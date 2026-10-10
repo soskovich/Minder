@@ -51,7 +51,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof vooruitZone === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof renderPlan === 'function');
 }
 
 /* De inventaris leest elke CSS-regel die --teal of --accent noemt plus elke inline stijl, en niet
@@ -144,7 +144,8 @@ test.describe('b · één idioom voor vouwen', () => {
      betekent. Nu overal: driehoek omlaag dicht, driehoek omhoog open.
      v208: insVouw() is vervallen met het Kerncijfers-blok op Inzichten - dat was zijn enige
      aanroeper. Er blijven drie plekken over, met hetzelfde idioom. */
-  const BRONNEN = ['renderMerchants', 'spendVsBudgetChart', 'vooruitZone'];
+  /* v380: vooruitZone() is vervallen met de zonebalk "Bestemmingen"; Plan opent op de kop. */
+  const BRONNEN = ['renderMerchants', 'spendVsBudgetChart'];
 
   test('geen enkele vouwknop draagt nog een chevron', async ({ page }) => {
     await boot(page);
@@ -212,34 +213,20 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
      wélk bedrag daar staat: dit scherm gaat over verdelen, dus rechts in de rij staat wat deze
      bestemming per maand krijgt. De stand verhuist naar de regel eronder, en houdt daar zijn eigen
      verhouding: het bereikte bedrag vet, de eenheid en de noemer gedempt. */
-  test('het maandbedrag heeft het gewicht, de naam stapt terug', async ({ page }) => {
+  /* v380: de rij draagt geen maandbedrag meer rechts (dat staat klein als "+EUR X deze maand"); het geld tegen het doel
+     draagt het gewicht, de noemer is gedempt. */
+  test('het geld heeft het gewicht, de noemer stapt terug', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
+    await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => {
-      /* v246: de eerste rij kan een ingeklapt vol noodfonds zijn, en dat is een regel en geen vat.
-         Deze test gaat over een bestemming die nog loopt, dus die zoeken we op.
-         v318: zo'n bestemming is `.wf-tekst`, met de naam in `.wf-naam` en het maandbedrag bij de
-         tak of in de eerste tekstregel. De verhouding die hier vastligt is dezelfde: het BEDRAG
-         draagt het gewicht en de NAAM stapt terug. */
-      /* v367: een rij per bestemming; het maandbedrag staat rechts (`[data-planrechts]`) */
-      const item = document.querySelector('#s-vooruit .plan-item[data-status="actief"]');
-      const naam = item.querySelector('.wf-naam');
-      const bedrag = item.querySelector('[data-planrechts]');
-      const b = bedrag.querySelector('b');
-      const sub = item.querySelector('.vat-stand');
-      return { naamGewicht: +getComputedStyle(naam).fontWeight,
-               bedragGewicht: b ? +getComputedStyle(b).fontWeight : null,
-               bedragTekst: b ? b.innerText : '',
-               eenheid: bedrag.innerText.replace(/\s+/g, ' '),
-               stand: sub ? sub.innerText.replace(/\s+/g, ' ') : '',
-               standGewicht: sub && sub.querySelector('b') ? +getComputedStyle(sub.querySelector('b')).fontWeight : null };
+      const item = document.querySelector('#s-vooruit .plan-item[data-status="actief"]') || document.querySelector('#s-vooruit .plan-item');
+      const naam = item.querySelector('.wf-naam'), g = item.querySelector('[data-rijgeld]');
+      return { naamGewicht: +getComputedStyle(naam).fontWeight, geldGewicht: +getComputedStyle(g.querySelector('b')).fontWeight,
+               noemer: getComputedStyle(g.querySelector('span')).color !== getComputedStyle(g.querySelector('b')).color, tekst: g.innerText };
     });
-    expect(r.bedragGewicht).toBeGreaterThan(r.naamGewicht);
-    expect(r.bedragTekst).toMatch(/€/);
-    expect(r.eenheid).toMatch(/\/mnd/);
-    // de stand staat een regel lager, met dezelfde verhouding: waarde vet, noemer gedempt
-    expect(r.stand).toMatch(/toegewezen \/ €/);
-    expect(r.standGewicht).toBeGreaterThan(400);
+    expect(r.geldGewicht).toBeGreaterThan(r.naamGewicht);
+    expect(r.noemer).toBe(true);
+    expect(r.tekst).toMatch(/€[\d.]+ \/ €/);
   });
 
   test('een noodfonds zonder bekend spaarsaldo blijft onbekend zeggen', async ({ page }) => {
@@ -300,12 +287,12 @@ test.describe('e · Plan opent open', () => {
     });
   }
 
-  test('je eigen keuze wint van de default', async ({ page }) => {
+  /* v380: de zonebalk is vervallen, dus er valt niets meer in te klappen: een oude keuze verbergt de lijst niet. */
+  test('een oude inklapkeuze verbergt de lijst niet meer', async ({ page }) => {
     await boot(page, seed({ vooruitDoelOpen: false }));
     await page.evaluate(() => go('vooruit'));
-    expect(await page.evaluate(() => document.querySelectorAll('#s-vooruit .plan-item').length)).toBe(0);
-    await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     expect(await page.evaluate(() => document.querySelectorAll('#s-vooruit .plan-item').length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => !!document.querySelector('[data-zone]'))).toBe(false);
   });
 });
 
@@ -322,7 +309,7 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
         .map((x) => x.getAttribute('style') || '');
       return { tekst: rij.innerText.replace(/\s+/g, ' '), fills };
     });
-    expect(r.tekst).toMatch(/gepauzeerd . krijgt nu niets/i);
+    expect(r.tekst).toMatch(/gepauzeerd/i); expect(r.tekst).toMatch(/krijgt nu niets/i);
     expect(r.fills.some((x) => /--mut/.test(x))).toBe(true);
     expect(r.fills.some((x) => /--teal|--accent/.test(x))).toBe(false);
     expect(r.fills.length).toBe(1);            // geen groei-segment

@@ -34,6 +34,7 @@
   --lab:#8a97ab;                       /* as- en maandlabels in grafieken */
   --nav-bg:rgba(13,20,34,.72);
   --surface:var(--card);               /* dekkend oppervlak voor sheets en popovers */
+  --kpi-bg:var(--accent-d); --kpi-txt:#ffffff;   /* v380: de kop van Plan; wit op accent-d is 5,47:1 (donker) en 10,9:1 (prive) */
   --font-head:inherit;                 /* koppen + hero; Privé zet hier een serif */
   --hero-gradient:none;                /* Aurora zet hier een verloop voor het hero-bedrag */
   --card-blur:none;                    /* Aurora zet hier de glas-blur */
@@ -59,6 +60,7 @@
   --line:rgba(255,255,255,.08); --ln2:rgba(255,255,255,.14);
   --txt:#eaf0fb; --mut:#9aa6bd; --mut2:#7e8ba4;
   --accent:#34e0c4; --accent-d:#0e8f7c; --on-accent:#05221c;
+  --kpi-bg:#0b5f58;                    /* v380: wit op #0e8f7c is 4,01:1, onder AA; hierop 7,52:1 */
   --bar:#37455f; --ref:#5b6a86; --lab:#93a2ba;
   --nav-bg:rgba(10,14,23,.66); --surface:#121826;
   --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.32);
@@ -4976,7 +4978,6 @@ function coHorizonVraag(m){
   }
   return `<div id="vooruitHorizon" class="small muted" style="margin:2px 2px 9px;line-height:1.45;cursor:pointer" onclick="coStart('horizon','${esc(mm)}')">${vraag} <span style="color:var(--teal);font-weight:700">›</span></div>`;
 }
-function toggleVooruit(k){ SET[k]=!SET[k]; save(); renderVooruit(); }
 function toggleVooruitCut(key,cut){ SET.coachRules=SET.coachRules||{}; if(SET.coachRules[key]) delete SET.coachRules[key]; else SET.coachRules[key]=cut; save(); renderVooruit(); }
 // verdeelmodus-chips, gedeeld door de doel-editor en de noodfonds-sheet
 function planModeChips(mode, handler){
@@ -10138,11 +10139,16 @@ function terugzetScenario(P, cap, B, bron, keuze){
   const D=terugzetDelen(B, keuze);
   const nog=keuze==='niet'?B:(keuze==='drie'?B-D[0]:0);
   const tot=bron.reduce((a,b)=>a+b.af,0)||1;
+  /* v380: bij spreiden komt het deel dat nog terug moet als `pending` in de projectie (variant X), niet als rest die je
+     inleg moet vullen; bij niet terugzetten is het wel rest, want dan komt er niets terug. */
+  const tzRest={};
   const Q=P.map(p=>{ const b=bron.find(x=>x.id===p.id); if(!b||!(nog>0)) return p;
-    const extra=Math.round(nog*b.af/tot); return Object.assign({}, p, {rest:Math.min(Math.round(+p.rest||0)+extra, Math.round(+p.doel||0))}); });
+    const extra=Math.round(nog*b.af/tot);
+    if(keuze==='drie'){ tzRest[p.id]=extra; return p; }
+    return Object.assign({}, p, {rest:Math.min(Math.round(+p.rest||0)+extra, Math.round(+p.doel||0))}); });
   const bij=(keuze==='drie')?terugzetBijVan(D.slice(1), d=>{ const u={}; bron.forEach(b=>{ u[b.id]=Math.round(d*b.af/tot); }); return u; }):{};
-  const rest={}; for(const q of Q) rest[q.id]=Math.max(Math.round(+q.rest||0),0);
-  return {delen:D, eta:planVooruit(Q, cap, undefined, undefined, {bij}), rest};
+  const rest={}; for(const q of Q) rest[q.id]=Math.min(Math.max(Math.round(+q.rest||0)+(tzRest[q.id]||0),0), Math.round(+q.doel||0));
+  return {delen:D, eta:planVooruit(Q, cap, undefined, undefined, {rest:tzRest, bij}), rest};
 }
 function terugzetData(){
   const ym=thisYM(), B=terugzetOpname(ym); if(!(B>0)) return null;
@@ -10373,6 +10379,20 @@ function planInlegLopend(cap, extra){
 /* v367: `reeks` (optioneel) krijgt per bestemming wat hij in elke maand van de projectie krijgt (index = maand vanaf nu,
    1 is volgende maand), voor de tijdlijn op Plan (planTijdlijnData()). Dezelfde verdeling als elke vol-datum, dus de
    balken en de datums kunnen niet uiteenlopen. */
+/* v380: WAT DE PROJECTIE VAN JE TERUGZETKEUZES EN VAN TOEGEWEZEN ZONDER GELD MOET WETEN, op een plek met twee lezers
+   (planVooruit() en de Vermogensreis via fireInputs()). rest: per bron wat er na deze maand nog terugkomt (pending, telt
+   pas in de maand van zijn deel); bij: per maand de delen, en in maand 1 wat deze maand doorschuift (terugzetNaarDoel());
+   door: wie in maand 1 doorgeschoven geld krijgt (dat vult de rest en niet de pending); zg: wat zonder geld en zonder
+   keuze is toegewezen. Dat laatste komt niet terug, dus vanaf volgende maand vult je inleg het aan (zoals bij niet
+   terugzetten), en tot dan is de bron niet vol. Een herintreding (spaarOver() leest allocatePlan()) slaat zg over. */
+function planTerugProj(P){
+  let tz=null; try{ tz=terugzetProjectie(); }catch(_){}
+  const rest=Object.assign({}, (tz&&tz.rest)||{}), bij=Object.assign({}, (tz&&tz.bij)||{}), door={};
+  try{ const TD=terugzetNaarDoel(P); for(const id in TD.door){ const som=TD.door[id].reduce((x,d)=>x+d.bedrag,0); if(som>0){ bij[1]=Object.assign({}, bij[1]||{}); bij[1][id]=(bij[1][id]||0)+som; door[id]=1; } } }catch(_){}
+  let zg={};
+  if(!planTerugProj._in){ planTerugProj._in=true; try{ zg=planZonderAf(P)||{}; }catch(_){ zg={}; } finally{ planTerugProj._in=false; } }
+  return {rest, bij, door, zg};
+}
 function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe = een toewijzing die de aanroeper doorrekent (spaarVerdeelVoorstel())
   const uit={};
   P=P||allocatePlan();
@@ -10381,15 +10401,22 @@ function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe
   /* v365: een gespreide terugzetting (terugzetProjectie()) staat in de projectie: wat er nog terug moet komt bij
      de rest van de bron, en elke maand gaat het deel van die maand er rechtstreeks af, bovenop je inleg. Een
      aanroeper die een scenario doorrekent geeft zijn eigen `tz` mee; zonder geldt de keuze die je maakte. */
-  let tzEigen=false; if(tz===undefined){ tzEigen=true; try{ tz=terugzetProjectie(); }catch(_){ tz=null; } }
-  const tzRest=(tz&&tz.rest)||{}, tzBij=Object.assign({}, (tz&&tz.bij)||{});
-  /* v371: wat de bron niet kon dragen schoof deze maand door (terugzetNaarDoel()); dat geld komt in maand 1 bij zijn
-     ontvanger. Alleen zonder eigen scenario van de aanroeper, want die rekent zijn eigen terugzetting. */
-  if(tzEigen){ try{ const TD=terugzetNaarDoel(P); for(const id in TD.door){ const som=TD.door[id].reduce((x,d)=>x+d.bedrag,0); if(som>0){ tzBij[1]=Object.assign({}, tzBij[1]||{}); tzBij[1][id]=(tzBij[1][id]||0)+som; } } }catch(_){} }
-  const rows=P.map(p=>({id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct, zelf:!!p.zelf, vraag:!!p.vraag,
-    doel:Math.max(Math.round(+p.doel||0),0), rest:Math.min(Math.max(Math.round(+p.rest||0),0)+Math.max(Math.round(+tzRest[p.id]||0),0), Math.max(Math.round(+p.doel||0),0)),
+  let tzEigen=false, TPj=null; if(tz===undefined){ tzEigen=true; TPj=planTerugProj(P); }
+  const tzRest=tzEigen?TPj.rest:((tz&&tz.rest)||{}), tzBij=tzEigen?TPj.bij:Object.assign({}, (tz&&tz.bij)||{}), tzDoor=tzEigen?TPj.door:{}, tzZg=tzEigen?TPj.zg:{};
+  /* v380: WAT NOG TERUGKOMT IS GEEN RUIMTE VOOR JE INLEG. Tot v379 telde de projectie de delen die na deze maand nog
+     terug moeten (tzRest) bij de rest van de bron op, en dan vroeg die bron in maand 1 meer inleg dan allocatePlan()
+     hem gaf: gemeten 462 tegen 362 op het Noodfonds, en Inrichting kreeg daardoor 100 minder dan op het scherm. Nu
+     staan ze apart: `rest` is wat de inleg nog moet vullen (gelijk aan p.rest), `pending` is wat er via de delen nog
+     terugkomt. Een deel van de bron zelf haalt `pending` omlaag, wat doorschuift (terugzetNaarDoel()) haalt `rest`
+     omlaag, en VOL is pas als beide nul zijn. De inleg schuift dus door naar de volgende doelen zodra de rest
+     gevuld is, en het laatste terugzetdeel bepaalt de vol-datum (keuze X van de gebruiker). */
+  const rows=P.map(p=>{ const doel=Math.max(Math.round(+p.doel||0),0), rest=Math.min(Math.max(Math.round(+p.rest||0),0), doel);
+    return {id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct, zelf:!!p.zelf, vraag:!!p.vraag,
+    doel, rest, pending:Math.min(Math.max(Math.round(+tzRest[p.id]||0),0), Math.max(doel-rest,0)),
+    zgLater:Math.min(Math.max(Math.round(+tzZg[p.id]||0),0), Math.max(doel-rest-Math.max(Math.round(+tzRest[p.id]||0),0),0)),
     nfOnbekend:!!p.nfOnbekend, status:(p.status==='gepauzeerd')?'gepauzeerd':'',
-    houdt:(p.type==='aflossen')}));
+    houdt:(p.type==='aflossen')}; });
+  let laatsteBij=rows.some(r=>r.zgLater>0)?2:0; for(const m in tzBij) if(+m>laatsteBij) laatsteBij=+m;
   let vorig=null;
   /* de grootste stijger van deze maand ten opzichte van de vorige, de gever zelf uitgezonderd */
   const wieSteeg=(nu,vg,van)=>{
@@ -10403,7 +10430,11 @@ function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe
   };
   const cap1=planInlegLopend(cap, extraToe);
   for(let m=1;m<=PLAN_VOORUIT_MAX;m++){
-    if(tzBij[m]) for(const r of rows){ const b=Math.round(+tzBij[m][r.id]||0); if(b>0){ r.rest=Math.max(r.rest-b,0); if(r.rest<=0&&uit[r.id]==null) uit[r.id]=m; } }
+    if(m===2) for(const r of rows) if(r.zgLater>0){ r.rest+=r.zgLater; r.zgLater=0; }   // v380: zonder geld zonder keuze vult je inleg vanaf volgende maand aan
+    if(tzBij[m]) for(const r of rows){ let b=Math.round(+tzBij[m][r.id]||0); if(b>0){
+      const vp=Math.min(b, (m===1&&tzDoor[r.id])?0:r.pending); r.pending-=vp; b-=vp;   // v380: een deel van de bron zelf vult eerst wat nog terugkomt
+      if(b>0) r.rest=Math.max(r.rest-b,0);
+      if(r.rest<=0&&r.pending<=0&&!(r.zgLater>0)&&uit[r.id]==null) uit[r.id]=m; } }
     const capM=(m===1)?cap1:cap;
     planVerdeelMaand(rows, capM, planGrendelVan(rows.find(r=>r.type==='noodfonds'), capM));
     if(reeks) for(const r of rows){ (reeks[r.id]=reeks[r.id]||[])[m]=(r.status==='gepauzeerd')?0:Math.max(Math.round(+r.alloc||0),0); }
@@ -10420,10 +10451,11 @@ function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe
       if(r.status==='gepauzeerd'||r.houdt) continue;
       const a=Math.max(Math.round(+r.alloc||0),0); if(a<=0) continue;
       r.rest=Math.max(r.rest-a,0); bewoog=true;
-      if(r.rest<=0&&uit[r.id]==null){
-        uit[r.id]=m;
+      if(r.rest<=0&&!r.leeg){
+        r.leeg=true;   // v380: de inleg valt hier vrij, ook als er nog een deel terugkomt
         if(terug) terug.push({van:r.id, maand:m, naar:null, vanaf:null});
       }
+      if(r.rest<=0&&r.pending<=0&&!(r.zgLater>0)&&uit[r.id]==null) uit[r.id]=m;
     }
     /* de entries van DEZE maand: zakte er in de vulmaand zelf al iets door, dan is dat het moment */
     if(terug&&nu&&vorig) for(const e of terug) if(e.naar==null && e.maand===m){
@@ -10431,7 +10463,7 @@ function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe
       if(b){ e.naar=b.id; e.vanaf=m; }
     }
     if(terug) vorig=nu;
-    if(!bewoog && !(m===1 && cap1<cap)) break;   // v370: een lopende maand die al is toegewezen beweegt niets, en dat is geen stilstand
+    if(!bewoog && !(m===1 && cap1<cap) && m>=laatsteBij) break;   // v370: een lopende maand die al is toegewezen beweegt niets, en dat is geen stilstand
   }
   return uit;
 }
@@ -11163,7 +11195,7 @@ function planMaandTekst(){
    bestemming. Pauzeren, verfijnen en uit plan halen verschijnen nog steeds pas na een tik op de
    rij: dat zijn keuzes bij een bestemming, en ze concurreerden met de knoppen die het mechanisme
    zelf bedienen. */
-function planRij(id){ window._planRij=(window._planRij===id)?null:id; render(); }
+/* v380: planRij() opent de detailsheet (openPlanDoel()); de open rij van v367 is vervallen. */
 
 /* ===== De vertakte waterval (v246) =====
  * Plan toonde drie doelen als losse voortgangsbalken met een nummertje, en legde de rest in proza
@@ -11297,33 +11329,7 @@ function planTint(p,i){
   return pct>=100?'var(--teal)':`color-mix(in srgb,var(--teal) ${pct}%,var(--card2))`;
 }
 
-/* De verdeling van de inlegbalk. Eén bron met de tak: beide lezen p.alloc, dus wat er uit je
-   spaarinleg vertrekt. Bij een aflos-item telt debtPer NIET mee: dat is je bestaande termijn en die
-   komt niet uit deze balk. Wat onverdeeld blijft is een eigen segment en geen weggelaten rest. */
-/* v317: DE MINIMUMBREEDTE STAAT IN DE SEGMENTEN EN NIET IN DE CSS VAN EEN LEZER. Een bestemming
-   die iets krijgt moet zichtbaar iets krijgen, en dat hoort in de data te staan en niet in de
-   opmaak van een van de twee weergaven, anders loopt de ene lezer uiteen met de andere.
-   EEN PERCENTAGE EN GEEN PIXELS, want dat is de eenheid waarin de balk rekent: 1 procent is 3px op
-   de 300px-balk van 360px en 3,3px op 390px.
-   DE SOM KAN BOVEN 100 UITKOMEN zodra het minimum bijt, en dat klemt niet: de balk heeft
-   `overflow:hidden`. Herschalen zou de andere segmenten een breedte geven die hun bedrag niet
-   draagt, en dat is een tweede vertekening om een eerste te verbergen.
-   v318: de tweede lezer is sinds die ronde de DIKTE van de verticale tak (planTakDikte), en die
-   heeft zijn eigen ondergrens in pixels om dezelfde reden. De twee delen hun BRON (p.alloc) en niet
-   hun eenheid: een balk verdeelt een breedte, een tak draagt een dikte. */
-const SEG_MIN_PCT=1;
-function planSegmenten(P,cap){
-  const segs=[]; let acc=0;
-  for(const p of (P||[])){
-    const a=Math.max(Math.round(+p.alloc||0),0);
-    let breed=(cap>0)?Math.max(a/cap*100,0):0;
-    if(a>0 && breed>0 && breed<SEG_MIN_PCT) breed=SEG_MIN_PCT;
-    segs.push({id:p.id, alloc:a, van:acc, breed});
-    acc+=breed;
-  }
-  return {segs, vrij:Math.max(100-acc,0)};
-}
-
+/* v380: de inlegbalk (planSegmenten()) is vervallen met de kop van de waterval; de kop van Plan draagt een voortgangsbalk. */
 /* De stand in het vat. Eigen functie omdat twee plekken hem lezen: het vat en blok 3 van het
    diagnosescherm, dat vaststelt waar het getoonde bedrag vandaan komt. Eén bron per getal.
    HIJ WORDT NIET GETOOND BIJ nfOnbekend. Die nul is geen toewijzing van jou maar een gat (v173),
@@ -11487,14 +11493,6 @@ function planTijdlijnData(P,cap){
   }
   return {per, maxM:Math.min(maxM,PLAN_TIJDLIJN_MAX), cap};
 }
-function planRijStatus(p,t){
-  if(p.nfOnbekend) return {k:'onbekend', tekst:'stand onbekend'};
-  if(p.status==='bereikt') return {k:'vol', tekst:'vol'};
-  if(p.status==='gepauzeerd') return {k:'gepauzeerd', tekst:'gepauzeerd \u00b7 krijgt nu niets'};
-  if(Math.round(+p.alloc||0)>0) return {k:'actief', tekst:'nu actief'};
-  if(t && t.eerste!=null) return {k:'wacht', tekst:`wacht tot ${etaDatum(t.eerste+1)}`};   // v370: eerste is een kolom, etaDatum() een aantal inleggen
-  return {k:'wacht', tekst:'wacht'};
-}
 /* v371: WAT ER IN EEN BRON NOG NIET IN GELD STAAT, per bestemming. tzNog: wat er met een lopende keuze nog terug moet
    (deze maand en later). zgAf: wat er zonder keuze zonder geld staat, uit spaarOverRaakt() (dezelfde volgorde als de
    melding); de laatste die inlevert draagt de centen, zodat de rij hetzelfde bedrag noemt als de melding. */
@@ -11508,6 +11506,37 @@ function planZonderAf(P){
     RK.forEach((x,k)=>{ zgAf[x.id]=(zgAf[x.id]||0)+Math.round(+x.af||0)-(k===RK.length-1?cent:0); }); }catch(_){}
   return zgAf;
 }
+/* v380 (D): DE VERWACHTE STAND EIND DEZE MAAND, EEN FUNCTIE. Per bestemming wat er op je spaarrekening staat (geld: de
+   toewijzing min wat nog terug moet en min wat zonder geld is toegewezen), plus wat er deze maand terug gaat
+   (terugzetNaarDoel()) en de inleg van deze maand: S = geld + tb + inleg. Wat er na deze maand nog terugkomt staat er
+   apart bij (nogLater, met de delen per maand uit terugzetProjectie()), want dat telt pas in de maand dat het komt en
+   bepaalt dus de vol-datum (variant X) en niet de stand. Vier lezers: de rij, de detailsheet, de KPI en "nog te gaan"
+   (som van doel min S over wat loopt). Zonder geld zonder keuze telt niet mee in S: dat geld is er niet. */
+function planStandEind(P){
+  P=P||allocatePlan();
+  let TND={per:{}, door:{}, onverdeeld:0}; try{ TND=terugzetNaarDoel(P); }catch(_){}
+  const nog=planTerugNog(), zgAf=planZonderAf(P);
+  let TP=null; try{ TP=terugzetProjectie(); }catch(_){}
+  const per={}; let nogTeGaan=0, doelSom=0, geldSom=0;
+  for(const p of P){
+    const doel=Math.max(Math.round(+p.doel||0),0), uit=p.nfOnbekend||p.type==='aflossen';
+    const n=Math.max(nog[p.id]||0,0), zg=Math.max(zgAf[p.id]||0,0);
+    const geld=uit?0:Math.max(Math.round((Math.round(+p.gespaard||0)-n-zg)*100)/100,0);
+    const tb=Math.max(Math.round(TND.per[p.id]||0),0);
+    const inleg=(p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(+p.alloc||0),0);
+    const S=Math.round((geld+tb+inleg)*100)/100;
+    const later=[]; let nogLater=0;
+    if(TP&&TP.bij) Object.keys(TP.bij).map(Number).sort((a,b)=>a-b).forEach(m=>{ const b=Math.round(+TP.bij[m][p.id]||0); if(b>0){ later.push({m, bedrag:b}); nogLater+=b; } });
+    per[p.id]={geld, zg, tb, inleg, S, doel, nogLater, later, door:TND.door[p.id]||null,
+      gesplitst:!uit && doel>0 && (n>0 || zg>0 || !!TND.door[p.id])};
+    if(!uit && p.status!=='gepauzeerd'){ nogTeGaan+=Math.max(doel-S,0); doelSom+=doel; geldSom+=geld; }
+  }
+  return {per, nogTeGaan:Math.round(nogTeGaan), doelSom, geldSom:Math.round(geldSom*100)/100, TND};
+}
+/* v380: "bijna vol" (keuze C van de gebruiker): de verwachte stand eind deze maand is minstens 95 procent van het doel en
+   nog niet het doel, en er komt na deze maand nog geld terug, dus de vol-datum ligt later. */
+const PLAN_BIJNA_VOL=0.95;
+function planBijnaVol(x){ return !!x && x.doel>0 && x.S<x.doel && x.S>=PLAN_BIJNA_VOL*x.doel && x.nogLater>0; }
 /* v371 (punt 2): WAAR HET TERUGZETBEDRAG VAN DEZE MAAND HEEN GAAT. Eerst terug naar de bron waar het uit kwam, tot aan
    het doelbedrag: ruimte is het doel min het geld dat er staat min de inleg van deze maand. Kan de bron het niet meer
    dragen, dan schuift de rest door naar de volgende bestemming in de volgorde met ruimte, en blijft er daarna nog iets
@@ -11534,42 +11563,18 @@ function terugzetNaarDoel(P){
   for(const id in ruw) if(!P.some(p=>p.id===id)) onverdeeld+=ruw[id];
   return {per, door, onverdeeld};
 }
-/* v371: de regel van een bron met geld dat nog terug moet: "EUR 3.407 in geld + EUR 231 terug + EUR 362 inleg = EUR 4.000
-   · vol okt 2026". De som is per constructie geld + de termen, en dat is de verwachte stand na deze maand: het
-   doelbedrag als hij vol raakt. data-terugbak blijft op deze regel, want dat is wat er deze maand terug gaat (v365). */
-function planGeldRegel(p,t,x){
-  const som=Math.round((x.geld+x.zg+x.tb+x.inleg)*100)/100, vol=t&&t.vol>0?etaDatum(t.vol):'';
-  const delen=[`<b style="font-weight:700">${euroC(x.geld)}</b> in geld`];
-  if(x.zg>0) delen.push(`${euroC(x.zg)} zonder geld`);
-  if(x.tb>0) delen.push(`${euro0(x.tb)} terug`);
-  if(x.inleg>0) delen.push(`${euro0(x.inleg)} inleg`);
-  const staart=vol?` · vol ${vol}`:(p.type==='goal'&&p.streefdatum?` · streef ${doelDatumLabel(p.streefdatum,true)}`:'');
-  const doorTxt=(x.door&&x.door.length)?`<div class="small muted" data-doorvan="${esc(x.door.map(d=>d.van).join(','))}">${euro0(x.inleg)} + ${euro0(x.tb)} terug (${esc(x.door.map(d=>`${d.naam} ${d.waarom}`).join(', '))})</div>`:'';
-  return doorTxt?`<div data-doorwrap="${p.id}">${planGeldRegelKaal(p,x,som,delen,staart)}${doorTxt}</div>`:planGeldRegelKaal(p,x,som,delen,staart);
-}
-function planGeldRegelKaal(p,x,som,delen,staart){
-  return `<div class="small vat-stand" data-geldregel="${p.id}" data-geld="${x.geld}" data-zg="${x.zg}" ${x.tb>0?`data-terugbak="${p.id}" data-terug="${x.tb}"`:''} data-inleg="${x.inleg}" data-som="${som}" data-doel="${Math.round(+p.doel||0)}" style="line-height:1.45">${delen.join(' + ')} = <b style="font-weight:700">${euroC(som)}</b><span data-planrechts style="color:var(--mut)">${staart}</span></div>`;
-}
-function planRijRechts(p,t){
-  const D=planBedragDeel(p), bed=`${D.mod}<b style="font-weight:800;color:var(--txt)">${D.bedrag}</b>/mnd`;   // v203: het bedrag draagt het gewicht
-  if(p.status==='bereikt') return 'bereikt';
-  const vol=t&&t.vol>0?etaDatum(t.vol):'';
-  if(p.type==='aflossen') return vol?`${bed} · schuldenvrij ${vol}`:bed;
-  if(Math.round(+p.alloc||0)>0 && vol) return `${bed} · vol ${vol}`;
-  if(p.type==='goal') return p.streefdatum?`${bed} · streef ${doelDatumLabel(p.streefdatum,true)}`:`${bed} · geen streefdatum`;
-  return vol?`${bed} · vol ${vol}`:bed;
-}
 function tlMaand(m){ const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+m, 1); return {k:MNAMES[d.getMonth()], j:d.getFullYear()}; }
-function openPlanTijdlijn(){
-  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
-  const T=planTijdlijnData(P,cap), N=T.maxM+1;
-  const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
+/* v380: de tijdlijn staat inline onder de schakelaar en in de sheet, met DEZELFDE inhoud (planTijdlijnHTML()) en
+   dezelfde datums als de lijst (planTijdlijnData()). */
+function planTijdlijnHTML(P,cap,T,tints){
+  T=T||planTijdlijnData(P,cap); const N=T.maxM+1;
+  if(!tints){ tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); }); }
   const kol=`grid-template-columns:96px repeat(${N},minmax(0,1fr))`;
   const kop=`<div class="ptl-r" style="${kol}"><span></span>${Array.from({length:N},(_,m)=>`<span class="ptl-m" data-tlkop="${m}">${N>14&&m%3?'':tlMaand(m).k}</span>`).join('')}</div>`;
   const rijen=P.map((p,i)=>{ const t=T.per[p.id]||{maanden:[]};
     const cel=m=>{ const a=+t.maanden[m]||0, vol=cap>0&&a>=cap, ruit=t.K!=null&&t.K===m;
       return `<span class="ptl-c" data-tlm="${m}" data-a="${a}" data-tlsoort="${a<=0?'leeg':(vol?'vol':'deel')}">${a>0?`<i style="background:${vol?tints[p.id]:`color-mix(in srgb,${tints[p.id]} 40%,transparent)`}"></i>`:''}${ruit?'<b data-ruit>◆</b>':''}</span>`; };
-    return `<div class="ptl-r" data-tlrij="${p.id}" style="${kol}"><span class="ptl-n">${i+1} ${esc(p.naam)}</span>${Array.from({length:N},(_,m)=>cel(m)).join('')}</div>`; }).join('');
+    return `<div class="ptl-r" data-tlrij="${p.id}" data-tlvol="${t.vol!=null?t.vol:''}" style="${kol}"><span class="ptl-n">${i+1} ${esc(p.naam)}</span>${Array.from({length:N},(_,m)=>cel(m)).join('')}</div>`; }).join('');
   const naam=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };   // v317: het noodfonds heet "je noodfonds"
   const wat=P.filter(p=>(T.per[p.id]||{}).warn).map(p=>{ const t=T.per[p.id], i=P.indexOf(p), vorige=P.slice(0,i).reverse().find(x=>x.type==='goal'&&x.status!=='bereikt');
     const lbl=doelDatumLabel(p.streefdatum,true);
@@ -11584,11 +11589,15 @@ function openPlanTijdlijn(){
   let TV=[]; try{ TV=planTerugval(P,cap); }catch(_){}
   const tv=TV.map(e=>{ const nv=naam(e.van), nn=naam(e.naar), dt=etaDatum(e.vanaf); return (nv&&nn&&dt)?`<div class="small muted" data-erfregel="${e.van}" data-erfnaar="${e.naar}">vanaf ${dt} gaat de ruimte van ${esc(nv)} naar ${esc(nn)}</div>`:''; }).join('');
   const a=tlMaand(0), b=tlMaand(T.maxM);
+  return `<div class="small muted" style="margin:0 0 10px">${a.k} ${a.j} – ${b.k} ${b.j} · licht = deel van de inleg, donker = volle inleg</div>
+    ${cap>0?`${kop}${rijen}<div class="small muted" style="margin:6px 0 4px">◆ streefdatum</div>`:'<div class="small muted">Zonder spaarinleg is er geen tijdlijn: er valt niets te verdelen.</div>'}
+    ${tv}${wat}`;
+}
+function openPlanTijdlijn(){
+  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
   $('#sheet').innerHTML=`<div class="grab"></div><div id="planTijdlijn">
     <div style="font-weight:800;font-size:var(--fs-lg)">Tijdlijn spaardoelen</div>
-    <div class="small muted" style="margin:2px 0 10px">${a.k} ${a.j} – ${b.k} ${b.j} · licht = deel van de inleg, donker = volle inleg</div>
-    ${cap>0?`${kop}${rijen}<div class="small muted" style="margin:6px 0 4px">◆ streefdatum</div>`:'<div class="small muted">Zonder spaarinleg is er geen tijdlijn: er valt niets te verdelen.</div>'}
-    ${tv}${wat}</div>`;
+    ${planTijdlijnHTML(P,cap)}</div>`;
   showSheetBg();
 }
 /* ===== v371: DE VERDELING VAN JE INLEG: OP VOLGORDE OF ZELF (gevraagd door de gebruiker, mockup "spaarinleg verdelen") =====
@@ -11622,11 +11631,6 @@ function planVerdelingMeldingRegel(){
   return `<div class="row small" data-verdelingmelding role="button" style="gap:8px;margin:6px 0 2px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="planVerdelingMeldingOpen()"><span style="flex:1;min-width:0;font-weight:600">Je verdeling staat nu op één plek</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">bekijk ›</span></div>`;
 }
 function planVerdelingMeldingOpen(){ delete SET.planVerdelingMelding; save(); render(); openVerdeling(); }
-function planVerdelingRegel(){
-  let cap=0; try{ cap=planCapacity(); }catch(_){} if(!(cap>0)) return '';
-  let n=0; try{ n=allocatePlan().filter(p=>p.type==='goal').length; }catch(_){} if(!n) return '';
-  return `<div class="row small" data-verdelingregel="${planZelf()?'zelf':'volgorde'}" role="button" style="gap:8px;margin:6px 0 2px;cursor:pointer" onclick="openVerdeling()"><span style="flex:1;min-width:0;color:var(--mut)">Verdeling: <b style="color:var(--txt)">${planZelf()?'zelf verdeeld':'op volgorde'}</b></span><span style="color:var(--teal);font-weight:700;white-space:nowrap">aanpassen ›</span></div>`;
-}
 /* De sheet. window._vd is een WEERGAVE: wisselen, slepen en typen schrijven niets tot je bevestigt. */
 function openVerdeling(){
   const Z=planZelf(); const ids=planItems().map(x=>x.id);
@@ -11798,140 +11802,223 @@ function verdelingLogRij(x){
 }
 function verdelingLog(){ return (Array.isArray(SET.planVerdelingLog)?SET.planVerdelingLog:[]).slice().reverse(); }
 function renderPlan(bare){
-  const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
-  const G=planGrendel();
-  const SEG=planSegmenten(P,cap);
+  /* v380: PLAN IS EEN DASHBOARD (gevraagd door de gebruiker, mockup "Plan-scherm als dashboard"). Bovenaan het antwoord
+     (planKpi(): hoeveel heb je, van hoeveel, wat gaat er deze maand opzij en wanneer is alles vol), daaronder een
+     schakelaar Lijst / Tijdlijn, en per doel EEN rijvorm (planDoelRij()). De rekensom staat in de detailsheet
+     (openPlanDoel()), de instellingen achter "verdeling ⚙" (openPlanInstel()). VAN HET SCHERM: de kop "Te verdelen",
+     de inlegbalk zonder legenda, de volgorde-zin, het controletotaal (planToeMaand() blijft als functie), "Blijft over
+     EUR 0" en "Nog EUR X te gaan" (dat getal staat als data-nogtegaan op de kop). ALLES UIT EEN BRON: de stand uit
+     planStandEind(), elke datum uit planTijdlijnData() (planVooruit()), dus lijst, tijdlijn en "Alles vol" lopen niet
+     uiteen. `.plan-item[data-id]` blijft de naam van een bestemming (v225). */
+  const P=allocatePlan(); const cap=planCapacity();
+  const TL=planTijdlijnData(P,cap), SE=planStandEind(P);
   const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
-  /* v367: DE VATEN ZIJN VERVALLEN IN DE STANDAARDWEERGAVE; PER BESTEMMING EEN RIJ (gevraagd door de gebruiker, mockup
-     "spaardoelen compact"). Nummer, naam en status ("nu actief", "wacht tot <maand>", "wacht"), een dunne voortgangsbalk,
-     links toegewezen tegen het doel en rechts het maandbedrag met de vol-datum of de streefdatum. Vier doelen kostten
-     ongeveer anderhalf scherm; de volgorde staat nu in de nummering en de status, en de tijdlijn (openPlanTijdlijn())
-     laat zien wie wanneer geld krijgt. ALLES KOMT UIT DEZELFDE PROJECTIE ALS ELKE VOL-DATUM (planTijdlijnData(), die
-     planVooruit() leest), dus de status, de datum en de waarschuwing kunnen niet uiteenlopen. `.plan-item[data-id]`
-     blijft de naam van een bestemming (v225). */
-  const TL=planTijdlijnData(P,cap);
-  const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
-  const acties=p=>window._planRij===p.id?`<div class="row" data-acties="${p.id}" style="margin:6px 2px 2px;gap:14px;flex-wrap:wrap">
-      ${act('teal', p.type==='noodfonds'?'verfijnen ›':'openen ›', planOpen(p))}
-      ${p.type==='aflossen'?act('teal','maandbedrag ›',planAllocOpen(p)):''}
-      ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
-      ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
-    </div>`:'';
-  const nrVan=p=>{ const i=P.indexOf(p); return `<span class="plan-1${i===0?'':' n'}">${i+1}</span>`; };
-  /* v365: wat er deze maand terug gaat naar een bak (alles of het deel van deze maand bij spreiden), per bron. */
-  /* v371: elke lopende keuze telt (terugzetActief()), dus ook een keuze over toegewezen zonder geld; en wat de bron niet
-     meer kan dragen schuift door (terugzetNaarDoel()). */
-  let TND={per:{}, door:{}, onverdeeld:0}; try{ TND=terugzetNaarDoel(P); }catch(_){}
-  const tzBak=TND.per;
-  const tzNog=planTerugNog(), zgAf=planZonderAf(P);
-  const rij=p=>{
-    const t=TL.per[p.id]||{}, st=planRijStatus(p,t), R=planRijRechts(p,t), tint=tints[p.id];
-    const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
-    const ST=p.nfOnbekend?null:doelStreepje(p), tb=tzBak[p.id]||0;
-    /* v194: stilstand is grijs, beweging krijgt een tweede segment: wat er deze maand bij komt (bij een aflos-item met je
-       termijn erbij), zoals het vat het droeg. */
-    const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
-    const groei=(!p.nfOnbekend&&p.status!=='gepauzeerd'&&p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
-    /* v371: GELD EN PLAN APART (gevraagd door de gebruiker). Staat er in deze bron iets dat nog terug moet of zonder geld
-       is toegewezen, dan toont de balk het GELD dicht, met wat er deze maand terug gaat en de inleg gearceerd erachter, en
-       de regel eronder telt op: geld + zonder geld + terug + inleg = het doelbedrag of de verwachte stand. De toewijzing
-       zelf ("EUR 3.638 toegewezen") staat er dan niet, want die beweert geld dat er niet is. */
-    const nog=Math.max((tzNog[p.id]||0),0), zg=Math.max(zgAf[p.id]||0,0);
-    const dr=TND.door[p.id]||null;
-    const gesplitst=!p.nfOnbekend && p.type!=='aflossen' && p.doel>0 && (nog>0 || zg>0 || !!dr);
-    const geld=gesplitst?Math.max(Math.round((Math.round(+p.gespaard||0)-nog-zg)*100)/100,0):0;
-    const pctG=(gesplitst&&p.doel>0)?Math.min(geld/p.doel*100,100):pct;
-    const tbPct=(tb>0&&p.doel>0)?Math.max(Math.min(tb/p.doel*100,gesplitst?100-pctG:pct),0):0;
-    const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="position:absolute;top:-3px;bottom:-3px;left:${ST.pct.toFixed(2)}%;width:2px;background:var(--txt)"><span class="sr-only">${doelStreepjeTekst(p,ST,t.warn?(t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'):'')}</span></span>`:'';
-    const arc=(c)=>`repeating-linear-gradient(135deg,color-mix(in srgb,${c} 55%,transparent) 0 3px,transparent 3px 5px)`;
-    const groeiG=gesplitst&&perMnd>0&&p.status!=='gepauzeerd'?Math.max(Math.min(perMnd/p.doel*100,100-pctG-tbPct),0):0;
-    const balk=p.nfOnbekend?'':gesplitst?`<div class="bar-track plan-rijbalk" data-geldbalk="${p.id}" style="height:5px;margin:6px 0 5px;position:relative">
-        <div class="bar-fill" data-geldvat="${p.id}" data-pct="${pctG.toFixed(2)}" style="width:${pctG.toFixed(2)}%;background:${tint}"></div>${tbPct>0?`<div class="bar-fill" data-terugvat="${p.id}" data-pct="${tbPct.toFixed(2)}" style="width:${tbPct.toFixed(2)}%;background:${arc(tint)}"></div>`:''}${groeiG>0?`<div class="bar-fill" data-groei data-inlegvat="${p.id}" style="width:${groeiG.toFixed(2)}%;background:${arc(tint)}"></div>`:''}${streep}</div>`
-      :`<div class="bar-track plan-rijbalk" style="height:5px;margin:6px 0 5px;position:relative">
-        <div class="bar-fill" style="width:${pct}%;background:${tint}"></div>${groei>0?`<div class="bar-fill" data-groei style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></div>`:''}${tbPct>0?`<i data-terugvat="${p.id}" style="position:absolute;top:0;bottom:0;left:${(pct-tbPct).toFixed(1)}%;width:${tbPct.toFixed(1)}%;background:repeating-linear-gradient(135deg,transparent 0 3px,var(--card) 3px 5px)"></i>`:''}
-        ${streep}</div>`;
-    return `<div class="plan-item plan-rij2${t.warn?' wf-laat':''}" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}" style="border-top:1px solid var(--line);padding:9px 0 8px;cursor:pointer" onclick="planRij('${p.id}')">
-      <div class="row" style="gap:8px;align-items:baseline"><span class="wf-naam" style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${nrVan(p)} ${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;color:${st.k==='actief'?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
-      ${balk}
-      ${gesplitst?planGeldRegel(p,t,{geld,zg,tb,inleg:p.status==='gepauzeerd'?0:perMnd,door:dr}):`<div class="row small" style="gap:8px;align-items:baseline"><span class="vat-stand" style="flex:1;min-width:0">${p.nfOnbekend?'<span class="muted">onbekend</span>':planStand(p)}</span><span data-planrechts style="white-space:nowrap;color:var(--mut)">${R}</span></div>`}
-      ${t.warn?`<div class="small" data-planwaarschuwing="${p.id}" style="color:var(--amber);margin-top:3px" onclick="event.stopPropagation();openPlanTijdlijn()">⚠ streefdatum niet haalbaar in deze volgorde: ${t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'}</div>`:''}
-      ${window._planRij===p.id?planRijDetail(p):planDatumRegel(p)}${acties(p)}</div>`;
-  };
-  /* Een tik op een rij opent hem: het datumpaar van v307/v318 (vatRegels(): streefdatum, speling of achterstand, waarop
-     hij wacht) staat dan onder de rij, met de handelingen. Verplaatst van het vat naar de open rij, niet weggegooid. */
-  const planRijDetail=p=>{ const R=vatRegels(p,false); return R.regels.length?`<div class="small vat-dat" data-plandetail="${p.id}" style="color:var(--mut);margin-top:5px;line-height:1.45">${R.regels.join('<br>')}</div>`:''; };
-  const volg=P.length>1?`<div class="row small" data-planvolgorde style="gap:8px;border-top:1px solid var(--line);padding:8px 0 2px;color:var(--mut2)"><span style="flex:1;min-width:0">Volgorde: ${P.map((_,i)=>i+1).join(' → ')}, de ruimte schuift door</span><span style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" data-plantijdlijn onclick="openPlanTijdlijn()">tijdlijn ›</span></div>`
-    :(P.length?`<div class="row small" data-planvolgorde style="justify-content:flex-end;padding:8px 0 2px"><span style="color:var(--teal);font-weight:700;cursor:pointer" data-plantijdlijn onclick="openPlanTijdlijn()">tijdlijn ›</span></div>`:'');
-  const rows=P.length?P.map(rij).join('')+volg:'';
-
-  // Wat het scherm eerst in zinnen zei staat nu achter het uitlegteken bovenin de kaart.
   NOTES.planUitleg=[
     planCapTerugval()
       ? 'Je hebt nog geen spaarinleg ingesteld, dus dit plan verdeelt je comfortabele ruimte: wat er na je vaste lasten en je gewone uitgaven overblijft.'
-      : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Je plek in de rij zet je bij de bestemming zelf.',
-    /* v367: de vaten zijn rijen geworden; de uitleg zegt wat een rij draagt en waar de tijdlijn staat. */
-    'Per bestemming een rij: de balk is wat je er al aan hebt toegewezen tegen het doel, rechts staat wat er per maand heen gaat en wanneer hij vol is.',
-    'Het streepje op een balk is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
-    'Raakt een bestemming vol, dan gaat zijn maandbedrag naar de volgende. De tijdlijn laat per maand zien wie geld krijgt.',
+      : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Je plek in de rij zet je bij de bestemming zelf of in Verdeling.',
+    'Bovenaan staat wat er voor je doelen op je spaarrekening staat, tegen wat je doelen samen vragen. Geld dat nog terug moet telt pas als het er weer staat.',
+    'Per doel een rij: het geld dicht, wat er deze maand bijkomt gearceerd, en de maand waarin het vol is. Tik op een doel voor de rekensom.',
     planMaandTekst()
   ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
-  /* Punt 5: de inlegbalk is verdeeld in segmenten per bestemming, naar wat ze deze maand krijgen.
-     Wat onverdeeld blijft is een eigen leeg segment en geen weggelaten rest, zodat de balk zelf
-     optelt tot wat er te verdelen is. */
-  /* v317: DE SEGMENTEN STAAN ABSOLUUT, PRECIES ZOALS DE TAKKEN. De balk was `display:flex`, dus
-     zodra de breedtes samen boven 100 procent uitkwamen (en dat kan sinds de minimumbreedte van
-     SEG_MIN_PCT) KROMP flex ze allemaal proportioneel, terwijl de tak met `left`+`width` niet krimpt.
-     GEMETEN bij een bestemming op 0,5 procent: hetzelfde segment werd 2,98px in de balk en 3px in de
-     tak, en het grote segment 297,02 tegen 298,5. Dezelfde getallen, twee geometrieen. Nu lezen beide
-     `van` en `breed` op dezelfde manier, en is het verschil per constructie nul. */
-  /* v319: DE BALK HOUDT ZIJN AFSTAND TOT DE KOP EN NIET TOT DE REGEL ERTUSSEN. Zijn 9px bestond om
-     hem van de kop te scheiden, en met de inleg-regel ertussen doet die regel dat al; 9px erbovenop
-     zet een gat van 29px tussen twee getallen die bij elkaar horen. GEMETEN wat het oplevert: 5px,
-     en dat is precies wat de waterval op 360x640 weer boven de vouw brengt (569 van 567 naar 564). */
-  const inlegRegel=planInlegRegel();
-  const balk=cap>0?`<div class="bar-track inleg-balk" style="margin:${inlegRegel?4:9}px 0 1px">
-      ${SEG.segs.filter(s=>s.alloc>0).map(s=>`<div class="bar-fill" data-seg="${s.id}" style="left:${s.van.toFixed(2)}%;width:${s.breed.toFixed(2)}%;background:${tints[s.id]};border-radius:0"></div>`).join('')}
-      ${SEG.vrij>0.05?`<div class="bar-fill" data-seg="vrij" style="left:${(100-SEG.vrij).toFixed(2)}%;width:${SEG.vrij.toFixed(2)}%;background:var(--card2);border-radius:0"></div>`:''}
-    </div>`:'';
-  /* v319: de werkelijke inleg staat DIRECT onder de twee getallen die hij vergelijkt, en boven de
-     balk: de balk verdeelt de INSTELLING, dus de meting hoort ertussen en niet eronder. */
-  /* v365: na een opname uit je spaargeld staat hier de keuze (terugzetKaart), en na een keuze de kop van DEZE maand:
-     "Te verdelen deze maand" met de vaste inleg plus wat er terug gaat. Volgende maand staat de kop weer op je
-     maandbedrag, of op het volgende deel als je spreidde. */
-  let TZ=null, tzKaart=''; try{ TZ=terugzetVoor(thisYM()); }catch(_){}
-  /* v367: de keuze is een compacte regel met de kaart van v365 in een sheet erachter (openTerugzetSheet()). */
-  try{ const D0=(!TZ || (window._terugzetWijzig && TZ.i===0))?terugzetData():null; if(D0 && (!D0.rec || window._terugzetWijzig)) tzKaart=`<div class="row small" id="terugzetRegel" data-terugzet="${D0.B}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTerugzetSheet()"><span style="flex:1;min-width:0;font-weight:600">${euro0(D0.B)} eruit gehaald in ${esc(MFULL[+D0.ym.slice(5,7)-1])}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">kies \u203a</span></div>`; }catch(_){}
-  /* v371: de kop telt elke lopende keuze (terugzetDeel() is de som), en staat ook op "deze maand" met alleen een keuze
-     over toegewezen zonder geld. */
-  const tzDeel=Math.round(terugzetDeel(thisYM())||0);
-  const tzKop=(TZ&&!tzKaart) || (!TZ && tzDeel>0);
-  const kopTekst=tzKop ? `Te verdelen deze maand ${noteIcon('planUitleg','hoe dit plan verdeelt')}` : `Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}`;
-  const kopBedrag=tzKop ? euro0(cap+tzDeel) : (cap>0?`${euro0(cap)}/mnd`:'nog niet bekend');
-  const tzSub=tzKop ? `<div class="small" id="terugzetGekozen" data-terugzetkeuze-gekozen="${TZ&&!tzKaart?TZ.r.keuze:''}" data-inlegmaand="${cap+tzDeel}" style="color:var(--mut);margin:2px 0 0">${euro0(cap)} vaste inleg${tzDeel>0?` + ${euro0(tzDeel)} terugzetten`:''}${TZ&&!tzKaart?` · gekozen: ${esc(TERUGZET_LAB[TZ.r.keuze].toLowerCase())}${TZ.i===0?` · <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terugzetWijzig()">wijzig</span>`:''}`:''}</div>` : '';
-  /* v371: de melding over toegewezen zonder geld staat bij de kop, onder de keuze over een opname. */
+  /* de meldingen die een keuze of een verschil noemen blijven, onder de kop: een open terugzetvraag, toegewezen zonder
+     geld, de eenmalige melding over de verdeling en de gemeten inleg (v319) */
+  let tzKaart=''; try{ const TZ=terugzetVoor(thisYM()); const D0=(!TZ || (window._terugzetWijzig && TZ.i===0))?terugzetData():null;
+    if(D0 && (!D0.rec || window._terugzetWijzig)) tzKaart=`<div class="row small" id="terugzetRegel" data-terugzet="${D0.B}" role="button" style="gap:8px;margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTerugzetSheet()"><span style="flex:1;min-width:0;font-weight:600">${euro0(D0.B)} eruit gehaald in ${esc(MFULL[+D0.ym.slice(5,7)-1])}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">kies ›</span></div>`; }catch(_){}
   let zgRegel=''; try{ zgRegel=spaarOverLine(P); }catch(_){}
-  let vdRegel=''; try{ vdRegel=planVerdelingMeldingRegel()+planVerdelingRegel(); }catch(_){}
-  const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">${kopTekst}</span><span id="planKopBedrag" style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${kopBedrag}</span></div>${tzSub}${tzKaart}${zgRegel}${vdRegel}${inlegRegel}${balk}`;
-  /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
-     de waterval, en een sluitpost die alleen bij een positief bedrag verschijnt laat je raden of
-     hij er niet was of dat hij nul was. Een keuze staat er alleen als er iets te kiezen valt. */
-  const vrij=planVrij(P)+Math.max(Math.round(TND.onverdeeld||0),0);   // v371: terugzetgeld dat nergens past blijft over
-  const rest=`<div id="planVrij" class="small" style="border-top:1px solid var(--ln2);margin-top:2px;padding-top:9px;display:flex;justify-content:space-between;gap:12px;color:var(--mut2)"><span>Blijft over${(vrij>0&&!isMode('rustig'))?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:${vrij>0?'var(--txt)':'var(--mut)'}">${euro0(vrij)}</b>/mnd${vrij>0?` · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span>`:''}</span></div>`;
-  /* v371 (punt 2): DE CONTROLE. Met geld dat terug gaat is "te verdelen deze maand" de inleg plus dat bedrag, en wat er aan
-     de bestemmingen is toegewezen hoort daar op de euro mee te sluiten: de inleg via allocatePlan(), het terugzetbedrag via
-     terugzetNaarDoel(). Sluit het niet, dan staat het verschil eronder bij "Blijft over". */
-  const toeMaand=Math.round(P.reduce((x,p)=>x+Math.max(Math.round(+p.alloc||0),0),0)+Object.values(tzBak).reduce((x,v)=>x+v,0));
-  const toeRegel=(cap>0&&tzDeel>0)?`<div class="small" id="planToeMaand" data-toegewezen="${toeMaand}" data-teverdelen="${cap+tzDeel}" style="border-top:1px solid var(--ln2);margin-top:2px;padding-top:9px;display:flex;justify-content:space-between;gap:12px;color:var(--mut2)"><span>Toegewezen deze maand</span><b style="font-weight:700;color:var(--txt);white-space:nowrap">${euro0(toeMaand)} van ${euro0(cap+tzDeel)}</b></div>`:'';
-  const leeg=`<div class="small muted" style="border-top:1px solid var(--ln2);margin-top:2px;padding:11px 0 3px">Nog geen bestemmingen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
-  /* Punt 12: de optelling stond tussen de bestemmingen en de reserveringen, en las daardoor alsof
-     de reserveringen erin zaten. Hij hoort bij de waterval, dus hij staat er nu onder, binnen
-     dezelfde kaart. P gaat mee: planTotaal() heeft status en rest nodig en die komen hiervandaan. */
-  /* v371: de regel "meer toegewezen dan er staat" verdween tot v370 zodra er een terugzetkeuze was, en daarmee ook
-     het deel dat die keuze niet dekt. Hij staat nu bij de kop en leest spaarOver().zonder: wat een keuze terugzet
-     staat er niet in, de rest wel. Zonder keuze over de opname (tzKaart) dekt er nog niets, dus dan telt die mee. */
-  return planWachtRegel()+spaarVrijLine(P)
-    +`<div class="card" style="padding:12px 13px">${kopBalk}${rows||leeg}${toeRegel}${rest}${planTotaalRegel(P)}</div>`
+  let vdMeld=''; try{ vdMeld=planVerdelingMeldingRegel(); }catch(_){}
+  const inlegRegel=planInlegRegel();
+  const meld=(tzKaart||zgRegel||vdMeld||inlegRegel)?`<div data-planmeldingen style="margin:0 2px 8px">${tzKaart}${zgRegel}${vdMeld}${inlegRegel}</div>`:'';
+  const weergave=planWeergave();
+  const knop=(k,t)=>`<span role="button" data-planweergave="${k}" data-aan="${weergave===k?1:0}" onclick="planWeergaveZet('${k}')" style="flex:1;text-align:center;padding:6px 4px;border-radius:9px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;${weergave===k?'background:var(--card);color:var(--txt);box-shadow:var(--shadow)':'color:var(--mut)'}">${t}</span>`;
+  const schakel=P.length?`<div class="row" data-planschakel style="gap:0;padding:3px;border-radius:12px;background:var(--card2);margin:0 0 9px">${knop('lijst','Lijst')}${knop('tijdlijn','Tijdlijn')}</div>`:'';
+  const leeg=`<div class="small muted" style="padding:11px 0 3px">Nog geen bestemmingen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
+  const inhoud=!P.length?`<div class="card" style="padding:4px 13px">${leeg}</div>`
+    :(weergave==='tijdlijn'
+      ? `<div class="card" id="planTijdlijnInline" style="padding:12px 13px">${planTijdlijnHTML(P,cap,TL,tints)}</div>`
+      : `<div class="card" id="planLijst" style="padding:2px 13px">${P.map((p,i)=>planDoelRij(p,i,TL,SE,tints)).join('')}</div>`);
+  /* "Blijft over" staat er alleen nog als er iets overblijft, als regel onder de lijst */
+  let TND=SE.TND; const vrij=planVrij(P)+Math.max(Math.round((TND&&TND.onverdeeld)||0),0);
+  const rest=vrij>0?`<div id="planVrij" class="small" style="display:flex;justify-content:space-between;gap:12px;color:var(--mut2);margin:-2px 4px 9px"><span>Blijft over${!isMode('rustig')?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:var(--txt)">${euro0(vrij)}</b>/mnd · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></span></div>`:'';
+  return planWachtRegel()+spaarVrijLine(P)+planKpi(P,cap,TL,SE)+meld+schakel+inhoud+rest
     +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+}
+/* v380: de weergave Lijst of Tijdlijn, per gebruiker onthouden; standaard Lijst. */
+function planWeergave(){ return SET.planWeergave==='tijdlijn'?'tijdlijn':'lijst'; }
+function planWeergaveZet(k){ SET.planWeergave=(k==='tijdlijn')?'tijdlijn':'lijst'; save(); render(); }
+/* v380: DE KOP. Een bron per getal: het geld en de doelen uit planStandEind(), "deze maand opzij" is de inleg plus wat
+   er terug gaat (dezelfde termen als de detailsheet), en "Alles vol" de laatste vol-datum van de rijen (planTijdlijnData(),
+   de lezer van de lijst en de tijdlijn). */
+function planKpiData(P,cap,TL,SE){
+  P=P||allocatePlan(); if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
+  TL=TL||planTijdlijnData(P,cap); SE=SE||planStandEind(P);
+  let geld=0, doel=0, inleg=0, terug=0;
+  for(const p of P){ const x=SE.per[p.id]; if(!x) continue; inleg+=x.inleg; terug+=x.tb;
+    if(p.type==='aflossen'||p.nfOnbekend) continue; geld+=x.geld; doel+=x.doel; }
+  geld=Math.round(geld*100)/100;
+  const pct=doel>0?Math.min(Math.round(geld/doel*100),100):0;
+  const loopt=P.filter(p=>p.type!=='aflossen'&&p.status!=='bereikt'&&p.status!=='gepauzeerd'&&!p.nfOnbekend);
+  let laatste=null, onbekend=false;
+  for(const p of loopt){ const v=(TL.per[p.id]||{}).vol; if(v==null){ onbekend=true; continue; } if(laatste==null||v>laatste) laatste=v; }
+  const laat=P.filter(p=>(TL.per[p.id]||{}).warn);
+  return {geld, doel, pct, opzij:Math.round(inleg+terug), terug:Math.round(terug), inleg:Math.round(inleg),
+    allesVol:(cap>0&&!onbekend&&laatste!=null)?laatste:null, allesVolOnbekend:onbekend||!(cap>0), laat, loopt:loopt.length, nogTeGaan:SE.nogTeGaan};
+}
+function planKpi(P,cap,TL,SE){
+  if(!P.length) return '';
+  const K=planKpiData(P,cap,TL,SE);
+  const tegel=(lbl,val,extra,attr)=>`<div ${attr} style="background:color-mix(in srgb,var(--kpi-txt) 13%,transparent);border-radius:10px;padding:7px 9px;font-size:var(--fs-xs);min-width:0">${lbl}<b style="display:block;font-size:var(--fs-md);font-weight:800">${val}</b>${extra}</div>`;
+  const chip=(t,fn,attr)=>`<span ${attr||''} ${fn?`role="button" onclick="event.stopPropagation();${fn}"`:''} style="display:inline-block;background:color-mix(in srgb,var(--kpi-txt) 20%,transparent);border-radius:10px;padding:2px 8px;margin-top:4px;${fn?'cursor:pointer':''}">${t}</span>`;
+  const p1=K.laat[0];
+  const vol=K.allesVol!=null?etaDatum(K.allesVol):(K.loopt?'nog niet te zeggen':'alles is vol');
+  const sub2=p1?`${esc(p1.naam)} haalt ${esc(doelDatumLabel(p1.streefdatum,true))} niet${K.laat.length>1?` (en ${K.laat.length-1} ander${K.laat.length>2?'e':''})`:''}`:'op schema';
+  return `<div id="planKpi" data-kpigeld="${K.geld}" data-kpidoel="${K.doel}" data-kpipct="${K.pct}" data-nogtegaan="${K.nogTeGaan}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px">
+    <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Gespaard voor je doelen</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
+    <div style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px"><span data-kpigeldtekst>${euro0(K.geld)}</span> <span style="font-size:var(--fs-md);font-weight:600">van ${euro0(K.doel)}</span></div>
+    <div data-kpibalk style="height:8px;background:color-mix(in srgb,var(--kpi-txt) 25%,transparent);border-radius:5px;margin:8px 0 10px;overflow:hidden"><i style="display:block;height:8px;width:${K.pct}%;background:var(--kpi-txt);border-radius:5px"></i></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${tegel('Deze maand opzij', euro0(K.opzij), K.terug>0?chip(`incl. ${euro0(K.terug)} terug ›`,'openTerugOpbouw()','data-kpiterug="'+K.terug+'"'):'', `data-kpiopzij="${K.opzij}"`)}
+      ${tegel('Alles vol', vol, chip(sub2,p1?'openPlanTijdlijn()':'', `data-kpischema="${p1?'laat':'ok'}"`), `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
+    </div></div>`;
+}
+/* v380: DE RIJ, EEN VORM VOOR ELK DOEL: nummer, naam, status, een balk (het geld dicht, wat er deze maand bijkomt
+   gearceerd), links "EUR geld / EUR doel", rechts de vol-datum, en een kleine grijze regel. Geen rekensom: die staat in
+   de detailsheet. De status: vol, vol in <maand> (deze maand), bijna vol (C), nu actief, vanaf <maand>, gepauzeerd. */
+function planDoelStatus(p,t,x){
+  if(p.nfOnbekend) return {k:'onbekend', tekst:'stand onbekend'};
+  if(p.status==='bereikt') return {k:'vol', tekst:'vol'};
+  if(p.status==='gepauzeerd') return {k:'gepauzeerd', tekst:'gepauzeerd'};
+  if(x && planBijnaVol(x)) return {k:'bijnavol', tekst:'bijna vol'};
+  if(t && t.vol===1 && x && x.S>=x.doel) return {k:'volin', tekst:`vol in ${MNAMES[new Date().getMonth()]}`};
+  if(Math.round(+p.alloc||0)>0 || (x&&x.tb>0)) return {k:'actief', tekst:'nu actief'};
+  if(t && t.eerste!=null) return {k:'wacht', tekst:`vanaf ${tlMaand(t.eerste).k}`};
+  return {k:'wacht', tekst:'wacht'};
+}
+function planDoelRij(p,i,TL,SE,tints){
+  const t=TL.per[p.id]||{}, x=SE.per[p.id]||{geld:0,tb:0,inleg:0,S:0,doel:0,nogLater:0}, st=planDoelStatus(p,t,x), tint=tints[p.id];
+  const doel=Math.max(Math.round(+p.doel||0),0);
+  const geld=p.type==='aflossen'?Math.max(Math.round(+p.gespaard||0),0):x.geld;
+  const pct=doel>0?Math.min(geld/doel*100,100):0;
+  const bij=p.status==='gepauzeerd'?0:(x.tb+x.inleg);
+  const bijPct=doel>0?Math.max(Math.min(bij/doel*100,100-pct),0):0;
+  const arc=`repeating-linear-gradient(135deg,${tint} 0 3px,color-mix(in srgb,${tint} 30%,transparent) 3px 6px)`;
+  const balk=`<div class="bar-track plan-rijbalk" data-rijbalk style="height:7px;margin:6px 0 5px;position:relative">${p.nfOnbekend?'':`<div class="bar-fill" data-geldvat="${p.id}" data-pct="${pct.toFixed(2)}" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" data-groei data-bijvat="${p.id}" data-pct="${bijPct.toFixed(2)}" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}`}</div>`;
+  const vol=p.status==='bereikt'?'vol':(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
+  const streef=(p.type==='goal'&&p.streefdatum)?doelDatumLabel(p.streefdatum,true):'';
+  const sub=st.k==='bijnavol'?`vol ${t.vol>0?etaDatum(t.vol):'nog niet te zeggen'} · ${euro0(x.nogLater)} komt nog terug`
+    :st.k==='gepauzeerd'?'krijgt nu niets'
+    :st.k==='vol'?'geen inleg meer nodig'
+    :st.k==='onbekend'?'wat er al staat is niet bekend'
+    :bij>0?`+${euro0(bij)} deze maand`
+    :streef?`streef ${streef} · ${t.warn?'niet haalbaar':'haalbaar'}`
+    :planDatumMist(p)?'geen streefdatum'
+    :(p.grendel?'wacht op je buffer':'krijgt deze maand niets');
+  const nr=`<span class="plan-1${i===0?'':' n'}" data-rijnr>${i+1}</span>`;
+  return `<div class="plan-item plan-rij2" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}"${t.warn?` data-planwaarschuwing="${p.id}"`:''} role="button" style="${i?'border-top:1px solid var(--line);':''}padding:9px 0 8px;cursor:pointer" onclick="openPlanDoel('${p.id}')">
+    <div class="row" style="gap:8px;align-items:baseline">${nr}<span class="wf-naam" data-rijnaam style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
+    ${balk}
+    <div class="row small" style="gap:8px;align-items:baseline"><span data-rijgeld style="flex:1;min-width:0"><b style="font-weight:700">${euro0(geld)}</b> <span style="color:var(--mut)">/ ${euro0(doel)}</span></span><span data-rijvol style="white-space:nowrap;color:var(--mut)">${esc(vol)} ›</span></div>
+    <div class="small" data-rijsub style="color:${t.warn?'var(--amber)':'var(--mut2)'};margin-top:1px">${esc(sub)}</div></div>`;
+}
+/* v380: DE DETAILSHEET. De rekensom van een doel: wat er nu op je spaarrekening staat, plus wat er deze maand terug gaat,
+   plus de inleg van deze maand, is de stand eind deze maand (planStandEind()). "vol" alleen als die stand het doel haalt;
+   anders de rode regel met wat er nog nodig is. Komt er na deze maand nog geld terug (B), dan staat dat eronder, buiten de
+   som, met de vol-datum die het laatste deel geeft. */
+function openPlanDoel(id){ window._planDoel=id; renderPlanDoel(); showSheetBg(); }
+function planRij(id){ openPlanDoel(id); }
+const PLAN_PLEK=['eerste','tweede','derde','vierde','vijfde','zesde'];
+function renderPlanDoel(){
+  const id=window._planDoel; let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
+  const p=P.find(x=>x.id===id); if(!p){ closeSheet(); return; }
+  const i=P.indexOf(p), TL=planTijdlijnData(P,cap), SE=planStandEind(P), t=TL.per[p.id]||{}, x=SE.per[p.id], st=planDoelStatus(p,t,x);
+  const tint=planTint(p,i), mn=MFULL[new Date().getMonth()], mnK=MNAMES[new Date().getMonth()];
+  const doel=x.doel, geld=p.type==='aflossen'?Math.max(Math.round(+p.gespaard||0),0):x.geld;
+  const pct=doel>0?Math.min(geld/doel*100,100):0, bij=p.status==='gepauzeerd'?0:x.tb+x.inleg, bijPct=doel>0?Math.max(Math.min(bij/doel*100,100-pct),0):0;
+  const arc=`repeating-linear-gradient(135deg,${tint} 0 3px,color-mix(in srgb,${tint} 30%,transparent) 3px 6px)`;
+  const op=(k,l,b,stijl)=>`<div class="row small" data-op="${k}" data-bedrag="${b}" style="gap:8px;padding:7px 0;border-bottom:1px solid var(--line);${stijl||''}"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${euro0(b)}</b></div>`;
+  const naar=p.type==='noodfonds'?'je noodfonds':esc(p.naam);
+  /* het streepje van v248 (waar je zou moeten staan om je streefdatum te halen) staat op de balk van de detailsheet */
+  const ST=p.nfOnbekend?null:doelStreepje(p);
+  const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="position:absolute;top:-3px;bottom:-3px;left:${ST.pct.toFixed(2)}%;width:2px;background:var(--txt)"><span class="sr-only">${doelStreepjeTekst(p,ST,t.warn?(t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'):'')}</span></span>`:'';
+  const S=x.S, vol=S>=doel&&doel>0;
+  let som='';
+  if(p.type!=='aflossen' && !p.nfOnbekend){
+    som+=op('geld','Staat nu op je spaarrekening',x.geld);
+    if(x.tb>0) som+=op('terug',`+ Terug naar ${naar}`,x.tb);
+    if(x.nogLater>0) som+=`<div class="row small" data-op="later" data-bedrag="${x.nogLater}" style="gap:8px;padding:5px 0;border-bottom:1px solid var(--line);color:var(--mut)"><span style="flex:1;min-width:0">+ nog terug na ${esc(mn)} ${euro0(x.nogLater)} (${x.later.map(l=>`${tlMaand(l.m-1).k} ${euro0(l.bedrag)}`).join(', ')})</span></div>`;
+    som+=op('inleg','+ Inleg deze maand',p.status==='gepauzeerd'?0:x.inleg);
+    som+=`<div class="row" data-op="eind" data-bedrag="${S}" data-vol="${vol?1:0}" style="gap:8px;padding:7px 0;border-bottom:2px solid var(--txt);font-weight:800"><span style="flex:1;min-width:0">Eind ${esc(mn)}</span><span style="white-space:nowrap">${euro0(S)}${vol?' · vol':''}</span></div>`;
+    if(x.nogLater>0 && t.vol>0) som+=`<div class="small" data-eindvol style="color:var(--mut);padding:5px 0">vol ${etaDatum(t.vol)} (met het laatste terugzetdeel)</div>`;
+    if(!vol && doel>0) som+=`<div class="row small" data-nognodig="${Math.round((doel-S)*100)/100}" role="button" onclick="closeSheet();planWeergaveZet('tijdlijn')" style="gap:8px;padding:7px 0;color:var(--red);font-weight:700;cursor:pointer"><span style="flex:1;min-width:0">Nog nodig tot ${euro0(doel)}</span><span style="white-space:nowrap">${euro0(doel-S)} ›</span></div>`;
+    if(x.zg>0) som+=`<div class="small muted" data-op="zg" style="padding:3px 0">${euroC(x.zg)} is toegewezen zonder geld en telt hier niet mee.</div>`;
+    if(x.tb>0||x.nogLater>0) som+=`<div class="small muted" style="margin-top:6px">Waar komt "terug" vandaan? <span role="button" data-terugherkomst style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openTerugOpbouw()">opnames in ${esc(mn)} ›</span></div>`;
+  } else som=`<div class="small" style="padding:7px 0">${p.nfOnbekend?'Wat er al staat is niet bekend.':`${euro0(geld)} afgelost van ${euro0(doel)}, ${euro0(x.inleg)} extra deze maand.`}</div>`;
+  /* het datumpaar (vatRegels(): streefdatum, speling of achterstand, waarop hij wacht, bij een schuld beide datums) en de
+     ingang "datum zetten" bij een doel zonder streefdatum stonden in de open rij (v367) en staan nu hier */
+  let dat=''; try{ const R=vatRegels(p,false); if(R.regels.length) dat=`<div class="small vat-dat" data-plandetail="${p.id}" style="color:var(--mut);margin-top:8px;line-height:1.45">${R.regels.join('<br>')}</div>`; }catch(_){}
+  if(t.warn) dat+=`<div class="small" data-planwaarschuwing="${p.id}" role="button" style="color:var(--amber);margin-top:6px;cursor:pointer" onclick="openPlanTijdlijn()">⚠ streefdatum niet haalbaar in deze volgorde: ${t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'} ›</div>`;
+  const plek=PLAN_PLEK[i]||`${i+1}e`;
+  const act=(t2,fn,attr)=>`<span role="button" ${attr} style="color:var(--teal);font-weight:700;cursor:pointer" onclick="${fn}">${t2}</span>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="planDoelSheet" data-doel="${p.id}">
+    <div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:800;font-size:var(--fs-lg)">${esc(p.naam)}</span><span class="small" data-planstatus style="font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
+    <div class="small muted" style="margin:2px 0 8px">doel ${euro0(doel)} · ${plek} in de volgorde</div>
+    <div class="bar-track" style="height:10px;margin:0 0 6px;position:relative"><div class="bar-fill" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}${streep}</div>
+    ${som}${dat}
+    <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
+}
+/* v380: WAAR DE "TERUG" VAN DEZE MAAND VANDAAN KOMT: per lopende keuze het deel van deze maand (dezelfde terugzetActief()
+   als de kop en de rij), de onttrekkingen van deze maand (spaarOnttrekkingen(), blok 14) en waar het heen gaat
+   (terugzetNaarDoel()). Twee ingangen: de chip in de kop en de link in de detailsheet. */
+function openTerugOpbouw(){
+  const ym=thisYM(), A=terugzetActief(ym), mn=MFULL[+ym.slice(5,7)-1];
+  let P=[]; try{ P=allocatePlan(); }catch(_){}
+  const TND=terugzetNaarDoel(P), naam=id=>{ const x=P.find(y=>y.id===id); return x?(x.type==='noodfonds'?'Noodfonds':x.naam):'een doel dat uit het plan ging'; };
+  const tot=Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0));
+  const rij=(k,l,b,attr)=>`<div class="row small" ${attr} style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${b}</b></div>`;
+  const keuzes=A.map(T=>rij('k',`${T.gat?`${euroC(+T.r.bedrag||0)} toegewezen zonder geld`:`${euro0(+T.r.bedrag||0)} eruit gehaald`} · ${esc((TERUGZET_LAB[T.r.keuze]||T.r.keuze).toLowerCase())}`, euroC(tzDeelVan(T)), `data-opbouwrij="${tzDeelVan(T)}"`)).join('');
+  let O=[]; try{ O=spaarOnttrekkingen([ym]); }catch(_){}
+  const boek=(O[0]&&O[0].eruit||[]).map(t2=>rij('b',`${esc(dagKort(t2.date))} · ${esc(txNaam(t2))}`, euroC(-t2.amount), 'data-opbouwboeking')).join('');
+  const heen=Object.keys(TND.per).map(id=>rij('h',`naar ${esc(naam(id))}`, euro0(TND.per[id]), `data-opbouwnaar="${id}"`)).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="terugOpbouw" data-terugtotaal="${tot}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${euro0(tot)} terug in ${esc(mn)}</div>
+    <div class="small muted" style="margin:2px 0 8px">Wat je deze maand terugzet, per keuze.</div>
+    ${keuzes||'<div class="small muted">Er loopt geen keuze om terug te zetten.</div>'}
+    ${boek?`<div class="small" style="font-weight:700;margin:12px 0 2px">Eruit gehaald in ${esc(mn)}</div>${boek}`:''}
+    ${heen?`<div class="small" style="font-weight:700;margin:12px 0 2px">Waar het heen gaat</div>${heen}`:''}
+    ${TND.onverdeeld>0?`<div class="small muted" style="margin-top:4px">${euro0(TND.onverdeeld)} past nergens en blijft over.</div>`:''}
+    <div class="small" style="margin-top:12px"><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openPlanInstel()">keuze wijzigen ›</span></div></div>`;
+  showSheetBg();
+}
+/* v380: "VERDELING ⚙": de twee instellingen in een sheet, met de gekozen stand gemarkeerd. Een andere keuze loopt via de
+   bestaande flow met het gevolg vooraf: de terugzetkaart (terugzetKaart()) en de sheet Verdeling (openVerdeling()). */
+function openPlanInstel(){
+  const ym=thisYM(); let D=null; try{ D=terugzetData(); }catch(_){}
+  const rec=(terugzetRecs()[ym])||null, Z=planZelf();
+  const pick=(attr,aan,t,sub,fn)=>`<div ${attr} data-gekozen="${aan?1:0}" role="button" onclick="${fn}" style="border:1.5px solid ${aan?'var(--teal)':'var(--ln2)'};border-radius:10px;padding:8px 10px;margin-top:6px;cursor:pointer;${aan?'background:color-mix(in srgb,var(--teal) 10%,transparent)':''}"><span class="small" style="font-weight:700">${t}</span>${aan?' <span class="small muted">· gekozen</span>':''}${sub?` <span class="small muted">· ${sub}</span>`:''}</div>`;
+  const gat=terugzetGatRecs().filter(r=>r&&r.M===ym);
+  let terug='';
+  if(D) terug=`<div class="small" style="margin-top:4px"><b>Terugzetten</b> · ${euro0(D.B)} eruit gehaald in ${esc(MFULL[+ym.slice(5,7)-1])}</div>`
+    +['alles','drie','niet'].map(k=>pick(`data-instelterug="${k}"`, !!rec&&rec.keuze===k, TERUGZET_LAB[k], '', 'openTerugzetSheet()')).join('');
+  if(gat.length) terug+=`<div class="small" style="margin-top:${D?10:4}px"><b>Toegewezen zonder geld</b></div>`+gat.map(r=>`<div class="small" data-instelgat="${esc(r.keuze)}" style="padding:5px 0;color:var(--mut)">${euroC(+r.bedrag||0)} · ${esc((r.keuze==='verlaag'?'toewijzing verlaagd':(TERUGZET_LAB[r.keuze]||r.keuze)).toLowerCase())} · gekozen</div>`).join('');
+  if(!terug) terug=`<div class="small muted" style="margin-top:4px"><b style="color:var(--txt)">Terugzetten</b> · er is deze maand niets van je spaarrekening gehaald.</div>`;
+  let n=0; try{ n=allocatePlan().length; }catch(_){}
+  const verdeel=`<div class="small" style="margin-top:12px"><b>Verdelen</b></div>`
+    +pick('data-instelverdeel="volgorde"', !Z, 'Op volgorde', Array.from({length:n},(_,i)=>i+1).join(' → ')+(n>1?', de ruimte schuift door':''), 'openVerdeling()')
+    +pick('data-instelverdeel="zelf"', !!Z, 'Zelf verdelen', '', 'openVerdeling()');
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="planInstel">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Verdeling</div>
+    <div class="small muted" style="margin:2px 0 8px">hoe je inleg over je doelen gaat</div>
+    ${terug}${verdeel}
+    <div class="small muted" style="margin-top:8px">Volgorde wijzigen: sleep de doelen in Verdelen, of kies de plek bij het doel zelf.</div></div>`;
+  showSheetBg();
+}
+/* v380: het controletotaal van v371 staat niet meer op het scherm en blijft als functie (en als test): wat er deze maand
+   is toegewezen, de inleg via allocatePlan() plus het terugzetbedrag via terugzetNaarDoel(), tegen te verdelen. */
+function planToeMaand(P){
+  P=P||allocatePlan(); let cap=0; try{ cap=planCapacity(); }catch(_){}
+  let TND={per:{}}; try{ TND=terugzetNaarDoel(P); }catch(_){}
+  const toe=Math.round(P.reduce((x,p)=>x+Math.max(Math.round(+p.alloc||0),0),0)+Object.values(TND.per).reduce((x,v)=>x+v,0));
+  return {toegewezen:toe, teVerdelen:cap+Math.round(terugzetDeel(thisYM())||0)};
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
@@ -12644,11 +12731,14 @@ function fireInputs(){
      geld de deur uit (v347). */
   let doelPerMaand=0, doelItems=[], planRijen=[], planCap=0;
   try{ planCap=planCapacity(); }catch(_){}
-  try{ const P=allocatePlan();
+  let planBij={};
+  try{ const P=allocatePlan(); const TPj=planTerugProj(P); planBij=TPj.bij;   // v380: dezelfde terugzetting en zonder geld als Plan
        planRijen=P.map(p=>{ const k=(p.type==='goal'&&p.streefdatum)?doelMaandenTot(p.streefdatum):null;
+         const dl=Math.max(Math.round(+p.doel||0),0), rs=Math.max(Math.round(+p.rest||0),0), pd=Math.min(Math.max(Math.round(+TPj.rest[p.id]||0),0), Math.max(dl-rs,0));
          return {id:p.id, type:p.type, naam:p.naam||'', mode:p.mode, perMaand:p.perMaand, pct:p.pct,
            doel:Math.max(Math.round(+p.doel||0),0), rest:Math.max(Math.round(+p.rest||0),0), gespaard:Math.max(Math.round(+p.gespaard||0),0), nfOnbekend:!!p.nfOnbekend,
-           status:(p.status==='gepauzeerd')?'gepauzeerd':'', houdt:(p.type==='aflossen'), k:(k!=null&&k>=0)?k:null}; });
+           status:(p.status==='gepauzeerd')?'gepauzeerd':'', houdt:(p.type==='aflossen'), k:(k!=null&&k>=0)?k:null,
+           pending:pd, zgLater:Math.min(Math.max(Math.round(+TPj.zg[p.id]||0),0), Math.max(dl-rs-pd,0)), door:!!TPj.door[p.id]}; });
        doelItems=P.filter(p=>p&&p.type==='goal').map(p=>{
          const k=p.streefdatum?doelMaandenTot(p.streefdatum):null;
          return {naam:p.naam||'Doel', per:Math.max(Math.round(+p.alloc||0),0), doel:Math.max(Math.round(+p.doel||0),0),
@@ -12664,7 +12754,7 @@ function fireInputs(){
      structureel per maand kosten en je inleg per bezitting (spaar, res en bel in vermogensInleg()). */
   if(!opzij && monthlySaving>0) opzij={bedrag:Math.round(monthlySaving+Math.max(+resPerMaand||0,0)+belegdItems.reduce((a,x)=>a+Math.max(+x.per||0,0),0)), bron:'instelling', maanden:[]};
   if(!opzij) opzij={bedrag:null, bron:'surplus', maanden:[]};
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, planRijen, planCap, planCap0:(function(){ try{ return planInlegLopend(planCap); }catch(_){ return planCap; } })(), opzij, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, planRijen, planBij, planCap, planCap0:(function(){ try{ return planInlegLopend(planCap); }catch(_){ return planCap; } })(), opzij, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -12801,6 +12891,7 @@ function fireModel(R, inputs){
   const _planCap=_auto?Math.max(Math.round(+inputs.planCap||0),0):0;
   const _planCap0=_auto?Math.max(Math.round(+(inputs.planCap0!=null?inputs.planCap0:inputs.planCap)||0),0):0;
   const _rij0=_auto?(inputs.planRijen||[]).map(r=>Object.assign({},r,{acc:Math.max(+r.gespaard||0,0), alloc:0})):[];
+  const _planBij=(_auto&&inputs.planBij)||{};
   /* v348: DE INLEG IS GESPLITST. Wat er werkelijk opzij ging (inputs.opzij, het gemiddelde van drie
      afgeronde maanden) gaat de waterval in; de rest van je surplus blijft vlak op je rekening staan en
      groeit niet. Samen is dat per constructie het surplus, dus er verdwijnt geen geld en er komt er
@@ -12886,6 +12977,9 @@ function fireModel(R, inputs){
        opzij ging (F) staan vlak (C). Samen is dat per maand het surplus: er komt geen euro bij en er
        valt er geen weg (v348). */
     for(let m=0;m<12;m++){ const k=12*y+m;
+      /* v380: dezelfde terugzetdelen en zonder geld als Plan (planTerugProj()): maand k+1 van planVooruit() */
+      if(k===1) for(const r of _rij) if(r.zgLater>0){ r.rest+=r.zgLater; r.zgLater=0; }
+      const _b=_planBij[k+1]; if(_b) for(const r of _rij){ let b=Math.round(+_b[r.id]||0); if(b>0){ const vp=Math.min(b,(k===0&&r.door)?0:(r.pending||0)); r.pending=(r.pending||0)-vp; b-=vp; if(b>0) r.rest=Math.max(r.rest-b,0); if(r.rest<=0&&!(r.pending>0)&&!(r.zgLater>0)&&_vol[r.id]==null) _vol[r.id]=k+1; } }
       const _q=maandDeel(nowY+y,k,_rij,true), p=_q.p, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
       _pJaar[y]+=p; if(_q.plan>0) _planLaatst=k+1;   // v370: een aantal inleggen, zoals een eta
       let _weg=0;
@@ -12894,7 +12988,7 @@ function fireModel(R, inputs){
          Een gepauzeerd doel krijgt niets bij, maar zijn geld gaat op zijn datum wel weg. */
       for(const r of _rij){
         if(!r.houdt && r.status!=='gepauzeerd'){ const al=Math.max(Math.round(+r.alloc||0),0);
-          if(al>0){ r.rest=Math.max(r.rest-al,0); r.acc+=al; if(r.rest<=0&&_vol[r.id]==null) _vol[r.id]=k+1; } }   // v370: gelijk aan planVooruit()
+          if(al>0){ r.rest=Math.max(r.rest-al,0); r.acc+=al; if(r.rest<=0&&!(r.pending>0)&&!(r.zgLater>0)&&_vol[r.id]==null) _vol[r.id]=k+1; } }   // v370: gelijk aan planVooruit(); v380: ook de pending en zonder geld
         if(r.type==='goal' && !r.uit && r.k!=null && r.k===k){ _weg+=r.acc; r.uit=true; r.rest=0; r.status='bereikt'; } }
       if(_auto){ _weg+=(_resEen[k]||0); for(const x of _resTerug) if(k>=x.k&&(k-x.k)%x.iv===0) _weg+=x.bedrag; }
       const _f=(_q.aperWens>0)?(aper/_q.aperWens):0;   // proportioneel klemmen: elke pot levert evenveel in
@@ -14205,11 +14299,11 @@ function renderVooruit(){
      opent om je doelen te ordenen, dus de lijst hoort er te staan. Ook in Rustig: 'Rustig toont
      minder' (v20/v90) gaat over nevenzaken, en hier is de lijst de hoofdzaak. Je eigen keuze wint
      onverkort, want SET.vooruitDoelOpen wordt als eerste gelezen. */
-  const doelOpen=(SET.vooruitDoelOpen!==undefined)?SET.vooruitDoelOpen:true;
   /* v225: hier stond de samenvatting van de lijst in de zonebalk ("#1 Vakantie · +3 meer"), met
      P, top, doelKop en doelTeaser eromheen. De kaart eronder toont die volgorde nu zelf, met
      nummers, dus de balk draagt alleen nog de naam van de zone en de inklap-knop. */
-  const doelZone=vooruitZone('vooruitDoelOpen','Bestemmingen','',doelOpen,goals);
+  /* v380: de zonebalk "Bestemmingen" is vervallen: Plan opent op de kop (renderPlan()). */
+  const doelZone=goals;
   // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
   // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
@@ -14225,113 +14319,6 @@ function renderVooruit(){
      daardoor alsof de reserveringen erin zaten. Hij hoort bij de waterval en staat sindsdien in
      renderPlan(), binnen dezelfde kaart, onder de sluitpost. */
   $('#s-vooruit').innerHTML = doelZone + VOORUIT_FOOT;
-}
-/* v221: de optelling over je plan. Per doel zag je toegewezen tegen doelbedrag en wat het per
-   maand krijgt, maar nergens het totaal: wat vraagt je plan bij elkaar, wat staat daar tegenover,
-   en wat is het verschil. Dat was alleen te zien door de regels zelf op te tellen.
-   Bronnen: doel, gespaard en rest zoals allocatePlan() ze al levert, planCapacity() voor het tempo
-   en doelMaandenTot() voor de datum. Er wordt niets herrekend.
-   AFBAKENING. Alles behalve type 'aflossen' - schuld is een andere vraag. Het noodfonds telt dus
-   MEE: sinds v172 is het een plan-item met hetzelfde doel/toegewezen-patroon als een doel, het
-   staat in dezelfde lijst, en een regel die zich 'totaal' noemt terwijl het eerste item erboven
-   ontbreekt is een claim die niet klopt.
-   NIET de v211-filter (type 'goal' én alloc > 0). Die hoort bij maandelijkse bestemmingen en werkt
-   hier averechts: een doel dat 'wacht op capaciteit' heeft alloc 0, en dat is juist het doel waar
-   deze vraag over gaat. Een afbakening is niet overdraagbaar tussen twee vragen.
-   Een GEPAUZEERD doel telt wel in het totaal en niet in de maanden: het bedrag is niet verdwenen,
-   je hebt alleen de inleg stilgezet, maar het krijgt geen inleg en dan zou het getal een tempo
-   claimen voor geld dat geen tempo heeft (zelfde redenering als een vlakke bezitting buiten de
-   groei, v213). Een BEREIKT doel telt in beide sommen mee en laat het verschil dus ongemoeid.
-   Geen oordeel: geen kleur die dit als probleem markeert, geen advies om meer in te leggen, geen
-   aanmoediging. Dit heb je nodig, dit staat er, zoveel maanden scheelt dat, en je eerste
-   streefdatum is dan. Wat je ermee doet is aan jou. */
-function planTotaal(P){
-  const items=(P||(function(){ try{ return allocatePlan(); }catch(_){ return []; } })())
-    .filter(p=>p&&p.type!=='aflossen');
-  if(!items.some(p=>p.type==='goal')) return null;   // zonder doelen valt er niets op te tellen
-  const rest=p=>Math.max(Math.round((p.rest!=null)?+p.rest:((+p.doel||0)-(+p.gespaard||0)))||0,0);
-  const nodig=items.reduce((a,p)=>a+Math.max(Math.round(+p.doel||0),0),0);
-  const toe=items.reduce((a,p)=>a+Math.max(Math.round(+p.gespaard||0),0),0);
-  const gat=items.reduce((a,p)=>a+rest(p),0);
-  const pauze=items.filter(p=>p.status==='gepauzeerd');
-  const gatPauze=pauze.reduce((a,p)=>a+rest(p),0);
-  const gatLopend=Math.max(gat-gatPauze,0);
-  /* v317: HIER STOND DE EIGEN DELING, `Math.ceil(gatLopend/cap)`, plus de eerstvolgende
-     streefdatum. Dat was de DERDE telling over dezelfde vraag: de vaten lezen sinds v307 de
-     projectie van `planVooruit()` en deze regel niet. Gemeten liepen de twee uiteen op precies het
-     geval dat de regel moest dragen: met een doel dat achter de grendel op de buffer wacht zei de
-     alinea "10 maanden" terwijl het traagste vat `eta` 4 had en het wachtende doel helemaal geen
-     vol-datum droeg. In het normale geval vielen ze samen, want zolang elk item meedoet verdeelt de
-     projectie elke maand de hele inleg, en dan is de laatste maand per constructie `ceil(gat/cap)`.
-     Een tweede uitdrukking die meestal hetzelfde zegt is precies wat v104 verbiedt.
-     DE STREEFDATUM-ZIN IS DAARMEE OOK VERVALLEN: die bestond alleen om uit te leggen dat de maanden
-     over het hele plan gingen en de datum bij EEN doel hoorde. Met een echte vol-maand uit de
-     projectie is er geen verwarring meer om weg te schrijven, en de streefdatum per doel staat in
-     het datumpaar van dat doel.
-     `cap` BLIJFT, want de regel in rustig leest hem niet maar `planKlaarMaand()` heeft hem nodig en
-     de aanroeper geeft hem mee. */
-  return {nodig, toe, gat, gatLopend, gatPauze, pauze:pauze.length,
-    nf:items.some(p=>p.type==='noodfonds')};
-}
-/* v317: WANNEER IS JE PLAN VOL. Uit `planVooruit()` en niets anders: de laatste maand waarin een
-   bestemming die meedoet vol raakt. Daarmee leest deze regel dezelfde projectie als het datumpaar in
-   elk vat, en kan hij er niet meer van afwijken.
-   WIE MEEDOET: geen aflos-item (dat is een andere vraag, en de projectie laat zijn alloc voor altijd
-   staan, v307), niet bereikt, niet gepauzeerd, en rest boven nul. Een GEPAUZEERD doel zit wel in het
-   bedrag en niet in de maand, net als voorheen; de regel zegt dat ook.
-   WAT ZONDER MAAND BLIJFT WORDT GENOEMD EN NIET WEGGELATEN (v59/v73/v173). Zonder bekende inleg geeft
-   `planVooruit()` een lege map en is er over geen enkel doel een maand te zeggen; dan staat er geen
-   maand in plaats van een verzonnen tempo. */
-function planKlaarMaand(P,cap){
-  P=P||allocatePlan();
-  if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
-  let VOL={}; try{ VOL=planVooruit(P,cap,planGrendel())||{}; }catch(_){}
-  const mee=(P||[]).filter(p=>p&&p.type!=='aflossen'&&p.status!=='bereikt'
-    &&p.status!=='gepauzeerd'&&Math.round(+p.rest||0)>0);
-  let laatste=null;
-  for(const p of mee){
-    const m=VOL[p.id];
-    if(m!=null&&(laatste==null||m>laatste.maand)) laatste={id:p.id, naam:p.naam, maand:m};
-  }
-  return {laatste, zonder:mee.filter(p=>VOL[p.id]==null).map(p=>p.naam), mee:mee.length};
-}
-/* v317: EEN REGEL IN PLAATS VAN EEN ALINEA, EN DE MAAND KOMT UIT DE PROJECTIE. De alinea droeg vijf
-   zinnen (gemeten 113px op 360px en 94px op 390px) en rekende zelf `ceil(gatLopend/cap)`; zie
-   planTotaal() voor waarom die deling eruit is.
-   WAT DE REGEL NOG ZEGT zijn de twee dingen die de vaten NIET zeggen: wat je plan bij elkaar nog
-   vraagt, en wanneer het hele plan vol is. Dat tweede is op het gemeten tegenvoorbeeld meer dan de
-   vaten tonen: een doel dat achter de grendel op de buffer wacht heeft helemaal geen vol-datum in
-   zijn vat, en de projectie geeft er wel een.
-   WAT ERAF IS: het totaal (`nodig`) en het toegewezen bedrag (`toe`). Die twee staan per bestemming
-   in de stand-regel ("EUR 0 toegewezen / EUR 15.000"), dus de som ervan is op te tellen en het
-   VERSCHIL is wat je niet uit de rijen afleest. Dat is de keuze die de regel tot een regel maakt;
-   `planTotaal()` blijft ze leveren voor wie ze nodig heeft.
-   HET GEPAUZEERDE BEDRAG HOUDT ZIJN EIGEN ZIN, om de reden van v221: het zit in het verschil en
-   niet in de maand, dus zonder die zin leest "nog X te gaan en vol in Y" als een belofte over geld
-   dat geen inleg krijgt. */
-function planTotaalRegel(P){
-  const T=planTotaal(P); if(!T) return '';
-  const kort=isMode('rustig');
-  if(kort) return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${euro0(T.gat)} van je plan staat er nog niet.</div>`;
-  let cap=0; try{ cap=planCapacity(); }catch(_){}
-  const K=planKlaarMaand(P,cap);
-  const lbl=(K.laatste&&K.laatste.maand!=null)?etaDatum(K.laatste.maand):'';
-  const delen=[];
-  delen.push(lbl
-    ? `Nog <b>${euro0(T.gatLopend)}</b> te gaan, en op deze verdeling is je plan vol in <b>${lbl}</b>.`
-    : `Nog <b>${euro0(T.gatLopend)}</b> te gaan.`);
-  if(T.gatPauze>0) delen.push(`${euro0(T.gatPauze)} hoort bij ${T.pauze===1?'een gepauzeerd doel':'gepauzeerde doelen'} en krijgt geen inleg, dus dat zit hier niet in.`);
-  /* Zonder maand staat de reden erbij in plaats van niets: zonder bekende inleg valt er over geen
-     enkele bestemming een maand te zeggen, en dat is iets anders dan een plan dat al vol is. */
-  if(!lbl&&K.mee>0) delen.push(cap>0
-    ? `Wanneer het vol is valt nog niet te zeggen.`
-    : `Zonder bekende ${planCapLabel()} valt niet te zeggen wanneer het vol is.`);
-  else if(lbl&&K.zonder.length) delen.push(`${opsomming(K.zonder.map(esc))} ${K.zonder.length===1?'zit':'zitten'} daar niet in.`);
-  return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.5">${delen.join(' ')}</div>`;
-}
-function vooruitZone(key,label,teaser,open,content){
-  const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:var(--fs-md)">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'▼'}</span></div>`;
-  return open?bar+content:bar;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 /* v196: hier stond coachItems(), de vijf regels van het opgeheven coachscherm. Alle vijf leven

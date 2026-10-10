@@ -111,6 +111,9 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   ruimte schuift door" met "tijdlijn ›" naar de Gantt-sheet (`openPlanTijdlijn()`, `planTijdlijnData()`), en een
   doel waarvan de streefdatum in deze volgorde niet haalbaar is draagt een waarschuwing (`data-planwaarschuwing`).
   Bind op `.plan-item[data-id]`.
+  SINDS `v380` IS PLAN EEN DASHBOARD: de kop `#planKpi` (`planKpi()`, `planKpiData()`), de schakelaar Lijst / Tijdlijn
+  (`SET.planWeergave`), een rijvorm per doel (`planDoelRij()`), de rekensom in de detailsheet (`openPlanDoel()`) en de
+  instellingen achter "verdeling ⚙" (`openPlanInstel()`); zie de staande regel bovenaan.
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen; sinds `v374` zes subpagina's voor wat je
 zelden wijzigt, het maandwerk staat op Grip). Die dragen geen
@@ -125,6 +128,42 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **PLAN IS EEN DASHBOARD, VOL IS PAS VOL ALS GELD + TERUG + INLEG HET DOEL HALEN, EN NOG TE GAAN REKENT VANAF HET GELD**
+  (`v380`, gevraagd door de gebruiker, mockup "Plan-scherm als dashboard", keuzes B, C (variant X) en D).
+  DEEL 1, DE GETALLEN. `planStandEind(P)` is de ENE verwachte stand eind deze maand: per bestemming geld (toewijzing min
+  wat nog terug moet en min zonder geld), tb (`terugzetNaarDoel()`), inleg, `S = geld + tb + inleg`, en apart `nogLater`
+  met `later` (de terugzetdelen na deze maand uit `terugzetProjectie()`). Vier lezers: de rij, de detailsheet, de kop en
+  nog te gaan (`nogTeGaan` = som doel min S over wat loopt, gepauzeerd en aflossen niet; gemeten EUR 16.262 op de stand van
+  het toestel, tegen EUR 18.362 tot `v379`). `planVooruit()` houdt `rest` (wat de inleg vult, gelijk aan `p.rest`) apart
+  van `pending` (wat via de delen terugkomt) en `zgLater` (zonder geld zonder keuze: komt niet terug, de inleg vult het
+  vanaf volgende maand); vol is pas als alle drie nul zijn. Tot `v379` telde de projectie de delen bij de rest op en vroeg
+  het Noodfonds in oktober EUR 462 tegen EUR 362 in `allocatePlan()`. `planTerugProj(P)` levert die invoer aan
+  `planVooruit()` en aan `fireInputs()` (`planBij`, en `pending`/`zgLater` per rij), zodat `M.sim.vol` gelijk blijft.
+  GEMETEN op de stand van het toestel (`tests/plan-toestel-stand.js`): Noodfonds EUR 2.850 + EUR 688 + EUR 362 = EUR 3.900
+  eind oktober, vol december 2026 (met het laatste terugzetdeel), Inrichting EUR 1.838 in oktober en vol november.
+  "BIJNA VOL" (`planBijnaVol()`, `PLAN_BIJNA_VOL` 0,95): S minstens 95 procent van het doel en eronder, en er komt nog geld
+  terug; de rij zegt "vol dec 2026 · EUR 100 komt nog terug".
+  DEEL 2, HET SCHERM. Bovenaan `#planKpi` (tokens `--kpi-bg`/`--kpi-txt`): "Gespaard voor je doelen", EUR geld van EUR
+  doelen met een balk, de tegel "Deze maand opzij" (inleg plus terug, chip "incl. EUR X terug ›" alleen bij terug, naar
+  `openTerugOpbouw()`) en "Alles vol" (de laatste vol-datum van `planTijdlijnData()`, de bron van de rijen en de
+  tijdlijn) met "op schema" of "<doel> haalt <streef> niet"; `data-nogtegaan` draagt nog te gaan. Daaronder de
+  meldingen (een open terugzetvraag, toegewezen zonder geld, de eenmalige verdelingmelding, de gemeten inleg), de
+  schakelaar Lijst / Tijdlijn (`SET.planWeergave`, standaard lijst; de tijdlijn is `planTijdlijnHTML()`, dezelfde als de
+  sheet) en een rij per doel met nummer, naam, status (vol, vol in <maand>, bijna vol, nu actief, vanaf <maand>,
+  gepauzeerd), een balk (geld dicht, wat deze maand bijkomt gearceerd), "EUR geld / EUR doel", "vol <maand jaar> ›" en een
+  grijze regel; GEEN REKENSOM. Een tik opent `openPlanDoel(id)`: staat nu op je spaarrekening, plus terug, plus inleg,
+  eindregel "Eind <maand> EUR S" met "· vol" alleen bij S ≥ doel en anders de rode regel "Nog nodig tot EUR doel", de
+  regels "+ nog terug na <maand>" en "vol <maand> (met het laatste terugzetdeel)" (B), het datumpaar van `vatRegels()`, het
+  streepje (`doelStreepje()`) en "Doel aanpassen" · "Pauzeren". "verdeling ⚙" (`openPlanInstel()`) toont de terugzetkeuze
+  en de verdeling met de gekozen stand gemarkeerd; wijzigen loopt via `openTerugzetSheet()` en `openVerdeling()`.
+  VERVALLEN: de zonebalk "Bestemmingen" (`vooruitZone()`, `toggleVooruit()`), de kop "Te verdelen", de inlegbalk
+  (`planSegmenten()`, `SEG_MIN_PCT`), de volgorde-zin, "Toegewezen deze maand" op het scherm (`planToeMaand()` blijft als
+  functie), "Blijft over EUR 0" (alleen nog bij meer dan nul), "Nog EUR X te gaan" (`planTotaal()`, `planKlaarMaand()`,
+  `planTotaalRegel()`), de rij-rekensom (`planGeldRegel()`, `planRijRechts()`, `planRijStatus()`), de open rij
+  (`window._planRij`; `planRij(id)` opent nu de sheet) en de regel `planVerdelingRegel()`.
+  GEMETEN op de stand van het toestel: de kop 179px, de derde rij eindigt op 584px; op 390x844 (vouw 772) staan de kop en
+  alle drie de rijen boven de vouw, op 360x640 (vouw 568) de kop en twee rijen. De detailsheet is 404px, de inline
+  tijdlijn 234px, zonder overloop. Specs `plan-stand-eind.spec.js` (deel 1) en `plan-dashboard.spec.js` (deel 2).
 - **HOME LEEST ALS EEN SOM: SALDO, NOG TE ONTVANGEN, VRIJ TE BESTEDEN, VERWACHT EIND; DE UITLEG STAAT ACHTER EEN i, EN DE
   MAAND HEEFT EEN DAGREEKS** (`v378`, gevraagd door de gebruiker, mockup "Home saldo"). HET SALDOBLOK (`saldoBlok()`,
   `data-saldoblok`) is EEN tikplek met een chevron naar `openBalances()`; de regel "EUR X op de bank · EUR Y contant"
@@ -6967,7 +7006,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v379` → `minder-v380`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v380` → `minder-v381`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -7003,7 +7042,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378` en `v379` naar `minder-v379`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379` en `v380` naar `minder-v380`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
