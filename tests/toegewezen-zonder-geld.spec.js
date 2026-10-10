@@ -192,10 +192,12 @@ test.describe('d · de rij laat geld en plan apart zien', () => {
     const r = await rij(page, 'noodfonds');
     expect(r.op.geld).toBe(3000.2); expect(r.op.terug).toBe(231); expect(r.op.inleg).toBe(362);
     expect(r.op.eind).toBe(3593.2); expect(r.eindVol).toBe('0');
-    expect(r.op.zg).toBe('€406,80 is toegewezen zonder geld en telt hier niet mee.');
+    /* v381: de regel zegt dat er nog niet gekozen is (de keuzes staan eronder); de centen blijven die van de melding */
+    expect(r.op.zg).toBe('€406,80 toegewezen zonder geld · nog niet gekozen');
     expect(+r.nog).toBe(406.8);
     expect((await stand(page)).regel).toBe('€406,80 toegewezen zonder geld bekijk ›');
-    expect(r.vol).toBe('vol nov 2026 ›');
+    /* v381: zonder keuze over dat geld is de datum voorlopig */
+    expect(r.vol).toBe('vol nov 2026 · voorlopig ›');
   });
   test('zonder iets dat terug moet of zonder geld staat, blijft de gewone som', async ({ page }) => {
     await P.boot(page, { zonderOpname: true });
