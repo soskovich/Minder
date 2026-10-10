@@ -3347,6 +3347,18 @@ function maandLiqBasis(){
    PER DAG EERST WAT ERAF GAAT, DAN WAT ERBIJ KOMT. Voor de laagste stand is dat de voorzichtige kant (v168): op de
    dag van je salaris telt de stand van voor het salaris. De laagste stand is het minimum van de start, elke stand
    na de uitgaven van een dag, en de eindstand. */
+/* v379: de laatste salarisbetaling voor deze maand. Bron is de grootste inkomensboeking van de nieuwste maand
+   met inkomen (een gevlagde meevaller telt niet, v259/v369); daarvan de laatste betaling van dezelfde
+   recurKey(). Geen betaling geeft null, en dan rekent maandVerloop() met de laatste dag. */
+function salarisBetalingLaatst(ym){
+  const L=TX.filter(t=>!t.pending && t.amount>0 && t.date.slice(0,7)<ym && CATS[catOf(t)] && CATS[catOf(t)].type==='income'
+    && !(SET.onregelmatig && SET.onregelmatig[t.id]));
+  if(!L.length) return null;
+  const m=L.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,'');
+  const top=L.filter(t=>t.date.slice(0,7)===m).sort((a,b)=>b.amount-a.amount)[0];
+  const k=recurKey(top); const bron=L.filter(t=>recurKey(t)===k).sort((a,b)=>b.date.localeCompare(a.date));
+  return bron[0]||top;
+}
 function maandVerloop(L){
   L=L||maandLiqBasis();
   const now=new Date(); now.setHours(0,0,0,0);
@@ -3366,10 +3378,17 @@ function maandVerloop(L){
     const R=opDag(Math.max(d,vandaag)); const amt=Math.round(+s.amount||0);
     R.uit+=amt; R.posten.push({name:s.name, amt:-amt, cat:s.cat}); vast.push({name:s.name, amt, ymd:R.ymd, cat:s.cat}); }
   // inkomen op de verwachte dag van je salaris
-  let incDag=null;
+  let incDag=null, incBron=null;
   if(inc>0){
     try{ for(const r of recurringSchedule()){ if(r.type!=='income') continue; const nd=new Date(r.nextDate); nd.setHours(0,0,0,0);
       if(nd.getFullYear()===j && nd.getMonth()===mo && nd.getDate()>=vandaag && (incDag==null || nd.getDate()<incDag)) incDag=nd.getDate(); } }catch(_){}
+    if(incDag!=null) incBron='schema';
+    /* v379: recurringSchedule() eist twee betalingen. Met EEN eerdere betaling van je salaris lees ik de dag
+       van die laatste betaling, met dezelfde weekendregel als het schema, zodat een en twee betalingen
+       dezelfde dag geven. Is die dag voorbij en het geld nog niet binnen, dan vandaag (zoals het schema). */
+    if(incDag==null){ const b=salarisBetalingLaatst(ym); if(b){
+      let d=new Date(j, mo, Math.min(+b.date.slice(8,10), dim)); d=shiftWeekendToMonday(d);
+      incDag=(d.getMonth()===mo)?Math.max(d.getDate(), vandaag):dim; incBron='betaling'; } }
     if(incDag==null) incDag=dim;
     opDag(incDag).bij+=inc;
   }
@@ -3381,7 +3400,7 @@ function maandVerloop(L){
   for(const x of dagen){ b-=x.uit; if(b<laag.bedrag) laag={bedrag:b, ymd:x.ymd}; b+=x.bij; x.stand=b; }
   if(eind<laag.bedrag) laag={bedrag:eind, ymd:dagen[dagen.length-1].ymd};
   laag={bedrag:Math.round(laag.bedrag), ymd:laag.ymd};
-  return {ym, start, inc, fix, pot, eind, incDag:incDag==null?null:ymdDag(incDag), laagste:laag, perDag, vast,
+  return {ym, start, inc, fix, pot, eind, incDag:incDag==null?null:ymdDag(incDag), incBron, laagste:laag, perDag, vast,
     dagen:dagen.map(x=>({ymd:x.ymd, stand:x.stand, uit:x.uit, bij:x.bij, posten:x.posten})), missing:+L.missing||0};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
@@ -4118,7 +4137,7 @@ function openVerwachtEind(){
     <div style="font-weight:800;font-size:var(--fs-lg)">Verwacht eind ${esc(mnd)}</div>
     <div class="small muted" style="margin-bottom:6px">totaal saldo op ${dim} ${esc(MNAMES[mi])}, als alles gaat zoals gepland</div>
     ${rij('start', V.start, 'Totaal saldo nu', `${totalBalance().contant!=null?'bank + contant':'je rekeningen'}${Bw&&Bw.datum?`, bijgewerkt ${esc(dagKort(Bw.datum))}`:''}`, 'openBalances()')}
-    ${rij('inkomen', V.inc, 'Inkomen dat nog komt', esc(D?D.wie:'inkomen'), "openInsTegel('ontvangen')")}
+    ${rij('inkomen', V.inc, 'Inkomen dat nog komt', esc(D?D.wie:'inkomen')+(V.inc>0 && !V.incBron?'<br><span data-vesalaris>salarisdatum onbekend \u00b7 gerekend op de laatste dag</span>':''), "openInsTegel('ontvangen')")}
     ${rij('vast', -V.fix, 'Vaste lasten die nog komen', `incasso's en vaste betalingen t/m ${dim} ${esc(MNAMES[mi])}`, 'openFixedDue()')}
     ${rij('potjes', -V.pot, 'Verwachte uitgaven uit je potjes', 'wat er nog in je potjes zit', 'openReservedPotjes()')}
     <div class="row" data-veeind="${V.eind}" style="gap:10px;padding:11px 0 4px;font-weight:800"><div style="flex:1">Verwacht eind ${esc(mnd)}</div><div style="white-space:nowrap">\u2248 ${euro0(V.eind)}${V.missing>0?' \u00b7 onvolledig':''}</div></div>

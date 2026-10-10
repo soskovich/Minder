@@ -199,3 +199,57 @@ test.describe('g · liquidityDaily leest de dagreeks van deze maand', () => {
     expect(r.lowbal).toBe(true);
   });
 });
+
+/* v379: DE SALARISDAG BIJ EEN EERDERE BETALING. recurringSchedule() eist twee betalingen; maandVerloop() valt
+   bij een betaling terug op de dag van die laatste betaling, met dezelfde weekendregel. De fixture zet het
+   salaris op de 25e; 25 oktober 2026 is een zondag, dus beide routes geven maandag 26 oktober. */
+test.describe('h · de salarisdag', () => {
+  const dagVan = (page) => page.evaluate(() => { const V = maandVerloop(); return { dag: V.incDag, bron: V.incBron, inc: V.inc,
+    schema: recurringSchedule().filter((r) => r.type === 'income').length }; });
+  test('een betaling op 25 sep geeft 26 okt, gelijk aan twee betalingen', async ({ page }) => {
+    await I.boot(page, { vanaf: '2026-09-01' });
+    const een = await dagVan(page);
+    expect(een.schema).toBe(0);                     // het schema kent de bron niet: de terugval draagt het
+    expect(een).toMatchObject({ dag: '2026-10-26', bron: 'betaling' });
+    await I.boot(page, { vanaf: '2026-08-01' });
+    const twee = await dagVan(page);
+    expect(twee.schema).toBe(1);
+    expect(twee).toMatchObject({ dag: '2026-10-26', bron: 'schema' });
+  });
+  test('een betaling op een doordeweekse dag houdt die dag, zonder verschuiving', async ({ page }) => {
+    await I.boot(page, { zonderInkomen: true, extraTx: [{ id: 'sx', date: '2026-09-16', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' }] });
+    const r = await dagVan(page);
+    expect(r).toMatchObject({ dag: '2026-10-16', bron: 'betaling' });   // 16 oktober 2026 is een vrijdag
+  });
+  test('twee betalingen in dezelfde maand: de laatste wint, en het schema telt ze als een', async ({ page }) => {
+    await I.boot(page, { zonderInkomen: true, extraTx: [
+      { id: 's1', date: '2026-09-03', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' },
+      { id: 's2', date: '2026-09-16', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' }] });
+    const r = await dagVan(page);
+    expect(r.schema).toBe(0);
+    expect(r).toMatchObject({ dag: '2026-10-16', bron: 'betaling' });   // de 3e zou op vandaag (7 okt) vallen
+  });
+  test('een meevaller die je als onregelmatig vlagde is geen salarisbetaling', async ({ page }) => {
+    await I.boot(page, { zonderInkomen: true, extraTx: [{ id: 'mv', date: '2026-09-16', amount: 2500, name: 'Bonus', desc: 'SALARIS BONUS' }] });
+    const r = await page.evaluate(() => { const t = TX.find((x) => x.name === 'Bonus');
+      const voor = maandVerloop(); SET.onregelmatig = { [t.id]: 2500 }; save();
+      const V = maandVerloop(); return { voor: { dag: voor.incDag, bron: voor.incBron }, na: { dag: V.incDag, bron: V.incBron } }; });
+    expect(r.voor).toEqual({ dag: '2026-10-16', bron: 'betaling' });   // ongevlagd telt hij wel: de vlag doet het werk
+    expect(r.na).toEqual({ dag: '2026-10-31', bron: null });
+  });
+  test('zonder eerdere betaling de laatste dag, en de sheet zegt dat als observatie zonder link', async ({ page }) => {
+    await I.boot(page, { zonderInkomen: true });
+    const r = await dagVan(page);
+    expect(r.inc).toBeGreaterThan(0);
+    expect(r).toMatchObject({ dag: '2026-10-31', bron: null });
+    await page.evaluate(() => openVerwachtEind());
+    const s = page.locator('[data-vesalaris]');
+    await expect(s).toHaveText('salarisdatum onbekend · gerekend op de laatste dag');
+    expect(await s.evaluate((e) => !!e.closest('a,button') || !!e.getAttribute('onclick'))).toBe(false);
+  });
+  test('met een bekende dag staat de observatie er niet', async ({ page }) => {
+    await I.boot(page, { vanaf: '2026-09-01' });
+    await page.evaluate(() => openVerwachtEind());
+    expect(await page.locator('[data-vesalaris]').count()).toBe(0);
+  });
+});
