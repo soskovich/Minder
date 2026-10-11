@@ -3,6 +3,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { kaalUit } = require('./bron-kaal');
 
 /* v208: het Kerncijfers-blok is van Inzichten af, dus de drietraps uitklap uit v90 leeft alleen
    nog op Maand, met SET.kpiAllMaand. Wat deze tests bewaken is ongewijzigd: Rustig start met een
@@ -50,43 +51,16 @@ test.describe('a · kerncijfers: één cijfer, in elke modus hetzelfde', () => {
   });
 });
 
-test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
-  test('Rustig start dicht, met een tikbare kop', async ({ page }) => {
-    await openGrafiek(page, 'rustig');
-    expect(await grafiek(page).count()).toBe(0);                    // geen 12-maands grafiek in beeld
-    const kaart = page.locator('#insSpendCard');
-    await expect(kaart).toHaveCount(1);
-    expect((await kaart.innerText()).toLowerCase()).toContain('over de maanden');   // v359
-    expect(await kaart.innerText()).toContain('tik om te bekijken');
-
-    await kaart.locator('.row').click();
-    await page.waitForSelector('#insSpendChart');
-    expect(await page.evaluate(() => SET.openSpendChart)).toBe(true);
-    expect(await page.evaluate(() => collapOpen('openSpendChart'))).toBe(true);
-  });
-
-  test('Begeleid staat gewoon open, en een eigen keuze wint in beide modi', async ({ page }) => {
-    await openGrafiek(page, 'begeleid');
-    await expect(grafiek(page)).toHaveCount(1);
-
-    // de gebruiker klapt hem zelf dicht: dan blijft hij dicht, ook in Begeleid
-    /* De open variant draagt geen #insSpendCard, alleen de ingeklapte; de tik op de kop is
-       hierboven al getest. Hier gaat het om de vlag, dus roepen we de toggle rechtstreeks aan. */
-    await page.evaluate(() => { toggleCollap('openSpendChart'); });
-    await page.waitForTimeout(120);
-    expect(await page.evaluate(() => SET.openSpendChart)).toBe(false);
-    expect(await grafiek(page).count()).toBe(0);
-
-    // en in Rustig wint een expliciet "open" van de ingeklapte default
-    await page.evaluate(() => { SET.mode = 'rustig'; SET.openSpendChart = true; save(); renderIns(); });
-    await page.waitForTimeout(120);
-    await expect(grafiek(page)).toHaveCount(1);
-  });
-
-  test('collapOpen is drietraps en raakt bestaande vlaggen niet', async ({ page }) => {
+/* v382: weg, "Over de maanden" (spendVsBudgetChart, #insSpendCard, #insSpendChart) staat niet meer op
+   Inzichten, en daarmee is openSpendChart de laatste ingang van COLLAP_DEF kwijt. De twee tests over de
+   ingeklapte grafiek gingen uitsluitend over die vorm. Wat van v90 blijft is de drietraps van collapOpen():
+   een eigen keuze wint altijd, en een vlag zonder ingang in COLLAP_DEF is dicht, in elke modus. */
+test.describe('b · collapOpen blijft drietraps', () => {
+  test('een eigen keuze wint, en zonder ingang is een vlag dicht in elke modus', async ({ page }) => {
     await openGrafiek(page, 'begeleid');
     const r = await page.evaluate(() => {
       const uit = {};
+      uit.geenSpendChart = Object.prototype.hasOwnProperty.call(COLLAP_DEF, 'openSpendChart');
       delete SET.openSpendChart;
       SET.mode = 'rustig'; uit.rustigDefault = collapOpen('openSpendChart');
       SET.mode = 'begeleid'; uit.begeleidDefault = collapOpen('openSpendChart');
@@ -95,8 +69,9 @@ test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
       delete SET.openMerch; uit.merchDefault = collapOpen('openMerch');       // bestaande vlag: dicht
       return uit;
     });
+    expect(r.geenSpendChart).toBe(false);
     expect(r.rustigDefault).toBe(false);
-    expect(r.begeleidDefault).toBe(true);
+    expect(r.begeleidDefault).toBe(false);
     expect(r.expliciteDicht).toBe(false);
     expect(r.expliciteOpen).toBe(true);
     expect(r.merchDefault).toBe(false);
@@ -127,17 +102,11 @@ test.describe('c · niets anders verandert', () => {
     // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
     // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft
-    const src = await page.evaluate(() => renderIns.toString().replace(/\s+/g, ' '));
-    // v235: de Valt op-kaart is vervallen; op dezelfde plek staan de valt-op-regels (insSignalRows).
-    // De lek-ingang zat in die kaart en hangt nu aan de chevron op de Grip-kaart.
-    /* v241: renderIns() zet de blokken als losse secties neer, dus de oude regel bestaat niet meer.
-       De volgorde blijft dezelfde en staat als eigenschap in valt-op-signalen.spec.js; hier toetsen
-       we alleen dat de signaalregels nog door renderIns() worden geschreven. */
-    // v359: renderIns() is het dashboard: filter, tegels, kop-inzicht, grafiek, keuzekaart en patronen
-    // v365: het maandbudget als geheel (insMaandBudget) met de tegels als terugval, en de patronen in een sheet
-    for (const f of ['insFilterKnop(', 'insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).toContain(f);
-    expect(src).not.toContain('insPatronenKaart(');
-    expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
+    // v382: renderIns() tekent het filter, de maandkaart, de weektegel, de patroontegels en de verschuivingen;
+    // de tegels, het kop-inzicht, de grafiek en de keuzekaart zijn weg, in elke modus.
+    const src = (await kaalUit(page, 'renderIns')).replace(/\s+/g, ' ');
+    for (const f of ['insFilterKnop(', 'insMaandKaart(', 'insWeekTegel(', 'insPatroonTegels(', 'insVerschuiving(']) expect(src).toContain(f);
+    for (const f of ['insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).not.toContain(f);
   });
 
   test('Rustig past op 360px zonder overflow', async ({ page }) => {

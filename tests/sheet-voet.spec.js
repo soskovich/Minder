@@ -125,6 +125,9 @@ test('c. Nieuw potje met dekking: de reden noemt wat er nog open staat', async (
   await tik(page, '[data-potbron="dek"]');
   expect((await meet(page)).reden).toBe('Kies welk potje €100 inlevert');
   await tik(page, '[data-potdek="sport"]');
+  /* v382: een nieuw potje vraagt daarna of het meetelt in je weekbedrag, zonder voorkeuze */
+  expect((await meet(page)).reden).toBe('Kies of dit potje meetelt in je weekbedrag');
+  await tik(page, '[data-potwek="ja"]');
   const b = await controleer(page, 'Nieuw potje met dekking', 'ingevuld');
   expect(b.uit).toBe(false);
 });

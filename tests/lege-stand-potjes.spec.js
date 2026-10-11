@@ -49,29 +49,31 @@ async function boot(page, o, w) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof insTegelsNu === 'function' && TX.length > 0);
+  await page.waitForFunction(() => typeof insMaandKaart === 'function' && TX.length > 0);
 }
 const koppel = (exp) => ({ set: { psd2Accounts: { [PSD]: { uid: 'u1', iban: 'NL99PSD20000000001',
   hash: '', label: 'Main', bank: 'N26', exp: exp || '2099-01-01' } } } });
-const kaart = (page) => page.evaluate(() => { go('ins'); renderIns(); return $('#insStand').innerText.replace(/\s+/g, ' '); });
 
 test.describe('a - de invoer draagt het geval', () => {
   /* v359: DE VORM OP DE TEGELS. Zonder boekingen van deze maand zegt Uitgegeven "onbekend", en de tegel van je
      potjes heet "In je potjes" met het budget: met nul boekingen is het restant rekenkundig het hele budget,
      en "nog in potjes" zou een meting claimen. De reden en de stap om bij te werken staan in de sheet. */
-  test('zonder boekingen van deze maand: onbekend, je budget als budget, en de reden in de sheet', async ({ page }) => {
+  /* v382: DE VORM OP DE MAANDKAART. Zonder boekingen van deze maand is #insMaand "onbekend": geen €0 en geen
+     restant in je potjes, want dat zou een meting claimen. De reden en de stap om bij te werken staan in de sheet
+     achter de kaart (openInsTegel('uitgegeven')). De kaart toont in deze stand GEEN potjesbedrag meer; de
+     assertie van v359 op "In je potjes" met het budget is daarmee weg (de tegels bestaan niet meer). */
+  test('zonder boekingen van deze maand: onbekend, geen restant, en de reden in de sheet', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { go('ins'); renderIns();
-      const q = (k) => { const e = document.querySelector(`#insTegels [data-instegel="${k}"]`); return e ? e.innerText.replace(/\s+/g, ' ') : ''; };
-      const L = laatsteImport(); const VP = varPotjeStand(thisYM());
-      openInsTegel('uitgegeven'); const sh = $('#sheet').innerText.replace(/\s+/g, ' ');
-      return { uit: q('uitgegeven'), pot: q('potjes'), oud: L.datum < thisYM() + '-01', nog: VP.nog, budget: VP.budget + VP.terug, sh, cta: importCta().lab }; });
+      const k = document.querySelector('#insMaand');
+      const L = laatsteImport();
+      k.click(); const sh = $('#sheet').innerText.replace(/\s+/g, ' ');
+      return { stand: k.dataset.insmaand, kaart: k.innerText.replace(/\s+/g, ' '), oud: L.datum < thisYM() + '-01', sh, cta: importCta().lab }; });
     expect(r.oud, 'de fixture moet werkelijk geen boeking in deze maand dragen').toBe(true);
-    expect(r.uit).toMatch(/Uitgegeven onbekend/);
-    expect(r.uit).not.toMatch(/€0/);
-    expect(r.pot).toMatch(/^In je potjes/);
-    expect(r.pot).not.toMatch(/Nog in potjes/);
-    expect(r.pot).toContain('uitgegeven nog onbekend');
+    expect(r.stand).toBe('onbekend');
+    expect(r.kaart).toMatch(/onbekend/);
+    expect(r.kaart).not.toMatch(/€0/);
+    expect(r.kaart).not.toMatch(/nog in (je )?potjes/i);
     expect(r.sh).toContain('Nul uitgaven en geen data zijn niet hetzelfde');
     expect(r.sh).toContain(r.cta);
   });

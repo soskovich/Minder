@@ -15,7 +15,7 @@ const sheetTxt = (page) => page.locator('#sheet').innerText();
 async function openIns(page, payload) {
   await open(page, payload || seed());
   await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#insTegels');
+  await page.waitForSelector('#insMaand');   // v382: de maandkaart, de tegels zijn weg
 }
 
 /* v359: Inzichten draagt geen handeling meer, dus ook geen ingang naar de editor (de regel "Maandbudget" is met de

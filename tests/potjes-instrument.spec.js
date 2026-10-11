@@ -8,30 +8,19 @@
 // dat je gedrag veranderde.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { kaalUit } = require('./bron-kaal');
 
 const ins = (page) => page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
 const maand = (page) => page.evaluate(() => { go('maand'); return $('#s-maand').innerText; });
-/* v309: DE REGEL IS HET HOOFDGETAL VAN DE STAND-KAART GEWORDEN en staat niet meer in de lijst.
-   `lab` is het label, `val` het grote getal, `sub` de regel boven de balk (met een ANDERE noemer
-   dan de oude sub: totals().spendNorm tegen totals().budget in plaats van de potjes, v257), en
-   `noot` het deel van het achtervoegsel dat de tempo-krapte draagt. */
+/* v382: de stand-kaart en de tegel zijn weg; wat er nog in je potjes zit is de rij [data-insleg="nogpot"] in de
+   legenda van de maandkaart. `kaart` zegt of de maandkaart er staat, zodat "geen rij" niet ook "geen kaart" kan zijn. */
 const potjesTegel = (page) => page.evaluate(() => {
-  go('ins');
-  const kaart = document.getElementById('insStand');
-  const t = kaart ? [...kaart.querySelectorAll('div.row')]
-    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+  go('ins'); renderIns();
+  const kaart = document.getElementById('insMaand');
+  if (!kaart) throw new Error('de maandkaart staat er niet');
+  const t = kaart.querySelector('[data-insleg="nogpot"]');
   if (!t) return null;
-  const sp = [...t.querySelectorAll('span')];
-  const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
-  const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
-  const noemer = [...kaart.querySelectorAll('div.row')]
-    .find((x) => /van \u20ac[\d.]+ (maandbudget|je inkomen-limiet)/.test(x.textContent));
-  return { lab: vol.split(' \u00b7 ')[0], val: sp.length ? sp[0].innerText.trim() : '',
-    sub: noemer ? noemer.innerText.replace(/\s+/g, ' ').trim() : '',
-    achter, noot: /tekort/.test(achter) ? achter : null,
-    nootTik: null, tik: t.getAttribute('onclick'),
-    inLijst: [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-      .some((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText)) };
+  return { v: +t.dataset.v, tekst: t.innerText.replace(/\s+/g, ' ').trim() };
 });
 
 // potjes zonder uitgaven: alles staat nog open
@@ -78,16 +67,25 @@ test.describe('a - Inzichten voor en na', () => {
     await open(page, seed());
     const t = await ins(page);
     expect(t).toMatch(/uitgegeven/i);
-    // v359: de tegel Uitgegeven zegt wat er tot vandaag mocht, en het percentage van v208 is vervallen
-    expect(t).toMatch(/tot vandaag mocht|van €[\d.]+ budget/i);   // zonder drie afgeronde maanden geen tempo
+    // v382: de tegels zijn weg; de maandkaart draagt de budgetstand in zijn kop: uitgegeven van je maandbudget,
+    // uit dezelfde totals() als voorheen. Het percentage van v208 blijft vervallen.
+    const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), T = totals(thisYM());
+      return { stand: k.dataset.insmaand, uit: +k.dataset.insuit, bud: +k.dataset.insbudget, kop: k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g, ' '),
+        spendNorm: Math.round(T.spendNorm), budget: Math.round(T.budget) }; });
+    expect(r.stand).toBe('nu');
+    expect(r.uit).toBe(r.spendNorm);
+    expect(r.bud).toBe(r.budget);
+    expect(r.kop).toMatch(/€[\d.]+ van €[\d.]+/);
+    expect(r.kop).not.toMatch(/%/);
   });
 
   test('de functies achter het blok zijn verwijderd', async ({ page }) => {
     await open(page, seed());
     const r = await page.evaluate(() => ({
       strip: typeof insKpiStrip, sam: typeof insKpiSamenvatting, vouw: typeof insVouw,
-      def: Object.keys(COLLAP_DEF), src: renderIns.toString(),
+      def: Object.keys(COLLAP_DEF),
     }));
+    r.src = await kaalUit(page, 'renderIns');
     expect([r.strip, r.sam, r.vouw]).toEqual(['undefined', 'undefined', 'undefined']);
     expect(r.def).not.toContain('openKpiCard');
     expect(r.src).not.toContain('insVouw(');          // de aanroep, niet het woord in een comment
@@ -140,6 +138,9 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     expect(await potjesTegel(page)).toBeNull();
     const r = await page.evaluate(() => varPotjeStand(curMonth || months()[months().length - 1]));
     expect(r).toMatchObject({ budget: 0, gebruikt: 0, potjes: 0, deel: null, over: false });
+    /* tegenproef: met potjes staat de rij er wel, anders toetst de null hierboven niets */
+    await open(page, seed());
+    expect(await potjesTegel(page)).not.toBeNull();
   });
 
   /* v359: 'de plan-tegels dragen geen alarmkleur' is vervallen: v359: de stand-kaart is de tegel Nog in potjes; dit staat in potjesregel-aansluiting.spec.js en inzichten-dashboard.spec.js */
@@ -191,10 +192,11 @@ test.describe('e - layout', () => {
       await ins(page);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       const buiten = await page.evaluate(() => {
-        const rij = document.querySelector('#insNogLijst');
-        if (!rij) return 0;
+        /* v382: de lijst is weg; de rijen van de legenda van de maandkaart staan op hun plek */
+        const rij = document.querySelector('#insMaand');
+        if (!rij) return -1;
         const rb = rij.getBoundingClientRect();
-        return [...rij.querySelectorAll('.ins-nog-rij')].filter((t) => t.getBoundingClientRect().right > rb.right + 1).length;
+        return [...rij.querySelectorAll('[data-insleg]')].filter((t) => t.getBoundingClientRect().right > rb.right + 1).length;
       });
       expect(buiten).toBe(0);
     });

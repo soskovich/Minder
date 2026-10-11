@@ -73,15 +73,17 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
      deze maand. De REGEL die deze spec bewaakt verandert niet - een verplaatst element staat op
      precies één scherm - alleen de richting. De afweging staat in BESLISSINGEN.md met beide kanten:
      v178 haalde hem naar Maand omdat hij maanden naast elkaar zet, en dat argument staat nog. */
-  test('de meermaands-grafiek staat op Inzichten en niet meer op Maand', async ({ page }) => {
+  /* v382: "Over de maanden" is van Inzichten af en niet naar Grip gegaan: de bridge van een afgesloten maand
+     staat in het logboek (renderLogMaand, achter openLogMaand, leest brugBlok). De regel blijft: op precies één plek. */
+  test('de meermaands-grafiek staat op geen van beide schermen, de bridge per maand in het logboek', async ({ page }) => {
     await boot(page, 'maand');
     const t = await beide(page);
-    expect(t.ins).toMatch(/over de maanden/i);           // v359: de kop heet "Over de maanden"
+    expect(t.ins).not.toMatch(/over de maanden/i);
     expect(t.maand).not.toMatch(/over de maanden/i);
-    /* Zonder comments gemeten: renderMaand() noemt de functie nog in een comment dat vertelt dát
-       hij verhuisd is, en een naam in een comment is geen aanroep. */
-    expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderIns'))).toBe(true);
-    expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderMaand'))).toBe(false);
+    /* Zonder comments gemeten: een naam in een comment is geen aanroep. */
+    expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderIns', 'renderMaand'))).toBe(false);
+    expect(await page.evaluate(() => typeof spendVsBudgetChart)).toBe('undefined');
+    expect(/brugBlok\(/.test(await kaalUit(page, 'renderLogMaand'))).toBe(true);
   });
 
   /* v231: de abonnementenkaart is van Maand af en de lijst staat onder Instellingen (Vaste
@@ -98,7 +100,7 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
 
   test('de ingang uit het coachgesprek wijst naar de nieuwe plek', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => coTopicVast.toString());
+    const src = await kaalUit(page, 'coTopicVast');
     expect(src).toContain('Bekijk al mijn vaste lasten');
     expect(/Bekijk al mijn vaste lasten[\s\S]{0,120}openVasteLasten\(\)/.test(src)).toBe(true);
     expect(src).not.toContain("go('maand')");
@@ -192,7 +194,7 @@ test.describe('d · de horizon van het scherm blijft kloppen', () => {
      ene is het Kerncijfers-blok en dat is van Inzichten af, dus de sectie bestaat niet meer. */
   test('de verdieping op Inzichten bestaat niet meer', async ({ page }) => {
     await boot(page, 'ins');
-    const src = await page.evaluate(() => renderIns.toString());
+    const src = await kaalUit(page, 'renderIns');
     expect((src.match(/insVouw\(/g) || []).length).toBe(0);
     const t = await tekst(page, 'ins');
     expect(t).not.toMatch(/kerncijfers/i);

@@ -60,8 +60,9 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     await open(page);
     await page.evaluate(() => go('ins'));
     const t = await text(page, '#s-ins');
-    /* v359: de stand-kaart is vervallen; het budget staat als label bij de budgetlijn van de maandgrafiek. */
-    expect(t).toContain('budget €2.400');
+    /* v382: de grafiek is weg; het budget staat in de kop van de maandkaart ("van €2.400", [data-insbudget]). */
+    expect(await page.locator('#insMaand').getAttribute('data-insbudget')).toBe('2400');
+    expect(await text(page, '#insMaand [data-insmaandkop]')).toContain('van €2.400');
     /* v178: de limiet-spiegel was een oordeel over je plan en verhuisde naar Maand; v228 liet hem
        daar vervallen (tests/vaststellen-zonder-gevolg.spec.js). De limiet zelf blijft een meting. */
     expect(t).not.toContain('inkomen-limiet');
@@ -128,8 +129,14 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
        getal geworden; de bron is onveranderd varBudget() min varPotjeStand().gebruikt. */
     /* v359: de tegel "Nog in potjes" staat er altijd; zonder potjes zegt hij dat. */
     expect(t).not.toContain('Verwacht over einde maand');
-    if (potjes > 0) expect(t).toMatch(/Nog in potjes\s*-?€[\d.]+/);
-    else expect(t).toMatch(/Nog in potjes\s*€0\s*nog geen potjes/);
+    /* v382: de tegel is weg; wat er nog in je potjes zit is de rij [data-insleg="nogpot"] in de legenda van de
+       maandkaart, met het getal van varPotjeStand().nog. Een nulrij staat er niet. */
+    const nog = await page.evaluate(() => varPotjeStand(thisYM()).nog);
+    const rij = page.locator('#insMaand [data-insleg="nogpot"]');
+    if (potjes > 0 && nog !== 0) {
+      expect(await rij.getAttribute('data-v')).toBe(String(nog));
+      expect(await rij.innerText()).toMatch(/(in potjes|te veel in potjes)\s*€[\d.]+/);
+    } else await expect(rij).toHaveCount(0);
     expect(plan).toBeGreaterThanOrEqual(0);
   });
 
@@ -236,8 +243,8 @@ test.describe('v55 vast = herkende herhaling', () => {
 test('budgetrij "Uitgegeven" opent het maand-detail vanaf Inzichten', async ({ page }) => {
   await open(page);
   await page.evaluate(() => go('ins'));
-  /* v359: de tegel Uitgegeven opent zijn opbouw, en "Per categorie ›" daarin het maand-detail. */
-  await page.click('[data-instegel="uitgegeven"]');
+  /* v382: de kop van de maandkaart opent de opbouw van uitgegeven, en "Per categorie ›" daarin het maand-detail. */
+  await page.click('#insMaand [data-insmaandkop]');
   await page.waitForSelector('#sheetBg.show');
   expect(await text(page, '#sheet')).toContain('€445');
   await page.locator('#sheet >> text=Per categorie').click();

@@ -96,9 +96,11 @@ const LEES = () => {
     posten: nogDezeMaandPosten().map((p) => String(p.lab).replace(/<[^>]*>/g, '') + ' ' + p.val),
     /* v309: de potjes-post is het hoofdgetal van de stand-kaart geworden, dus de stand wordt daar
        gelezen. `posten` blijft, om te toetsen dat hij in de lijst NIET meer staat. */
-    // v359: de stand-kaart is de tegel "Nog in potjes"; label en bedrag zoals de tegel ze draagt
-    kopPotjes: (() => { try { const k = insTegelsNu('alle').find((x) => x.key === 'potjes');
-      return k ? k.lab.toLowerCase() + ' ' + String(k.val).replace(/^\u20ac/, '') : null; } catch (_) { return null; } })(),
+    /* v382: de tegel is weg; de stand staat als rij [data-insleg="nogpot"] in de legenda van de maandkaart,
+       met "in potjes" of "te veel in potjes" en het bedrag zoals de rij ze draagt. */
+    kopPotjes: (() => { try { const d = document.createElement('div'); d.innerHTML = insMaandKaart(insPeriode(), 'alle');
+      const k = d.querySelector('[data-insleg="nogpot"]');
+      return k ? [...k.children].map((x) => x.textContent).join(' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/\u20ac/, '') : null; } catch (_) { return null; } })(),
   };
 };
 
@@ -134,7 +136,7 @@ test.describe('a - zonder vlag: de huidige situatie, ongewijzigd', () => {
     expect(r.overCat).toBe('belasting +363');
     /* v309: deze stand stond als post onder "Nog deze maand" en staat nu als hoofdgetal op de
        stand-kaart. De lijst draagt hem niet meer, en dat is de andere helft van de verhuizing. */
-    expect(r.kopPotjes).toMatch(/^te veel uitgegeven /);
+    expect(r.kopPotjes).toMatch(/^te veel in potjes /);
     expect(r.posten.some((p) => /Te veel uitgegeven|uit je potjes/.test(p))).toBe(false);
   });
 });
@@ -179,7 +181,7 @@ test.describe('b - mijn geval: twee boetes samen 463 gevlagd', () => {
     expect(r.planRest).toBeLessThanOrEqual(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.reserved).toBe(355);
-    expect(r.kopPotjes).toMatch(/^nog in potjes /);       // v309: op de kaart, niet in de lijst
+    expect(r.kopPotjes).toMatch(/^in potjes /);       // v309: op de kaart, niet in de lijst
     expect(r.posten.some((p) => /uit je potjes|Te veel uitgegeven/.test(p))).toBe(false);
   });
 
@@ -279,8 +281,8 @@ test.describe('d - de zichtbaarheidsregel', () => {
     const na = await page.evaluate(() => { const m = thisYM();
       const b = txOfMonth(m).filter((t) => t.name === 'CJIB');
       for (const t of b) zetUitReservering(t.id, -t.amount, false);
-      // v359: de regel staat in de sheet achter de tegel Uitgegeven, onder "Niet in dit bedrag"
-      go('ins'); openInsTegel('uitgegeven');
+      // v382: de regel staat in de sheet achter de kop van de maandkaart (openInsTegel('uitgegeven')), onder "Niet in dit bedrag"
+      go('ins'); renderIns(); document.querySelector('#insMaand [data-insmaandkop]').click();
       const kaart = document.getElementById('insTegelSheet');
       return { html: uitReserveringRegels(totals(m), m),
         tekst: kaart.innerText.replace(/\n/g, ' | '),

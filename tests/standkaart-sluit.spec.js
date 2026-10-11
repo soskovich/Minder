@@ -106,13 +106,18 @@ test('b4 de lijst achter "nog te betalen" zegt dat Shurgard in zijn potje telt',
   expect(t).toMatch(/IN EEN POTJE · TELT DAAR[\s\S]*Shurgard NL[\s\S]*uit je potje Huur/i);
 });
 
-test('c1 de tegel toont €2.380 nog in potjes, zonder dagbedrag (v367)', async ({page})=>{
+test('c1 de maandkaart toont €2.380 nog in potjes, zonder dagbedrag (v367)', async ({page})=>{
   await bootStand(page);
-  /* v359: de stand-kaart is de tegel "Nog in potjes"; go() hertekent niet als het scherm al de bron is (v280) */
-  const t=await page.evaluate(()=>{ go('ins'); renderIns(); const q=(k)=>document.querySelector(`#insTegels [data-instegel="${k}"]`).innerText.replace(/\s+/g,' ');
-    return {pot:q('potjes'), uit:q('uitgegeven')}; });
-  expect(t.pot).toMatch(/Nog in potjes €2\.380 al bestemd, verdeeld over je potjes/);
-  expect(t.uit).toMatch(/Uitgegeven €175/);
+  /* v382: de tegels zijn weg; "nog in potjes" is de rij [data-insleg="nogpot"] in de legenda van de maandkaart,
+     en uitgegeven staat in de kop ([data-insuit]). go() hertekent niet als het scherm al de bron is (v280) */
+  const t=await page.evaluate(()=>{ go('ins'); renderIns(); const k=document.querySelector('#insMaand');
+    const pot=k.querySelector('[data-insleg="nogpot"]');
+    return {pot:pot?pot.innerText.replace(/\s+/g,' '):'', potv:pot?+pot.dataset.v:null, uit:+k.dataset.insuit, kop:k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g,' ')}; });
+  expect(t.potv).toBe(2380);
+  expect(t.pot).toMatch(/in potjes €2\.380/);
+  expect(t.pot).not.toMatch(/per dag/);
+  expect(t.uit).toBe(175);
+  expect(t.kop).toMatch(/€175 van €3\.375/);
 });
 
 /* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de sheet
@@ -176,12 +181,12 @@ test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page
 });
 
 for (const w of [360, 390]) {
-  test(`f1 op ${w}px: de Grip-kaart loopt niet over, en de tegels op Inzichten ook niet`, async ({page})=>{
+  test(`f1 op ${w}px: de Grip-kaart loopt niet over, en de maandkaart op Inzichten ook niet`, async ({page})=>{
     await page.setViewportSize({width:w, height:w===360?640:844});
     await bootStand(page);
     const r=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })();
       const kr=k.getBoundingClientRect(); const over=[...k.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>kr.right+0.5);
-      closeSheet(); go('ins'); renderIns(); const g=document.querySelector('#insTegels'), gr=g.getBoundingClientRect();
+      closeSheet(); go('ins'); renderIns(); const g=document.querySelector('#insMaand'), gr=g.getBoundingClientRect();
       const tover=[...g.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>gr.right+0.5);
       return {kh:Math.round(kr.height), over, tover, sw:document.documentElement.scrollWidth, vw:innerWidth}; });
     expect(r.over).toBe(false);

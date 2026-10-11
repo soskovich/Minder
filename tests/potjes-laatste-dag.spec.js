@@ -71,22 +71,19 @@ const meet = (page) => page.evaluate(() => {
   for (const k in B) { const bud = +B[k] || 0; if (bud <= 0 || rc.has(k)) continue;
     onbesteed += Math.max(bud - (sp[k] || 0), 0);
     tempoSom += Math.round(bud / Math.max(d.dim, 1) * daysLeft); }
-  /* v309: de post is naar het hoofdgetal van de stand-kaart verhuisd, dus de stand en zijn
-     achtervoegsel worden daar gelezen. De lijst wordt ook gelezen, maar om te toetsen dat de post
-     daar NIET meer staat (verplaatsen is nooit kopieren). */
-  const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-    .find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-  // v359: de stand-kaart is de tegel "Nog in potjes"; zijn waarde en de regel eronder
-  go('ins');
-  const kaart = document.querySelector('#insTegels [data-instegel="potjes"]');
-  const sp2 = kaart ? [kaart.querySelector('.vl'), kaart.querySelector('.ms')] : [];
+  /* v382: de tegel "Nog in potjes" is weg; de stand staat als rij [data-insleg="nogpot"] in de legenda van de
+     maandkaart (#insMaand), met het bedrag van varPotjeStand().nog. */
+  go('ins'); renderIns();
+  const kaart = document.querySelector('#insMaand');
+  const rij = kaart ? kaart.querySelector('[data-insleg="nogpot"]') : null;
   return { dim: d.dim, elapsed: d.elapsed, daysLeft,
     budget: VP.budget, gebruikt: VP.gebruikt, inPotjes: VP.budget - VP.gebruikt,
     plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
     onbesteed: Math.round(onbesteed), bovengrens: Math.round(tempoSom),
-    postInLijst: !!rij,
-    val: sp2.length ? sp2[0].innerText.trim() : null,
-    achtervoegsel: sp2.length > 1 ? sp2[1].innerText.replace(/\s+/g, ' ').trim() : null,
+    nog: VP.nog,
+    rijV: rij ? +rij.dataset.v : null,
+    val: rij ? rij.querySelector('b').innerText.replace(/\s*›\s*$/, '').trim() : null,
+    rijTekst: rij ? rij.innerText.replace(/\s+/g, ' ').trim() : '',
     kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
 });
 
@@ -108,20 +105,20 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
     const r = await meet(page);
     expect(r.plan).toBe(0);
     expect(r.plan).not.toBe(GEMELD.oudePlan);
-    /* v309: de tekortregel is het achtervoegsel van het hoofdgetal geworden. Met een projectie van
-       nul is het gat negatief, dus hij vuurt niet en draagt het achtervoegsel het dagbedrag. */
-    expect(r.achtervoegsel).not.toMatch(/tekort/);
+    /* v382: het achtervoegsel van de tegel is weg; de maandkaart draagt geen tekortregel over je potjes. */
     expect(r.kaartTekst).not.toMatch(/tekort/);
   });
 
   test('de stand blijft staan met zijn dagbedrag, want die klopten', async ({ page }) => {
     await boot(page, 0);
     const r = await meet(page);
-    /* v309: dezelfde twee feiten, op hun nieuwe plek. Op de laatste dag klemt maandDagenOver() op
-       1 (v257), dus het dagbedrag is het hele restant; dat is onveranderd gedrag. */
+    /* v382: de stand staat als rij "in potjes" in de legenda van de maandkaart, met het restant uit
+       varPotjeStand().nog. Het dagbedrag staat op Home en niet hier (v367). De post in "Nog deze maand" en het
+       achtervoegsel van de tegel bestaan niet meer (v382: weg, die vormen zijn vervallen). */
+    expect(r.nog).toBe(GEMELD.inPotjes);
+    expect(r.rijV).toBe(GEMELD.inPotjes);
     expect(r.val).toBe('\u20ac319');
-    expect(r.achtervoegsel).toBe('al bestemd, verdeeld over je potjes');   // v367: het dagbedrag staat op Home, niet op de tegel
-    expect(r.postInLijst).toBe(false);          // en de post staat niet meer in de lijst
+    expect(r.rijTekst).not.toMatch(/per dag/);
     expect(r.reserve).toBe(GEMELD.oudePlan);    // de reservering is onaangeroerd (v254)
   });
 });

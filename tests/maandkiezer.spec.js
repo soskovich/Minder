@@ -185,19 +185,29 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     // v232: de spaarquote staat op Vermogen en niet meer op Maand, ook niet bij een andere maand.
     expect(maand).not.toMatch(/spaarquote/i);
     const ins = await tekst(page, 'ins');
-    expect(ins).toMatch(/uitgegeven/i);                // de budgetstand rekent door
+    // de budgetstand rekent door: v382 zet op de maandkaart wat er die maand uitging, uit de staaf van die maand
+    const uitV = await page.evaluate((m) => ({ k: +document.querySelector('#insMaand').dataset.insuit, s: Math.round(maandStaaf(m).spend) }), VORIGE);
+    expect(uitV.k).toBe(uitV.s);
+    expect(uitV.k).toBeGreaterThan(0);
     // v359: een afgesloten maand draagt de uitkomst tegen je potjes, en geen tempo of dagteller
-    // v365: het maandbudget van een afgesloten maand heeft twee delen, Uitgegeven en Over (of Erboven)
-    expect(ins).toMatch(/ Over €[\d.]+ onder budget| Erboven €[\d.]+ boven budget/);
+    // v382: de maandkaart van een afgesloten maand (data-insmaand="af") zet uitgegeven tegen het budget van die maand
+    expect(await page.locator('#insMaand').getAttribute('data-insmaand')).toBe('af');
+    expect(ins).toMatch(/€[\d.]+ van €[\d.]+ €[\d.]+ (onder|boven) budget/);
     expect(ins).not.toMatch(/tot vandaag/i);
+    expect(ins).not.toMatch(/tempo/i);
   });
 
   test('wat over het nu gaat verdwijnt', async ({ page }) => {
     await boot(page);
-    // v359: 'Nog deze maand' is opgegaan in de tegels; een afgesloten maand draagt alleen wat er uitkwam
-    expect(await tekst(page, 'ins')).toMatch(/nog te betalen/i);
+    // v382: de lopende maand draagt in de maandkaart "Nog te gaan" (vaste lasten en wat er in je potjes zit) en een
+    // tempo; een afgesloten maand draagt alleen wat er uitkwam
+    const nu = await tekst(page, 'ins');
+    expect(nu).toMatch(/nog te gaan/i);
+    expect(nu).toMatch(/tempo/i);
     await kies(page, VORIGE);
     const t = await tekst(page, 'ins');
+    expect(t).not.toMatch(/nog te gaan/i);
+    expect(t).not.toMatch(/tempo/i);
     expect(t).not.toMatch(/nog te betalen/i);
     expect(t).not.toMatch(/nog te ontvangen/i);
     expect(t).not.toMatch(/abonnementen/i);

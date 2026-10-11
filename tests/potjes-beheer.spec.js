@@ -36,6 +36,12 @@ test.describe('nieuw potje met dekking', () => {
     expect(await page.locator('[data-potdek="huur"]').count()).toBe(0);
     await page.click('[data-potdek="sport"]');
     await expect(page.locator('[data-potgevolg]')).toContainText('levert Sport & gezondheid');
+    /* v382: een nieuw potje vraagt een verplichte keuze of het meetelt in je weekbedrag, zonder voorkeuze */
+    await expect(page.locator('[data-potwek]')).toHaveCount(2);
+    expect(await page.locator('[data-potwek].on').count()).toBe(0);
+    await expect(page.locator('[data-potformsave]')).toBeDisabled();
+    await page.click('[data-potwek="ja"]');
+    await expect(page.locator('[data-potformsave]')).toBeEnabled();
     expect(await opslag(page)).toBe(voor);
     const tot0 = await page.evaluate(() => Object.values(budgetVoorMaand('2026-11')).reduce((s, v) => s + v, 0));
     await page.click('[data-potformsave]');
@@ -50,7 +56,7 @@ test.describe('nieuw potje met dekking', () => {
   });
   test('de schrijver eist de dekking zelf, ook buiten het formulier om', async ({ page }) => {
     await boot(page, opt());
-    const r = await page.evaluate(() => { window._potForm = { cat: '_nieuw', naam: 'Kinderen', aard: 'wisselend', bedrag: '100', vanaf: '2026-11', bron: 'dek', dek: null };
+    const r = await page.evaluate(() => { window._potForm = { cat: '_nieuw', naam: 'Kinderen', aard: 'wisselend', bedrag: '100', vanaf: '2026-11', bron: 'dek', dek: null, wek: 'ja' };   /* v382: wek gekozen, zodat alleen de dekking ontbreekt */
       potFormZet(); return { E: SET.eigenCats || {}, N: SET.budgetsNext || {} }; });
     expect(Object.keys(r.E).length).toBe(0);
     expect(Object.keys(r.N).length).toBe(0);
@@ -77,6 +83,7 @@ test.describe('verhoging van het maandbudget', () => {
     await page.fill('#potFormBedrag', '200');
     await page.selectOption('#potFormVanaf', '2026-10');
     await page.click('[data-potbron="verhoog"]');
+    await page.click('[data-potwek="ja"]');   // v382: de verplichte keuze voor het weekbedrag
     const g = await page.locator('[data-potgevolg]').innerText();
     expect(g).toContain(`van € ${m.tot.toLocaleString('nl-NL')}`.replace('€ ', '€'));
     expect(g).toContain('Veilig te besteden gaat deze maand van');
@@ -93,7 +100,7 @@ test.describe('verhoging van het maandbudget', () => {
   });
   test('vanaf een latere maand verandert veilig te besteden deze maand niet, en het plan schuift door', async ({ page }) => {
     await boot(page, opt());
-    await page.evaluate(() => { window._potForm = { cat: '_nieuw', naam: 'Kinderen', aard: 'wisselend', bedrag: '150', vanaf: '2027-01', bron: 'verhoog' }; renderPotForm(); showSheetBg(); });
+    await page.evaluate(() => { window._potForm = { cat: '_nieuw', naam: 'Kinderen', aard: 'wisselend', bedrag: '150', vanaf: '2027-01', bron: 'verhoog', wek: 'ja' };   /* v382: wek gekozen */ renderPotForm(); showSheetBg(); });
     await expect(page.locator('[data-potgevolg]')).toContainText('Veilig te besteden verandert deze maand niet');
     await page.click('[data-potformsave]');
     const r = await page.evaluate(() => { const k = Object.keys(SET.eigenCats)[0]; return { k, P: SET.budgetPlan, nov: budgetVoorMaand('2026-11')[k], jan: budgetVoorMaand('2027-01')[k] }; });
