@@ -3,6 +3,7 @@
 // vouw-plekken met drie verschillende idiomen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -145,28 +146,26 @@ test.describe('b · één idioom voor vouwen', () => {
      v208: insVouw() is vervallen met het Kerncijfers-blok op Inzichten - dat was zijn enige
      aanroeper. Er blijven drie plekken over, met hetzelfde idioom. */
   /* v380: vooruitZone() is vervallen met de zonebalk "Bestemmingen"; Plan opent op de kop. */
-  const BRONNEN = ['renderMerchants', 'spendVsBudgetChart'];
+  /* v382: spendVsBudgetChart() is vervallen met "Over de maanden" op Inzichten; renderMerchants blijft de vouwplek. */
+  const BRONNEN = ['renderMerchants'];
 
   test('geen enkele vouwknop draagt nog een chevron', async ({ page }) => {
     await boot(page);
     /* De markering staat een paar regels na de onclick, dus een filter per regel vindt hem niet.
        We nemen daarom het venster na elke vouw-toggle in de platgeslagen bron: daar hoort een
        driehoek te staan en geen chevron. */
-    const r = await page.evaluate((namen) => {
-      const uit = {};
-      for (const n of namen) {
-        const f = window[n]; if (typeof f !== 'function') { uit[n] = 'ontbreekt'; continue; }
-        const src = f.toString().replace(/\s+/g, ' ');
-        const vensters = [];
-        const rx = /toggle(?:Collap|Vooruit)\(/g; let m;
-        while ((m = rx.exec(src))) vensters.push(src.slice(m.index, m.index + 420));
-        uit[n] = { regels: vensters.length,
-                   chevron: vensters.some((v) => v.includes('›')),
-                   neer: vensters.some((v) => v.includes('▼')),
-                   op: vensters.some((v) => v.includes('▲')) };
-      }
-      return uit;
-    }, BRONNEN);
+    const r = {};
+    for (const n of BRONNEN) {
+      if (!(await page.evaluate((x) => typeof window[x] === 'function', n))) { r[n] = 'ontbreekt'; continue; }
+      const src = (await kaalUit(page, n)).replace(/\s+/g, ' ');
+      const vensters = [];
+      const rx = /toggle(?:Collap|Vooruit)\(/g; let m;
+      while ((m = rx.exec(src))) vensters.push(src.slice(m.index, m.index + 420));
+      r[n] = { regels: vensters.length,
+               chevron: vensters.some((v) => v.includes('›')),
+               neer: vensters.some((v) => v.includes('▼')),
+               op: vensters.some((v) => v.includes('▲')) };
+    }
     for (const n of BRONNEN) {
       expect(r[n], n).not.toBe('ontbreekt');
       expect(r[n].regels, n).toBeGreaterThan(0);
@@ -181,23 +180,31 @@ test.describe('b · één idioom voor vouwen', () => {
      de maandgrafiek, met dezelfde drietraps vlag (v90) en hetzelfde idioom.
      v227: die grafiek staat sinds deze ronde op Inzichten en niet meer op Maand. Het idioom is wat
      hier getoetst wordt, niet de plek, dus alleen het scherm dat gelezen wordt verschuift. */
+  /* v382: de maandgrafiek (spendVsBudgetChart, vlag openSpendChart) is weg met "Over de maanden" op Inzichten. Het idioom
+     wordt nu getoetst op de vouwplek die er wel is: Top uitgaven (renderMerchants, vlag openMerch), dezelfde drietraps vlag. */
   test('de vouwknop staat boven de inhoud, niet als voetregel eronder', async ({ page }) => {
     await boot(page);
-    const open = await page.evaluate(() => { SET.openSpendChart = true; save(); return spendVsBudgetChart(); });
+    const open = await page.evaluate(() => { SET.openMerch = true; return renderMerchants(txOfMonth(thisYM()), ''); });
     expect(open).toContain('▲');
-    // 'cbar' is de eerste staaf van de grafiek; het icoon in de kop is zelf ook een svg
-    expect(open.indexOf('▲')).toBeLessThan(open.indexOf('cbar'));
+    // 'cat-row' is de eerste winkelrij van de lijst
+    expect(open).toContain('cat-row');
+    expect(open.indexOf('▲')).toBeLessThan(open.indexOf('cat-row'));
     expect(open).not.toMatch(/inklappen/);
   });
 
-  test('open en dicht wisselen elkaar echt af op het scherm', async ({ page }) => {
+  test('open en dicht wisselen elkaar echt af', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.openSpendChart = true; save(); render(); go('ins'); });
-    const a = await page.evaluate(() => $('#s-ins').innerText);
-    expect(a).toContain('▲');
-    await page.evaluate(() => toggleCollap('openSpendChart'));
-    const b = await page.evaluate(() => $('#s-ins').innerText);
-    expect(b).toContain('▼');
+    const r = await page.evaluate(() => {
+      SET.openMerch = true; save();
+      const a = renderMerchants(txOfMonth(thisYM()), '');
+      toggleCollap('openMerch');
+      const b = renderMerchants(txOfMonth(thisYM()), '');
+      return { a, b, vlag: SET.openMerch };
+    });
+    expect(r.a).toContain('▲');
+    expect(r.vlag).toBe(false);
+    expect(r.b).toContain('▼');
+    expect(r.b).not.toContain('cat-row');
   });
 
   test('insVouw en zijn vlag bestaan niet meer', async ({ page }) => {

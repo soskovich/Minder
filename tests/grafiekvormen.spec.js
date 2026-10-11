@@ -43,7 +43,7 @@ async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof spendVsBudgetChart === 'function');
+  await page.waitForFunction(() => typeof renderPlan === 'function' && typeof insKpis === 'function');   // v382: spendVsBudgetChart is weg
 }
 
 // het budget in de lopende maand is huur 900 + boodschappen 500 = 1400; huur valt in de maand zelf
@@ -226,21 +226,22 @@ test.describe('g · layout', () => {
       await page.evaluate(() => { SET.openSpendChart = true; save(); go('ins'); });
       await page.waitForSelector('#s-ins .card');
       /* v227: de grafiek staat op Inzichten, onder het blok over deze maand. Beide schermen worden
-         nog op overflow gemeten, alleen staat de grafiek nu in het eerste. */
+         nog op overflow gemeten, alleen staat de grafiek nu in het eerste.
+         v382: de staafgrafiek is weg; op Inzichten staat de maandkaart met zijn balk (#insMaand, #insMbBalk). */
       const ins = await page.evaluate(() => {
         const el = document.getElementById('s-ins');
-        return { over: el.scrollWidth - el.clientWidth, grafiek: !!el.querySelector('#insSpendChart') };
+        return { over: el.scrollWidth - el.clientWidth, balk: !!el.querySelector('#insMaand #insMbBalk') };
       });
       expect(ins.over, `${w}px inzichten`).toBe(0);
-      expect(ins.grafiek).toBe(true);
+      expect(ins.balk).toBe(true);
       await page.evaluate(() => go('maand'));
       await page.waitForSelector('#s-maand .card');
       const maand = await page.evaluate(() => {
         const el = document.getElementById('s-maand');
-        return { over: el.scrollWidth - el.clientWidth, grafiek: !!el.querySelector('#insSpendChart') };
+        return { over: el.scrollWidth - el.clientWidth, balk: !!el.querySelector('#insMbBalk') };
       });
       expect(maand.over, `${w}px maand`).toBe(0);
-      expect(maand.grafiek).toBe(false);
+      expect(maand.balk).toBe(false);                     // de maandbalk staat op Inzichten en niet op Grip
     });
   }
 });

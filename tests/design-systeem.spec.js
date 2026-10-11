@@ -65,14 +65,7 @@ test.describe('b · tokens en kleurgebruik', () => {
     }
   });
 
-  test('grafiekstaven zijn neutraal; teal alleen voor de lopende maand', async ({ page }) => {
-    await boot(page, 'ins');
-    const html = await page.evaluate(() => spendVsBudgetChart());
-    expect(html).toContain('var(--bar)');                               // rustige staven
-    expect((html.match(/fill="var\(--teal\)"/g) || []).length).toBeLessThanOrEqual(1);
-    // en geen gridlijnen meer in de grafiek
-    expect(html).not.toContain('rgba(255,255,255,.07)"');
-  });
+  // v382: weg, 'grafiekstaven zijn neutraal; teal alleen voor de lopende maand' ging over spendVsBudgetChart, de staafgrafiek op Inzichten die er niet meer is
 
   test('de KPI-sparklines gebruiken één rustige kleur binnen de band', async ({ page }) => {
     await boot(page, 'ins');

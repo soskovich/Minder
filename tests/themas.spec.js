@@ -57,18 +57,21 @@ test.describe('a · de wissel', () => {
 test.describe('b · de hele app volgt', () => {
   test('grafieken, nav en coach lopen via tokens, niet via vaste kleuren', async ({ page }) => {
     await boot(page, 'ins');
+    /* v382: de staafgrafiek (spendVsBudgetChart) is weg; de grafieken zijn nu de maandkaart op Inzichten (#insMaand,
+       met zijn balk) en de bridge van een afgesloten maand in het logboek (brugBlok). */
     const uit = await page.evaluate(() => ({
-      chart: spendVsBudgetChart(),
+      chart: (document.querySelector('#s-ins #insMaand') || {}).outerHTML || '',
+      brug: brugBlok(months().filter((m) => m < thisYM()).slice(-1)[0]),
       kpi: maandKpiBlok(curMonth || months()[months().length - 1]),   // v208: de tegels staan alleen nog op Maand
       avatar: coachAvatar(),
     }));
     for (const [naam, html] of Object.entries(uit)) {
       expect(html, naam).not.toMatch(/#2dd4bf|#56627d|#8a97ab|#0b1220/i);   // oude vaste kleuren
     }
-    expect(uit.chart).toContain('var(--bar)');
-    /* v359: teal is in de grafiek de gekozen maand (v335, een ingang), dus het accent verschijnt pas na een tik */
-    const gekozen = await page.evaluate(() => { brugKies(insAfgerond().slice(-1)[0]); return spendVsBudgetChart(); });
-    expect(gekozen).toMatch(/var\(--(accent|teal)\)/);              // het accent via een token
+    expect(uit.chart).toContain('data-insseg');                     // invoermeting: de balk staat er
+    expect(uit.chart).toMatch(/data-insseg="[a-z]+"[^>]*background:var\(--/);   // de segmenten kleuren via tokens
+    expect(uit.brug).toContain('data-brugstap="eind"');              // invoermeting: de bridge staat er
+    expect(uit.brug).toMatch(/var\(--(accent|teal)\)/);              // het accent via een token
     expect(uit.avatar).toContain('var(--accent)');
   });
 

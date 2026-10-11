@@ -1,6 +1,9 @@
 /* v359: INZICHTEN ALS DASHBOARD, op de stand van 7 oktober 2026 (tests/inzichten-stand.js).
-   Inzichten observeert, Grip stuurt: een filter, KPI-tegels met een sheet per tegel, een kop-inzicht met de
-   teller naar de patronen, de maanden met de bridge, de keuzekaart en vier soorten patronen. */
+   Inzichten observeert, Grip stuurt.
+   v382: de tegels, het kop-inzicht, "Over de maanden" en de keuzekaart zijn weg; wat deze spec over de BLIJVENDE
+   eigenschappen vasthield (het filter, geen handeling op het scherm, sheets die niets schrijven, de patronen-bron, de
+   soort-snede, de onbekend-stand, de overloop) is gebonden aan de maandkaart (#insMaand), de weektegel, de
+   patroontegels en de verschuivingen. De nieuwe vorm zelf staat in inzichten-week.spec.js. */
 const { test, expect } = require('@playwright/test');
 const S = require('./inzichten-stand');
 
@@ -9,42 +12,32 @@ async function open(page, o, vp) {
   if (vp) await page.setViewportSize(vp);
   await page.evaluate(() => go('ins'));
 }
-const tegels = (page) => page.evaluate(() => [...document.querySelectorAll('#insTegels [data-instegel]')].map((el) => ({
-  key: el.dataset.instegel, st: el.className.replace('ins-kt', '').replace('mb-kt', '').trim(),
-  lab: el.querySelector('.lb').innerText, val: el.querySelector('.vl').innerText, ms: el.querySelector('.ms').innerText })));
-const tegel = async (page, k) => (await tegels(page)).find((t) => t.key === k);
+const kaart = (page) => page.evaluate(() => { const e = document.getElementById('insMaand'); return Object.assign({ txt: e.innerText }, e.dataset); });
+/* De keuze welke potjes wekelijks zijn, zoals inzichten-week.spec.js hem zet: anders staat er een regel naar die keuze
+   in plaats van de weektegel. */
+async function kies(page) {
+  await page.evaluate(() => { SET.potWekelijks = {}; for (const k of wekKandidaten()) SET.potWekelijks[k] = true; SET.weekStand = null; save(); render(); go('ins'); });
+}
 
-test.describe('a · de tegels van 7 oktober', () => {
-  /* v365: drie tegels als delen van het maandbudget; ontvangen staat op Home, sparen op Plan en contant in het saldo. */
-  test('de drie tegels met hun bedragen, in de volgorde van de balk', async ({ page }) => {
-    await open(page);
-    const T = await tegels(page);
-    expect(T.map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
-    expect(T.map((t) => t.val)).toEqual(['€406', '€817', '€2.153']);
-    expect(T[0].ms).toBe('tot vandaag mocht €578 · je zit €172 eronder');
-    expect(T[1].ms).toBe('van €817 deze maand');
-    expect(T[2].ms).toBe('al bestemd, verdeeld over je potjes');   // v367: geen tweede dagbedrag naast Home
-  });
-  test('de status blijft: uitgegeven en potjes groen, vast grijs', async ({ page }) => {
-    await open(page);
-    expect((await tegels(page)).map((t) => t.st)).toEqual(['grn', 'gry', 'grn']);
-  });
-  test('boven het tempo is uitgegeven amber, en een potje boven zijn bedrag maakt potjes amber', async ({ page }) => {
-    await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
-    const T = await tegels(page);
-    expect(T[0].st).toBe('amb'); expect(T[0].ms).toMatch(/· €[\d.]+ boven je tempo$/);
-    expect(T.find((t) => t.key === 'potjes').st).toBe('amb');
-  });
+test.describe('a · de maandkaart van 7 oktober', () => {
+  // v382: weg, de drie tegels met hun bedragen en volgorde; de maandkaart staat in inzichten-week.spec.js e.
+  // v382: weg, de status per tegel (groen, grijs); er zijn geen tegels meer. De kleur met reden staat in l.
+  // v382: weg, amber op de tegels uitgegeven en potjes; zie l voor amber op de maandkaart.
   test('het budget is uitgegeven plus nog in potjes plus nog te betalen (v327)', async ({ page }) => {
     await open(page);
-    const r = await page.evaluate(() => ({ b: Math.round(totals(thisYM()).budget), T: [...document.querySelectorAll('#insTegels [data-instegel]')].map((e) => e.querySelector('.vl').innerText) }));
+    const r = await page.evaluate(() => { const M = insMaandStand(); return { b: Math.round(totals(thisYM()).budget), M }; });
+    const k = await kaart(page);
     expect(r.b).toBe(3376);
-    expect(406 + 2153 + 817).toBe(r.b);
+    expect(+k.insbudget).toBe(r.b); expect(+k.insuit).toBe(r.M.uit);
+    expect(r.M.uit + r.M.nogVast + r.M.nogPot).toBe(r.b);
+    expect(r.M.boven).toBe(0);
   });
   test('zonder boekingen van deze maand is uitgegeven onbekend, en geen nul', async ({ page }) => {
     await open(page, { tot: '2026-10-01' });
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.val).toBe('onbekend'); expect(t.ms).toBe('nog geen boekingen van deze maand'); expect(t.st).toBe('gry');
+    const k = await kaart(page);
+    expect(k.insmaand).toBe('onbekend');
+    expect(k.txt).toContain('onbekend'); expect(k.txt).toContain('nog geen boekingen van deze maand');
+    expect(k.txt).not.toMatch(/€0\b/);
   });
   // v365: nog te ontvangen staat op Home
   /* v378: is alles binnen en geen bonus verwacht, dan staat er geen regel meer (keuze van de gebruiker). */
@@ -57,172 +50,156 @@ test.describe('a · de tegels van 7 oktober', () => {
 });
 
 test.describe('b · het tempo telt een vaste last op zijn datum', () => {
-  test('op 7 oktober is het tempo het variabele deel naar rato, niet het budget naar rato', async ({ page }) => {
+  /* v382: insTempo() is opgegaan in het trap-tempo van insMaandStand(); de eigenschap (een vaste last telt op zijn
+     datum, niet naar rato) blijft. */
+  test('op 7 oktober is het tempo het potjesdeel naar rato, niet het budget naar rato', async ({ page }) => {
     await open(page);
-    const r = await page.evaluate(() => { const t = insTempo(); return { t, oud: Math.round(totals(thisYM()).budget * 7 / 31), V: maandVooruit().variabel.budget }; });
-    expect(r.oud).toBe(762);
-    expect(r.V).toBe(2559);
-    expect(r.t.varNaar).toBe(Math.round(2559 * 7 / 31));
-    expect(r.t.vastTot).toBe(0);
-    expect(r.t.mocht).toBe(578);
+    const M = await page.evaluate(() => insMaandStand());
+    expect(Math.round(3376 * 7 / 31)).toBe(762);
+    expect(M.potDeel).toBe(3376 - 817);
+    expect(M.potTempo).toBe(Math.round(M.potDeel * 7 / 31));
+    expect(M.vastTempo).toBe(0);
+    expect(M.tempo).toBe(578);
   });
   test('na de lease telt hij voor zijn hele bedrag mee, ook als hij nog niet is afgeschreven', async ({ page }) => {
     await open(page, { dag: '2026-10-16', extraTx: [{ id: 'nf10', date: '2026-10-15', amount: -43, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL' }] });
-    const t = await page.evaluate(() => insTempo());
-    expect(t.betaald).toBe(43);
-    expect(t.achter.map((x) => [x.naam, x.bedrag])).toEqual([['Hiltermann Lease', 537]]);
-    expect(t.mocht).toBe(Math.round(2559 * 16 / 31) + 43 + 537);
+    const M = await page.evaluate(() => insMaandStand());
+    expect(M.vast).toBe(43);
+    expect(M.achter.map((x) => [x.naam, x.bedrag])).toEqual([['Hiltermann Lease', 537]]);
+    expect(M.vastTempo).toBe(43 + 537);
   });
   test('een vaste last die nog moet komen telt niet', async ({ page }) => {
     await open(page, { dag: '2026-10-12' });
-    const t = await page.evaluate(() => insTempo());
-    expect(t.achter).toEqual([]);
-    expect(t.mocht).toBe(Math.round(2559 * 12 / 31));
+    const M = await page.evaluate(() => insMaandStand());
+    expect(M.achter).toEqual([]);
+    expect(M.vastTempo).toBe(0);
   });
-  test('de sheet van uitgegeven telt op tot de tegel en tot het tempo', async ({ page }) => {
+  test('de sheet van uitgegeven telt op tot de kaart en tot het tempo', async ({ page }) => {
     await open(page, { dag: '2026-10-16', extraTx: [{ id: 'nf10', date: '2026-10-15', amount: -43, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL' }] });
-    await page.click('[data-instegel="uitgegeven"]');
+    const uit = +(await kaart(page)).insuit;
+    await page.click('[data-insmaandkop]');
     const r = await page.evaluate(() => { const s = document.getElementById('insTegelSheet');
       return { w: +s.dataset.inswaarde, delen: [...s.querySelectorAll('[data-insrij]')].map((e) => +e.dataset.insrij),
-        tempo: +s.querySelector('[data-instempo]').dataset.instempo, tdelen: [...s.querySelectorAll('[data-instempodeel]')].map((e) => +e.dataset.instempodeel), mocht: insTempo().mocht }; });
+        tempo: +s.querySelector('[data-instempo]').dataset.instempo, tdelen: [...s.querySelectorAll('[data-instempodeel]')].map((e) => +e.dataset.instempodeel), M: insMaandStand() }; });
+    expect(r.w).toBe(uit);
     expect(r.delen.reduce((a, b) => a + b, 0)).toBe(r.w);
     expect(r.tdelen.reduce((a, b) => a + b, 0)).toBe(r.tempo);
-    expect(r.tempo).toBe(r.mocht);
+    expect(r.tempo).toBe(r.M.tempo);
   });
 });
 
-test.describe('c · de tegels passen zich aan', () => {
-  /* v365: bij alle uitgaven met een budget zijn het altijd de drie delen van het maandbudget. */
-  test('zonder sparen en contant: dezelfde drie delen', async ({ page }) => {
-    await open(page, { zonderSparen: true, zonderContant: true });
-    expect((await tegels(page)).map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
-  });
-  test('zonder herkende incasso en zonder inkomen: nog steeds drie delen, vast op nul', async ({ page }) => {
+test.describe('c · de kaart past zich aan', () => {
+  // v382: weg, "zonder sparen en contant: dezelfde drie delen"; er zijn geen tegels meer.
+  test('zonder herkende incasso en zonder inkomen: geen vaste lasten op de kaart', async ({ page }) => {
     await open(page, { zonderVast: true, zonderInkomen: true, zonderSparen: true, set: { income: 0 } });
-    const T = await tegels(page);
-    expect(T.map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
-    expect(T[1].val).toBe('€0');
+    const r = await page.evaluate(() => { const M = insMaandStand(); return { vast: M.vast, nogVast: M.nogVast, leg: [...document.querySelectorAll('#insMaand [data-insleg]')].map((e) => e.dataset.insleg) }; });
+    expect(r.vast).toBe(0); expect(r.nogVast).toBe(0);
+    expect(r.leg).not.toContain('vast'); expect(r.leg).not.toContain('nogvast');   // nulrijen staan er niet
   });
-  test('een opname zonder telling geeft geen contanttegel en geen splitsing op Home', async ({ page }) => {
+  test('een opname zonder telling geeft geen splitsing op Home', async ({ page }) => {
     await open(page, { zonderContant: true, extraTx: [{ id: 'gea', date: '2026-08-12', amount: -50, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT' }] });
-    expect((await tegels(page)).map((t) => t.key)).not.toContain('cash');
     await page.evaluate(() => go('dash'));
     expect(await page.locator('[data-saldosplit]').count()).toBe(0);
   });
-  test('de tegelkeuze onthoudt alleen nog vast', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => { delete SET.contant; SET.savingAmount = 0; save(); renderIns(); });
-    expect(await page.evaluate(() => SET.insTegels)).toEqual({ maand: '2026-10', aan: ['vast'] });
-  });
-  test('een nieuwe maand begint opnieuw', async ({ page }) => {
-    await open(page, { dag: '2026-11-03', zonderContant: true, set: { insTegels: { maand: '2026-10', aan: ['vast', 'ontvangen', 'sparen', 'cash'] }, budgetMonth: '2026-10' } });
-    expect((await tegels(page)).map((t) => t.key)).not.toContain('cash');
-    expect(await page.evaluate(() => SET.insTegels.maand)).toBe('2026-11');
-  });
+  // v382: weg, "de tegelkeuze onthoudt alleen nog vast"; SET.insTegels heeft geen lezer meer.
+  // v382: weg, "een nieuwe maand begint opnieuw"; idem, de tegelkeuze per maand bestaat niet meer.
 });
 
-test.describe('d · de keuzekaart', () => {
-  test('staat standaard op tegen je potje, met de legenda in de kaart', async ({ page }) => {
-    await open(page);
-    const r = await page.evaluate(() => { const k = document.getElementById('insKeuze');
-      openInsAlle('potje');   // v367: de legenda staat bij de volle lijst; de kaart draagt de uitschieters
-      return { stand: k.dataset.inskeuzestand, on: k.querySelector('.ins-tog .on').dataset.inskeuze, leg: document.querySelector('#insAlle .ins-leg').innerText, set: SET.insKeuze };
-    });
-    expect(r.stand).toBe('potje'); expect(r.on).toBe('potje'); expect(r.set).toBeUndefined();
-    expect(r.leg).toContain('normaal op dag 7');
-  });
-  test('per potje wat er uit is tegen het potje, met de streep op wat normaal is in dezelfde dagen', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => openInsAlle('potje'));   // v367: de volle lijst staat in de drilldown
-    const r = await page.evaluate(() => [...document.querySelectorAll('#insAlle [data-inspotrij]')].map((e) => [e.dataset.inspotrij, +e.dataset.uit, +e.dataset.potje, e.dataset.normaal == null ? null : +e.dataset.normaal, e.querySelector('em') ? e.querySelector('em').style.left : null]));
-    const u = r.find((x) => x[0] === 'uiteten');
-    expect(u.slice(0, 4)).toEqual(['uiteten', 110, 150, 40]);
-    expect(u[4]).toBe((40 / 150 * 100).toFixed(1) + '%');
-    expect(r.map((x) => x[1])).toEqual([...r.map((x) => x[1])].sort((a, b) => b - a));
-  });
-  test('de keuze wordt onthouden', async ({ page }) => {
-    await open(page);
-    await page.click('[data-inskeuze="vorige"]');
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('minder_set')).insKeuze)).toBe('vorige');
-    await page.evaluate(() => { go('dash'); go('ins'); });
-    expect(await page.getAttribute('#insKeuze', 'data-inskeuzestand')).toBe('vorige');
-    await open(page, { set: { insKeuze: 'vorige' } });
-    expect(await page.getAttribute('#insKeuze', 'data-inskeuzestand')).toBe('vorige');
-  });
-  test('tegen vorige maanden: het verschil met dezelfde dagen, links minder en rechts meer', async ({ page }) => {
-    await open(page);
-    await page.click('[data-inskeuze="vorige"]');
-    expect(await page.innerText('#insKeuze')).toContain('dezelfde eerste 7 dagen in juli, augustus en september');
-    await page.evaluate(() => openInsAlle('vorige'));   // v367: de volle lijst staat in de drilldown
-    const r = await page.evaluate(() => [...document.querySelectorAll('#insAlle [data-insvorigrij]')].map((e) => [e.dataset.insvorigrij, +e.dataset.verschil, !!e.querySelector('.l i'), !!e.querySelector('.r i')]));
-    expect(r.find((x) => x[0] === 'uiteten').slice(0, 2)).toEqual(['uiteten', 70]);
-    expect(r.find((x) => x[0] === 'boodschappen').slice(0, 4)).toEqual(['boodschappen', -30, true, false]);
-    expect(r.find((x) => x[0] === 'vervoer').slice(0, 4)).toEqual(['vervoer', 99, false, true]);
-    expect(r.map((x) => x[1])).toEqual([...r.map((x) => x[1])].sort((a, b) => b - a));
-  });
-});
+// v382: weg, d · de keuzekaart ("Tegen je potje" / "Tegen vorige maanden"); die kaart is vervallen. Wat er uit is
+// tegen het potje met de streep op normaal staat nu in de potje-sheet (inzichten-week.spec.js d).
 
 test.describe('e · geen handeling op Inzichten', () => {
-  const MAG = ['openInsFilter', 'openInsTegel', 'insNaarPatronen', 'insNulToggle', 'brugKies', 'brugTegen', 'brugRest', 'insKeuzeZet', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation', 'openInsAlle'];
-  const MAG_SHEET = MAG.concat(['closeSheet', 'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet']);
+  /* v382: de ingangen van de nieuwe vorm. Elk opent een sheet, wisselt een weergave (de verschuivingen, het filter)
+     of verwijst naar Grip. */
+  const MAG = ['openInsFilter', 'openInsTegel', 'openInsZonder', 'openWeekSheet', 'openWekelijks', 'openInsPatroon',
+    'verschuivingToggle', 'verschuivingKies', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
+  const MAG_SHEET = MAG.concat(['closeSheet', 'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet', 'openInsPotje', 'openSheet', 'wekKies']);
+  /* DE UITZONDERING, met reden: in de sheet "Welke potjes zijn wekelijks?" schrijft "Bevestigen" (wekBevestig)
+     SET.potWekelijks. Dat is een instelling en geen handeling op je geld: hij beweegt geen geld en zet geen grens, hij
+     kiest alleen wat de weektegel optelt, en het is de keuze van de gebruiker in v382 dat die keuze op Inzichten staat.
+     Hij staat hier bij naam, zodat geen andere schrijver erbij kan zonder dat deze test valt. */
+  const SCHRIJVER = ['wekBevestig'];
   const aanroepen = (root) => [...root.querySelectorAll('[onclick]')].flatMap((e) => e.getAttribute('onclick').split(';').map((x) => x.trim().split('(')[0]).filter(Boolean));
-  test('het scherm draagt alleen tikken die iets openen of naar Grip verwijzen', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => brugKies('2026-08'));
+  test('het scherm draagt alleen tikken die iets openen, een weergave wisselen of naar Grip verwijzen', async ({ page }) => {
+    await open(page); await kies(page);
+    await page.evaluate(() => verschuivingToggle());
     const r = await page.evaluate((src) => { const f = new Function('root', 'return (' + src + ')(root)'); return f(document.getElementById('s-ins')); }, aanroepen.toString());
-    expect(r.length).toBeGreaterThan(10);
+    for (const x of ['openInsFilter', 'openInsTegel', 'openWeekSheet', 'openInsPatroon', 'verschuivingToggle', 'verschuivingKies'])
+      expect(r, x + ' staat werkelijk op het scherm').toContain(x);
     expect(r.filter((x) => !MAG.includes(x))).toEqual([]);
     expect(await page.$$eval('#s-ins .btn, #s-ins button', (e) => e.length)).toBe(0);
   });
-  test('de sheets achter de tegels en het filter schrijven niets en dragen geen handeling', async ({ page }) => {
+  test('zonder keuze over wekelijks leidt de regel naar de keuze, en ook dat is een ingang', async ({ page }) => {
     await open(page);
+    const r = await page.evaluate((src) => { const f = new Function('root', 'return (' + src + ')(root)'); return f(document.getElementById('s-ins')); }, aanroepen.toString());
+    expect(r).toContain('openWekelijks');
+    expect(r.filter((x) => !MAG.includes(x))).toEqual([]);
+  });
+  test('de sheets achter de kaart, de week, de patronen en het filter schrijven niets en dragen geen handeling', async ({ page }) => {
+    await open(page, { extraTx: [{ id: 'kap1', date: '2026-10-06', amount: -45, name: 'Kapper Jan', desc: 'BEA, BETAALPAS KAPPER JAN' }] });
+    await page.evaluate(() => { const t = TX.find((x) => x.name === 'Kapper Jan'); OVR[t.id] = 'zorg'; save(); });
+    await kies(page);
     const r = await page.evaluate((src) => {
       const f = new Function('root', 'return (' + src + ')(root)');
       const voor = localStorage.getItem('minder_set'); let schrijf = 0; const orig = Storage.prototype.setItem;
       Storage.prototype.setItem = function () { schrijf++; return orig.apply(this, arguments); };
-      const uit = [];
-      for (const k of ['uitgegeven', 'potjes', 'vast', 'ontvangen', 'sparen', 'cash']) { openInsTegel(k); uit.push(...f(document.getElementById('sheet'))); closeSheet(); }
+      const uit = []; const sh = () => { uit.push(...f(document.getElementById('sheet'))); closeSheet(); };
+      for (const k of ['uitgegeven', 'potjes', 'vast', 'ontvangen', 'sparen', 'cash']) { openInsTegel(k); sh(); }
+      openInsZonder(); sh(); openInsPotje('uiteten'); sh(); openWeekSheet(); sh();
+      for (let i = 0; i < (window._insPats || []).length; i++) { openInsPatroon(i); sh(); }
+      openWekelijks(); wekKies('uiteten', false); uit.push(...f(document.getElementById('sheet'))); closeSheet();
+      verschuivingToggle(); verschuivingKies(0);
       openInsFilter(); const filt = f(document.getElementById('sheet')); closeSheet();
       Storage.prototype.setItem = orig;
-      return { uit, filt, schrijf, gelijk: voor === localStorage.getItem('minder_set') };
+      return { uit, filt, schrijf, gelijk: voor === localStorage.getItem('minder_set'), npat: (window._insPats || []).length };
     }, aanroepen.toString());
+    expect(r.npat).toBe(4);
     expect(r.schrijf).toBe(0); expect(r.gelijk).toBe(true);
-    expect(r.uit.filter((x) => !MAG_SHEET.includes(x))).toEqual([]);
+    expect(r.uit.filter((x) => !MAG_SHEET.includes(x) && !SCHRIJVER.includes(x))).toEqual([]);
     expect(r.filt.filter((x) => x !== 'insFilterZet')).toEqual([]);
   });
-  test('de oude stand-kaart, "Wat opvalt" en "Nog deze maand" staan er niet meer', async ({ page }) => {
+  test('de uitzondering: Bevestigen in de wekelijks-sheet schrijft alleen de keuze en het weekbedrag', async ({ page }) => {
     await open(page);
-    const r = await page.evaluate(() => ({ ids: ['insStand', 'insNogLijst', 'insSignalRows'].filter((i) => document.getElementById(i)), txt: document.getElementById('s-ins').innerText }));
+    const r = await page.evaluate(() => {
+      const voor = JSON.parse(localStorage.getItem('minder_set'));
+      openWekelijks(); for (const k of wekKandidaten()) wekKies(k, true); wekBevestig();
+      const na = JSON.parse(localStorage.getItem('minder_set'));
+      const keys = new Set([...Object.keys(voor), ...Object.keys(na)]);
+      return [...keys].filter((k) => JSON.stringify(voor[k]) !== JSON.stringify(na[k])).sort();
+    });
+    expect(r.filter((k) => !['potWekelijks', 'weekStand'].includes(k))).toEqual([]);
+    expect(r).toContain('potWekelijks');
+  });
+  test('de oude stand-kaart, "Wat opvalt", "Nog deze maand" en de vorm van v359 staan er niet meer', async ({ page }) => {
+    await open(page);
+    const r = await page.evaluate(() => ({ ids: ['insStand', 'insNogLijst', 'insSignalRows', 'insTegels', 'insKop', 'insKeuze', 'insSpendCard', 'insBrug'].filter((i) => document.getElementById(i)), txt: document.getElementById('s-ins').innerText }));
     expect(r.ids).toEqual([]);
     expect(r.txt).not.toMatch(/WAT OPVALT|NOG DEZE MAAND/i);
   });
 });
 
-test.describe('f · het kop-inzicht', () => {
-  test('een zin in euro\'s, zonder percentage, met de teller naar de patronen', async ({ page }) => {
-    await open(page, null, { width: 360, height: 640 });
-    const r = await page.evaluate(() => ({ zin: document.querySelector('#insKop > div').innerText, chip: document.querySelector('[data-patronenteller]').innerText }));
-    expect(r.zin).toBe('Uit eten & café loopt weer voor: verwacht €130 boven je potje, net als in september (€194 erboven).');
-    expect(r.zin).not.toContain('%');
-    expect(r.chip).toBe('4 patronen ›');
-    await page.click('[data-patronenteller]');
-    await page.waitForSelector('#insPatronenSheet #insPatronen');   // v365: de teller opent een sheet
-  });
-  test('zonder drie afgeronde maanden zegt hij dat eerlijk, zonder teller', async ({ page }) => {
+test.describe('f · zonder patronen', () => {
+  // v382: weg, het kop-inzicht ("een zin in euro's ... met de teller naar de patronen"); het kop-inzicht is vervallen.
+  test('zonder drie afgeronde maanden zegt het scherm dat eerlijk, zonder tegels', async ({ page }) => {
     await open(page, { vanaf: '2026-08-01' });
-    const r = await page.evaluate(() => ({ zin: document.querySelector('#insKop').innerText, n: document.querySelectorAll('[data-patronenteller]').length, p: !!document.getElementById('insPatronen') }));
-    expect(r.zin).toBe('Nog geen patronen: na drie maanden boekingen ziet de app wat bij jou gewoon is.');
-    expect(r.n).toBe(0); expect(r.p).toBe(false);
+    const r = await page.evaluate(() => { const e = document.getElementById('insPatronen'); return { n: e.dataset.patronen, txt: e.innerText, tegels: document.querySelectorAll('.ins-pt').length }; });
+    expect(r.n).toBe('0');
+    expect(r.txt).toBe('Nog geen patronen: na drie maanden boekingen ziet de app wat bij jou gewoon is.');
+    expect(r.tegels).toBe(0);
   });
 });
 
 test.describe('g · de vier patronen', () => {
-  // v365: de patronen staan in een sheet achter "N patronen ›"
+  /* v382: de patronen staan als tegels op het scherm (#insPatronen .ins-pt); een tik opent de uitleg in een sheet
+     (#insPatroonSheet), met dezelfde insPatronenKaart() als tot nu. */
   test('elk patroon met wat er gebeurt, gezien in, en de verwijzing naar Grip', async ({ page }) => {
-    await open(page); await page.click('[data-patronenteller]');
-    const P = await page.evaluate(() => [...document.querySelectorAll('[data-patroon]')].map((e) => ({ s: e.dataset.patroon, k: e.dataset.patk,
-      h: e.querySelector('.ins-pat-h').innerText, t: e.querySelector('.ins-pat-h').nextElementSibling.innerText, b: e.querySelector('[data-patbron]').innerText, g: !!e.querySelector('[data-insgrip]'),
-      dot: e.querySelector('.ins-pat-tg i').style.background })));
+    await open(page);
+    const tegels = await page.$$eval('#insPatronen .ins-pt', (e) => e.map((x) => x.dataset.patroon));
+    const P = await page.evaluate(() => (window._insPats || []).map((_, i) => { openInsPatroon(i); const e = document.querySelector('#insPatroonSheet [data-patroon]');
+      const o = { s: e.dataset.patroon, k: e.dataset.patk,
+        h: e.querySelector('.ins-pat-h').innerText, t: e.querySelector('.ins-pat-h').nextElementSibling.innerText, b: e.querySelector('[data-patbron]').innerText, g: !!e.querySelector('[data-insgrip]'),
+        dot: e.querySelector('.ins-pat-tg i').style.background }; closeSheet(); return o; }));
+    expect(tegels).toEqual(P.map((p) => p.s));
     expect(P.map((p) => p.s)).toEqual(['herhaalt', 'structureel', 'nieuw', 'herstelt']);
     expect(P[0].t).toBe('In september €194 boven je potje; je noemde het toen een uitzondering. Oktober loopt weer voor: verwacht €130 erboven.');
     expect(P[0].b).toBe('gezien in: het logboek van september, de vooruitblik van oktober');
@@ -236,13 +213,13 @@ test.describe('g · de vier patronen', () => {
     expect(P.map((p) => p.dot)).toEqual(['var(--red)', 'var(--amber)', 'var(--blue)', 'var(--green)']);
   });
   test('de labels zijn rustig: geen hoofdletters en geen gekleurd vlak', async ({ page }) => {
-    await open(page); await page.click('[data-patronenteller]');
-    const r = await page.evaluate(() => { const e = document.querySelector('.ins-pat-tg'); const cs = getComputedStyle(e); return { tt: cs.textTransform, bg: cs.backgroundColor, txt: e.innerText }; });
+    await open(page); await page.click('#insPatronen .ins-pt');
+    const r = await page.evaluate(() => { const e = document.querySelector('#insPatroonSheet .ins-pat-tg'); const cs = getComputedStyle(e); return { tt: cs.textTransform, bg: cs.backgroundColor, txt: e.innerText }; });
     expect(r.tt).toBe('none'); expect(r.bg).toBe('rgba(0, 0, 0, 0)'); expect(r.txt).toBe('herhaalt zich');
   });
   test('bijsturen op Grip opent Grip, met het potje erbij', async ({ page }) => {
-    await open(page); await page.click('[data-patronenteller]');
-    await page.click('[data-patroon="herhaalt"] [data-insgrip]');
+    await open(page); await page.click('#insPatronen .ins-pt[data-patroon="herhaalt"]');
+    await page.click('#insPatroonSheet [data-insgrip]');
     expect(await page.evaluate(() => ({ s: document.querySelector('.screen.active').id, p: window._gripPotje, open: document.getElementById('sheetBg').classList.contains('show') })))
       .toEqual({ s: 's-maand', p: 'uiteten', open: true });
   });
@@ -285,34 +262,9 @@ test.describe('g · de vier patronen', () => {
   });
 });
 
-test.describe('h · over de maanden', () => {
-  test('drie afgesloten maanden en de lopende, met het bedrag in de balk', async ({ page }) => {
-    await open(page);
-    const r = await page.evaluate(() => ({ b: [...document.querySelectorAll('#insSpendChart [data-maandbalk]')].map((e) => [e.dataset.maandbalk, e.hasAttribute('data-lopend')]),
-      bed: [...document.querySelectorAll('#insSpendChart [data-balkbedrag]')].map((e) => +e.dataset.balkbedrag), staaf: ['2026-07', '2026-08', '2026-09'].map((m) => Math.round(maandStaaf(m).spend)),
-      txt: document.getElementById('insSpendChart').textContent }));
-    expect(r.b).toEqual([['2026-07', false], ['2026-08', false], ['2026-09', false], ['2026-10', true]]);
-    expect(r.bed).toEqual([...r.staaf, 406]);
-    expect(r.txt).toContain('t/m 7 okt'); expect(r.txt).toContain('budget €3.376');
-  });
-  test('het filter op twaalf maanden zet er twaalf afgesloten naast de lopende', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => insFilterZet('12', null));
-    expect(await page.$$eval('#insSpendChart [data-maandbalk]', (e) => e.length)).toBe(13);
-  });
-  test('een tik op een maand opent de bridge met tegen budget en tegen de maand ervoor', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => brugKies('2026-08'));
-    const r = await page.evaluate(() => [...document.querySelectorAll('#insBrug [data-brugtegen]')].map((e) => e.innerText));
-    expect(r).toEqual(['Tegen budget', 'Tegen juli']);
-  });
-  test('bij variabel staat er geen budgetlijn en geen bridge, en dat staat erbij', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => insFilterZet(null, 'var'));
-    const r = await page.evaluate(() => ({ lijn: document.querySelectorAll('#insSpendChart line[stroke-dasharray]').length, tik: document.querySelectorAll('#insSpendChart [onclick]').length, uitleg: !!document.querySelector('[data-insgeenbudget]') }));
-    expect(r).toEqual({ lijn: 0, tik: 0, uitleg: true });
-  });
-});
+// v382: weg, h · over de maanden (de grafiek met de lopende maand, twaalf maanden, de bridge met tegen budget en
+// tegen de maand ervoor, en de budgetlijn per soort); "Over de maanden" staat niet meer op Inzichten. De bridge van een
+// afgesloten maand leest nu het logboek (openLogMaand).
 
 test.describe('i · het filter stuurt de pagina', () => {
   test('variabel plus vast is alle uitgaven, in elke maand', async ({ page }) => {
@@ -328,27 +280,31 @@ test.describe('i · het filter stuurt de pagina', () => {
   test('vorige maand: uitgegeven en over in je potjes van september', async ({ page }) => {
     await open(page);
     await page.evaluate(() => insFilterZet('vorige', null));
-    const T = await tegels(page);
-    // v365: het maandbudget van september in twee delen
-    expect(T.map((t) => [t.key, t.lab, t.val])).toEqual([['uitgegeven', 'Uitgegeven', '€1.866'], ['over', 'Over', '€1.510']]);
+    const k = await kaart(page);
+    // v382: het maandbudget van september als afgesloten kaart: uitgegeven, budget en wat eronder bleef
+    expect([k.insmaand, k.insuit, k.insbudget]).toEqual(['af', '1866', '3376']);
+    expect(k.txt).toContain('€1.510 onder budget');
     expect(await page.innerText('#insFilter')).toContain('Vorige maand');
-    expect(await page.innerText('#insKop')).toBe('In september gaf je €1.866 uit, €1.510 onder je budget; Uit eten & café droeg het meest erboven (+€194).');
+    // v382: weg, de kop-zin over september (het kop-inzicht is vervallen)
   });
-  test('laatste drie maanden: het totaal en het gemiddelde per maand', async ({ page }) => {
+  test('laatste drie maanden: het totaal tegen de budgetten van die drie maanden', async ({ page }) => {
     await open(page);
     await page.evaluate(() => insFilterZet('3', null));
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.val).toBe('€5.022'); expect(t.ms).toBe('gemiddeld €1.674 per maand');
+    const k = await kaart(page);
+    expect([k.insmaand, k.insuit]).toEqual(['af', '5022']);
+    expect(+k.insbudget).toBe(await page.evaluate(() => ['2026-07', '2026-08', '2026-09'].reduce((a, m) => a + maandStaaf(m).budget, 0)).then((x) => Math.round(x)));
+    // v382: weg, "gemiddeld €1.674 per maand" (de sub van de tegel uitgegeven)
   });
   test('soort vast: uitgegeven telt alleen de vaste lasten, tegen wat er tot vandaag verwacht was', async ({ page }) => {
     await open(page, { dag: '2026-10-16', extraTx: [{ id: 'nf10', date: '2026-10-15', amount: -43, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL' }] });
     await page.evaluate(() => insFilterZet(null, 'vast'));
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.val).toBe('€43'); expect(t.ms).toBe('tot vandaag verwacht €580 · je zit €537 eronder');
+    const k = await kaart(page);
+    expect(+k.insuit).toBe(43); expect(+k.instempoverschil).toBe(43 - 580);
+    expect(k.txt).toContain('€537 onder tempo');
   });
 });
 
-test.describe('j · de sheets tellen op tot hun tegel', () => {
+test.describe('j · de sheets tellen op tot hun getal', () => {
   for (const k of ['potjes', 'vast', 'cash']) {
     test(k, async ({ page }) => {
       await open(page);
@@ -358,6 +314,12 @@ test.describe('j · de sheets tellen op tot hun tegel', () => {
       expect(Math.round(r.d.reduce((a, b) => a + b, 0))).toBe(r.w);
     });
   }
+  test('de potjes-sheet is wat de kaart "in potjes" noemt', async ({ page }) => {
+    await open(page);
+    const v = +(await page.getAttribute('#insMaand [data-insleg="nogpot"]', 'data-v'));
+    await page.click('#insMaand [data-insleg="nogpot"]');
+    expect(+(await page.getAttribute('#insTegelSheet', 'data-inswaarde'))).toBe(v);
+  });
   test('ontvangen en sparen', async ({ page }) => {
     await open(page);
     await page.evaluate(() => openInsTegel('ontvangen'));   // v365: vanaf Home
@@ -371,51 +333,56 @@ test.describe('j · de sheets tellen op tot hun tegel', () => {
 
 test.describe('k · hoogtes op 360 en 390px', () => {
   for (const w of [360, 390]) {
-    test(`${w}px: geen overloop, en de tegels en het kop-inzicht boven de vouw`, async ({ page }) => {
+    test(`${w}px: geen overloop, en de maandkaart boven de vouw`, async ({ page }) => {
       const h = w === 360 ? 640 : 844;
       await open(page, null, { width: w, height: h });
+      await kies(page);
+      await page.evaluate(() => verschuivingToggle());   // ook open loopt hij niet over
       const r = await page.evaluate(() => { const s = document.getElementById('s-ins'); const b = (id) => { const e = document.getElementById(id); const q = e.getBoundingClientRect(); return { top: Math.round(q.top + scrollY), h: Math.round(q.height) }; };
         const over = [...s.querySelectorAll('*')].filter((e) => { const q = e.getBoundingClientRect(); return q.width > 0 && (q.right > innerWidth + 0.5 || q.left < -0.5); }).length;
-        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, tegels: b('insTegels'), kop: b('insKop'), maanden: b('insSpendCard'), keuze: b('insKeuze'), budget: b('insMaandBudget'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
+        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, maand: b('insMaand'), week: b('insWeek'), pat: b('insPatronen'), versch: b('insVersch'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
       console.log(w, JSON.stringify(r));
       expect(r.over).toBe(0); expect(r.sw).toBeLessThanOrEqual(r.cw);
-      expect(r.kop.top + r.kop.h).toBeLessThanOrEqual(r.vouw);
+      expect(r.maand.top + r.maand.h).toBeLessThanOrEqual(r.vouw);
     });
   }
 });
 
-/* v359, keuze van de gebruiker: AMBER OP UITGEGEVEN ALLEEN MET DE REDEN IN DE TEKST, nooit kleur alleen. Drie takken
-   kunnen amber geven (boven het tempo, zonder tempo boven het budget, en een afgesloten periode boven het budget), en
-   elk ervan staat hier in een stand die hem werkelijk amber maakt. */
-test.describe('l · amber op uitgegeven draagt zijn reden', () => {
-  const reden = /€[\d.]+ boven je (tempo|budget|inkomen-limiet)/;
+/* v359, keuze van de gebruiker: AMBER ALLEEN MET DE REDEN IN DE TEKST, nooit kleur alleen.
+   v382: op de maandkaart. Wat amber kan zijn: het verschil met het tempo (boven tempo), een afgesloten periode boven zijn
+   budget, de regel "boven budget" en "zonder potje". Elk amber element op de kaart draagt zijn reden in zijn eigen tekst. */
+test.describe('l · amber op de maandkaart draagt zijn reden', () => {
+  const reden = /boven (tempo|budget)|zonder potje/;
+  const amber = (page) => page.evaluate(() => { const p = document.createElement('span'); p.style.color = 'var(--amber)'; document.body.appendChild(p); const a = getComputedStyle(p).color; p.remove();
+    return [...document.querySelectorAll('#insMaand *')].filter((e) => getComputedStyle(e).color === a && e.innerText.trim() && ![...e.children].some((c) => getComputedStyle(c).color === a)).map((e) => e.innerText.trim()); });
   test('boven het tempo: het bedrag boven je tempo staat in de tekst', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.st).toBe('amb'); expect(t.ms).toMatch(reden);
-    const r = await page.evaluate(() => { const T = insTegelsNu('alle').find((x) => x.key === 'uitgegeven'); return T.waarde - T.mocht; });
-    expect(t.ms).toContain(`€${r.toLocaleString('nl-NL')} boven je tempo`);
+    const k = await kaart(page);
+    expect(+k.instempoverschil, 'deze stand ligt werkelijk boven het tempo').toBeGreaterThan(0);
+    const A = await amber(page);
+    expect(A).toContain(`€${(+k.instempoverschil).toLocaleString('nl-NL')} boven tempo`);
+    for (const t of A) expect(t).toMatch(reden);
   });
-  test('zonder tempo (minder dan drie afgeronde maanden): het bedrag boven je budget staat in de tekst', async ({ page }) => {
-    await open(page, { vanaf: '2026-08-01', extraTx: [{ id: 'x2', date: '2026-10-06', amount: -4000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
-    const r = await page.evaluate(() => ({ tp: (() => { try { return insTempo(); } catch (_) { return null; } })(), b: Math.round(totals(thisYM()).budget) }));
-    expect(r.tp, 'deze stand heeft werkelijk geen tempo').toBeNull();
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.st).toBe('amb'); expect(t.ms).toMatch(/^van €[\d.]+ budget · €[\d.]+ boven je budget$/);
-  });
+  // v382: weg, "zonder tempo (minder dan drie afgeronde maanden)"; het trap-tempo bestaat altijd zodra er een budget is.
   test('een afgesloten maand boven zijn budget: het bedrag boven je budget staat in de tekst', async ({ page }) => {
     await open(page);
     await page.evaluate(() => { SET.budgetHist = Object.assign({}, SET.budgetHist, { '2026-09': { boodschappen: 500 } }); save(); insFilterZet('vorige', null); });
-    const t = await tegel(page, 'uitgegeven');
-    expect(t.st).toBe('amb'); expect(t.ms).toBe('van €500 budget · €1.366 boven je budget');
+    const k = await kaart(page);
+    const over = +k.insuit - +k.insbudget;
+    expect(over, 'september ligt werkelijk boven zijn bewaarde budget').toBeGreaterThan(0);
+    const A = await amber(page);
+    expect(A).toContain(`€${over.toLocaleString('nl-NL')} boven budget`);
+    for (const t of A) expect(t).toMatch(reden);
   });
-  test('geen enkele amber tegel uitgegeven zonder reden, in elke periode', async ({ page }) => {
+  test('geen enkel amber element op de kaart zonder reden, in elke periode', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    let n = 0;
     for (const per of ['nu', 'vorige', '3', '12']) for (const so of ['alle', 'var', 'vast']) {
       await page.evaluate(([p, s]) => insFilterZet(p, s), [per, so]);
-      const t = await tegel(page, 'uitgegeven');
-      if (t.st === 'amb') expect(t.ms, per + '/' + so).toMatch(reden);
+      const A = await amber(page); n += A.length;
+      for (const t of A) expect(t, per + '/' + so).toMatch(reden);
     }
+    expect(n, 'er staat in deze stand werkelijk amber').toBeGreaterThan(0);
   });
 });
 

@@ -1,4 +1,8 @@
-/* v335: de bridge onder de staven op Inzichten ("Over de maanden heen", variant C). Een tik op een
+/* v382: de staafgrafiek op Inzichten (spendVsBudgetChart, #insSpendChart, brugKies) is weg. maandBrug() en
+   brugBlok() leven door in het logboek: openLogMaand(m) toont dezelfde bridge in #logBrug, met de kop uit
+   maandStaaf() (dezelfde bron als de staaf was). Deze spec leest de bridge daar; wat alleen over de staaf
+   of de tik op een staaf ging, is weg met de reden erbij.
+   v335: de bridge onder de staven op Inzichten ("Over de maanden heen", variant C). Een tik op een
    afgesloten maand toont van het budget (of de maand ervoor) naar wat je uitgaf, stap voor stap.
    Het geval van de gebruiker: september 2026, budget EUR 3.421, Uit eten +194, Vices +103,
    Boodschappen +84, uitgegeven EUR 3.095. De drie potjes eronder (shopping -400, vervoer -207,
@@ -53,13 +57,12 @@ async function boot(page, o, breed) {
       if (m) OVR[t.id] = m[1];
       if (t.name === 'Woningcorporatie') OVR[t.id] = 'huur';
     }
-    save(); window._brugMaand = null; go('ins');
-    insFilterZet('12', null);   // v359: standaard staan er drie maanden; deze spec tikt ook oudere aan
+    save();
   });
-  await page.waitForSelector('#insSpendChart');
 }
-const tik = (page, m) => page.locator(`#insSpendChart rect[onclick*="${m}"]`).click();
-const stappen = (page) => page.$$eval('#insBrug [data-brugstap]', (els) => els.map((e) => ({ soort: e.dataset.brugstap, w: +e.dataset.brugwaarde, label: e.innerText.replace(/\s+/g, ' ').trim() })));
+/* v382: de maand openen in het logboek is de ingang naar de bridge (het logboek, openLogMaand) */
+const tik = async (page, m) => { await page.evaluate((mm) => openLogMaand(mm), m); await page.waitForSelector('#logMaand #logBrug'); };
+const stappen = (page) => page.$$eval('#logBrug [data-brugstap]', (els) => els.map((e) => ({ soort: e.dataset.brugstap, w: +e.dataset.brugwaarde, label: e.innerText.replace(/\s+/g, ' ').trim() })));
 
 test.describe('a - het september-geval', () => {
   test('de invoer draagt het geval: budget 3.421 bewaard, staaf 3.095', async ({ page }) => {
@@ -85,10 +88,10 @@ test.describe('a - het september-geval', () => {
     expect(3421 + tussen).toBe(3095);
   });
 
-  test('de bridge eindigt op hetzelfde bedrag als de staaf', async ({ page }) => {
+  test('de bridge eindigt op hetzelfde bedrag als de kop van de maand (maandStaaf)', async ({ page }) => {
     await boot(page);
     await tik(page, '2026-09');
-    const lees = await page.locator('#spendRead').innerText();
+    const lees = await page.locator('#logMaand').innerText();
     expect(lees).toContain('€3.095');
     expect(lees).toContain('€3.421');                                  // de budgetlijn leest de bewaarde potjes
     const s = await stappen(page);
@@ -104,27 +107,16 @@ test.describe('a - het september-geval', () => {
     expect(z).not.toMatch(/goed|knap|helaas|!/i);
   });
 
-  test('de gekozen staaf draagt het accent, de andere niet', async ({ page }) => {
-    await boot(page);
-    expect(await page.locator('#insSpendChart rect.cbar[fill="var(--teal)"]').count()).toBe(0);
-    await tik(page, '2026-09');
-    expect(await page.locator('#insSpendChart rect.cbar[fill="var(--teal)"]').count()).toBe(1);
-  });
+  // v382: weg, 'de gekozen staaf draagt het accent' ging over de staafgrafiek op Inzichten, en die is er niet meer
 
   test('boven het budget in de kleur voor boven, onder gedempt', async ({ page }) => {
     await boot(page);
     await tik(page, '2026-09');
-    const k = await page.$$eval('#insBrug [data-brugstap]', (els) => els.map((e) => ({ w: +e.dataset.brugwaarde, s: e.dataset.brugstap, bg: e.querySelector('i').style.background })));
+    const k = await page.$$eval('#logBrug [data-brugstap]', (els) => els.map((e) => ({ w: +e.dataset.brugwaarde, s: e.dataset.brugstap, bg: e.querySelector('i').style.background })));
     for (const x of k.filter((x) => x.s !== 'begin' && x.s !== 'eind')) expect(x.bg).toBe(x.w > 0 ? 'var(--red)' : 'var(--mut2)');
   });
 
-  test('een tweede tik op dezelfde maand sluit de bridge', async ({ page }) => {
-    await boot(page);
-    await tik(page, '2026-09');
-    expect(await page.locator('#insBrug').count()).toBe(1);
-    await tik(page, '2026-09');
-    expect(await page.locator('#insBrug').count()).toBe(0);
-  });
+  // v382: weg, 'een tweede tik op dezelfde maand sluit de bridge' ging over de tik op een staaf; in het logboek is de bridge een sheet
 });
 
 test.describe('b - de rest splitst uit en telt op tot zijn stap', () => {
@@ -149,7 +141,15 @@ test.describe('c - de schakelaar is een weergave', () => {
     await page.locator('[data-brugtegen="vorige"]').click();
     expect(await page.locator('[data-brugtegen="vorige"].on').count()).toBe(1);
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
-    // een andere maand kiezen zet hem terug op tegen budget
+  });
+
+  /* v335: de schakelaar springt bij elke nieuwe maand terug op tegen budget. Tot v381 deed brugKies() dat;
+     in het logboek (openLogMaand) is die eigenschap aan te houden: een andere maand openen begint tegen budget. */
+  test('een andere maand openen zet hem terug op tegen budget', async ({ page }) => {
+    await boot(page);
+    await tik(page, '2026-09');
+    await page.locator('[data-brugtegen="vorige"]').click();
+    expect(await page.locator('[data-brugtegen="vorige"].on').count()).toBe(1);
     await tik(page, '2026-08');
     expect(await page.locator('[data-brugtegen="budget"].on').count()).toBe(1);
   });
@@ -197,7 +197,7 @@ test.describe('d - een maand van voor v309', () => {
     await tik(page, '2026-09');
     const s = await stappen(page);
     expect(s[0].w).toBe(3421);
-    expect(await page.locator('#spendRead').innerText()).toContain('van €3.421');
+    expect(await page.locator('#logMaand').innerText()).toContain('tegen €3.421');
     // juli heeft geen bewaarde bedragen en volgt dus wel de huidige
     await tik(page, '2026-07');
     expect((await stappen(page))[0].w).toBe(3821);
@@ -205,9 +205,10 @@ test.describe('d - een maand van voor v309', () => {
 });
 
 test.describe('d2 - de lopende maand', () => {
-  test('heeft geen staaf, en een rechtstreekse aanroep geeft niets', async ({ page }) => {
+  test('het logboek opent hem niet, en een rechtstreekse aanroep geeft niets', async ({ page }) => {
     await boot(page);
-    expect(await page.locator('#insSpendChart rect[onclick*="2026-10"]').count()).toBe(0);
+    await page.evaluate(() => openLogMaand('2026-10'));                 // v382: renderLogMaand sluit voor de lopende maand
+    expect(await page.locator('#logMaand').count()).toBe(0);
     const r = await page.evaluate(() => ({ b: brugBlok('2026-10'), m: maandBrug('2026-10', 'budget').leeg }));
     expect(r.m).toBe('lopend');
     expect(r.b).toBe('');
@@ -224,7 +225,7 @@ test.describe('e - afronding: de afgeronde stappen tellen precies op', () => {
     const s = await stappen(page);
     expect(s[s.length - 1].w).toBe(3097);
     expect(3421 + s.slice(1, -1).reduce((a, x) => a + x.w, 0)).toBe(3097);
-    expect(await page.locator('#spendRead').innerText()).toContain('€3.097');
+    expect(await page.locator('#logMaand').innerText()).toContain('€3.097');
   });
 
   test('brugAfronden geeft gehele getallen die precies optellen', async ({ page }) => {
@@ -252,7 +253,6 @@ test.describe('f - vaste lasten en uitgaven zonder potje', () => {
     const sep = Object.assign({}, SEP, { vakantie: 60 });
     await boot(page, { sep });
     await page.evaluate(() => { for (const t of TX) if (/Winkel vakantie/.test(t.name)) OVR[t.id] = 'vakantie'; save(); });
-    await page.evaluate(() => { window._brugMaand = null; renderIns(); });
     await tik(page, '2026-09');
     const s = await stappen(page);
     expect(s.find((x) => x.soort === 'zonder').w).toBe(60);
@@ -267,7 +267,7 @@ test.describe('g - de bron', () => {
      staaf uitkomen, dus beide vallen er net zo uit. */
   test('onvoorzien telt niet mee, net als in de staaf', async ({ page }) => {
     await boot(page, { sep: Object.assign({}, SEP, { onvoorzien: 450 }) });
-    await page.evaluate(() => { for (const t of TX) if (/Winkel onvoorzien/.test(t.name)) OVR[t.id] = 'onvoorzien'; save(); window._brugMaand = null; renderIns(); });
+    await page.evaluate(() => { for (const t of TX) if (/Winkel onvoorzien/.test(t.name)) OVR[t.id] = 'onvoorzien'; save(); });
     expect(await page.evaluate(() => totals('2026-09').buitenNorm)).toBe(450);   // invoermeting
     await tik(page, '2026-09');
     const s = await stappen(page);
@@ -281,7 +281,7 @@ test.describe('g - de bron', () => {
 
   test('een deel uit een reservering telt niet mee, net als in de staaf', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { const t = TX.find((x) => /Winkel uiteten 2026-09/.test(x.name)); SET.uitReservering = { [t.id]: 194 }; save(); window._brugMaand = null; renderIns(); });
+    await page.evaluate(() => { const t = TX.find((x) => /Winkel uiteten 2026-09/.test(x.name)); SET.uitReservering = { [t.id]: 194 }; save(); });
     expect(await page.evaluate(() => totals('2026-09').spendNorm)).toBe(3095 - 194);   // invoermeting
     await tik(page, '2026-09');
     const s = await stappen(page);
@@ -300,17 +300,15 @@ test.describe('g - de bron', () => {
 
 for (const breed of [360, 390]) {
   test.describe(`h - hoogte en overloop op ${breed}px`, () => {
-    test('de kaart voor en na de tik, zonder overloop en zonder overlappende labels', async ({ page }) => {
+    /* v382: de kaart rond de staven is weg; de bridge staat in de logboek-sheet. Wat blijft: geen overloop en geen
+       overlappende labels, ook uitgesplitst. 'de kaart wordt hoger na de tik' ging over de staafkaart en is weg. */
+    test('de bridge in het logboek, zonder overloop en zonder overlappende labels', async ({ page }) => {
       await boot(page, {}, breed);
-      const voor = await page.locator('#insSpendCard').evaluate((e) => e.getBoundingClientRect().height);
       await tik(page, '2026-09');
-      const na = await page.locator('#insSpendCard').evaluate((e) => e.getBoundingClientRect().height);
       await page.locator('[data-brugrest]').click();
-      const open = await page.locator('#insSpendCard').evaluate((e) => e.getBoundingClientRect().height);
-      console.log(`hoogte ${breed}: voor ${voor} na ${na} uitgesplitst ${open}`);
       const m = await page.evaluate(() => {
-        const kaart = document.querySelector('#insSpendCard').getBoundingClientRect();
-        const vals = [...document.querySelectorAll('#insBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
+        const kaart = document.querySelector('#logMaand').getBoundingClientRect();
+        const vals = [...document.querySelectorAll('#logBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
         let overlap = 0;
         for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) {
           const a = vals[i], b = vals[j];
@@ -320,7 +318,6 @@ for (const breed of [360, 390]) {
           scroll: document.documentElement.scrollWidth <= window.innerWidth };
       });
       expect(m).toEqual({ overlap: 0, links: true, rechts: true, scroll: true });
-      expect(na).toBeGreaterThan(voor);
     });
 
     /* Het zwaarste geval: vier losse potjes, de rest, een vaste last en een uitgave zonder potje,
@@ -328,13 +325,13 @@ for (const breed of [360, 390]) {
        en lopen niet over elkaar heen (de meetles van v318 over absoluut geplaatste labels). */
     test('negen kolommen: geen overlappende bedragen, geen naam buiten de kaart', async ({ page }) => {
       await boot(page, { sep: Object.assign({}, SEP, { huur: 1250, vakantie: 60 }) }, breed);
-      await page.evaluate(() => { for (const t of TX) if (/Winkel vakantie/.test(t.name)) OVR[t.id] = 'vakantie'; save(); window._brugMaand = null; renderIns(); });
+      await page.evaluate(() => { for (const t of TX) if (/Winkel vakantie/.test(t.name)) OVR[t.id] = 'vakantie'; save(); });
       await tik(page, '2026-09');
-      expect(await page.locator('#insBrug [data-brugstap]').count()).toBe(9);
+      expect(await page.locator('#logBrug [data-brugstap]').count()).toBe(9);
       const m = await page.evaluate(() => {
-        const kaart = document.querySelector('#insSpendCard').getBoundingClientRect();
-        const vals = [...document.querySelectorAll('#insBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
-        const namen = [...document.querySelectorAll('#insBrug [data-brugstap] > div:last-child')].map((e) => ({ r: e.getBoundingClientRect(), sw: e.scrollWidth, cw: e.clientWidth }));
+        const kaart = document.querySelector('#logMaand').getBoundingClientRect();
+        const vals = [...document.querySelectorAll('#logBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
+        const namen = [...document.querySelectorAll('#logBrug [data-brugstap] > div:last-child')].map((e) => ({ r: e.getBoundingClientRect(), sw: e.scrollWidth, cw: e.clientWidth }));
         let overlap = 0;
         for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) {
           const a = vals[i], b = vals[j];
