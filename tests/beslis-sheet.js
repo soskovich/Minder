@@ -12,10 +12,20 @@
  * status `tekort` of `let op`, gelezen uit dezelfde zoekfunctie als de sheet (`maandBeslisZoek`).
  */
 
+/* v387: DE TEGELS ZIJN WEG (Grip als regelkring). De regels dekking, buffer en doel hebben hun ingang in de sheet van de
+ * Beleggen-meter (`[data-meterwv]`, die openMaandBeslis(key) opent); een structureel signaal staat onder 'Let op'. Deze
+ * helper tekent die sheet, leest zijn ingangen en sluit hem weer, en daarna Let op. De kleur van een regel is zijn status
+ * (tekort rood, let op amber, ok groen); er is geen tegel meer die hem draagt. */
+const KLEUR_VAN = { tekort: 'rood', 'let op': 'amber', ok: 'groen' };
 // de sleutels van de regels die een beslissing of aandacht vragen, in schermvolgorde
 const BESLIS_KEYS_JS = `(() => {
-  const uit = [];
-  for (const el of document.querySelectorAll('#s-maand [data-tegel], #s-maand [data-letop="str"]')) {
+  const uit = [], els = [];
+  try { window._gripMeter = 'beleggen'; renderGripMeter(); els.push(...document.querySelectorAll('#gripMeterSheet [data-meterwv]')); } catch (_) {}
+  const sheet = [...els].map((e) => e.getAttribute('onclick') || '');
+  try { closeSheet(); } catch (_) {}
+  els.length = 0; els.push(...document.querySelectorAll('#s-maand [data-letop="str"]'));
+  for (const oc of sheet.concat([...els].map((e) => e.getAttribute('onclick') || ''))) {
+    const el = { getAttribute: () => oc };
     const m = /openMaandBeslis\\('([^']*)'\\)/.exec(el.getAttribute('onclick') || '');
     if (!m || uit.includes(m[1])) continue;
     const r = maandBeslisZoek(m[1]);
@@ -71,8 +81,8 @@ const beslisTekstAlles = async (page) => {
 const beslisRegels = async (page) => {
   const keys = await beslisKeys(page);
   return page.evaluate((keys) => keys.map((k) => {
-    const tegel = document.querySelector(`#s-maand [data-tegel="${k}"]`);
     const r = maandBeslisZoek(k);
+    const tegel = ['dekking', 'buffer', 'doel'].includes(k) ? { dataset: { kleur: ({ tekort: 'rood', 'let op': 'amber', ok: 'groen' })[r.status] || 'grijs' } } : null;
     openMaandBeslis(k);
     const sh = document.querySelector('#sheet');
     const b = sh.querySelector('[data-sheetbedrag]');
@@ -85,4 +95,35 @@ const beslisRegels = async (page) => {
   }), keys);
 };
 
-module.exports = { beslisKeys, beslisIngangen, beslisTekst, beslisTekstAlles, beslisRegels };
+module.exports = { KLEUR_VAN, beslisKeys, beslisIngangen, beslisTekst, beslisTekstAlles, beslisRegels };
+
+/* v387: de ingang naar de sheet van een regel, zoals de gebruiker hem neemt: een structureel signaal onder 'Let op', en
+   dekking, buffer en doel via de sheet van de Beleggen-meter. */
+async function openRegelUI(page, k) {
+  const str = page.locator(`#s-maand [data-letop="str"][onclick*="'${k}'"]`);
+  if (await str.count()) { await str.first().click(); return; }
+  await page.click('#s-maand [data-meter="beleggen"]');
+  await page.click(`#gripMeterSheet [data-meterwv="${k}"]`);
+}
+// Grip op een tab: de tabs zijn een stand van het scherm, en Grip opent altijd op Zien
+const gripOp = (page, tab) => page.evaluate((t) => { go('maand'); if (t && t !== 'zien') gripKiesTab(t); }, tab);
+module.exports.openRegelUI = openRegelUI;
+module.exports.gripOp = gripOp;
+
+/* v387: per regel (dekking, buffer, doel) wat de tegel van v340 droeg, nu uit de sheet van de Beleggen-meter: de kleur
+   (de status zoals Grip hem leest), de waarde, de maat, de tekst van de rij en de ingang. */
+const regelTegels = (page) => page.evaluate(() => {
+  const K = { tekort: 'rood', 'let op': 'amber', ok: 'groen' }, per = {};
+  window._gripMeter = 'beleggen'; renderGripMeter();
+  const RO = maandMetAfspraak(maandMetAccept(maandRegels()));
+  for (const e of document.querySelectorAll('#gripMeterSheet [data-meterwv]')) {
+    const k = e.dataset.meterwv, r = RO.find((x) => x.key === k);
+    const w = e.querySelector('[data-meterwaarde]'), m = e.querySelector('[data-metermaat]');
+    per[k] = { kleur: r ? (K[r.status] || 'grijs') : 'grijs', waarde: w ? w.innerText : '', maat: m ? m.innerText : '',
+      tekst: e.innerText.replace(/\s+/g, ' '), onclick: e.getAttribute('onclick'),
+      oorzaak: r ? ((maandBeslisDeel(r) || {}).oorzaak || '') : '' };
+  }
+  closeSheet();
+  return per;
+});
+module.exports.regelTegels = regelTegels;

@@ -11,7 +11,10 @@
    bridge (de oorzaak, de as, de losse stappen) draaien op SMAL: dezelfde stand met potjes die gelijk zijn aan hun
    incasso, zodat de bridge de vorm van v354 houdt (550 naar 694).
    v357: DE BRIDGE LOOPT WEER VAN HET HELE BUDGET NAAR DE UITKOMST (3.375 naar 2.672), met de vaste lasten als EEN
-   stap en wat er zonder potje uitgaat als eigen stap; de kop is de uitkomst tegen het budget. */
+   stap en wat er zonder potje uitgaat als eigen stap; de kop is de uitkomst tegen het budget.
+   v387: DE KAART IS WEG (Grip als regelkring). dezeMaandBrug() en dezeMaandZin() bestaan nog: de zin staat op Begrijpen en
+   de rest-stap voedt de sheet "Ruimte in andere potjes". Deze spec toetst die twee als functie; wat er op het scherm staat
+   is de bridge van Zien (gripZienBrug(), grip-kring.spec.js), en die leest dezelfde maandVooruit(). */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 const { kaalUit } = require('./bron-kaal');
@@ -41,7 +44,7 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
       { soort: 'eind', k: null, waarde: 2672, aard: null },
     ]);
     const r = await page.evaluate(() => ({ label: dezeMaandBrug(maandVooruit()).stappen.find((s) => s.soort === 'rest').label,
-      zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }));
+      zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }));
     expect(r.label).toBe('ruimte');
     expect(r.zin).toBe('Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €1.122 ruimte.');
   });
@@ -60,10 +63,10 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
   test('de afgeronde stappen tellen exact op van het budget tot de uitkomst, dezelfde als in de sheet', async ({ page }) => {
     await boot(page); await grip(page);
     const r = await page.evaluate(() => {
-      const kol = [...document.querySelectorAll('#gripDezeMaand [data-brugstap]')].map((e) => [e.dataset.brugstap, +e.dataset.brugwaarde]);
+      const kol = [...document.querySelectorAll('#gripZien [data-brugstap]')].map((e) => [e.dataset.brugstap, +e.dataset.brugwaarde]);
       openGripVooruit();
       return { kol, sheet: +document.getElementById('gripVooruit').dataset.projectie,
-        kaart: +document.querySelector('#gripDezeMaand [data-dmregel]').dataset.uitkomst };
+        kaart: +document.querySelector('#gripZien').dataset.zien };   // v387: de bridge van Zien
     });
     const begin = r.kol[0][1], eind = r.kol[r.kol.length - 1][1];
     const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], begin);
@@ -87,19 +90,23 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     expect(som).toBe(r.proj);
     expect(r.st[r.st.length - 1]).toBe(r.proj);
   });
-  test('de kop is de uitkomst tegen het budget (v357), en er staat geen regel vaste lasten onder de bridge', async ({ page }) => {
+  /* v387: de kop van Zien is het verschil met het EERLIJKE budget (zonder wat te ruim is), het getal van de Budget-meter.
+     Op deze stand zijn Sport, Verzekeringen en Abonnementen te ruim: de kaart zei hier "EUR 703 onder", Zien zegt erboven. */
+  test('de kop van Zien is de uitkomst tegen het eerlijke budget (v387)', async ({ page }) => {
     await boot(page); await grip(page);
-    const t = await page.locator('#gripDezeMaand [data-dmregel]').innerText();
-    expect(t.replace(/\s+/g, ' ')).toContain('€2.672 verwacht · €703 onder je budget');
-    expect(t).not.toContain('Variabel');
-    expect(await page.locator('#gripDezeMaand [data-vastregel]').count()).toBe(0);
+    const M = await page.evaluate(() => gripMeterBudget());
+    expect(M.verwacht).toBe(2672);
+    expect(M.eerlijk).toBe(3375 - M.ruim);
+    expect(M.verschil).toBeGreaterThan(0);
+    expect(await page.locator('#gripZien [data-zienkop]').innerText()).toBe(`€${M.verschil.toLocaleString('nl-NL')} boven`);
   });
+;
 });
 
 test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
   test('de zin op de kaart, zonder oordeel', async ({ page }) => {
     await boot(page, smal()); await grip(page);
-    const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
+    const z = await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())));
     expect(z).toBe('Vices en Boodschappen passen niet in hun potje.');   // v368: Boodschappen +61 is weer een rode stap
     expect(z).not.toMatch(/loopt voor|lopen voor/);
   });
@@ -116,7 +123,7 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
       extraTx: [{ id: 'ahx', date: '2026-10-05', amount: -400, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     await grip(page);
     const r = await page.evaluate(() => { const x = maandVooruit().potjes.find((p) => p.k === 'boodschappen');
-      return { uit: x.uit, typisch: x.typisch, patroon: x.patroon, eind: x.eind, aard: x.aard, zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+      return { uit: x.uit, typisch: x.typisch, patroon: x.patroon, eind: x.eind, aard: x.aard, zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }; });
     expect(r.uit).toBeGreaterThan(r.typisch);
     expect(r.patroon).toBeLessThanOrEqual(600);
     expect(r.eind).toBeGreaterThan(600);
@@ -157,7 +164,7 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
     await boot(page, { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 200, boodschappen: 700 } } });
     await grip(page);
     const r = await page.evaluate(() => ({ boven: maandVooruit().potjes.filter((x) => Math.round(x.overR) > 0).length,
-      zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }));
+      zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }));
     expect(r.boven).toBe(0);
     expect(r.zin).toBe('Alle potjes blijven verwacht onder hun bedrag.');
   });
@@ -166,16 +173,18 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
 test.describe('c. de as', () => {
   test('de as begint bij de ondergrens, zonder bedrag erbij (v352)', async ({ page }) => {
     await boot(page, smal()); await grip(page);
-    const b = await page.locator('#gripDezeMaand [data-asbasis]').getAttribute('data-asbasis');
-    expect(+b).toBe(2000);
-    // v352: het bedrag staat niet meer bij de as; het stond op 360px half buiten de kaart
-    expect(await page.locator('#gripDezeMaand [data-asbasis]').innerText()).toBe('');
-    expect(await page.locator('#gripBrug').innerText()).not.toContain('€2.000');
+    expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).basis)).toBe(2000);
+    // v352: het bedrag staat niet bij de as; v387: de bridge van Zien noemt hem eronder ("as begint bij")
+    const b = await page.locator('#gripZien [data-asbasis]').getAttribute('data-asbasis');
+    expect(await page.evaluate(() => gripZienBrug(maandVooruit()).basis)).toBe(+b);
+    expect(await page.locator('#gripZien [data-asbasis]').innerText()).toBe('');
+    expect(await page.locator('#gripZien [data-zienas]').innerText()).toContain(`as begint bij €${(+b).toLocaleString('nl-NL')}`);
   });
   test('bij grote stappen begint de as bij nul en staat er geen ondergrens', async ({ page }) => {
     await boot(page, { set: smal().set, extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     await grip(page);
-    const r = await page.evaluate(() => ({ basis: dezeMaandBrug(maandVooruit()).basis, as: document.querySelectorAll('#gripDezeMaand [data-asbasis]').length }));
+    const r = await page.evaluate(() => ({ basis: dezeMaandBrug(maandVooruit()).basis, as: document.querySelectorAll('#gripZien [data-asbasis]').length, zb: gripZienBrug(maandVooruit()).basis }));
+    expect(r.zb).toBe(0);
     expect(r.basis).toBe(0);
     expect(r.as).toBe(0);
   });
@@ -186,7 +195,7 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
   test('boven eindigende potjes los op grootte, een potje dat eronder blijft valt in de ruimte', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
-      const kleur = [...document.querySelectorAll('#gripDezeMaand [data-brugstap="potje"] i')].map((i) => i.style.background).filter(Boolean);
+      const kleur = [...document.querySelectorAll('#gripZien [data-brugstap="potje"] i')].map((i) => i.style.background).filter(Boolean);   // v387: Zien
       return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde, s.label]), budget: V.budget, proj: V.projectie, kleur,
         shop: Math.round(V.potjes.find((x) => x.k === 'shopping').overR) }; });
     // invoermeting: Online shopping eindigt onder zijn potje en is de grootste afwijking in absolute zin
@@ -203,7 +212,7 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
   });
   test('de zin noemt de potjes erboven en de ruimte, niet het potje eronder', async ({ page }) => {
     await boot(page, { set }); await grip(page);
-    const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
+    const z = await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())));
     expect(z).toBe('Uit eten & café, Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €300 ruimte.');
   });
   /* v367: DE ZIN NOEMT ALLEEN DE RODE STAPPEN. Tot v366 noemde hij een vierde potje erboven ook als het niet los stond;
@@ -215,7 +224,7 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       return { boven: uitschieters(V).map((x) => x.k),
         los: Br.los.map((x) => x.k), rest: Br.stappen.find((s) => s.soort === 'rest'),
-        zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+        zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }; });
     expect(r.boven.length).toBe(4);   // invoermeting
     expect(r.los.length).toBe(3);
     expect(r.los).not.toContain('shopping');
@@ -293,7 +302,7 @@ test.describe('f. de coachregel staat in de pop-up van de maandafsluiting', () =
     await boot(page); await grip(page);
     const r = await page.evaluate(() => {
       const ing = maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())));
-      const kaart = document.querySelectorAll('#gripDezeMaand [data-coachingang]').length;
+      const kaart = document.querySelectorAll('#s-maand [data-coachingang]').length;   // v387: nergens op Grip
       openAfsluiting('2026-09');
       return { ing: !!ing, kaart, pop: document.querySelectorAll('#sheet [data-coachingang]').length };
     });
@@ -302,7 +311,7 @@ test.describe('f. de coachregel staat in de pop-up van de maandafsluiting', () =
   });
   test('de bron: de kaart noemt de ingang niet, de pop-up wel', async ({ page }) => {
     await boot(page);
-    const kaart = await kaalUit(page, 'dezeMaandKaart'), pop = await kaalUit(page, 'renderAfsluitSheet');
+    const kaart = await kaalUit(page, 'renderMaand', 'gripZien'), pop = await kaalUit(page, 'renderAfsluitSheet');   // v387: de kaart is weg
     expect(kaart).not.toContain('maandCoachIngang(');
     expect(pop).toContain('maandCoachIngang(');
   });
@@ -314,8 +323,8 @@ test.describe('g. dynamisch met elke boeking', () => {
     const r = await page.evaluate(() => {
       TX.push({ id: 'vic10', date: '2026-10-06', amount: -40, acc: 'NL01MAIN0000001111', name: 'Coffeeshop', desc: 'BEA, BETAALPAS COFFEESHOP DE DAMPKRING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
       TX.forEach(categorize); save(); renderMaand();
-      const kaart = +document.querySelector('#gripDezeMaand [data-vooruit]').dataset.vooruit;
-      const vices = +document.querySelector('#gripDezeMaand [data-brugstap="potje"]').dataset.brugwaarde;
+      const kaart = +document.querySelector('#gripZien').dataset.zien;   // v387: Zien
+      const vices = +document.querySelector('#gripZien [data-brugstap="potje"]').dataset.brugwaarde;
       openGripVooruit();
       return { kaart, vices, sheet: +document.getElementById('gripVooruit').dataset.projectie };
     });
@@ -325,34 +334,5 @@ test.describe('g. dynamisch met elke boeking', () => {
   });
 });
 
-test.describe('h. hoogte op 360 en 390px', () => {
-  // Voor v349: kaart 145/127px, Grip 400/382px. Na: de bridge kost de rest.
-  // v354: de kop is het stuurgetal (op 360px twee regels) en de regel vaste lasten komt eronder (68/50px):
-  // de kaart gaat van 271 naar 338px op 360 en van 260 naar 300px op 390, Grip van 525 naar 592 en van 514 naar 555 (gemeten).
-  // v355: Sport en Verzekeringen staan met hun variabele deel in de bridge, en de zin noemt ze: de kaart gaat
-  // van 338 naar 348px op 360 en van 300 naar 309 op 390, Grip van 592 naar 602 en van 555 naar 564 (gemeten).
-  // v356: los staan alleen Vices en Boodschappen, de rest is EEN stap ruimte, en de zin noemt geen potje dat
-  // eronder blijft: de kaart gaat van 348 naar 330px op 360 en van 309 naar 299 op 390, Grip van 602 naar 584 en van 564 naar 553 (gemeten).
-  // v357: de kop is een regel (de uitkomst tegen het budget), de regel vaste lasten is weg en de bridge draagt zeven
-  // kolommen: de kaart gaat van 330 naar 271px op 360 en van 299 naar 271 op 390, Grip van 584 en 553 naar 525 op beide (gemeten).
-  // v359: de lek-regel staat onder Let op (Uit eten zonder potje op deze stand), dus Grip krijgt die kaart erbij: de
-  // kaart Deze maand blijft 271px en Grip gaat van 525 naar 649 op 360 en naar 634 op 390 (gemeten; de terugval
-  // "te weinig ingesteld" blijft staan, want de lek-regel zegt niets over wat er is ingesteld).
-  // v364: "Budget aanpassen ›" in de kop laat hem op 360px over twee regels breken: kaart en Grip +18px, 390 gelijk.
-  // v365: de koopcheck staat bovenaan Grip (76px plus zijn marge): Grip 760 op 360 en 727 op 390 (gemeten)
-  // v367: de zin noemde alleen Vices en was op 390px een regel korter (260/716); v368 zet Boodschappen +61 terug in de
-  // zin, dus weer 271/727 (gemeten)
-  const NA = { 360: { kaart: 289, grip: 760 }, 390: { kaart: 271, grip: 727 } };
-  for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: 800 });
-    await boot(page); await grip(page);
-    const r = await page.evaluate(() => { const k = document.getElementById('gripDezeMaand'), kr = k.getBoundingClientRect();
-      return { kaart: Math.round(kr.height), grip: Math.round(document.getElementById('s-maand').scrollHeight),
-        over: [...k.querySelectorAll('*')].filter((e) => e.getBoundingClientRect().right > kr.right + 0.5).length,
-        horiz: document.documentElement.scrollWidth > window.innerWidth }; });
-    expect(r.kaart).toBe(NA[w].kaart);
-    expect(r.grip).toBe(NA[w].grip);
-    expect(r.over).toBe(0);
-    expect(r.horiz).toBe(false);
-  });
-});
+/* v387: de groep h (de hoogte van de kaart Deze maand) is vervallen met de kaart; dat Grip als geheel op 390x844 boven de
+   menubalk past, staat in grip-kring.spec.js. */

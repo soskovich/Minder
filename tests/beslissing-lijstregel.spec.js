@@ -138,17 +138,11 @@ test.describe('b - de regel: stip, naam, oorzaak, het tekort, een chevron', () =
     // en bij het doel de streefdatum als oorzaak en het maandbedrag rechts
     expect(r[1].tekst).toMatch(/streefdatum \w+ \d{4}/);
     expect(r[1].bedrag).toEqual([`€${DOEL_TEKORT}`, 'per maand tekort']);
-    // v340: de rode stip is een rode tegel: een tekort dat een beslissing vraagt is echte aandacht
+    // v387: de tegels zijn weg; de status is de kleur, en de ingang staat in de sheet van de Beleggen-meter
     expect(r.map((x) => x.kleur)).toEqual(['rood', 'rood']);
-    const rand = await page.evaluate(() => {
-      const d = document.querySelector('#s-maand [data-tegel="dekking"]'); return getComputedStyle(d).borderLeftColor; });
-    const rood = await page.evaluate(() => { const e = document.createElement('div');
-      e.style.color = 'var(--red)'; document.body.appendChild(e); const c = getComputedStyle(e).color;
-      e.remove(); return c; });
-    expect(rand).toBe(rood);
-    // en de hele tegel is de knop
-    const act = await page.evaluate(() => document.querySelector('#s-maand [data-tegel="dekking"]').getAttribute('onclick'));
-    expect(act).toBe("openMaandBeslis('dekking')");
+    const act = await page.evaluate(() => { window._gripMeter = 'beleggen'; renderGripMeter();
+      const a = document.querySelector('#gripMeterSheet [data-meterwv="dekking"]').getAttribute('onclick'); closeSheet(); return a; });
+    expect(act).toBe("closeSheet();openMaandBeslis('dekking')");
   });
 
   test('de buffer: de oorzaak leest de norm, het bedrag het gat naar je richtbedrag', async ({ page }) => {
@@ -198,7 +192,7 @@ test.describe('c - een bron: de regel en de sheet lezen dezelfde velden', () => 
   test('de oorzaak komt van de rij en wordt in de regel niet afgeleid', async ({ page }) => {
     await boot(page);
     const deel = await kaalUit(page, 'maandBeslisDeel');
-    const rij = (await kaalUit(page, 'gripLetOpItems')) + (await kaalUit(page, 'gripTegels'));
+    const rij = (await kaalUit(page, 'gripLetOpItems')) + (await kaalUit(page, 'renderGripMeter'))   // v387: de tegels zijn weg;
     expect(deel).toContain('r.oorzaak');
     // geen tweede afleiding van de post, de streefdatum of de norm in de weergave
     for (const naam of ['resMaandLabel(', 'doelDatumLabel(', 'bufferNorm(']) {

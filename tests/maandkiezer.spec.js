@@ -156,7 +156,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
   test('met de kiezer op een eerdere maand rendert Grip byte-identiek', async ({ page }) => {
     await boot(page);
     const nu = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
-    expect(nu).toContain('data-tegel="buffer"');   // v340: de bufferregel is een tegel
+    expect(nu).toContain('data-meter="budget"');   // v387: Grip draagt de meters
     await kies(page, VORIGE);
     const daarna = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
     expect(daarna).toBe(nu);
@@ -173,7 +173,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     /* v315: maandPlanRegels() is vervallen. v340: maandVanafRegels() ook; wat vanaf volgende maand
        verandert leest de tijdlijn uit maandVanafData(). Alle bouwstenen van Grip worden gelezen. */
     const src = await kaalUit(page, 'renderMaand', 'maandIngang', 'maandCoachIngang', 'maandVanafData',
-      'gripTegels', 'gripLetOpItems', 'dezeMaandKaart', 'gripKoopcheck', 'renderMaandBeslisSheet');   // v365: gripTijdlijnData is vervallen
+      'gripMeters', 'renderGripMeter', 'gripZien', 'gripZienBrug', 'teRuimLijst', 'gripLetOpItems', 'gripAfsprakenHtml', 'renderMaandBeslisSheet');   // v387   // v365: gripTijdlijnData is vervallen
     expect(src).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 

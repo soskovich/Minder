@@ -41,7 +41,7 @@ async function boot(page, maand, breed) {
    (rood = tekort, amber = let op); de naam, de oorzaak en het bedrag staan in de sheet. */
 const KLEUR = { 'Vraagt een beslissing': 'rood', 'Vraagt aandacht': 'amber' };
 const kaart = (page, kop) => page.evaluate((kleur) => {
-  const t = document.querySelector('#s-maand [data-tegel="dekking"]');
+  const t = (() => { window._gripMeter = 'beleggen'; renderGripMeter(); const e = document.querySelector('#gripMeterSheet [data-meterwv="dekking"]'); const c = e ? e.cloneNode(true) : null; if (c) { c.dataset.kleur = ({ tekort: 'rood', 'let op': 'amber', ok: 'groen' })[e.dataset.status] || 'grijs'; } closeSheet(); return c; })();
   if (!t || t.dataset.kleur !== kleur) return null;
   const vorm = (el) => [el.tagName, ...[...el.attributes].map((a) => a.name).filter((n) => n !== 'style' && n !== 'onclick').sort(), '[' + [...el.children].map(vorm).join(',') + ']'].join(' ');
   openMaandBeslis('dekking');
@@ -49,7 +49,8 @@ const kaart = (page, kop) => page.evaluate((kleur) => {
   const b = sh.querySelector('[data-sheetbedrag]');
   const o = sh.querySelector('.small.muted');
   const uit = { tekst: document.querySelector('#s-maand').innerText,
-    rij: true, vorm: vorm(t), stip: getComputedStyle(t).borderLeftColor, kleur: t.dataset.kleur,
+    rij: true, vorm: vorm(t), stip: t.dataset.status,   // v387: de status van de regel in de sheet van de Beleggen-meter
+    kleur: t.dataset.kleur,
     naam: sh.querySelector('div[style*="font-weight:800"]').innerText,
     oorzaak: o ? o.innerText : '',
     bedrag: b ? b.innerText.replace(/\s+/g, ' ').trim() : '', onclick: t.getAttribute('onclick') };
@@ -65,14 +66,14 @@ test.describe('a · het gemelde geval onder Vraagt aandacht', () => {
     expect(k.naam).toBe('Dekking reserveringen');
     expect(k.oorzaak).toBe('Boetes cjib van €299 in november 2026');
     expect(k.bedrag).toBe('€131 per maand tot november');
-    expect(k.onclick).toBe("openMaandBeslis('dekking')");
+    expect(k.onclick).toBe("closeSheet();openMaandBeslis('dekking')");   // v387: vanuit de sheet van de Beleggen-meter
   });
   test('de alinea staat niet op Grip maar in de sheet (verplaatsen is geen kopiëren)', async ({ page }) => {
     await boot(page);
     const k = await kaart(page, 'Vraagt aandacht');
     expect(k.tekst).not.toContain('Je pot dekt de eerstvolgende post');
     expect(k.tekst).not.toContain('deze maand meegeteld');
-    await page.locator('#s-maand [data-tegel="dekking"]').click();
+    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
     const sh = await page.locator('#sheet').innerText();
     expect(sh).toContain('Je pot dekt de eerstvolgende post nu al niet');
     expect(sh).toContain('Dat is €131 per maand tot november, deze maand meegeteld.');
@@ -108,7 +109,7 @@ test.describe('b · van beslissing naar aandacht behoudt de vorm', () => {
     expect(k.rij).toBe(true);
     expect(k.bedrag).toBe('€262 tekort');
     expect(await kaart(page, 'Vraagt een beslissing')).toBeNull();
-    await page.locator('#s-maand [data-tegel="dekking"]').click();
+    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 });

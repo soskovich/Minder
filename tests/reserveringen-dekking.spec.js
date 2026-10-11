@@ -257,7 +257,8 @@ test.describe('d · de zin', () => {
     await boot(page, seedRes({ reserveringen: [] }));
     expect(await page.evaluate(() => dekkingTekst(dekking(12)))).toBe('Je hebt nog geen verplichtingen ingevoerd.');
     // v344: de kaart op Plan is weg; de ingang is een grijze tegel op Grip
-    const h = await page.evaluate(() => { go('maand'); return document.querySelector('[data-tegel="dekking"]').outerHTML; });
+    // v387: de tegel is weg; de ingang is de regel dekking in de sheet van de Beleggen-meter
+    const h = await page.evaluate(() => { go('maand'); window._gripMeter = 'beleggen'; renderGripMeter(); const o = document.querySelector('[data-meterwv="dekking"]').outerHTML; closeSheet(); return o; });
     expect(h).toContain('openReserveringen()');
     expect(h).not.toContain('per maand nodig');
   });
@@ -413,8 +414,9 @@ test.describe('h · weergave', () => {
        uit dekkingTekst) staat in de sheet die de tegel opent, niet meer als regel op het scherm. */
     const r = await page.evaluate(() => {
       go('maand'); renderMaand();
-      const tegels = document.querySelectorAll('#s-maand #gripTegels [data-tegel="dekking"]');
       const scherm = $('#s-maand').innerText.replace(/\s+/g, ' ');
+      window._gripMeter = 'beleggen'; renderGripMeter();   // v387: de regel staat in de sheet van de Beleggen-meter
+      const tegels = document.querySelectorAll('#gripMeterSheet [data-meterwv="dekking"]');
       if (tegels.length) tegels[0].click();
       return { regel: (maandRegels() || []).find((x) => x.key === 'dekking'),
         zin: dekkingTekst(dekking(12)), scherm, tegels: tegels.length,

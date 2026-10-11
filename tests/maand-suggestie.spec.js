@@ -270,7 +270,7 @@ test.describe('e - elke regel opent het gesprek op zijn eigen onderwerp', () => 
     const m = await beslisIngangen(page);   // v320: in de sheet achter de regel
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel())
       .filter((r) => r.status === 'tekort').map((r) => r.key));
-    expect(m).toEqual(tekorten);
+    expect(m.slice().sort()).toEqual(tekorten.slice().sort());   // v387: de volgorde is die van de meter-sheet, niet van de tegels
   });
 
   test('en die regel heeft hier alle drie de vormen', async ({ page }) => {

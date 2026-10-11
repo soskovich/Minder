@@ -1,7 +1,9 @@
 /* v353: EEN TIK OP EEN STAP IN DE BRIDGE OPENT DIE STAP. Op de stand van 6 oktober (deze-maand-stand.js):
    budget 3.375, Vices +83, Boodschappen +61, rest -847, uitkomst 2.672.
    v354: de bridge gaat over de variabele potjes (550 naar 694); de rest-stap bestaat alleen bij meer dan drie
-   variabele potjes, dus de rest-tests dragen er vier. */
+   variabele potjes, dus de rest-tests dragen er vier.
+   v387: DE BRIDGE STAAT OP ZIEN (gripZienBrug()). De rest en de vaste lasten zijn daar samen "overig"; een tik op overig
+   opent een sheet met de delen (gripOverig), en daaruit "Andere variabele potjes" de sheet van de rest (gripRest). */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
@@ -34,10 +36,14 @@ test('a. een tik op Vices toont alleen Vices, met waarom en zijn handelingen, en
    Vices, Boodschappen); Online shopping blijft eronder en is de ruimte. */
 // v355: de vaste potjes staan op hun incasso (verzekering 150, abonnement 30, sport 73), anders zijn ze gemengd
 // en staat hun variabele rest in de bridge; dan zijn het geen vier variabele potjes meer.
-const VIER = { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } } };
+/* v387: Online shopping geeft gewoonlijk EUR 200 uit (op de 20e), anders is hij te ruim begroot en staat hij gearceerd
+   en niet in de rest. */
+const VIER = { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } },
+  extraTx: ['2026-07', '2026-08', '2026-09'].map((m) => ({ id: 'bol' + m, date: m + '-20', amount: -200, name: 'Bol.com', desc: 'BEA, BETAALPAS BOL.COM' })) };
 test('b. een tik op rest toont de variabele potjes in die stap met hun verschil, en die tellen op tot de stap', async ({ page }) => {
   await boot(page, VIER); await grip(page);
-  await tik(page, '#gripBrug [data-brugstap="rest"]');
+  await tik(page, '#gripBrug [data-brugstap="overig"]');
+  await page.click('[data-overigdeel="rest"]');
   const r = await page.evaluate(() => { const g = document.getElementById('gripRest'); const V = maandVooruit(), Br = dezeMaandBrug(V);
     const los = Br.los.map((x) => x.k);
     const rijen = [...g.querySelectorAll('[data-restpotje]')].map((e) => e.dataset.restpotje);
@@ -45,7 +51,7 @@ test('b. een tik op rest toont de variabele potjes in die stap met hun verschil,
     const vast = V.vastePotjes.map((x) => x.k);
     const getallen = [...g.querySelectorAll('[data-restpotje]')].map((e) => { const t = e.innerText.match(/([+−-])\s*€\s*([\d.]+)/); return t ? (t[1] === '+' ? 1 : -1) * +t[2].replace(/\./g, '') : NaN; });
     return { rest: +g.dataset.rest, stap: Br.rest, rijen, verwacht, los, vast, som: getallen.reduce((a, b) => a + b, 0), verder: g.querySelectorAll('[data-restverder]').length }; });
-  expect(r.rest).toBe(-300);
+  expect(r.rest).toBe(-100);
   expect(r.rijen).toEqual(['shopping']);   // v368: Boodschappen +61 haalt de EUR 50 en staat los
   expect(r.rijen.slice().sort()).toEqual(r.verwacht.slice().sort());
   for (const k of r.los) expect(r.rijen).not.toContain(k);
@@ -58,7 +64,7 @@ test('b. een tik op rest toont de variabele potjes in die stap met hun verschil,
 
 test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', async ({ page }) => {
   await boot(page);
-  for (const sel of ['#gripDezeMaand [data-dmkop]', '#gripBrug [data-brugstap="begin"]', '#gripBrug [data-brugstap="eind"]']) {
+  for (const sel of ['#gripBrug [data-brugstap="begin"]', '#gripBrug [data-brugstap="eind"]']) {   // v387: de kop van de kaart is weg
     await grip(page);
     await tik(page, sel);
     const s = await sheet(page);
@@ -97,7 +103,7 @@ for (const w of [360, 390]) {
     await tik(page, '#gripBrug [data-brugstap="potje"][data-brugwaarde="83"]'); await page.waitForTimeout(250);
     const p = await maat();
     await grip(page);
-    await tik(page, '#gripBrug [data-brugstap="rest"]'); await page.waitForTimeout(250);
+    await tik(page, '#gripBrug [data-brugstap="overig"]'); await page.click('[data-overigdeel="rest"]'); await page.waitForTimeout(250);
     const r = await maat();
     console.log(`v353 ${w}px potje ${p.h} rest ${r.h}`);
     expect(p).toMatchObject({ id: 'gripPotje', over: false });

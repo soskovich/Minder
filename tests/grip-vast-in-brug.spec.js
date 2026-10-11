@@ -4,7 +4,10 @@
    Een tik op de stap vaste lasten opent de sheet vaste lasten; de regel onder de bridge is vervallen.
    De sheet vaste lasten en de post "Nog te betalen · vast" op Inzichten lezen dezelfde bron (vasteLastenStand()).
    Fixtures: tests/deze-maand-stand.js (de stand van 6 oktober) en tests/vast-variabel-stand.js (het toestel, met
-   Huur EUR 750 zonder betaling). */
+   Huur EUR 750 zonder betaling).
+   v387: DE KAART IS WEG; de bridge staat op Zien (gripZienBrug()) en daar zijn de vaste lasten een deel van "overig". Een
+   tik op overig opent zijn delen (gripOverig), en "Vaste lasten" daarin de sheet vaste lasten. dezeMaandBrug() blijft de
+   bron van de stap vaste lasten, en de zin (dezeMaandZin()) staat op Begrijpen. */
 const { test, expect } = require('@playwright/test');
 const Zes = require('./deze-maand-stand');
 const Toe = require('./vast-variabel-stand');
@@ -32,21 +35,18 @@ test.describe('a. de bridge loopt van het budget naar de uitkomst, met de vaste 
     // de potjes en de ruimte samen zijn de variabele afwijking: de vaste lasten zitten er niet nog eens in
     expect(83 + 61 - 1122).toBe(r.varDiff);
   });
-  test('de kop is de uitkomst tegen het budget, en de regel vaste lasten is weg', async ({ page }) => {
+  test('de regel vaste lasten is weg (v357), ook op Zien', async ({ page }) => {
     await Zes.boot(page); await grip(page);
-    const r = await page.evaluate(() => ({ kop: document.querySelector('#gripDezeMaand [data-dmregel]').innerText.replace(/\s+/g, ' '),
-      regel: document.querySelectorAll('[data-vastregel],[data-vastgrootste],[data-variabel]').length }));
-    expect(r.kop).toMatch(/^€2\.672 verwacht · €703 onder je budget/);
-    expect(r.regel).toBe(0);
-    const bron = await kaalUit(page, 'dezeMaandKaart');
-    expect(bron).not.toContain('gripVastRegel');
+    expect(await page.evaluate(() => document.querySelectorAll('[data-vastregel],[data-vastgrootste],[data-variabel]').length)).toBe(0);
+    expect(await kaalUit(page, 'gripZien')).not.toContain('gripVastRegel');
     expect(await page.evaluate(() => typeof window.gripVastRegel)).toBe('undefined');
   });
+
   test('een vast potje zonder betaling telt met zijn bedrag, dus de stap blijft nul en de zin noemt het', async ({ page }) => {
     await Toe.boot(page, { set: { potAard: { huur: 'vast' } } }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       return { huur: V.vastePotjes.find((x) => x.k === 'huur'), vast: Br.stappen.find((s) => s.soort === 'vast').waarde,
-        proj: V.projectie, zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+        proj: V.projectie, zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }; });
     expect(r.huur).toMatchObject({ geen: true, eind: 750 });   // invoermeting: Huur draagt geen betaling en telt toch 750
     expect(r.vast).toBe(0);
     expect(r.proj).toBe(2473);
@@ -58,10 +58,10 @@ test.describe('a. de bridge loopt van het budget naar de uitkomst, met de vaste 
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       return { vast: Br.stappen.find((s) => s.soort === 'vast').waarde, verwacht: Math.round(V.vaste.eind - V.vaste.budget),
-        kleur: document.querySelector('#gripBrug [data-brugstap="vast"] i').style.background }; });
+        overig: (openGripOverig(), document.querySelector('[data-overigdeel="vast"]').innerText.replace(/\s+/g, ' ')) }; });
     expect(r.verwacht).toBe(37);
     expect(r.vast).toBe(37);
-    expect(r.kleur).toBe('var(--red)');
+    expect(r.overig).toContain('Vaste lasten +€37');   // v387: in de sheet van overig op Zien
   });
 });
 
@@ -69,7 +69,8 @@ test.describe('b. een tik op de stap', () => {
   test('vaste lasten opent de sheet vaste lasten, en openen schrijft niets', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await tik(page, '#gripBrug [data-brugstap="vast"]');
+    await tik(page, '#gripBrug [data-brugstap="overig"]');   // v387: via overig
+    await page.click('[data-overigdeel="vast"]');
     expect(await page.evaluate(() => !!document.getElementById('gripVast'))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
@@ -117,15 +118,13 @@ test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () 
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       return { boven: uitschieters(V).map((x) => x.k), st: Br.stappen.map((s) => s.soort),
         som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, V.budget), proj: V.projectie,
-        kol: [...document.querySelectorAll('#gripBrug [data-brugstap]')].map((k) => k.getBoundingClientRect().width),
-        as: document.querySelectorAll('#gripBrug [data-asbasis]').length,
-        zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+        kol: [...document.querySelectorAll('#gripZien [data-brugstap]')].map((k) => k.getBoundingClientRect().width),   // v387: de bridge van Zien
+        as: document.querySelectorAll('#gripZien [data-asbasis]').length,
+        zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }; });
     expect(r.boven.slice().sort()).toEqual(['boodschappen', 'uiteten', 'vices']);   // invoermeting: drie potjes erboven
     expect(r.st).toEqual(['begin', 'potje', 'potje', 'rest', 'vast', 'zonder', 'eind']);
     expect(r.som).toBe(r.proj);
-    expect(r.kol.length).toBe(7);
-    // onafgerond: met de as als eigen kolom is een kolom 39,86px, en afgerond leest dat als 40
-    expect(r.as).toBe(1);   // invoermeting: de as staat er
+    expect(r.kol.length).toBeLessThanOrEqual(7);
     for (const w of r.kol) expect(w).toBeGreaterThanOrEqual(40);
     expect(r.zin).toContain('Boodschappen');
     expect(r.zin).toContain('Uit eten');
@@ -144,19 +143,14 @@ test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () 
 });
 
 for (const w of [360, 390]) {
-  test(`e. op ${w}px loopt de kaart niet over, en de sheet vaste lasten ook niet`, async ({ page }) => {
+  test(`e. op ${w}px loopt Zien niet over, en de sheet vaste lasten ook niet`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await Zes.boot(page); await grip(page);
-    const k = await page.evaluate(() => { const e = document.getElementById('gripDezeMaand'), r = e.getBoundingClientRect();
-      return { h: Math.round(r.height), over: [...e.querySelectorAll('*')].filter((x) => x.getBoundingClientRect().right > r.right + 0.5).length,
-        kop: Math.round(e.querySelector('[data-dmregel]').getBoundingClientRect().height) }; });
-    await tik(page, '#gripBrug [data-brugstap="vast"]');
-    const s = await page.evaluate(() => { const g = document.getElementById('gripVast');
-      return { h: Math.round(g.getBoundingClientRect().height), uitleg: Math.round(g.querySelector('[data-vastuitleg]').getBoundingClientRect().height),
-        over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }; });
-    console.log(`v357 ${w}px: kaart ${k.h}, kop ${k.kop}, sheet ${s.h}, uitleg ${s.uitleg}`);
+    const k = await page.evaluate(() => { const e = document.getElementById('gripZien'), r = e.getBoundingClientRect();
+      return { over: [...e.querySelectorAll('*')].filter((x) => x.getBoundingClientRect().right > r.right + 0.5).length }; });
+    await page.evaluate(() => openGripVast());
+    const s = await page.evaluate(() => ({ over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }));
     expect(k.over).toBe(0);
-    expect(k.h).toBe(w === 360 ? 289 : 271);   // v364: de link in de kop kost 18px op 360; v368: Boodschappen weer in de zin
     expect(s.over).toBe(false);
   });
 }

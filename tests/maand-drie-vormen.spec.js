@@ -6,6 +6,7 @@
 // omdat de terugblik hoort in de maand waarin het gat valt en dat maanden later kan zijn dan de
 // afspraaklus kijkt.
 const { test, expect } = require('@playwright/test');
+const { regelTegels, openRegelUI } = require('./beslis-sheet');
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');
 
@@ -116,8 +117,8 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
 
   test('het scherm zegt dat je hem bewust hebt geaccepteerd', async ({ page }) => {
     await open(page, drieTekorten());
-    const kleuren = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#gripTegels [data-tegel]')]
-      .map((t) => [t.dataset.tegel, t.dataset.kleur])));
+    // v387: de tegels zijn weg; de kleur is de status van de regel in de sheet van de Beleggen-meter
+    const kleuren = async () => Object.fromEntries(Object.entries(await regelTegels(page)).map(([k, v]) => [k, v.kleur]));
     await page.evaluate(() => { go('maand'); renderMaand(); });
     expect((await kleuren()).buffer, 'voor het accepteren is de buffer een beslissing').toBe('rood');
     await page.evaluate(() => { maandAcceptZet('buffer'); renderMaand(); });
@@ -127,14 +128,14 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
     expect(k.buffer).toBe('amber');
     expect(k.dekking).toBe('rood');   // de andere twee tekorten staan er nog
     expect(k.doel).toBe('rood');
-    await page.locator('#gripTegels [data-tegel="buffer"]').click();
+    await openRegelUI(page, 'buffer');
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
   /* v340: de oordeelzin is vervallen; wat hij telde zijn nu de rode tegels. */
   test('Grip telt hem niet meer als tekort', async ({ page }) => {
     await open(page, drieTekorten());
-    const rood = () => page.evaluate(() => { renderMaand(); return document.querySelectorAll('#gripTegels [data-kleur="rood"]').length; });
+    const rood = async () => { await page.evaluate(() => renderMaand()); return Object.values(await regelTegels(page)).filter((v) => v.kleur === 'rood').length; };
     await page.evaluate(() => go('maand'));
     const a = await rood();
     await page.evaluate(() => maandAcceptZet('buffer'));
@@ -163,14 +164,13 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
        viel `maandBeleggenRegel(R)` buiten die snede. De eigenschap gaat over WELK argument die functie
        krijgt en niet over een byte-afstand; dat is meetles (t), nu op een lengte in plaats van op een
        indentatie. De hele functie, zonder commentaar, want een naam in een comment is geen aanroep. */
-    /* v340: maandBeleggenRegel() is de tegel geworden; gripTegels() krijgt RO voor de tegels en R voor
-       beleggen, en leest beleggenKlaar() op die onbewerkte R. */
+    /* v387: de tegels zijn weg; de Beleggen-meter (gripMeterBeleggen()) leest beleggenKlaar() op de onbewerkte regels,
+       renderMaand() geeft Let op de gewogen lijst. */
     const bron = await kaalUit(page, 'renderMaand');
-    expect(bron).toContain('gripTegels(RO, R)');
     expect(bron).toContain('maandMetAccept(R).concat(STR)');
-    const tegel = await kaalUit(page, 'gripTegels');
-    expect(tegel).toContain('beleggenKlaar(R)');
-    expect(tegel).not.toContain('beleggenKlaar(RO)');
+    const meter = await kaalUit(page, 'gripMeterBeleggen');
+    expect(meter).toContain('beleggenKlaar(maandRegels())');
+    expect(meter).not.toMatch(/beleggenKlaar\(\s*(RO|maandMetAccept)/);
   });
 });
 

@@ -3,6 +3,9 @@
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 const rb = require('./ruim-bijstel-stand');
+/* v387: Verzekeringen op EUR 324 is sinds de regelkring niet meer te ruim (december vraagt DELA erbij), dus de sheet
+   draait hier op Verzekeringen EUR 700, zoals grip-ruim-bijstel. */
+const rbBoot700 = (page, o) => rb.boot(page, Object.assign({}, o || {}, { set: { budgets: Object.assign({}, rb.BUDGETS, { verzekering: 700 }) } }));
 
 const openDela = page => page.evaluate(() => {
   const P = uitgeslotenPotjes().find(x => /DELA/.test(x.naam)); if (!P) throw new Error('DELA staat niet op de kaart');
@@ -82,7 +85,7 @@ test('e. een rechtstreekse aanroep zonder maand verlaagt niets en schrijft niets
 });
 
 test('f. DELA naar de reserveringen in Te ruime potjes: dezelfde regel, het potje draagt DELA niet meer', async ({ page }) => {
-  await rb.boot(page);
+  await rbBoot700(page);
   await page.evaluate(() => { go('maand'); openGripRest(); });
   await page.click('[data-ruimer]');
   await page.click('[data-ruimpot="verzekering"] [data-ruimkeuze="res"]');

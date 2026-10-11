@@ -105,9 +105,9 @@ test.describe('b · het schema per potje op de logboekpagina', () => {
 test.describe('c · een potje dat later hoger gaat telt in de regel naar het logboek', () => {
   test('hoger vanaf volgende maand en vanaf een latere maand, uit hetzelfde schema; lager niet', async ({ page }) => {
     await I.boot(page, { set: { budgetsNext: { vices: 50, boodschappen: 350 }, budgetPlan: { '2027-01': { uiteten: 200 } } } });
-    await page.evaluate(() => go('maand'));
-    const r = await page.evaluate(() => ({ o: potjeOmhoogRegels().map((x) => x.k + '|' + x.ym), rij: document.querySelectorAll('#gripDezeMaand [data-potomhoog]').length,
-      later: (document.querySelector('#gripDezeMaand [data-afsprakenlater]') || {}).innerText || '' }));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });   // v387: de afspraken staan op Kiezen
+    const r = await page.evaluate(() => ({ o: potjeOmhoogRegels().map((x) => x.k + '|' + x.ym), rij: document.querySelectorAll('#gripInhoud [data-potomhoog]').length,
+      later: (document.querySelector('#gripInhoud [data-afsprakenlater]') || {}).innerText || '' }));
     expect(r.o).toEqual(['vices|2026-11', 'uiteten|2027-01']);
     expect(r.rij).toBe(0);
     expect(r.later).toContain('2 afspraken voor nov–jan');
@@ -116,17 +116,17 @@ test.describe('c · een potje dat later hoger gaat telt in de regel naar het log
   });
   test('hoger en lager tellen samen, en een tik opent het logboek', async ({ page }) => {
     await I.boot(page, { set: { budgetsNext: { vices: 50 } } });
-    await page.evaluate(() => { potPlanZet('boodschappen', '2026-11', 350); potjeAfspraak('boodschappen', 350, '2026-11'); go('maand'); });
-    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripDezeMaand [data-afspraak]').length,
-      later: document.querySelector('#gripDezeMaand [data-afsprakenlater]').dataset.afsprakenlater }));
+    await page.evaluate(() => { potPlanZet('boodschappen', '2026-11', 350); potjeAfspraak('boodschappen', 350, '2026-11'); go('maand'); gripKiesTab('kiezen'); });
+    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripInhoud [data-afspraak]').length,
+      later: document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater }));
     expect(r).toEqual({ af: 0, later: '2' });
-    await page.click('#gripDezeMaand [data-afsprakenlater]');
+    await page.click('#gripInhoud [data-afsprakenlater]');
     await expect(page.locator('#s-logboek')).toBeVisible();
   });
   test('zonder geplande wijziging staat er geen regel', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => go('maand'));
-    expect(await page.locator('#gripDezeMaand [data-afsprakenlater]').count()).toBe(0);
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
+    expect(await page.locator('#gripInhoud [data-afsprakenlater]').count()).toBe(0);
   });
 });
 

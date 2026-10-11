@@ -93,8 +93,8 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   expect(k.knop).toBe('open');                               // met open punten alleen via die knop
   // v340: de lopende afspraken staan onder Deze maand op Grip; v367: alleen wat deze maand geldt (de storting), de stop
   // van Abonnementen vanaf november telt in de regel "1 afspraak voor november"
-  expect(await page.evaluate(() => document.querySelectorAll('#gripDezeMaand [data-afspraak]').length)).toBe(1);
-  expect(await page.evaluate(() => document.querySelector('#gripDezeMaand [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
+  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak]').length))).toBe(1);
+  expect(await page.evaluate(() => document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
   // v365: de teller telt alleen de vijf afsluittaken, en de afspraken staan niet in de sheet
   expect(k.teller).toBe('4/5');
   expect(k.inSheet).toBe(0);
@@ -145,8 +145,8 @@ test('d. afsluiten met open punten bewaart ze bij september, en de kaart wordt e
   expect(r.tekst).not.toContain('gewijzigd na afsluiten');
   expect(await kaart(page)).toBeNull();
   // doorlopende afspraken staan onder Deze maand; v367: die van november in de regel eronder
-  expect(await page.evaluate(() => document.querySelectorAll('#gripDezeMaand [data-afspraak]').length)).toBe(1);
-  expect(await page.evaluate(() => document.querySelector('#gripDezeMaand [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
+  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak]').length))).toBe(1);
+  expect(await page.evaluate(() => document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
 });
 
 test('e. zonder open punten kan het gewoon, en niets sluit vanzelf', async ({ page }) => {

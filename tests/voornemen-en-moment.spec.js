@@ -59,6 +59,7 @@ const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('ma
   await page.waitForSelector('#s-maand .card');
   return page.evaluate(() => {
     let t = $('#s-maand').innerText;
+    gripKiesTab('kiezen'); t += ' ' + $('#gripInhoud').innerText; gripKiesTab('zien');   // v387: de afspraken staan op Kiezen
     for (const e of document.querySelectorAll('#gripLetOp [data-letop]')) {
       const k = e.dataset.letop; if (!['accept', 'afspraaklus', 'voornemen'].includes(k)) continue;
       openGripLetOp(k); t += ' ' + document.getElementById('gripLetOpSheet').innerText; closeSheet(); }
@@ -259,7 +260,7 @@ test.describe('e · een voornemen per maand, en de opslag blijft staan', () => {
       { type: 'afspraak', text: 'Tweede', ts: Date.now() },
       { type: 'afspraak', text: 'Eerste', ts: Date.now() - 1000 }] } });
     const r = await page.evaluate(() => ({ nu: coachThisMonthAfspraak(),
-      t: (function () { renderMaand(); return $('#s-maand').innerText.replace(/\s+/g, ' '); })() }));
+      t: (function () { go('maand'); gripKiesTab('kiezen'); return $('#s-maand').innerText.replace(/\s+/g, ' '); })() }));
     expect(r.nu.text).toBe('Tweede');                         // de nieuwste, de log staat nieuwste eerst
     expect((r.t.match(/Je afspraak deze maand/g) || []).length).toBe(1);
   });

@@ -65,8 +65,8 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
     expect(drie).toBe(een);
     /* v340: de oordeelzin en de kaarten met die koppen zijn vervallen; Grip draagt nu tegels, "Deze
        maand" en de link naar het logboek, dus de vergelijking hierboven loopt over een gevuld scherm. */
-    expect(een).toMatch(/Deze maand/i);
-    expect(een).toContain('Logboek');
+    expect(een).toMatch(/budget → verwacht/i);   // v387: Zien
+    expect(een).toContain('Terugblik');
   });
 
   test('de gelezen-vlag stuurt geen inhoud meer aan', async ({ page }) => {

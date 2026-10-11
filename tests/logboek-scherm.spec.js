@@ -35,7 +35,7 @@ test('a1 mijn september: de pop-up zegt €381 boven je potjes, alle 3 een uitzo
   expect(T.antwoord).toBe('Uitzondering 3 van 3 beantwoord');
 });test('a2 de link op Grip opent het logboek als eigen scherm, en terug brengt je op Grip', async ({page})=>{
   await boot(page, SEPTEMBER(true));
-  await page.evaluate(()=>{ closeSheet(); go('maand'); });
+  await page.evaluate(()=>{ closeSheet(); go('maand'); gripKiesTab('terugblik'); });   // v387: het logboek staat op Terugblik
   await page.click('#gripNaarLogboek');
   expect(await page.evaluate(()=>document.getElementById('s-logboek').classList.contains('active'))).toBe(true);
   await page.evaluate(()=>terug());
@@ -201,5 +201,6 @@ test('f Grip draagt geen logboekkaart en geen vraag, alleen de link', async ({pa
   const g=await grip(page);
   expect(g.vraagInGrip).toBe(0);
   expect(await page.evaluate(()=>!!document.querySelector('#s-maand #valtOpGrip'))).toBe(false);
-  expect(g.kaart).toContain('Logboek ›');
+  // v387: de link staat op Terugblik
+  expect(await page.evaluate(()=>{ gripKiesTab('terugblik'); return document.getElementById('s-maand').innerText; })).toContain('Logboek ›');
 });

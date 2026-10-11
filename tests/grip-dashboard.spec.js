@@ -3,7 +3,10 @@
    reserveringspot tegen een boete van EUR 299 in november, de buffer boven zijn norm, een doel, en twee
    bezittingen die groeien. Het logboek van september is beantwoord, september is nog niet afgesloten.
    Grip heeft drie blokken (tegels, Deze maand, Komende 3 maanden) en een link naar het logboek; de
-   maandafsluiting is een pop-up. */
+   maandafsluiting is een pop-up.
+   v387: GRIP IS EEN REGELKRING (meters, tabs, Zien). De tegels, de kaart Deze maand en de link onderaan zijn weg; de
+   regels staan in de sheet van de Beleggen-meter, de afspraken op Kiezen en het logboek op Terugblik. Wat deze spec
+   over de regels, de vooruitblik, de pop-up en het logboek vasthoudt, blijft; wat alleen over de tegels ging is weg. */
 const { test, expect } = require('@playwright/test');
 const { boot, seed, RES, MAIN } = require('./bezit-koppeling.fixture');
 const { pinDatum } = require('./vaste-dag');
@@ -35,60 +38,43 @@ const OKT = [
   { id: 'o2', date: '2026-10-25', amount: 3000, name: 'Werkgever', desc: 'SALARIS LOON' },
 ];
 
-test('a. de stand op 4 oktober: vier tegels, amber eerst, beleggen grijs en wachtend op de reserveringen', async ({ page }) => {
+test('a. de stand op 4 oktober: de regels en hun status, en de Beleggen-meter wacht op de reserveringen', async ({ page }) => {
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); });
-  const g = await grip(page);
-  expect(g.tegels.map((t) => t.key)).toEqual(['dekking', 'buffer', 'doel', 'beleggen']);
-  expect(g.tegels.map((t) => t.kleur)).toEqual(['amber', 'groen', 'groen', 'grijs']);
-  expect(g.tegels[0].tekst).toBe('Reserveringen €37 €299 nodig in november');
-  expect(g.tegels[1].tekst).toContain('je norm: 2');
-  expect(g.tegels[3].tekst).toBe('Beleggen wacht op je reserveringen');
-  // de kleur komt uit de bestaande status, er is geen nieuw oordeel
   const st = await page.evaluate(() => { const R = maandMetAfspraak(maandMetAccept(maandRegels())); return Object.fromEntries(R.map((r) => [r.key, r.status])); });
   expect(st).toMatchObject({ dekking: 'let op', buffer: 'ok', doel: 'ok' });
+  await page.click('[data-meter="beleggen"]');
+  const rij = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-meterwv]')].map((e) => [e.dataset.meterwv, e.innerText.replace(/\s+/g, ' ')])));
+  expect(rij.dekking).toContain('€37 tegen');
+  expect(rij.buffer).toContain('gehaald');
 });
 
-test('b. drie blokken en een link: wat van Grip verdween staat er niet meer', async ({ page }) => {
+test('b. meters, tabs en Zien: wat van Grip verdween staat er niet meer', async ({ page }) => {
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); });
   const g = await grip(page);
-  // v365: de koopcheck staat bovenaan en de tijdlijn is vervallen
-  expect(g.blokken).toEqual(['gripKoopcheck', 'gripTegels', 'gripDezeMaand', 'gripNaarLogboek']);
+  expect(g.blokken).toEqual(['gripMeters', 'gripTabs', 'gripInhoud', 'gripKoopcheck']);
   for (const weg of ['Vraagt een beslissing', 'Vraagt aandacht', 'Staat goed', 'Voorwaarden voor beleggen', 'afsluiten', 'Wat je met overschrijdingen deed', 'Er is niets dat vastloopt', 'Vanaf november'])
     expect(g.tekst.toUpperCase()).not.toContain(weg.toUpperCase());
-  const ids = await page.evaluate(() => ['afsluitKaart', 'afgeslotenRegel', 'valtOpGrip', 'afsprakenKaart'].filter((i) => document.querySelector('#s-maand #' + i)));
+  const ids = await page.evaluate(() => ['afsluitKaart', 'afgeslotenRegel', 'valtOpGrip', 'afsprakenKaart', 'gripTegels', 'gripDezeMaand'].filter((i) => document.querySelector('#s-maand #' + i)));
   expect(ids).toEqual([]);
-  expect(g.tekst).toContain('Logboek ›');
+  await page.evaluate(() => gripKiesTab('terugblik'));
+  expect((await grip(page)).tekst).toContain('Logboek ›');
 });
 
-test('c. een rode beslissing staat linksboven, ook als zijn regel normaal later komt', async ({ page }) => {
-  await stand(page, { goals: [{ id: 'g1', naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-01' }] });
-  await page.evaluate(() => { closeSheet(); go('maand'); });
-  const g = await grip(page);
-  expect(g.tegels[0]).toMatchObject({ key: 'doel', kleur: 'rood' });
-  expect(g.tegels[0].tekst).toContain('Kosten Koper');
-  expect(g.tegels.map((t) => t.kleur)).toEqual(['rood', 'amber', 'groen', 'grijs']);
-  // linksboven: de eerste cel van het raster
-  const pos = await page.evaluate(() => { const T = [...document.querySelectorAll('#gripTegels [data-tegel]')].map((e) => e.getBoundingClientRect()); return { x0: T[0].left, y0: T[0].top, x1: T[1].left, y2: T[2].top }; });
-  expect(pos.x0).toBeLessThan(pos.x1);
-  expect(pos.y2).toBeGreaterThan(pos.y0);
-});
+/* v387: c (een rode tegel linksboven) is vervallen met de tegels. */
 
-test('d. een tik op een tegel opent de bestaande sheet met uitleg, afspraak en handeling', async ({ page }) => {
+test('d. een regel in de sheet van de Beleggen-meter opent de bestaande sheet met uitleg, afspraak en handeling', async ({ page }) => {
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); });
   await page.waitForTimeout(400);
-  await page.click('[data-tegel="dekking"]');
+  await page.click('[data-meter="beleggen"]');
+  await page.click('[data-meterwv="dekking"]');
   const t = await page.evaluate(() => $('#sheet').innerText.replace(/\s+/g, ' '));
   expect(t).toContain('Dekking reserveringen');
   expect(t).toContain('€131 per maand tot november');
   expect(t).toContain('Ik stort €131 per maand tot november');
-  expect(t).toContain('voorwaarden voor beleggen');           // de samenhang die een eigen kaart was
-  await page.evaluate(() => { closeSheet(); });
-  await page.waitForTimeout(400);
-  await page.click('[data-tegel="beleggen"]');
-  expect(await page.evaluate(() => $('#sheet').innerText)).toContain('Voorwaarden voor beleggen');
+  expect(t).toContain('voorwaarden voor beleggen');
 });
 
 /* Een vaste last NA vandaag (dag 12) in de drie maanden ervoor: die staat in "vast nog" en mag niet nog
@@ -97,8 +83,9 @@ const NETFLIX = ['2026-06', '2026-07', '2026-08', '2026-09'].map((m, i) => ({ id
 test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de waterval', async ({ page }) => {
   await stand(page, null, { extraTx: NETFLIX });
   await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
-  const r = await page.evaluate(() => { const V = maandVooruit(); const k = document.getElementById('gripDezeMaand');
-    return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
+  const r = await page.evaluate(() => { const V = maandVooruit(); const z = document.getElementById('gripZien').dataset.zien;
+    gripKiesTab('kiezen'); const k = document.querySelector('#gripInhoud');   // v387: de afspraken staan op Kiezen
+    return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, zien: +z, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
   expect(r.V.projectie).toBe(r.V.uit + r.V.vast + r.V.rest);
   // de huur is een vaste last en staat al in "vast nog": hij telt niet nog eens mee in wat er gemiddeld bijkomt
   expect(r.V.vast).toBeGreaterThanOrEqual(900);
@@ -116,8 +103,7 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   // v349: de kaart draagt de uitkomst met het verschil met je budget, en de bridge eronder (deze-maand-bridge.spec.js)
   // v354: de kaart draagt het stuurgetal, variabel tegen je potjes; de totale uitkomst staat in de sheet
   // v357: de kop is weer de uitkomst tegen het budget, en de bridge loopt van het budget naar die uitkomst
-  expect(r.tekst).toContain(`€${r.V.projectie.toLocaleString('nl-NL')} verwacht · `);
-  expect(r.tekst).not.toContain('Variabel:');
+  expect(r.zien).toBe(r.V.projectie);   // v387: Zien draagt de uitkomst
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   await page.evaluate(() => openGripVooruit());
@@ -132,7 +118,7 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
 test('f. zonder drie afgeronde maanden geen vooruitblik, en dat staat er', async ({ page }) => {
   await stand(page);
   await page.evaluate(() => { TX = TX.filter((t) => t.date >= '2026-08-01'); save(); closeSheet(); go('maand'); });
-  const r = await page.evaluate(() => ({ V: maandVooruit().onbekend, t: document.getElementById('gripDezeMaand').innerText.replace(/\s+/g, ' ') }));
+  const r = await page.evaluate(() => ({ V: maandVooruit().onbekend, t: document.getElementById('gripInhoud').innerText.replace(/\s+/g, ' ') }));
   expect(r.V).toBe(true);
   expect(r.t).toContain('laatste 3 afgeronde maanden');
   expect(r.t).not.toContain('Komt uit rond');
@@ -209,32 +195,8 @@ test('k. het logboek: de open maand als regel, en eerdere maanden tegen de huidi
   expect(s).toContain('niet bewaard');
 });
 
-for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }) => {
-  await page.setViewportSize({ width: w, height: 800 });
-  await stand(page);
-  await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
-  const h = await page.evaluate(() => { const s = document.getElementById('s-maand'); const r = (id) => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().height) : 0; };
-    return { tegels: r('gripTegels'), deze: r('gripDezeMaand'), tijd: r('gripTijdlijn'), koop: r('gripKoopcheck'), totaal: Math.round(s.scrollHeight), over: document.documentElement.scrollWidth > window.innerWidth }; });
-  console.log('grip-dashboard', w, JSON.stringify(h));
-  /* GEMETEN bij v340 op deze stand (met de afspraak van EUR 131): de tegels 171px, Deze maand 176px op 360
-     en 158px op 390, de tijdlijn 129px, en Grip 582px op 360 en 564px op 390. Op v339 was Grip op dezelfde
-     stand 966px op 360 en 945px op 390.
-     v349: Deze maand draagt de bridge van budget naar uitkomst en de oorzaakzin: 315px op 360 en 297px op
-     390, en Grip 721px en 703px (de zin is hier een regel: geen potje komt boven uit). */
-  expect(h.over).toBe(false);
-  expect(h.tegels).toBe(171);
-  expect(h.tijd).toBe(0);   // v365: de tijdlijn is vervallen
-  // v354: de kop is het stuurgetal en de regel vaste lasten komt onder de bridge: 411px op 360 en 373 op 390
-  // v355: Abonnementen heeft hier geen herkende incasso en is dus variabel; de regel vaste lasten heeft dan geen
-  // afwijking om te noemen (Huur EUR 900 van 900): 374px op 360 en 336 op 390 (gemeten)
-  // v357: de kop is de uitkomst tegen het budget en de regel vaste lasten is weg; de vaste lasten staan als stap in
-  // de bridge: 315px op 360 en 297 op 390, dezelfde hoogte als bij v349 (gemeten)
-  // v364: "Budget aanpassen ›" in de kop: op 360px breekt de kop over twee regels (+18px), op 390 niet (gemeten)
-  expect(h.deze).toBe(w === 360 ? 333 : 297);
-  // v365: de koopcheck erbij (76px) en de tijdlijn eraf (129px plus zijn marge): 686px op 360 en 650 op 390 (gemeten)
-  expect(h.koop).toBe(76);
-  expect(h.totaal).toBe(w === 360 ? 686 : 650);
-});
+/* v387: l (de hoogte van de tegels en de kaart Deze maand) is vervallen met die blokken; dat Grip op 390x844 boven de
+   menubalk past staat in grip-kring.spec.js. */
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4
    telkens 80 heen, en in oktober is er op dag 2 al 100 uit. Op tempo eindigt het dus op 180. */
@@ -252,9 +214,9 @@ test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de s
   expect(V.voor).toEqual(['uiteten']);
   expect(V.h).toEqual([expect.objectContaining({ k: 'uiteten', grens: 50, effect: 30 })]);
   expect(V.met).toBe(V.proj - 30);
-  const kaart = await page.evaluate(() => document.getElementById('gripDezeMaand').innerText.replace(/\s+/g, ' '));
-  /* v367: Uit eten eindigt EUR 30 boven een potje van EUR 150 (20 procent) en is geen uitschieter, dus de kaart noemt hem
-     niet; de handeling staat wel in de sheet. */
+  const kaart = await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())) + ' ' + document.getElementById('gripZien').innerText.replace(/\s+/g, ' '));
+  /* v367: Uit eten eindigt EUR 30 boven een potje van EUR 150 (20 procent) en is geen uitschieter, dus de zin noemt hem
+     niet; de handeling staat wel in de sheet. v387: de zin staat op Begrijpen, de bridge op Zien. */
   expect(kaart).toContain('Geen potje komt ver boven zijn bedrag uit');
   expect(kaart).not.toContain('loopt voor');
   // v349: de som met de grenzen staat in de sheet en niet meer op de kaart
@@ -277,7 +239,7 @@ test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt ee
   expect(a).toMatchObject({ cat: 'uiteten', bedrag: 150, van: '2026-10', tot: '2026-10' });
   const st = await page.evaluate((id) => afspraakStand(afsprakenLijst().find((x) => x.id === id)), a.id);
   expect(st.status).toBe('loopt');
-  expect(await page.evaluate(() => document.getElementById('gripDezeMaand').innerText)).toContain('Grens Uit eten & café: nog €50 tot 31 oktober');
+  expect(await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); return document.getElementById('gripInhoud').innerText; })).toContain('Grens Uit eten & café: nog €50 tot 31 oktober');   // v387: op Kiezen
 });
 
 test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die opent de kaart die er was', async ({ page }) => {
@@ -285,8 +247,8 @@ test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die ope
   await page.evaluate(() => { closeSheet(); go('maand'); });
   const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => [e.dataset.letop, e.innerText.replace(/\s+/g, ' ')]));
   expect(L).toEqual([['sig', 'Uit eten & café €40 boven je potje ›']]);
-  // de lijst staat direct onder de tegels
-  expect(await page.evaluate(() => document.getElementById('gripTegels').nextElementSibling.id)).toBe('gripLetOp');
+  // v387: de lijst staat op Zien, direct onder de bridge
+  expect(await page.evaluate(() => document.getElementById('gripZien').nextElementSibling.id)).toBe('gripLetOp');
   await page.evaluate(() => openGripLetOp('sig', valtOpSignals(thisYM())[0].id));
   const t = await page.evaluate(() => document.getElementById('gripLetOpSheet').innerText);
   expect(t).toContain('Zo laten');
@@ -302,14 +264,15 @@ test('p. zonder Let op-signaal staat er geen Let op', async ({ page }) => {
   expect(await page.evaluate(() => !!document.getElementById('gripLetOp'))).toBe(false);
 });
 
-test('q. een voorwaarde die niet te beoordelen is: de beleggen-tegel zegt onbekend en niet wacht', async ({ page }) => {
+test('q. een voorwaarde die niet te beoordelen is: de Beleggen-meter telt hem niet in de noemer en zegt onbekend', async ({ page }) => {
   await stand(page, { reserveringen: [] });
   await page.evaluate(() => { closeSheet(); go('maand'); });
-  const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const e = document.querySelector('[data-tegel="beleggen"]');
-    return { volledig: B.volledig, tekst: e.innerText.replace(/\s+/g, ' '), kleur: e.dataset.kleur }; });
+  const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const M = gripMeterBeleggen();
+    return { volledig: B.volledig, n: M.n, onb: M.onb.map((v) => v.key), tekst: document.querySelector('[data-meter="beleggen"]').innerText.replace(/\s+/g, ' ') }; });
   expect(r.volledig).toBe(false);
-  expect(r.tekst).toBe('Beleggen onbekend je reserveringen nog niet te beoordelen');
-  expect(r.kleur).toBe('grijs');
+  expect(r.onb).toEqual(['dekking']);
+  expect(r.n).toBe(2);
+  expect(r.tekst).toContain('1 onbekend');
 });
 
 /* De band gaat alleen over het deel van de maand dat nog moet komen: per afgeronde maand de uitgaven na

@@ -52,7 +52,7 @@ async function boot(page, set, w) {
 const lees = (page) => page.evaluate(() => {
   const r = maandRegels().find((x) => x.key === 'buffer');
   // v340: de regel is een tegel; amber is 'let op', en oorzaak en bedrag staan in de sheet erachter
-  const tegel = document.querySelector('#s-maand [data-tegel="buffer"]');
+  const tegel = (() => { window._gripMeter = 'beleggen'; renderGripMeter(); const e = document.querySelector('#gripMeterSheet [data-meterwv="buffer"]'); const c = e ? e.cloneNode(true) : null; if (c) { c.dataset.kleur = ({ tekort: 'rood', 'let op': 'amber', ok: 'groen' })[e.dataset.status] || 'grijs'; } closeSheet(); return c; })();
   let oorzaak = '', bedrag = [];
   if (tegel) {
     openMaandBeslis('buffer');
@@ -114,7 +114,7 @@ test.describe('b · meer toegewezen dan er op de spaarrekening staat', () => {
     expect(r.oorzaak).toBe('€2.750 minder op je spaarrekening dan toegewezen');
     expect(r.bedrag).toEqual(['€2.750', 'meer toegewezen']);
     // in de sheet staat hetzelfde bedrag, uit dezelfde bron
-    await page.locator('#s-maand [data-tegel="buffer"]').click();
+    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="buffer"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
     const sb = (await page.locator('#sheet [data-sheetbedrag="buffer"]').innerText()).replace(/\s+/g, ' ').trim();
     expect(sb).toBe('€2.750 meer toegewezen');
     expect(await page.locator('#sheet').innerText()).toContain('Tot je die keuze maakt telt je buffer niet als vol.');

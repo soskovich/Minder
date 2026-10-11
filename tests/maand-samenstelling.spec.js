@@ -61,7 +61,7 @@ test.describe('a · beide kaarten putten uit dezelfde lijst', () => {
     await boot(page);
     const src = await kaalUit(page, 'renderMaand');
     expect(src).toContain('RO=maandMetAfspraak(maandMetAccept(R).concat(STR))');
-    expect(src).toContain('gripTegels(RO, R)');
+    expect(await kaalUit(page, 'renderGripMeter')).toContain('maandMetAfspraak(maandMetAccept(maandRegels()))');   // v387: de regels in de sheet van de Beleggen-meter
     expect(src).toContain('gripLetOpItems(RO, SIG, BV)');
   });
 

@@ -228,8 +228,9 @@ test.describe('d · Grip en de coach zeggen hetzelfde', () => {
     expect(r.gevolg).toMatch(/dit doel staat stil/);
     expect(r.gevolg).not.toMatch(/\bZet\b|\bGeef\b|\bMoet\b|\bZorg\b/);
     // en de regel verdwijnt niet van Grip: v340, de oordeelzin is vervallen, de tegel is rood
-    expect(await page.evaluate(() => { go('maand');
-      const t = document.querySelector('#gripTegels [data-tegel="doel"]'); return t ? t.dataset.kleur : null; })).toBe('rood');
+    // v387: de tegel is weg; de regel staat in de sheet van de Beleggen-meter, met zijn status
+    expect(await page.evaluate(() => { go('maand'); window._gripMeter = 'beleggen'; renderGripMeter();
+      const t = document.querySelector('[data-meterwv="doel"]'); const s = t ? t.dataset.status : null; closeSheet(); return s; })).toBe('tekort');
     // de voorwaarde voor beleggen leest hem ook, en zegt niet 'geen tekort'
     expect(await page.evaluate(() => beleggenWaarde('doel', (maandRegels() || []).find((x) => x.key === 'doel'))))
       .toBe('datum niet te halen');

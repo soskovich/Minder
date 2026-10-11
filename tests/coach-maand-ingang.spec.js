@@ -5,7 +5,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
-const { beslisIngangen, beslisKeys } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
+const { beslisIngangen, beslisKeys , openRegelUI, gripOp } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const overMaanden = (n) => {
   const d = new Date(); d.setMonth(d.getMonth() + n);
@@ -52,7 +52,7 @@ async function maand(page, payload) {
 /* v340: de lijstregel is een tegel geworden (of een regel onder Let op); de eerste in schermvolgorde. */
 async function opentGesprek(page) {
   const k = (await beslisKeys(page))[0];
-  await page.locator(`#s-maand [data-tegel="${k}"], #s-maand [data-letop="str"][onclick*="'${k}'"]`).first().click();
+  await openRegelUI(page, k);   // v387: via de sheet van de Beleggen-meter of Let op
   await page.locator('#sheet [data-beslisknop]').first().click();
 }
 const wachtKeuze = (page) => page.waitForFunction(
@@ -188,7 +188,7 @@ test.describe('d · de afspraak', () => {
     expect(af[0].regel).toBe('doel');
     expect(af[0].text).toMatch(/per maand extra opzij voor kosten koper huis/i);
 
-    await page.evaluate(() => renderMaand());
+    await gripOp(page, 'kiezen');   // v387: de lopende afspraken staan op Kiezen
     const t = await page.locator('#s-maand').innerText();
     expect(t).toMatch(/je afspraak deze maand/i);
     expect(t).toContain(af[0].text);
@@ -264,6 +264,7 @@ test.describe('e · het overschrijfpad', () => {
 
   test('aanpassen en halverwege afbreken laat de oude afspraak staan', async ({ page }) => {
     await maand(page, metAfspraak());
+    await gripOp(page, 'kiezen');   // v387: de lopende afspraken staan op Kiezen
     expect(await page.locator('#s-maand').innerText()).toContain('oude afspraak');
 
     await page.locator('#s-maand').getByText('Je afspraak deze maand · aanpassen').click();   // v364: niet de link "Budget aanpassen ›"

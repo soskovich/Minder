@@ -16,6 +16,7 @@
 // beleggen (v154).
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { regelTegels } = require('./beslis-sheet');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -344,21 +345,18 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     await boot(page, { set: { goals: [
       { id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: vooruit(12) },
     ], assets: [{ id: 'a1', naam: 'Index', waarde: 1000 }] } });
+    /* v387: de tegel Beleggen is de Beleggen-meter: grijs (var(--mut2)), nooit rood of amber, naast een amber buffer. */
     const uit = await page.evaluate(() => {
       const R = maandRegels(); const B = beleggenKlaar(R); renderMaand();
-      const t = document.querySelector('#s-maand [data-tegel="beleggen"]');
-      const buf = document.querySelector('#s-maand [data-tegel="buffer"]');
+      const t = document.querySelector('#s-maand [data-meter="beleggen"]');
       return { blok: B.blokkade && B.blokkade.key, opTempo: !!R.find((r) => r.key === 'buffer').opTempo,
-        kleur: t && t.dataset.kleur, waarde: t && t.querySelector('.kt-val').innerText,
-        maat: t && t.querySelector('.kt-maat').innerText, html: t ? t.outerHTML : '', buffer: buf && buf.dataset.kleur };
+        kleur: t.querySelector('.gm-v').style.color, html: t.outerHTML };
     });
+    const buf = (await regelTegels(page)).buffer;
     expect(uit.blok).toBe('buffer');
     expect(uit.opTempo).toBe(true);
-    expect(uit.buffer).toBe('amber');
-    expect(uit.kleur).toBe('grijs');
-    expect(uit.waarde).toBe('wacht');
-    expect(uit.maat).toBe('op je buffer');
-    expect(uit.html).toContain('var(--bar)');
+    expect(buf.kleur).toBe('amber');
+    expect(uit.kleur).toBe('var(--mut2)');
     expect(uit.html).not.toContain('var(--red)');
     expect(uit.html).not.toContain('var(--amber)');
     await page.evaluate(() => openBeleggenVoorwaarden());
@@ -370,11 +368,8 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     await boot(page, { spaarPer: 0, set: { goals: [
       { id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: vooruit(12) },
     ], assets: [{ id: 'a1', naam: 'Index', waarde: 1000 }] } });
-    const uit = await page.evaluate(() => {
-      const R = maandRegels(); renderMaand();
-      return { status: R.find((r) => r.key === 'buffer').status,
-        kleur: document.querySelector('#s-maand [data-tegel="buffer"]').dataset.kleur };
-    });
+    const uit = await page.evaluate(() => { const R = maandRegels(); renderMaand(); return { status: R.find((r) => r.key === 'buffer').status }; });
+    uit.kleur = (await regelTegels(page)).buffer.kleur;   // v387
     expect(uit.status).toBe('tekort');
     expect(uit.kleur).toBe('rood');
   });
@@ -403,8 +398,8 @@ test.describe('f - een kaart zonder enig tekort', () => {
     const uit = await page.evaluate(() => { renderMaand(); return {
       statussen: maandRegels().map((r) => r.key + ':' + r.status),
       struct: maandStructureel().length,
-      tegels: [...document.querySelectorAll('#s-maand [data-tegel]')].map((t) => t.dataset.tegel + ':' + t.dataset.kleur),
     }; });
+    uit.tegels = Object.entries(await regelTegels(page)).filter(([k, v]) => v.kleur !== 'groen' && v.kleur !== 'grijs').map(([k, v]) => k + ':' + v.kleur);   // v387
     expect(uit.struct).toBe(0);
     expect(uit.statussen.sort()).toEqual(['buffer:let op', 'dekking:let op']);
     expect(uit.tegels.filter((x) => /:rood$/.test(x))).toEqual([]);

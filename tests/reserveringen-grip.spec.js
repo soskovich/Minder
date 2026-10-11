@@ -41,7 +41,13 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof dekking === 'function');
 }
 const sheetTekst = (page) => page.evaluate(() => document.querySelector('#sheet').innerText.replace(/\s+/g, ' '));
-const tegel = (page) => page.evaluate(() => { go('maand'); const e = document.querySelector('[data-tegel="dekking"]'); return e ? { tekst: e.innerText.replace(/\s+/g, ' ').trim(), kleur: e.dataset.kleur } : null; });
+/* v387: DE TEGEL IS WEG (Grip als regelkring). De ingang naar de reserveringen op Grip is de regel dekking in de sheet van
+   de Beleggen-meter ([data-meterwv="dekking"]); bij een lege lijst zegt die regel "onbekend: er staan geen reserveringen
+   in je lijst" en opent hij de lijst zelf. `tegel` leest die regel. */
+const tegel = (page) => page.evaluate(() => { go('maand'); window._gripMeter = 'beleggen'; renderGripMeter();
+  const e = document.querySelector('#gripMeterSheet [data-meterwv="dekking"]');
+  const r = e ? { tekst: e.innerText.replace(/\s+/g, ' ').trim(), onclick: e.getAttribute('onclick') } : null; closeSheet(); return r; });
+const naarRegel = async (page) => { await page.evaluate(() => go('maand')); await page.click('[data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]'); };
 
 test.describe('1 · de kaart op Plan is weg', () => {
   test('Plan draagt geen reserveringen meer, met en zonder lijst', async ({ page }) => {
@@ -55,18 +61,17 @@ test.describe('1 · de kaart op Plan is weg', () => {
 
   test('de tegel en de dekkingsregel staan op Grip zonder de kaart', async ({ page }) => {
     await boot(page, seed(299, BOETE));
-    expect(await tegel(page)).not.toBeNull();
+    expect(await tegel(page)).not.toBeNull();   // v387: ook zonder doel of bezitting staat de regel in de sheet
     const r = await page.evaluate(() => maandRegels().find((x) => x.key === 'dekking'));
     expect(r).toMatchObject({ status: 'ok', act: 'openReserveringen()' });
   });
 
   test('elke ingang naar de lijst opent de sheet en geen enkele gaat naar Plan', async ({ page }) => {
     await boot(page, seed(37, BOETE));
-    const src = await kaalUit(page, 'maandRegels', 'gripTegels', 'renderVooruit');   // v365: gripTijdlijn is vervallen
+    const src = await kaalUit(page, 'maandRegels', 'renderGripMeter', 'renderVooruit');   // v365: gripTijdlijn is vervallen; v387: de tegels ook
     expect(src).not.toMatch(/resDekkingCard/);
     // de link "Dekking reserveringen aanpassen" in de sheet van de regel opent de lijst
-    await page.evaluate(() => { go('maand'); });
-    await page.click('[data-tegel="dekking"]');
+    await naarRegel(page);
     const link = page.locator('#sheet').getByText(/aanpassen/).first();
     await expect(link).toBeVisible();
     await link.click();
@@ -86,26 +91,20 @@ test.describe('1 · de kaart op Plan is weg', () => {
     expect(await page.evaluate(() => document.querySelector('#sheet').innerHTML)).toMatch(/saveReservering\(/);
   });
 
-  test('een lege lijst heeft een grijze tegel die de sheet opent', async ({ page }) => {
+  test('een lege lijst: de regel in de sheet van de Beleggen-meter zegt het en opent de lijst', async ({ page }) => {
     await boot(page, seed(299, []));
     const t = await tegel(page);
-    expect(t).toMatchObject({ kleur: 'grijs' });
-    expect(t.tekst).toContain('instellen');
-    await page.click('[data-tegel="dekking"]');
+    expect(t.tekst).toContain('geen reserveringen in je lijst');
+    expect(t.onclick).toBe('closeSheet();openReserveringen()');
+    await naarRegel(page);
     await expect(page.locator('#resHead')).toBeVisible();
-    // de terugval "te weinig ingesteld" zegt niet meer dat er geen tegels zijn terwijl er een staat
-    const g = await page.evaluate(() => { go('maand'); return { t: document.querySelector('#s-maand').innerText,
-      n: document.querySelectorAll('#s-maand [data-tegel]').length }; });
-    expect(g.n).toBe(1);                                    // invoer: de instel-tegel is de enige
-    expect(g.t).not.toContain('om tegels te tonen');
-    expect(g.t).toContain('Er is nog te weinig ingesteld.'); // en de terugval staat er nog
   });
+
 
   test('met een lijst staat de grijze tegel er niet naast de echte', async ({ page }) => {
     await boot(page, seed(299, BOETE));
-    const n = await page.evaluate(() => { go('maand'); return document.querySelectorAll('[data-tegel="dekking"]').length; });
-    expect(n).toBe(1);
-    expect((await tegel(page)).tekst).not.toContain('instellen');
+    expect((await tegel(page)).onclick).toBe("closeSheet();openMaandBeslis('dekking')");
+    expect((await tegel(page)).tekst).not.toContain('geen reserveringen');
   });
 
   test('de controlevraag over de lijst staat in de sheet en "klopt nog" schrijft de maand', async ({ page }) => {
@@ -140,7 +139,7 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     const rij = await page.evaluate(() => document.querySelector('[data-resnodig]').innerText.replace(/\s+/g, ' '));
     expect(rij).toBe('Nog nodig per maand niets tot de volgende post');
     const t = await tegel(page);
-    expect(t.tekst).toBe(`Reserveringen €299 gedekt t/m ${mnd(1)}`);
+    expect(t.tekst).toContain(`€299 gedekt t/m ${mnd(1)}`);   // v387: de regel in de sheet van de Beleggen-meter
     expect(t.tekst).not.toContain('nodig');
   });
 
@@ -216,10 +215,10 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
 
 test.describe('3 · layout', () => {
   for (const w of [360, 390]) {
-    test(`de sheet en de tegels lopen niet over op ${w}px`, async ({ page }) => {
+    test(`de sheet en de meters lopen niet over op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 740 });
       await boot(page, seed(299, BOETE));
-      const t = await page.evaluate(() => { go('maand'); const e = document.querySelector('[data-tegel="dekking"]'); return { sw: e.scrollWidth, cw: e.clientWidth }; });
+      const t = await page.evaluate(() => { go('maand'); const e = document.querySelector('#gripMeters'); return { sw: e.scrollWidth, cw: e.clientWidth }; });
       expect(t.sw).toBeLessThanOrEqual(t.cw);
       await page.evaluate(() => openReserveringen());
       const o = await page.evaluate(() => { const s = document.querySelector('#sheet'); return { sw: s.scrollWidth, cw: s.clientWidth }; });

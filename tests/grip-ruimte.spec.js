@@ -28,21 +28,18 @@ test('a. de sheet heet ruimte, noemt bovenaan de ruimere potjes, en de regels te
   expect(r.kinderen.slice(1)).toEqual(['sport', 'verzekering', 'abonnement']);
 });
 
-test('b. de drempel: elke maand hooguit de helft van het variabele bedrag EN minstens EUR 50 eronder', async ({ page }) => {
-  await boot(page);
-  const r = await page.evaluate(() => [
-    potRuimer({ bud: 100, maanden: [50, 0, 0] }),
-    potRuimer({ bud: 100, maanden: [51, 0, 0] }),     // een maand boven de helft
-    potRuimer({ bud: 90, maanden: [0, 0, 41] }),      // onder de helft, maar 49 eronder
-    potRuimer({ bud: 90, maanden: [0, 0, 40] }),
-    potRuimer({ bud: 0, maanden: [0, 0, 0] }),
-    potRuimer({ bud: 100, maanden: [] }),
-    RUIMER_DREMPEL]);
-  expect(r).toEqual([true, false, false, true, false, false, { deel: 0.5, euro: 50 }]);
+/* v387: potRuimer() is opgegaan in teRuimLijst(), de ene definitie van te ruim begroot (keuze van de gebruiker): de
+   duurste van de komende twaalf maanden is hooguit de helft van het potje EN het potje is minstens EUR 50 meer dan het
+   voorstel (RUIMER_DREMPEL). Getoetst op de randen, met het vaste deel van een potje als wat nodig is. */
+test('b. de drempel: hooguit de helft van het potje EN minstens EUR 50 boven het voorstel', async ({ page }) => {
+  for (const [bud, k, ruim] of [[80, 'abonnement', true], [79, 'abonnement', false], [150, 'sport', true], [145, 'sport', false]]) {
+    await boot(page, { set: { budgets: Object.assign({ huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500 }, { [k]: bud }) } });
+    const x = await page.evaluate((k) => teRuimLijst().find((y) => y.k === k), k);
+    expect([bud, k, x.ruim]).toEqual([bud, k, ruim]);
+  }
+  expect(await page.evaluate(() => RUIMER_DREMPEL)).toEqual({ deel: 0.5, euro: 50 });
 });
 
-/* v358: bijstellen opent de sheet "Te ruime potjes bijstellen", met precies de potjes van de hint, en nooit de
-   budgeteditor (grip-ruim-bijstel.spec.js draagt de sheet zelf). */
 test('c. openen schrijft niets; bijstellen opent de sheet met de potjes van de hint', async ({ page }) => {
   await boot(page); await grip(page);
   const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
@@ -92,10 +89,9 @@ test('g. een potje dat deze maand los staat, staat niet in de ruimer-regel, ook 
   await grip(page);
   const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V), x = V.potjes.find((p) => p.k === 'shopping');
     openGripRest(); const e = document.querySelector('#gripRest [data-ruimer]');
-    return { los: Br.los.map((p) => p.k), maanden: x.maanden, ruimer: potRuimer(x), regel: e ? e.dataset.ruimer : '' }; });
-  // invoermeting: Online shopping staat los en zou op zijn maanden alleen ruimer heten
+    return { los: Br.los.map((p) => p.k), maanden: x.maanden, regel: e ? e.dataset.ruimer : '' }; });
+  // invoermeting: Online shopping staat los en gaf in de drie maanden ervoor niets uit
   expect(r.los).toContain('shopping');
   expect(r.maanden).toEqual([0, 0, 0]);
-  expect(r.ruimer).toBe(true);
   expect(r.regel.split(',')).not.toContain('shopping');
 });

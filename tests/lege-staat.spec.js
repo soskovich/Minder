@@ -116,7 +116,7 @@ test.describe('b · regel patroon bestaat niet meer', () => {
        zegt dan niet meer dat er geen tegels zijn. */
     const tegels = await page.evaluate(() => [...document.querySelectorAll('#s-maand [data-tegel]')].map((e) => e.innerText.replace(/\s+/g, ' ')));
     if (tegels.length) { expect(tegels).toEqual([expect.stringContaining('instellen')]); expect(t).toContain('Er is nog te weinig ingesteld.'); }
-    else expect(t).toContain('Er is nog te weinig ingesteld om tegels te tonen.');
+    else expect(t).toContain('Er is nog te weinig ingesteld.');   // v387: er zijn geen tegels meer
     expect(await page.evaluate(() => $('#s-maand').innerHTML)).toContain("go('set')");
     expect(t).not.toMatch(/regels staan goed/);
   });

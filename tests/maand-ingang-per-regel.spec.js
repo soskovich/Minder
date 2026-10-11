@@ -137,7 +137,8 @@ test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
   test('en ze staan alle drie achter hun eigen regel', async ({ page }) => {
     await boot(page);
     const keys = await beslisIngangen(page);
-    expect(keys).toEqual(['dekking', 'buffer', 'doel']);
+    // v387: de volgorde is die van de sheet van de Beleggen-meter (buffer, dekking, doel); de tegels zijn weg
+    expect(keys).toEqual(['buffer', 'dekking', 'doel']);
   });
 });
 
@@ -208,12 +209,12 @@ test.describe('d - de oude ingang onder de kaart is weg, de andere takken niet',
      afspraken onder 'Deze maand' geworden (`[data-afspraak="coach"]`). maandCoachIngang() zwijgt
      dan, want een afspraak per maand. De eigenschap blijft: de afspraak staat er, is aan te passen,
      en opent het gesprek zonder sleutel. */
-  test('de afspraak-rij blijft, onder Deze maand', async ({ page }) => {
+  test('de afspraak-rij blijft, op Kiezen (v387)', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => {
       SET.coachLog = (SET.coachLog || []).concat([{ type: 'afspraak', ts: Date.now(), text: 'Ik zet 100 extra opzij' }]);
-      save(); renderMaand();
-      const rij = document.querySelector('#gripDezeMaand [data-afspraak="coach"]');
+      save(); go('maand'); gripKiesTab('kiezen');
+      const rij = document.querySelector('#s-maand [data-kiezen] [data-afspraak="coach"]');
       return { gevonden: !!coachThisMonthAfspraak(), ingang: maandCoachIngang(maandMetAccept(maandRegels())),
         tekst: rij ? rij.innerText : '', onclick: rij ? rij.getAttribute('onclick') : '' };
     });

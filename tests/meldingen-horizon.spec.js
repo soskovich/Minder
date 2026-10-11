@@ -147,7 +147,7 @@ test.describe('c · structureel op het maandscherm', () => {
     /* v349: de ingang staat in de pop-up van de maandafsluiting, en leest daar dezelfde lijst als RO:
        de regels met acceptatie en afspraak, plus de structurele signalen. */
     const src = await kaalUit(page, 'renderMaand');
-    expect(await kaalUit(page, 'dezeMaandKaart')).not.toContain('maandCoachIngang(');
+    expect(await kaalUit(page, 'gripZien', 'gripAfsprakenHtml')).not.toContain('maandCoachIngang(');   // v387
     expect(await kaalUit(page, 'renderAfsluitSheet')).toContain('maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())))');
     expect(src).not.toMatch(/maandCoachIngang\(R\)/);
   });

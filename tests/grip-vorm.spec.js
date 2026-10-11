@@ -24,6 +24,7 @@
  * assertie niets.
  */
 const { test, expect } = require('@playwright/test');
+const { regelTegels } = require('./beslis-sheet');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 const fs = require('fs');
@@ -248,10 +249,10 @@ test('e: de tegels dragen hun maatstaf uit hun eigen bron', async ({ page }) => 
   await boot(page);
   const r = await page.evaluate(() => {
     const R = maandRegels(); const by = {}; R.forEach(x => by[x.key] = x);
-    const T = Object.fromEntries([...document.querySelectorAll('#gripTegels [data-tegel]')].map(e => [e.dataset.tegel, e.querySelector('.kt-maat').innerText]));
     return { subs: { buffer: by.buffer.sub, dekking: by.dekking.sub }, eenheden: { buffer: by.buffer.eenheid, dekking: by.dekking.eenheid, doel: by.doel.eenheid },
-      waarden: { dekking: by.dekking.waarde }, gedektTot: dekking(12).gedektTot, benodigdeStand: by.dekking.benodigdeStand, T, sg: document.getElementById('s-maand').innerText };
+      waarden: { dekking: by.dekking.waarde }, gedektTot: dekking(12).gedektTot, benodigdeStand: by.dekking.benodigdeStand, sg: document.getElementById('s-maand').innerText };
   });
+  r.T = Object.fromEntries(Object.entries(await regelTegels(page)).map(([k, v]) => [k, v.maat]));   // v387: de maat staat in de sheet van de Beleggen-meter
   expect(r.subs.buffer).toBe(`je norm: ${NORM} maanden`);
   expect(r.T.buffer).toBe(`je norm: ${NORM} maanden`);
   expect(r.T.buffer).not.toContain(String(RICHT));
@@ -298,10 +299,10 @@ test('f: de afspraak staat onder Deze maand en niet op een tegel', async ({ page
   await boot(page, { set: { coachLog: [{ type: 'afspraak', regel: 'buffer', ts: NU.getTime(),
     text: 'Ik verhoog het bedrag dat ik per maand opzij zet' }] } });
   const r = await page.evaluate(() => {
-    const t = document.getElementById('s-maand').innerText;
+    gripKiesTab('kiezen'); const t = document.getElementById('s-maand').innerText;   // v387: de afspraken staan op Kiezen
     const R = maandMetAfspraak(maandRegels());
     return { n: (t.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length,
-      deze: document.getElementById('gripDezeMaand').innerText, tegels: document.getElementById('gripTegels').innerText,
+      deze: (gripKiesTab('kiezen'), document.getElementById('gripInhoud').innerText), tegels: (window._gripMeter = 'beleggen', renderGripMeter(), document.getElementById('gripMeterSheet').innerText),
       vlag: !!R.find(x => x.key === 'buffer').afspraak };
   });
   expect(r.n).toBe(1);
@@ -313,20 +314,21 @@ test('f: de afspraak staat onder Deze maand en niet op een tegel', async ({ page
 /* ===== g) beleggen: neutraal ===== */
 /* v340: de kaart 'Voorwaarden voor beleggen' is de tegel Beleggen. Niet gehaald is grijs (v314: geen
    alarm), gehaald groen. */
+/* v387: de tegel Beleggen is de Beleggen-meter: gehaald tegen te beoordelen, grijs zolang niet alles gehaald is. */
 test('g: niet gehaald is grijs en geen alarm', async ({ page }) => {
   await boot(page, { set: { beleggenDrempel: 6 } });
-  const r = await page.evaluate(() => { const e = document.querySelector('[data-tegel="beleggen"]');
-    return { kleur: e.dataset.kleur, tekst: e.innerText.replace(/\s+/g, ' '), blok: beleggenKlaar(maandRegels()).blokkade.key }; });
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="beleggen"] .gm-v');
+    return { kleur: e.style.color, tekst: e.innerText, blok: beleggenKlaar(maandRegels()).blokkade.key }; });
   expect(r.blok).toBe('buffer');
-  expect(r.kleur).toBe('grijs');
-  expect(r.tekst).toBe('Beleggen wacht op je buffer');
+  expect(r.kleur).toBe('var(--mut2)');
+  expect(r.tekst).toBe('2/3');
 });
 
 test('g: gehaald blijft groen', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => { const e = document.querySelector('[data-tegel="beleggen"]'); return { kleur: e.dataset.kleur, tekst: e.innerText.replace(/\s+/g, ' ') }; });
-  expect(r.kleur).toBe('groen');
-  expect(r.tekst).toContain('alle drie gehaald');
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="beleggen"] .gm-v'); return { kleur: e.style.color, tekst: e.innerText }; });
+  expect(r.kleur).toBe('var(--green)');
+  expect(r.tekst).toBe('3/3');
 });
 
 

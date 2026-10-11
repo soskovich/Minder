@@ -4,6 +4,9 @@
    waarom (data-voetreden). De balk verandert de hoogte van de sheet niet. Gemeten op 360x640, leeg en ingevuld. */
 const { test, expect } = require('@playwright/test');
 const rb = require('./ruim-bijstel-stand');
+/* v387: Verzekeringen op EUR 324 is sinds de regelkring niet meer te ruim (december vraagt DELA erbij), dus de sheet
+   draait hier op Verzekeringen EUR 700, zoals grip-ruim-bijstel. */
+const rbBoot700 = (page, o) => rb.boot(page, Object.assign({}, o || {}, { set: { budgets: Object.assign({}, rb.BUDGETS, { verzekering: 700 }) } }));
 const dm = require('./deze-maand-stand.js');
 const { bootStand } = require('./standkaart-sluit.fixture');
 const { pinDag, vasteDatum } = require('./vaste-dag');
@@ -92,19 +95,19 @@ test('a. Splitsen: de knop staat onderaan, leeg en ingevuld, en de reden volgt d
 });
 
 test('b. Te ruime potjes: "Kies eerst waar de €X heen gaat" staat in de balk', async ({ page }) => {
-  await start(page, rb.boot);
+  await start(page, rbBoot700);
   await page.evaluate(() => { go('maand'); openGripRest(); });
   await page.evaluate(() => document.querySelector('[data-ruimer]').click());
   await controleer(page, 'Te ruime potjes', 'leeg', /^Kies eerst wat je met Verzekeringen doet$/);
   await page.evaluate(() => ruimZet('keuze', 'verzekering', 'res'));
   await page.evaluate(() => ruimZet('vanaf', '2026-11'));
   const m = await meet(page);
-  expect(m.reden).toBe('Kies eerst waar de €165 heen gaat');
+  expect(m.reden).toBe('Kies eerst waar de €530 heen gaat');
   await page.evaluate(() => { const e = document.querySelector('[data-ruimbest="pot:vices"] input'); e.value = '100'; e.dispatchEvent(new Event('input')); });
-  expect((await meet(page)).reden).toBe('Kies eerst waar de €65 heen gaat');   // bij het typen bijgewerkt
-  await page.evaluate(() => { const e = document.querySelector('[data-ruimbest="sparen"] input'); e.value = '70'; e.dispatchEvent(new Event('input')); });
+  expect((await meet(page)).reden).toBe('Kies eerst waar de €430 heen gaat');   // bij het typen bijgewerkt
+  await page.evaluate(() => { const e = document.querySelector('[data-ruimbest="sparen"] input'); e.value = '435'; e.dispatchEvent(new Event('input')); });
   expect((await meet(page)).reden).toBe('Je verdeelt €5 meer dan er vrijkomt');
-  await page.evaluate(() => { const e = document.querySelector('[data-ruimbest="sparen"] input'); e.value = '65'; e.dispatchEvent(new Event('input')); });
+  await page.evaluate(() => { const e = document.querySelector('[data-ruimbest="sparen"] input'); e.value = '430'; e.dispatchEvent(new Event('input')); });
   const b = await controleer(page, 'Te ruime potjes', 'ingevuld');
   expect(b.uit).toBe(false);
 });

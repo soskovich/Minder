@@ -388,6 +388,18 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
    een naam die je zelf invoerde stil werd afgekapt (v281/v284), en dat is nergens anders meer zo. */
 /* v340: de KPI-tegels op Grip en in de afsluit-pop-up, en de tijdlijn van drie maanden. De kleur zit in
    de linkerrand en is de bestaande status (rood, amber, groen, grijs); het getal houdt de gewone kleur. */
+.gm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.gm-dial{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center;cursor:pointer;min-width:0}
+.gm-l{font-size:var(--fs-xs);font-weight:700;color:var(--lab)}
+.gm-ring{width:52px;height:52px;border-radius:50%;margin:5px auto 3px;display:grid;place-items:center;position:relative}
+.gm-ring::before{content:'';position:absolute;inset:6px;border-radius:50%;background:var(--card)}
+.gm-ring span{position:relative;font-size:12px;font-weight:800}
+.gm-v{font-weight:800;font-size:var(--fs-md);line-height:1.2}
+.gm-s{font-size:var(--fs-xs);color:var(--mut2);line-height:1.25;overflow-wrap:anywhere}
+.gm-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:var(--card2);border-radius:12px;padding:3px;margin-bottom:8px}
+.gm-tabs span{text-align:center;font-size:var(--fs-sm);font-weight:600;padding:7px 2px;border-radius:9px;cursor:pointer;color:var(--mut);white-space:nowrap}
+.gm-tabs span.on{background:var(--card);color:var(--txt);font-weight:800}
+.gm-stage{margin-bottom:8px}
 .kt-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:var(--s2)}
 .kt{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--bar);border-radius:12px;padding:10px 11px;cursor:pointer;min-width:0}
 .kt-lab{font-size:var(--fs-xs);color:var(--lab);overflow-wrap:anywhere}
@@ -8134,42 +8146,6 @@ function openAfgesloten(M){
    rustige link naar het logboek. De maandafsluiting is een pop-up en geen vaste kaart.
    EEN TEGEL REKENT NIETS ZELF: hij leest de rij uit maandRegels() (via dezelfde lagen als de sheet:
    acceptatie en afspraak) en zijn kleur is de bestaande status. Een tik opent de bestaande sheet. */
-const GRIP_KLEUR={tekort:'rood', 'let op':'amber', ok:'groen'};
-const GRIP_RANG={rood:0, amber:1, groen:2, grijs:3};
-const GRIP_RAND={rood:'var(--red)', amber:'var(--amber)', groen:'var(--green)', grijs:'var(--bar)'};
-function gripTegels(RO, R){
-  const T=[], volg=k=>{ const i=MAAND_VOLGORDE.indexOf(k); return i<0?9:i; };
-  for(const r of (RO||[])){
-    if(!r || r.structureel || !['dekking','buffer','doel'].includes(r.key)) continue;
-    if(T.some(x=>x.key===r.key)) continue;
-    const kleur=GRIP_KLEUR[r.status]||'grijs';
-    let label, waarde, maat;
-    if(r.key==='dekking'){ label='Reserveringen'; waarde=r.waarde; maat=r.tegelMaat||r.eenheid||''; }
-    else if(r.key==='buffer'){ label='Buffer'; waarde=r.maanden!=null?`${r.waarde} mnd`:r.waarde; maat=r.sub||'nog geen norm gekozen'; }
-    else { label=r.naam; waarde=r.waarde; maat=r.eenheid||''; }
-    T.push({key:r.key, label, waarde, maat, kleur, act:`openMaandBeslis('${esc(r.key)}')`, v:volg(r.key)});
-  }
-  /* v344: EEN LEGE LIJST HEEFT EEN TEGEL OM HEM IN TE STELLEN. Zonder verplichtingen is er geen
-     dekkingsregel en dus geen tegel, en sinds de kaart op Plan weg is was dat de enige plek met
-     "instellen". Grijs en zonder oordeel: er is niets gemeten (v59/v73). `instel` houdt hem buiten de
-     poort van de terugval in renderMaand(), want hij zegt niets over wat er is ingesteld. */
-  try{ if(!T.some(x=>x.key==='dekking') && !resLijst().length)
-    T.push({key:'dekking', label:'Reserveringen', waarde:'instellen', maat:'kosten die niet elke maand vallen', kleur:'grijs', act:'openReserveringen()', v:volg('dekking'), instel:true}); }catch(_){}
-  /* Beleggen is een samenstelling van de drie: groen als alle drie gehaald zijn, anders grijs met
-     waar het op wacht. Niet gehaald is geen fout (v314), dus nooit rood of amber. Hij leest de
-     ONBEWERKTE R, zoals maandBeleggenRegel(): een geaccepteerd tekort is nog steeds een tekort. */
-  try{ if(beleggenZichtbaar()){ const B=beleggenKlaar(R);
-    if(B){ const naam=k=>k==='buffer'?'je buffer':k==='dekking'?'je reserveringen':((R||[]).find(x=>x.key===k)||{}).naam||'je doel';
-      const wacht=B.voorwaarden.find(v=>!v.gehaald);
-      const onb=!!(wacht && wacht.ontbreekt);
-      T.push({key:'beleggen', label:'Beleggen', waarde:B.klaar?'klaar':onb?'onbekend':'wacht', maat:B.klaar?'alle drie gehaald':onb?`${naam(wacht.key)} nog niet te beoordelen`:`op ${naam(wacht?wacht.key:'')}`,
-        kleur:B.klaar?'groen':'grijs', act:'openBeleggenVoorwaarden()', v:8}); } } }catch(_){}
-  return T.sort((a,b)=>GRIP_RANG[a.kleur]-GRIP_RANG[b.kleur] || a.v-b.v);
-}
-function gripTegelHtml(t){
-  return `<div class="kt" data-tegel="${esc(t.key)}" data-kleur="${t.kleur}" style="border-left-color:${GRIP_RAND[t.kleur]}" onclick="${t.act}">
-    <div class="kt-lab">${esc(t.label)}</div><div class="kt-val">${esc(t.waarde)}</div><div class="kt-maat">${esc(t.maat)}</div></div>`;
-}
 /* ===== LET OP: EEN REGEL PER SIGNAAL ZONDER EIGEN TEGEL =====
    Alles wat vroeger als eigen kaart op Grip stond en niet bij een tegel hoort: structurele signalen
    (stilstaand geld, maanden boven je grens), een potje boven zijn grens, beleggen terwijl de
@@ -8533,38 +8509,6 @@ function afsprakenLaterRegel(D){
   return `<div class="row" data-afsprakenlater="${D.n}" style="gap:10px;align-items:center;padding:7px 0 2px;border-top:1px solid var(--line);cursor:pointer" onclick="go('logboek')">
     <span class="small" style="flex:1;min-width:0">${D.n} ${D.n===1?'afspraak':'afspraken'} voor ${esc(per)}</span><span class="small" style="color:var(--teal);font-weight:700;white-space:nowrap">Logboek \u203a</span></div>`;
 }
-function dezeMaandKaart(){
-  const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
-  /* De lopende afspraken staan hier, onder deze maand: wat je afsprak gaat over wat je nu doet.
-     Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
-  /* v367: ALLEEN WAT DEZE MAAND GELDT STAAT HIER ALS AFVINKREGEL (gevraagd door de gebruiker). Een afspraak die pas in
-     een latere maand ingaat en een potje dat later hoger gaat (v366) tellen samen in EEN regel "N afspraken voor
-     nov–dec › Logboek", naar het schema per potje in het logboek; afvinken van een maand die nog moet komen betekent
-     niets. Op de 1e van die maand staan ze een keer in de pop-up (maandBeginData()). */
-  let af=''; try{ const D=afsprakenDezeMaand(); af=D.nu.map(a=>afspraakRij(a)).join('')+afsprakenLaterRegel(D); }catch(_){}
-  try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
-  /* v364: DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR (keuze a van de gebruiker, het open punt van
-     v352/v359). "Budget aanpassen ›" staat rechts in de kop van Deze maand en opent dezelfde editor (v61) op de
-     lopende maand, want Grip leest altijd thisYM() en heeft geen maandkiezer. Hij staat buiten de hoofdletterkop
-     en stopt de tik, zodat de kop zelf zijn eigen sheet blijft openen. Plan krijgt geen ingang. */
-  const kop=`<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><div class="hlabel" data-dmkop style="margin:0;flex:1;min-width:0${V&&!V.onbekend?';cursor:pointer':''}"${V&&!V.onbekend?' onclick="openGripVooruit()"':''}>Deze maand · ${esc(ymFull(m))}</div><span data-budgetlink style="font-size:var(--fs-sm);font-weight:700;color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openBudgetEditor(thisYM())">Budget aanpassen ›</span></div>`;
-  let boven;
-  if(!V || V.onbekend){
-    const T=totals(m); const bud=Math.round(T.budget||0);
-    boven=`<div data-vooruit="onbekend"><div style="font-weight:700;font-size:var(--fs-md)">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
-      <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
-  } else {
-    /* v357: DE KOP IS DE UITKOMST TEGEN HET BUDGET (gevraagd door de gebruiker), want de bridge loopt weer van
-       het hele budget naar die uitkomst. Het stuurgetal van v354 (variabel tegen je potjes) staat in de sheet. */
-    let Br=null; try{ Br=dezeMaandBrug(V); }catch(_){ Br=null; }
-    if(Br){ Br.tik='gripBrugTik'; Br.gap=2; }
-    const vs=gripVerschil(V.projectie, V.budget);
-    boven=`<div data-vooruit="${V.projectie}" style="cursor:pointer" onclick="openGripVooruit()">
-      <div class="row" data-dmregel data-uitkomst="${V.projectie}" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0"><span style="font-weight:800;font-size:var(--fs-lg)">${euro0(V.projectie)}</span><span class="small muted"> verwacht${vs?` · ${vs}`:''}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>
-      ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div><div class="small" data-dmzin style="line-height:1.45;margin-top:6px;color:var(--mut)">${esc(dezeMaandZin(Br))}</div>`:''}</div>`;
-  }
-  return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}</div>`;
-}
 /* De reden bij de vaste last die het meest afwijkt; sinds v357 in de zin onder de bridge (v355: een potje zonder
    betaling telt met zijn hele bedrag en wordt eerst genoemd). */
 function gripVastAfwijking(x){
@@ -8750,17 +8694,15 @@ function renderGripPotje(){
    van de laatste VOORUIT_MAANDEN afgeronde maanden hooguit de helft van het variabele bedrag was EN minstens
    EUR 50 eronder bleef. De twee waarden staan hier en nergens anders. */
 const RUIMER_DREMPEL={deel:0.5, euro:50};
-function potRuimer(x){
-  if(!x || !(x.bud>0) || !Array.isArray(x.maanden) || !x.maanden.length) return false;
-  return x.maanden.every(u=>u<=x.bud*RUIMER_DREMPEL.deel && x.bud-u>=RUIMER_DREMPEL.euro);
-}
 /* v358: de potjes van de hint, op EEN plek, met twee lezers: de hint in renderGripRest() en de sheet
    "Te ruime potjes bijstellen". Een tweede uitdrukking zou een potje in de sheet kunnen zetten dat de hint niet
    noemt (v104). */
+/* v387: DE POTJES KOMEN UIT teRuim(), DE ENE DEFINITIE VAN TE RUIM BEGROOT (keuze van de gebruiker): het variabele
+   deel van een potje dat daar te ruim heet. potRuimer() bleef de drempel van v356 en is daarin opgegaan. */
 function gripRuimLijst(V, Br){
-  if(!V || V.onbekend || !Br || !Br.rest) return [];
-  const los=new Set(Br.los.map(x=>x.k));
-  return V.potjes.filter(x=>!los.has(x.k)).filter(potRuimer)
+  if(!V || V.onbekend || !Br) return [];
+  const los=new Set((Br.los||[]).map(x=>x.k)), tr=new Set(teRuim(V).map(x=>x.k));
+  return V.potjes.filter(x=>!los.has(x.k) && tr.has(x.k) && x.bud>0 && x.maanden.length)
     .sort((a,b)=>(b.bud-Math.max(...b.maanden))-(a.bud-Math.max(...a.maanden)) || (a.naam<b.naam?-1:1));
 }
 /* v358: "bijstellen ›" opent de sheet "Te ruime potjes bijstellen" en nooit de budgeteditor: je kwam voor
@@ -9396,34 +9338,359 @@ function renderLogMaand(){
     <div class="small muted" style="margin-top:2px">${euro0(Math.round(S.spend))} uitgegeven${S.budget>0?` tegen ${euro0(Math.round(S.budget))} · ${d>0?euro0(d)+' boven':euro0(-d)+' onder'} je budget`:''}${S.bron==='bewaard'?'':' · tegen je huidige potjes, de potjebedragen van toen zijn niet bewaard'}</div>
     ${brug}${ant}${rec?afgeslotenInhoud(m, rec):`<div class="small muted" style="margin-top:14px">Deze maand is van voor de maandafsluiting, dus er zijn geen afspraken bij bewaard.</div>`}</div>`;
 }
+/* ===== v387: GRIP ALS REGELKRING (deel 1: structuur, meters en Zien) =====
+   Grip heeft een vaste bovenkant: drie meters (Budget, Doelen, Beleggen) en vier tabs (Zien, Begrijpen, Kiezen,
+   Terugblik). Grip opent ALTIJD op Zien (go('maand') zet de tab terug). Onderaan staat de vaste knop "Ik wil iets
+   kopen" (de bestaande aankoopcheck, openBuy()).
+
+   TE RUIM BEGROOT IS EEN INSTELLING EN GEEN GEDRAG (keuze van de gebruiker bij v387). Een potje is te ruim als wat het
+   in de duurste van de komende twaalf maanden nodig heeft hooguit de helft van het potje is EN het potje minstens
+   EUR 50 meer is (RUIMER_DREMPEL, dezelfde lat als de hint van v356). "Nodig" per maand is het variabele deel in de
+   duurste van je laatste afgeronde maanden (x.maanden van maandVooruit(), dus zonder herkende incasso's) plus de
+   vaste posten die het schema in die maand verwacht: een maandpost een keer, een 4-wekelijkse post per termijn
+   (v384), een kwartaal- of jaarpost in zijn eigen maand (de ondergrens van v350/v358). Deze maand is het vaste deel
+   wat maandSplitsing() verwacht. Alleen het deel boven die verwachting telt als te ruim. Een vast potje zonder
+   betaling (geen, v355) is nooit te ruim: geen betaling is geen besparing.
+   Het voorstel is die duurste maand, bij een variabel deel op tien euro naar boven (RUIM_MARGE), en nooit onder wat
+   er deze maand al uit is. Te ruim is het potje min het voorstel. Een uitgesloten post telt mee zoals in
+   potjeMaandVloer(): hij komt nog (v328). */
+function teRuimTermijnen(s, ym){
+  const nd=s.nextDate instanceof Date?s.nextDate:(s.nextDate?new Date(s.nextDate):null);
+  if(!nd || isNaN(nd)) return 0;
+  const ymIdx=x=>{ const [y,m]=String(x).split('-').map(Number); return y*12+m-1; };
+  const idx=ymIdx(ym);
+  if(s.cadans==='4w' && +s.afstand>0){ let n=0; const d=new Date(nd);
+    for(let g=0; g<40; g++){ const i=d.getFullYear()*12+d.getMonth(); if(i>idx) break; if(i===idx) n++; d.setDate(d.getDate()+(+s.afstand)); }
+    return n; }
+  const iv=+s.intervalM||1, n0=nd.getFullYear()*12+nd.getMonth();
+  if(idx<n0) return 0;
+  return (idx-n0)%iv===0?1:0;
+}
+function teRuimLijst(V){
+  if(V===undefined){ try{ V=maandVooruit(); }catch(_){ V=null; } }
+  if(!V || V.onbekend) return [];
+  const m=V.m, B=SET.budgets||{};
+  let sched=[]; try{ sched=recurringSchedule().filter(s=>s.type==='fixed'); }catch(_){}
+  let cs={}; try{ cs=catSpendMap(m)||{}; }catch(_){}
+  const uit=[];
+  for(const k of Object.keys(B)){
+    const bud=Math.round(+B[k]||0); if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
+    const va=V.potjes.find(x=>x.k===k)||null, vs=(V.vastePotjes||[]).find(x=>x.k===k)||null;
+    const varMax=va&&va.maanden.length?Math.max(...va.maanden):0, varNu=va?Math.max(varMax, Math.round(va.eindR||0)):0;
+    const posten=sched.filter(s=>s.cat===k);
+    const rij={k, naam:CATS[k].name, bud, vast:vs?{bud:vs.bud, eind:Math.round(vs.eind), geen:!!vs.geen}:null,
+      variabel:va?{bud:va.bud, maanden:va.maanden.slice()}:null, nodig:0, maand:m, reden:'', voorstel:bud, teRuim:0, ruim:false};
+    if(vs && vs.geen && !va){ uit.push(rij); continue; }
+    let best={v:-1, ym:m, reden:''};
+    for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i); let v, reden='';
+      if(i===0) v=(vs?Math.round(vs.eind):0)+varNu;
+      else { v=varMax;
+        for(const s of posten){ const n=teRuimTermijnen(s, ym); if(!n) continue; v+=n*(+s.amount||0);
+          if(n>1) reden=`${n===2?'twee':n} termijnen ${titleCase(cleanMerch(s.name)||s.name||'')} in ${ymFull(ym)}`;
+          else if((+s.intervalM||1)>1 && !reden) reden=`${titleCase(cleanMerch(s.name)||s.name||'')} in ${ymFull(ym)}`; } }
+      if(v>best.v) best={v, ym, reden}; }
+    const nodig=Math.max(Math.round(best.v),0);
+    const al=Math.round(Math.max(+cs[k]||0,0));
+    const voorstel=Math.max(va?ruimAfrond(nodig):nodig, al);
+    rij.nodig=nodig; rij.maand=best.ym; rij.reden=best.ym!==m?best.reden:''; rij.voorstel=voorstel; rij.al=al;
+    rij.ruim=nodig<=bud*RUIMER_DREMPEL.deel && bud-voorstel>=RUIMER_DREMPEL.euro && !(vs&&vs.geen);
+    rij.teRuim=rij.ruim?bud-voorstel:0;
+    uit.push(rij);
+  }
+  return uit.sort((a,b)=>b.teRuim-a.teRuim || (a.naam<b.naam?-1:1));
+}
+function teRuim(V){ return teRuimLijst(V).filter(x=>x.ruim); }
+/* ===== DE DRIE METERS: EEN BRON PER GETAL ===== */
+/* BUDGET: verwacht eind maand (maandVooruit().projectie, dezelfde uitkomst als de bridge) gedeeld door het EERLIJKE
+   budget, het maandbudget min wat te ruim begroot is. Te ruim telt niet als ruimte. */
+function gripMeterBudget(V){
+  if(V===undefined){ try{ V=maandVooruit(); }catch(_){ V=null; } }
+  if(!V || V.onbekend || !(V.budget>0)) return {onbekend:true};
+  const TR=teRuim(V), ruim=TR.reduce((a,x)=>a+x.teRuim,0), eerlijk=V.budget-ruim;
+  if(!(eerlijk>0)) return {onbekend:true};
+  const verschil=V.projectie-eerlijk;
+  return {verwacht:V.projectie, budget:V.budget, ruim, TR, eerlijk, verschil, pct:Math.round(V.projectie/eerlijk*100)};
+}
+/* DOELEN: Plan "deze maand opzij" (planKpiData().opzij, inleg plus terugzetten) min alles wat er deze maand van je
+   spaarrekening ging (spaarStortStand().uit: elke afschrijving, ook uit vrij spaargeld, zonder een overboeking tussen
+   twee spaarrekeningen). Een onttrekking laat de meter dalen; een keuze om terug te zetten verhoogt "opzij". */
+function gripMeterDoelen(){
+  let opzij=0, S=null; try{ opzij=planKpiData().opzij||0; }catch(_){}
+  try{ S=spaarStortStand(thisYM()); }catch(_){}
+  if(!(opzij>0)) return {onbekend:true, opzij:0, uit:S?S.uit:0};
+  const uit=S?S.uitExact:0, netto=Math.round(opzij-uit);
+  return {opzij, uit:Math.round(uit), netto, pct:Math.max(Math.round(netto/opzij*100),0), tx:S?S.uitTx:[]};
+}
+/* BELEGGEN: het aantal gehaalde voorwaarden uit beleggenKlaar(), met als noemer de voorwaarden die te beoordelen zijn
+   (keuze van de gebruiker): een voorwaarde zonder meting staat er als "N onbekend" bij, met welke en waarom. */
+const BELEG_ONBEKEND_REDEN={buffer:'je hebt nog geen ondergrens voor je buffer gekozen, of het saldo van je spaarrekening is onbekend',
+  dekking:'er staan geen reserveringen in je lijst', doel:'er is geen doel met een streefdatum'};
+function gripMeterBeleggen(){
+  let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){}
+  /* Zonder doel en zonder bezitting is er niets te beleggen (v188): de meter zegt niets, maar zijn sheet draagt de regels
+     wel, want die sheet is op Grip de ingang naar je reserveringen, je buffer en je doel (de tegels van v340 zijn weg). */
+  if(!beleggenZichtbaar()) return {onbekend:true, leeg:true, B};
+  if(!B) return {onbekend:true};
+  const te=B.voorwaarden.filter(v=>!v.ontbreekt), onb=B.voorwaarden.filter(v=>v.ontbreekt);
+  const gehaald=te.filter(v=>v.gehaald).length;
+  let inleg=null;
+  try{ for(const a of (SET.assets||[])){ if(!a.grow) continue; const b=bezitInleg(a.id, thisYM());
+    const k=(SET.belegKeuze||{})[a.id];
+    if(b>0 || (+a.per||0)>0){ inleg={naam:a.naam||'Bezitting', bedrag:b, per:+a.per||0, stil:!!(k&&k.maand===thisYM()&&k.keuze==='pauze')}; break; } } }catch(_){}
+  return {gehaald, n:te.length, onb, B, inleg};
+}
+function gripMeterKleur(k, M){
+  if(M.onbekend) return 'var(--mut2)';
+  if(k==='budget') return M.verschil>0?'var(--red)':'var(--green)';
+  if(k==='doelen') return M.pct>=100?'var(--green)':'var(--amber)';
+  return (M.n>0 && M.gehaald===M.n && !M.onb.length)?'var(--green)':'var(--mut2)';   // niet gehaald is geen fout (v314)
+}
+function gripMeters(){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const MB=gripMeterBudget(V), MD=gripMeterDoelen(), ML=gripMeterBeleggen();
+  const ring=(pct,kl,txt)=>`<div class="gm-ring" style="background:conic-gradient(${kl} 0 ${Math.min(Math.max(pct,0),100)}%,var(--bar) ${Math.min(Math.max(pct,0),100)}% 100%)"><span style="color:${kl}">${txt}</span></div>`;
+  const dial=(k,l,M,pct,txt,v,sub)=>{ const kl=gripMeterKleur(k,M);
+    return `<div class="gm-dial" data-meter="${k}" role="button" onclick="openGripMeter('${k}')"><div class="gm-l">${l}</div>${ring(pct,kl,txt)}<div class="gm-v" style="color:${kl}">${v}</div><div class="gm-s">${sub}</div></div>`; };
+  const b=MB.onbekend?dial('budget','Budget',MB,0,'?','nog niet','nog niet te rekenen')
+    :dial('budget','Budget',MB,MB.pct,MB.pct+'%',euro0(Math.abs(MB.verschil)),MB.verschil>0?'boven budget':MB.verschil<0?'onder budget':'precies je budget');
+  const d=MD.onbekend?dial('doelen','Doelen',MD,0,'?','geen inleg','Plan zet niets opzij')
+    :dial('doelen','Doelen',MD,MD.pct,MD.pct+'%',MD.pct+'%',`${euro0(MD.netto)} van ${euro0(MD.opzij)}`);
+  const inl=ML.inleg?(ML.inleg.stil?`${esc(ML.inleg.naam)} zelf stilgezet`:ML.inleg.bedrag>0?`${esc(ML.inleg.naam)} ${euro0(ML.inleg.bedrag)} ingelegd`:`${esc(ML.inleg.naam)} ${euro0(ML.inleg.per)}/mnd`):'';
+  const lsub=ML.onbekend?'':[ML.onb.length?`${ML.onb.length} onbekend`:'', inl].filter(Boolean).join(' · ')||'voorwaarden';
+  const l=ML.onbekend||!ML.n?dial('beleggen','Beleggen',{onbekend:true},0,'?','nog niet',ML.leeg?'geen doel of bezitting':(lsub||'voorwaarden'))
+    :dial('beleggen','Beleggen',ML,ML.gehaald/ML.n*100,`${ML.gehaald}/${ML.n}`,`${ML.gehaald}/${ML.n}`,lsub);
+  return `<div class="gm" id="gripMeters">${b}${d}${l}</div>
+    <div class="small" data-meteruitleg style="color:var(--mut2);font-size:var(--fs-xs);margin:-2px 2px 8px;line-height:1.35">doelen = wat er deze maand netto naar je doelen gaat (opzij min eruit gehaald) · tik voor de schaal</div>`;
+}
+function openGripMeter(k){ window._gripMeter=k; renderGripMeter(); showSheetBg(); }
+function renderGripMeter(){
+  const k=window._gripMeter;
+  const rij=(l,v,attr,tik)=>`<div class="row" ${attr||''} style="gap:10px;padding:7px 0;border-bottom:1px solid var(--line)${tik?';cursor:pointer':''}"${tik?` onclick="${tik}"`:''}><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">${l}</span><span class="small" style="font-weight:700;white-space:nowrap">${v}</span>${tik?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`;
+  let kop='', body='', schaal='';
+  if(k==='budget'){ const M=gripMeterBudget();
+    kop='Budget';
+    if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div>`;
+    else { body=rij('Maandbudget', euro0(M.budget))
+      + M.TR.map(x=>rij(`${esc(x.naam)} te ruim begroot (${euro0(x.bud)}, ${euro0(x.voorstel)} nodig)`, '−'+euro0(x.teRuim), `data-meterruim="${esc(x.k)}"`)).join('')
+      + rij('<b>Eerlijk budget</b>', euro0(M.eerlijk), 'data-metereerlijk')
+      + rij('Verwacht eind maand', euro0(M.verwacht), 'data-meterverwacht')
+      + rij(M.verschil>0?'Boven budget':'Onder budget', euro0(Math.abs(M.verschil)));
+      schaal=`${euro0(M.verwacht)} gedeeld door ${euro0(M.eerlijk)} is ${M.pct}%. Op 100% kom je precies op je eerlijke budget uit; daarboven geef je meer uit dan je potjes zeggen. Wat te ruim begroot is telt niet als ruimte.`; } }
+  else if(k==='doelen'){ const M=gripMeterDoelen();
+    kop='Doelen';
+    if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">Plan zet deze maand niets opzij, dus er is niets om tegen af te zetten.</div>`;
+    else { body=rij('Plan: deze maand opzij', euro0(M.opzij), 'data-meteropzij', "closeSheet();go('vooruit')")
+      + (M.tx||[]).map(t=>rij(`Eruit gehaald op ${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}`, '−'+euro(-t.amount), 'data-meteruit')).join('')
+      + rij('<b>Netto naar je doelen</b>', euro0(M.netto), 'data-meternetto');
+      schaal=`${euro0(M.netto)} van ${euro0(M.opzij)} is ${M.pct}%. Op 100% gaat er deze maand netto zoveel naar je doelen als Plan opzij zet. Elke afschrijving van je spaarrekening telt, ook uit vrij spaargeld; een overboeking tussen twee spaarrekeningen niet.`; } }
+  else { const M=gripMeterBeleggen(); kop='Beleggen';
+    const tik=v=>v.ontbreekt&&!(maandRegels().find(r=>r.key===v.key))?(v.key==='dekking'?'closeSheet();openReserveringen()':v.key==='buffer'?'closeSheet();openNoodfondsPanel()':"closeSheet();go('vooruit')"):`closeSheet();openMaandBeslis('${esc(v.key)}')`;
+    /* Per voorwaarde de regel zoals hij op de tegel stond (waarde en maat, v340) en of hij voor beleggen gehaald is. */
+    const RO=maandMetAfspraak(maandMetAccept(maandRegels()));   // de status zoals Grip hem leest (de tegels van v340 lazen RO)
+    const regels=B=>(B?B.voorwaarden:[]).map(v=>{ const r=RO.find(x=>x.key===v.key)||null;
+      const maat=!r?'':v.key==='buffer'?(r.sub||'nog geen norm gekozen'):v.key==='dekking'?(r.tegelMaat||r.eenheid||''):(r.eenheid||'');
+      return rij(`<b>${esc(v.naam.charAt(0).toUpperCase()+v.naam.slice(1))}</b>${r&&!v.ontbreekt?`<br><span style="color:var(--mut2)"><span data-meterwaarde>${esc(r.maanden!=null&&v.key==='buffer'?r.waarde+' mnd':r.waarde)}</span>${maat?` <span data-metermaat>${esc(maat)}</span>`:''}</span>`:''}${v.ontbreekt?`<br><span style="color:var(--mut2)">onbekend: ${esc(BELEG_ONBEKEND_REDEN[v.key]||'niet te beoordelen')}</span>`:''}`,
+        v.ontbreekt?'onbekend':(v.gehaald?'gehaald':`${esc(v.waarde)} tegen ${esc(v.drempel)}`), `data-meterwv="${esc(v.key)}" data-status="${esc(r?r.status:'onbekend')}"`, tik(v)); }).join('');
+    if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">${M.leeg?'Je hebt nog geen doel en geen bezitting, dus er is niets om de voorwaarden voor beleggen tegen af te zetten.':'De voorwaarden zijn nog niet te beoordelen.'}</div>`+regels(M.B);
+    else { body=regels(M.B)
+        + (M.inleg?rij(`Lopende inleg: ${esc(M.inleg.naam)}`, M.inleg.stil?'zelf stilgezet':M.inleg.bedrag>0?`${euro0(M.inleg.bedrag)} deze maand`:`${euro0(M.inleg.per)} per maand`, 'data-meterinleg'):'');
+      schaal=`${M.gehaald} van de ${M.n} voorwaarden die te beoordelen zijn, zijn gehaald.${M.onb.length?` ${M.onb.length} ${M.onb.length===1?'is':'zijn'} onbekend en ${M.onb.length===1?'telt':'tellen'} niet mee in de noemer.`:''}`; } }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripMeterSheet" data-meter="${esc(k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${kop}</div>
+    <div class="small" data-meterschaal style="line-height:1.5;margin:4px 0 8px;color:var(--mut)">${schaal}</div>${body}</div>`;
+}
+/* ===== DE TABS ===== */
+const GRIP_TABS=[['zien','Zien'],['begrijpen','Begrijpen'],['kiezen','Kiezen'],['terugblik','Terugblik']];
+function gripTab(){ const t=window._gripTab; return GRIP_TABS.some(x=>x[0]===t)?t:'zien'; }
+/* Afgerond per maand: Zien zodra je een andere tab opent (je hebt hem gezien), Terugblik zodra je hem opent. Begrijpen
+   en Kiezen ronden af op hun eigen inhoud (deel 2). Het is een stand van het scherm en geen teller. */
+function gripAfgerond(){ const G=SET.gripGezien||{}; return G.maand===thisYM()?(G.tabs||{}):{}; }
+function gripStapOpen(){ return false; }   // deel 2: een stap in Kiezen die nog openstaat
+function gripKiesTab(t){
+  const nu=gripTab();
+  if(t!==nu){ const G=SET.gripGezien&&SET.gripGezien.maand===thisYM()?SET.gripGezien:{maand:thisYM(), tabs:{}};
+    if(nu==='zien') G.tabs.zien=1; if(t==='terugblik') G.tabs.terugblik=1;
+    SET.gripGezien=G; save(); }
+  window._gripTab=t; renderMaand();
+}
+function gripTabsHtml(){
+  const A=gripAfgerond(), t=gripTab();
+  return `<div class="gm-tabs" id="gripTabs">${GRIP_TABS.map(([k,l])=>`<span data-griptab="${k}"${k===t?' class="on"':''}${A[k]?' data-afgerond':''} onclick="gripKiesTab('${k}')">${l}${A[k]?' ✓':''}${k==='kiezen'&&gripStapOpen()?'<b data-stapopen style="color:var(--amber)"> •</b>':''}</span>`).join('')}</div>`;
+}
+/* ===== ZIEN: DE BRIDGE VAN BUDGET NAAR VERWACHT =====
+   Dezelfde stappen als dezeMaandBrug() (uitschieters en zonder potje), met elk te ruim begroot potje als eigen
+   GEARCEERDE stap (soort 'teruim', -teRuim) en de rest als "overig". De kop is het verschil met het EERLIJKE budget,
+   het getal van de Budget-meter. Afgerond met brugAfronden(), dus de stappen tellen exact op tot de uitkomst. */
+function gripZienBrug(V, TR){
+  if(!V || V.onbekend || !(V.budget>0)) return null;
+  TR=TR||teRuim(V);
+  const diff=V.projectie-V.budget, boven=uitschieters(V);
+  const maak=(n, teLos)=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
+    let zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonder', v:zonder});
+    if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim}); else if(TR.length) rauw.push({k:'~tr', v:-TR.reduce((a,x)=>a+x.teRuim,0)});
+    rauw.push({k:'~overig', v:diff-rauw.reduce((a,x)=>a+x.v,0)});
+    const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>R[x.k]||(x.k==='~overig'&&(V.vastePotjes||[]).length)).length;
+    return {los, R, kol, teLos, zonder}; };
+  /* Hooguit DEZEMAAND_KOL kolommen (v357): eerst gaan de te ruime potjes samen in een stap, en pas daarna valt een
+     uitschieter in overig, want een uitschieter vraagt iets en te ruim is een instelling. */
+  let M=maak(Math.min(DEZEMAAND_LOS, boven.length), true);
+  if(M.kol>DEZEMAAND_KOL) M=maak(M.los.length, false);
+  while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1, false);
+  const {los, R}=M, stappen=[{soort:'begin', label:'budget', waarde:V.budget}];
+  for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
+  if(R['~zonder']) stappen.push({soort:'zonder', label:'z. potje', waarde:R['~zonder']});
+  if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push({soort:'teruim', k:x.k, label:x.naam, waarde:R['~tr:'+x.k]}); }
+  else if(R['~tr']) stappen.push({soort:'teruim', label:'te ruim', waarde:R['~tr']});
+  /* Overig staat er ook op nul zolang er vaste potjes zijn: zijn sheet is de ingang naar de vaste lasten (v357). */
+  if(R['~overig'] || (V.vastePotjes||[]).length) stappen.push({soort:'overig', label:'overig', waarde:R['~overig']||0});
+  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
+  let run=V.budget; const lv=[V.budget, V.projectie];
+  for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
+  const lo=Math.min(...lv), hi=Math.max(...lv);
+  let basis=0;
+  if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
+  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2};
+}
+function gripZienTik(soort,k){
+  if(soort==='teruim'){ openTeRuim(); return; }
+  if(soort==='overig'){ openGripOverig(); return; }
+  gripBrugTik(soort,k);
+}
+/* WAARUIT "OVERIG" BESTAAT: de andere variabele potjes (naar renderGripRest()), de vaste lasten (naar renderGripVast()) en
+   het te ruime deel dat al apart gearceerd staat en dus hier terugkomt. Afgerond met brugAfronden() op de stap, dus de
+   regels tellen op tot het getal waarop je tikte. */
+function gripOverigDelen(V){
+  const Br=gripZienBrug(V); if(!Br) return null;
+  const st=Br.stappen.find(x=>x.soort==='overig'); const tot=st?st.waarde:0;
+  const los=Br.stappen.filter(x=>x.soort==='potje').map(x=>x.k), TR=teRuim(V);
+  const rest=V.variabel.eind-V.variabel.budget-V.potjes.filter(x=>los.includes(x.k)).reduce((a,x)=>a+x.overR,0);
+  const vast=V.vaste.eind-V.vaste.budget, terug=TR.reduce((a,x)=>a+x.teRuim,0), zonder=Math.min(+V.zonder||0,0);
+  const R=brugAfronden([{k:'rest',v:rest},{k:'vast',v:vast},{k:'terug',v:terug},{k:'zonder',v:zonder}], tot);
+  return {tot, R};
+}
+function openGripOverig(){ renderGripOverig(); showSheetBg(); }
+function renderGripOverig(){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const D=V&&!V.onbekend?gripOverigDelen(V):null; if(!D){ closeSheet(); return; }
+  const vp=(V.vastePotjes||[]).length;
+  const rij=(k,l,tik)=>(D.R[k]||(k==='vast'&&vp))?`<div class="row" data-overigdeel="${k}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)${tik?';cursor:pointer':''}"${tik?` onclick="${tik}"`:''}><span class="small" style="flex:1;min-width:0">${l}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(D.R[k])}</span>${tik?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripOverig" data-overig="${D.tot}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Overig · ${brugTeken(D.tot)}</div>
+    <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Wat niet los in de bridge staat.</div>
+    ${rij('rest','Andere variabele potjes',"openGripRest()")}${rij('vast','Vaste lasten',"openGripVast()")}${rij('terug','Te ruim begroot, al apart gearceerd',"openTeRuim()")}${rij('zonder','Zonder potje','')}${gripAllesLink}</div>`;
+}
+/* DE MELDING: een regel "N potjes te ruim · EUR X ›" (keuze van de gebruiker), met per potje een keuze in de sheet. Een
+   potje dat je liet staan blijft gearceerd en buiten je eerlijke budget, maar staat deze maand niet meer in de regel. */
+function teRuimOpen(TR){ const L=(SET.teRuimLaten||{})[thisYM()]||{}; return (TR||teRuim()).filter(x=>!L[x.k]); }
+function teRuimRegel(TR){
+  const O=teRuimOpen(TR); if(!O.length) return '';
+  const som=O.reduce((a,x)=>a+x.teRuim,0);
+  return `<div class="row" data-teruimregel="${O.length}" style="gap:8px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTeRuim()">
+    <span class="small" style="flex:1;min-width:0;line-height:1.4"><b>${O.length===1?`${esc(O[0].naam)} te ruim`:`${O.length} potjes te ruim`} · ${euro0(som)}</b><br><span style="color:var(--mut2);font-size:var(--fs-xs)">instelling, geen gedrag</span></span>
+    <span style="color:var(--teal);font-weight:700">›</span></div>`;
+}
+function openTeRuim(){ window._teRuimKies=null; renderTeRuim(); showSheetBg(); }
+/* Het gevolg staat er vooraf: het potje oud en nieuw, het maandbudget oud en nieuw, en dat je uitgaven en je veilig te
+   besteden niet veranderen (in het geheugen doorgerekend met potSimuleer(), zonder save()). Pas Bevestigen schrijft. */
+function teRuimGevolg(x){
+  const B0=Object.assign({}, SET.budgets||{}), B1=Object.assign({}, B0); B1[x.k]=x.voorstel;
+  const meet=()=>{ let s=null, p=null; try{ s=Math.round(safeToSpend().safe); }catch(_){} try{ p=maandVooruit().projectie; }catch(_){} return {s,p}; };
+  const a=potSimuleer(B0, meet), b=potSimuleer(B1, meet);
+  const tot0=Object.values(B0).reduce((t,v)=>t+(+v||0),0);
+  return {tot0:Math.round(tot0), tot1:Math.round(tot0-x.bud+x.voorstel), safe0:a.s, safe1:b.s, proj0:a.p, proj1:b.p};
+}
+function renderTeRuim(){
+  const TR=teRuim(); if(!TR.length){ closeSheet(); return; }
+  const L=(SET.teRuimLaten||{})[thisYM()]||{}, kies=window._teRuimKies;
+  const rij=x=>{ const G=kies===x.k?teRuimGevolg(x):null;
+    const gevolg=G?`<div class="small" data-teruimgevolg="${esc(x.k)}" style="line-height:1.5;margin-top:6px;padding:8px;border-radius:8px;background:var(--card2)">
+        Potje ${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.voorstel)} vanaf ${esc(ymFull(thisYM()))}.<br>
+        Maandbudget ${euro0(G.tot0)} → ${euro0(G.tot1)}: ${euro0(x.teRuim)} minder ruimte op papier.<br>
+        Je uitgaven veranderen niet${G.proj0!=null&&G.proj0===G.proj1?` (verwacht ${euro0(G.proj1)})`:''}${G.safe0!=null&&G.safe0===G.safe1?`, en veilig te besteden blijft ${euro0(G.safe1)}`:G.safe1!=null?`; veilig te besteden ${euro0(G.safe0)} → ${euro0(G.safe1)}`:''}.
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn" data-teruimbevestig="${esc(x.k)}" style="width:auto;padding:8px 14px" onclick="teRuimZet('${esc(x.k)}')">Bevestigen</button><button class="btn sec" style="width:auto;padding:8px 14px" onclick="window._teRuimKies=null;renderTeRuim()">Terug</button></div></div>`:'';
+    return `<div data-teruimpotje="${esc(x.k)}" style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <div class="row" style="gap:8px;align-items:baseline"><b style="flex:1;min-width:0">${esc(x.naam)} ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig</b><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.teRuim)} te ruim</span></div>
+      <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:2px">${!(x.nodig>0)?'geen betaling in je laatste afgeronde maanden en niets verwacht; een potje op nul is geen voorstel':x.reden?`duurste maand: ${esc(x.reden)}`:`duurste maand van de komende twaalf: ${esc(ymFull(x.maand))}`}${L[x.k]?' · deze maand laten staan':''}</div>
+      ${G?'':`<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap">${x.voorstel>0?`<button class="btn sec" data-teruimkies="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="window._teRuimKies='${esc(x.k)}';renderTeRuim()">Verlagen naar ${euro0(x.voorstel)}</button>`
+        :`<button class="btn sec" data-teruimsplits="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="openSplits('${esc(x.k)}')">Splitsen ›</button><button class="btn sec" data-teruimform="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="openPotForm('${esc(x.k)}')">Ander bedrag vanaf een maand ›</button>`}${L[x.k]?'':`<button class="btn sec" data-teruimlaten="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="teRuimLaten('${esc(x.k)}')">Laten staan</button>`}</div>`}
+      ${gevolg}</div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="teRuimSheet">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Te ruim begroot</div>
+    <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Een potje dat in zijn duurste maand van de komende twaalf hooguit de helft nodig heeft, en minstens ${euro0(RUIMER_DREMPEL.euro)} meer is. Dat is een instelling en geen gedrag; het telt niet als ruimte.</div>
+    ${TR.map(rij).join('')}</div>`;
+}
+/* Bevestigen leest de lijst opnieuw (v319) en verlaagt het potje vanaf deze maand; wat vrijkomt gaat van het
+   maandbudget af (de bestemming "verlagen" van v362), en het lagere potje wordt een afspraak (v337). */
+function teRuimZet(k){
+  const x=teRuim().find(r=>r.k===k); if(!x || !(x.voorstel>0)) return;
+  const ym=thisYM(), van=x.bud;
+  potPlanZet(k, ym, x.voorstel);
+  try{ potjeAfspraak(k, x.voorstel, ym, 'het maandbudget omlaag'); }catch(_){}
+  (SET.teRuimLog=SET.teRuimLog||[]).push({k, naam:x.naam, van, naar:x.voorstel, maand:ym, op:vandaagYMD()});
+  save(); window._teRuimKies=null; closeSheet(); renderMaand(); toast(`${x.naam} verlaagd naar ${euro0(x.voorstel)}`);
+}
+function teRuimLaten(k){
+  const ym=thisYM(); SET.teRuimLaten=SET.teRuimLaten||{}; (SET.teRuimLaten[ym]=SET.teRuimLaten[ym]||{})[k]=vandaagYMD();
+  save(); renderTeRuim(); renderMaand();
+}
+/* v364: de ENIGE ingang naar de budgeteditor op Grip, sinds v387 onder de bridge van Zien. */
+const GRIP_BUDGETLINK=`<span data-budgetlink style="font-size:var(--fs-xs);font-weight:700;color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openBudgetEditor(thisYM())">Budget aanpassen ›</span>`;
+function gripZien(V){
+  if(!V || V.onbekend){ const T=totals(thisYM()), bud=Math.round(T.budget||0);
+    return `<div class="card gm-stage" id="gripZien" data-zien="onbekend"><div style="font-weight:700">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
+      <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div>
+      <div class="small" style="margin-top:6px;text-align:right">${GRIP_BUDGETLINK}</div></div>`; }
+  const TR=teRuim(V), MB=gripMeterBudget(V), Br=gripZienBrug(V, TR);
+  const kop=MB.onbekend?'':(MB.verschil>0?`${euro0(MB.verschil)} boven`:MB.verschil<0?`${euro0(-MB.verschil)} onder`:'op budget');
+  const as=[Br&&Br.basis>0?`as begint bij ${euro0(Br.basis)}`:'', TR.length?'gearceerd = te ruim begroot, telt niet als ruimte':''].filter(Boolean).join(' · ');
+  return `<div class="card gm-stage" id="gripZien" data-zien="${V.projectie}">
+    <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))} · budget → verwacht</span><span data-zienkop style="font-weight:800;color:${MB.verschil>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
+    ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div>`:''}
+    <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div>
+    ${teRuimRegel(TR)}</div>`;
+}
+/* De lopende afspraken van deze maand (uit dezeMaandKaart(), die tot v386 de kaart Deze maand droeg). */
+function gripAfsprakenHtml(){
+  const m=thisYM(); let af='';
+  try{ const D=afsprakenDezeMaand(); af=D.nu.map(a=>afspraakRij(a)).join('')+afsprakenLaterRegel(D); }catch(_){}
+  try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
+  return af;
+}
 function renderMaand(){
-  /* v233: Grip leest altijd de lopende maand en heeft geen maandkiezer.
-     v340: GRIP IS EEN DASHBOARD MET DRIE BLOKKEN: de KPI-tegels (met "Let op" eronder als er een
-     signaal zonder eigen tegel is), "Deze maand" met de lopende afspraken, en "Komende 3 maanden".
-     Onderaan een rustige link naar het logboek. Wat er tot v339 stond (de samenvatting, Vraagt een
-     beslissing, Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel
-     en de logboekkaart) staat in de sheets achter de tegels, in de pop-up of in het logboek. */
+  /* v387: GRIP ALS REGELKRING. Een vaste bovenkant (gripMeters, gripTabsHtml) en per tab een eigen inhoud; Grip opent
+     altijd op Zien (go('maand')). Tot v386 stonden hier de KPI-tegels, Let op, de kaart Deze maand en het logboek
+     (v340); de tegels en de kaart zijn weg, Let op staat tot deel 2 op Zien. De ingangen die aan een tegel hingen
+     (reserveringen, buffer, doel) staan in de sheet van de Beleggen-meter. */
   const R=maandRegels();
   const STR=maandStructureel();
-  /* De signalen worden een keer opgehaald (v314): valtOpSignals() schrijft ook (de log-records en
-     `getoond`), dus het moet bij elke render van Grip blijven gebeuren, ook nu de kaarten in een
-     sheet staan. */
+  /* De signalen worden een keer opgehaald (v314): valtOpSignals() schrijft ook (de log-records en `getoond`). */
   const SIG=(function(){ try{ return valtOpSignals(thisYM())||[]; }catch(_){ return []; } })();
   const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();
   const RO=maandMetAfspraak(maandMetAccept(R).concat(STR));
-  const T=(function(){ try{ return gripTegels(RO, R); }catch(_){ return []; } })();
   const L=(function(){ try{ return gripLetOpItems(RO, SIG, BV); }catch(_){ return []; } })();
-  /* De terugval staat er alleen als er niets is om in te stellen: geen tegel en geen ander signaal dan een
-     potje boven zijn grens. Dat is de poort van v188 (regels, structurele signalen, contant, uitgesloten,
-     beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. De lek-regel
-     (v359) ook niet: een uitgave zonder potje is eerder een teken dat er te weinig is ingesteld. */
-  const raster=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`:'';
-  const tegels=raster + (T.some(t=>!t.instel) || L.some(x=>x.soort!=='sig'&&x.soort!=='lek') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld${T.length?'':' om tegels te tonen'}. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`);
-  $('#s-maand').innerHTML=`${gripKoopcheck()}${tegels}${gripLetOpKaart(L)}${dezeMaandKaart()}
-    <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
-    <div style="height:12px"></div>`;
-  /* Een terugblik sluit met "Gezien" via renderMaand() en niet via render(); de sheet erachter rekent
-     daarom ook hier mee, en sluit als zijn kaart weg is. */
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const tab=gripTab();
+  let inhoud='';
+  if(tab==='zien'){
+    /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
+       ander signaal dan een potje boven zijn grens of de lek-regel. */
+    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek');
+    inhoud=gripZien(V)+gripLetOpKaart(L)
+      +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'')
+      +`<div class="small" data-gripcta style="margin:10px 2px 0;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('begrijpen')">Waarom? Bekijk wat erachter zit ›</div>`;
+  } else if(tab==='begrijpen'){
+    let Br=null; try{ Br=V&&!V.onbekend?dezeMaandBrug(V):null; }catch(_){}
+    inhoud=`<div class="card gm-stage" data-begrijpen><div class="small" style="line-height:1.5">${Br?esc(dezeMaandZin(Br)):'Waar je maand uitkomt rekent Minder met je laatste '+VOORUIT_MAANDEN+' afgeronde maanden, en die zijn er nog niet allemaal.'}</div>
+      ${Br?`<div class="small" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVooruit()">Wat je deze maand kunt doen ›</div>`:''}</div>`;
+  } else if(tab==='kiezen'){
+    const af=gripAfsprakenHtml();
+    inhoud=`<div class="card gm-stage" data-kiezen><div class="hlabel" style="margin:0 0 6px">Jouw keuzes deze maand</div>${af||'<div class="small muted">Er loopt deze maand geen afspraak.</div>'}</div>`;
+  } else {
+    inhoud=`<div class="card gm-stage" data-terugblik><div class="small" id="gripNaarLogboek" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
+  }
+  $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}">${inhoud}</div>
+    <button class="btn sec" id="gripKoopcheck" data-koopknop style="margin-top:10px" onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button>
+    <div style="height:8px"></div>`;
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
   try{ if(document.getElementById('gripLetOpLijst') && $('#sheetBg').classList.contains('show')) renderGripLetOpLijst(); }catch(_){}
 }
@@ -10233,12 +10500,12 @@ function spaarStortStand(ym){
   let net=null; try{ net=savedNet(ym); }catch(_){}
   const n=(net==null?0:net);
   const sav=new Set(n26SavingsAccounts());
-  let uit=0;
+  let uit=0; const uitTx=[];   // v387: de afschrijvingen zelf, voor de sheet van de Doelen-meter op Grip
   if(sav.size){ const rij=txOfMonth(ym).filter(t=>sav.has(t.acc)), bij=rij.filter(t=>t.amount>0), gebruikt=new Set();
     for(const t of rij){ if(!(t.amount<0)) continue;
       const m=bij.find(b=>!gebruikt.has(b) && b.acc!==t.acc && b.date===t.date && Math.abs(b.amount+t.amount)<0.005);
       if(m){ gebruikt.add(m); continue; }
-      uit+=-t.amount; } }
+      uit+=-t.amount; uitTx.push(t); } }
   /* Een keuze over toegewezen zonder geld dekt eerst het gat dat er aan het begin van de maand al was (G0: wat er
      toegewezen staat min het saldo van toen, min wat keuzes van eerdere maanden nog terugzetten), en pas daarna een
      opname van deze maand. Zonder dat dekt een keuze over een oud gat een nieuwe opname die nog geen keuze heeft. */
@@ -10254,7 +10521,7 @@ function spaarStortStand(ym){
   let aanvullen=0, vrijOpname=0;
   if(netto<0){ const open=-netto; let z=0; try{ z=+spaarOver().zonder||0; }catch(_){}
     aanvullen=Math.min(open, z); vrijOpname=open-aanvullen; }
-  return {gestort:Math.round(Math.max(netto,0)), aanvullen:Math.round(aanvullen), vrijOpname:Math.round(vrijOpname), uit:Math.round(uit), gedekt:Math.round(gedekt), G0:Math.round(G0*100)/100};
+  return {gestort:Math.round(Math.max(netto,0)), aanvullen:Math.round(aanvullen), vrijOpname:Math.round(vrijOpname), uit:Math.round(uit), uitExact:Math.round(uit*100)/100, uitTx, gedekt:Math.round(gedekt), G0:Math.round(G0*100)/100};
 }
 /* v371: WAT DE LOPENDE KEUZES NOG DEKKEN. Een keuze dekt alleen zijn eigen bedrag, en alleen zolang het geld er nog
    niet is: wat er na deze maand nog terug moet, plus het deel van deze maand dat nog niet binnen is. Binnen is wat er
@@ -12799,9 +13066,6 @@ function netWorthSeries(){
 /* v365: DE KOOPCHECK STAAT BOVENAAN GRIP. Een aankoopcheck is sturen: past het in een potje, of gaat het van
    je ruimte af. Dat is de vraag van Grip en niet van Home, en Home moest op een scherm passen. Dezelfde check
    (openBuy()), een ingang en geen tweede. */
-function gripKoopcheck(){
-  return `<div class="card" id="gripKoopcheck" style="cursor:pointer" onclick="openBuy()"><div class="row"><span style="font-weight:600">${ICON('cart')} Ik wil iets kopen</span><span class="small" style="color:var(--teal);font-weight:700">check ›</span></div><div class="small muted" style="margin-top:4px">Past het in een potje, of gaat het van je ruimte af?</div></div>`;
-}
 /* v350: DE TELLING OP HOME TELT WAT DE PAGINA ERACHTER TOONT. GEMETEN voor deze ronde: Home zei "3
    bezittingen" en dat was SET.assets.length, terwijl Vermogen onder Bezittingen vijf rijen toonde (je
    rekeningen, drie bezittingen en de auto van een financial lease) en daaronder twee uitgeleende bedragen.
@@ -18800,7 +19064,7 @@ function brugGrafiek(Br){
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>
-        <i style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${kleur(c.s)};border-radius:3px"></i>${lijn}
+        <i${c.s.soort==='teruim'?' data-gearceerd':''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px)':kleur(c.s)};border-radius:3px"></i>${lijn}
       </div>
       <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.label)}</div>
     </div>`;}).join('')}</div>`;
@@ -25619,6 +25883,23 @@ function diagReisReserveringen(){
   L.push(`FIRE ${Math.round(M.FIRE)}: lijn ${f&&f.yr!=null?f.yr:'niet gehaald'} · mediaan band ${reikt(mc.p50)||'niet gehaald'}${mc0?` · band bij nul ${reikt(mc0.p50)||'niet gehaald'}`:''} · doeljaar ${M.targetYear} · kans ${mc.succ}%`);
   return L;
 }
+/* v387: TE RUIM BEGROOT PER POTJE, op het toestel. Alleen lezen (v244): elk getal komt uit teRuimLijst() en
+   gripMeterBudget(), de bronnen van Grip (v104). */
+function diagTeRuim(){
+  const L=[]; let V=null; try{ V=maandVooruit(); }catch(e){ return ['maandVooruit(): FOUT '+e.message]; }
+  if(!V || V.onbekend) return ['geen drie afgeronde maanden: te ruim is niet te bepalen (maandVooruit().onbekend)'];
+  L.push(`drempel: nodig hooguit ${RUIMER_DREMPEL.deel*100}% van het potje EN het potje minstens EUR ${RUIMER_DREMPEL.euro} boven het voorstel`);
+  L.push('per potje: budget | vast deel (budget, verwacht deze maand) | variabel deel (budget, maanden) | nodig in de duurste maand | voorstel | te ruim');
+  for(const x of teRuimLijst(V)){
+    const v=x.vast?`vast ${x.vast.bud}/${x.vast.eind}${x.vast.geen?' geen betaling':''}`:'vast -';
+    const w=x.variabel?`variabel ${x.variabel.bud} [${x.variabel.maanden.join(', ')}]`:'variabel -';
+    L.push(`  ${x.naam} (${x.k}): ${x.bud} | ${v} | ${w} | nodig ${x.nodig} in ${x.maand}${x.reden?' ('+x.reden+')':''} | voorstel ${x.voorstel} | ${x.ruim?'TE RUIM '+x.teRuim:'niet te ruim'}`);
+  }
+  const M=gripMeterBudget(V);
+  if(!M.onbekend) L.push(`eerlijk budget: ${M.budget} - ${M.ruim} = ${M.eerlijk}; verwacht ${M.verwacht}; ${M.pct}% (${M.verschil>0?'boven':'onder'} ${Math.abs(M.verschil)})`);
+  const D=gripMeterDoelen(); L.push(D.onbekend?'doelen-meter: Plan zet niets opzij':`doelen-meter: opzij ${D.opzij} - eruit ${D.uit} = ${D.netto} (${D.pct}%)`);
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -25638,6 +25919,7 @@ const DIAG_BLOKKEN=[
   {titel:'boekingen naar een beleggingspartij en hun bezitting', lees:diagBezitKoppeling},
   {titel:'hoe een storting van contant geld er bij je banken uitziet', lees:diagContantStorting},
   {titel:'reserveringen en doelen in de lange-termijnprojectie, en de lijn naast de band', lees:diagReisReserveringen},
+  {titel:'te ruim begroot per potje, en de meters op Grip', lees:diagTeRuim},
 ];
 
 async function diagTekst(){
@@ -25948,7 +26230,7 @@ function go(name){
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
     /* v176: het leesmoment gaat over de lopende maand. v233: Grip is altijd de lopende maand, dus
        de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
-    if(name==='maand'){ try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); }catch(_){} }
+    if(name==='maand'){ window._gripTab='zien'; try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); }catch(_){} }
   }
   /* v331: het logboek leest de stand van het moment waarop je hem opent. */
   if(name==='logboek'){ try{ renderLogboek(); }catch(_){} }

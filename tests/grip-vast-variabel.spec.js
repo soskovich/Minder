@@ -17,7 +17,9 @@ const lees = (page) => page.evaluate(() => { const V = maandVooruit(); const Br 
     potjes: V.potjes.map((x) => ({ k: x.k, bud: x.bud, uit: x.uit, eind: x.eind, vastDeel: x.vastDeel })),
     vaste_: V.vastePotjes.map((x) => ({ k: x.k, bud: x.bud, uit: x.uit, vast: x.vast, eind: x.eind, geen: x.geen })) },
     stappen: Br.stappen.map((s) => ({ soort: s.soort, label: s.label, k: s.k || null, w: s.waarde })) }; });
-const naarGrip = async (page) => { await page.evaluate(() => go('maand')); await page.waitForSelector('#gripDezeMaand [data-dmregel]'); };
+/* v387: de kaart Deze maand is weg; de bridge staat op Zien, en de vaste lasten zijn daar een deel van "overig". */
+const naarGrip = async (page) => { await page.evaluate(() => go('maand')); await page.waitForSelector('#gripZien'); };
+const vastOpen = async (page) => { await page.locator('#gripBrug [data-brugstap="overig"]').click(); await page.locator('[data-overigdeel="vast"]').click(); };
 const HUURVAST = { set: { potAard: { huur: 'vast' } } };
 const huurTx = [
   { id: 'h7', date: '2026-07-12', amount: -300, name: 'Kamerverhuur', desc: 'OVERBOEKING HUUR KAMER' },
@@ -110,13 +112,13 @@ test.describe('b. geen vaste lijst', () => {
 test.describe('c. de kaart', () => {
   test('de kop is de uitkomst tegen het budget, Vervoer en de vaste lasten staan in de bridge en Huur in de zin', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripDezeMaand [data-dmregel]').innerText()).toMatch(/^€2\.473 verwacht · €328 boven je budget/);
+    expect(await page.locator('#gripZien').getAttribute('data-zien')).toBe('2473');
     const brug = await page.locator('#gripBrug').innerText();
     expect(brug).not.toContain('Huur');
     expect(brug).toContain('Vervoer');
-    expect(await page.locator('#gripBrug [data-brugstap="vast"]').getAttribute('data-brugwaarde')).toBe('0');
-    expect(await page.locator('#gripDezeMaand [data-vastregel]').count()).toBe(0);
-    expect(await page.locator('#gripDezeMaand [data-dmzin]').innerText()).toContain('Huur: geen betaling verwacht deze maand · €750 telt mee als vaste last.');
+    expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).stappen.find((x) => x.soort === 'vast').waarde)).toBe(0);
+    expect(await page.locator('[data-vastregel]').count()).toBe(0);
+    expect(await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())))).toContain('Huur: geen betaling verwacht deze maand · €750 telt mee als vaste last.');
     expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).vastGrootste.k)).toBe('huur');
   });
   test('een potje zonder betaling gaat in de regel voor op een grotere afwijking', async ({ page }) => {
@@ -130,8 +132,8 @@ test.describe('c. de kaart', () => {
   });
   test('de totale uitkomst staat op de kaart en in de sheet, als hetzelfde getal (v357)', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripDezeMaand [data-dmregel]').getAttribute('data-uitkomst')).toBe('2473');
-    await page.locator('#gripDezeMaand [data-dmkop]').click();
+    expect(await page.locator('#gripZien').getAttribute('data-zien')).toBe('2473');
+    await page.locator('#gripBrug [data-brugstap="eind"]').click();
     await page.waitForSelector('#gripVooruit');
     expect(await page.locator('#gripVooruit [data-bandregel]').innerText()).toContain('Rond €2.473');
     expect(await page.locator('#gripVooruit [data-opbouw]').innerText()).toBe('Variabel €1.022 · vaste lasten €1.451 · €328 boven je budget');
@@ -141,7 +143,7 @@ test.describe('c. de kaart', () => {
 test.describe('d. de sheets', () => {
   test('de vaste lasten per potje, met Huur als feit en Vervoer als vast deel van zijn potje', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    await page.locator('#gripBrug [data-brugstap="vast"]').click();
+    await vastOpen(page);
     await page.waitForSelector('#gripVast');
     /* v362: regels zonder verschil staan samen onder "N vaste lasten volgens budget"; Huur zonder betaling blijft
        los staan, want de vraag eronder gaat erover. */
@@ -155,7 +157,7 @@ test.describe('d. de sheets', () => {
   });
   test('Vervoer vanuit de vaste lasten opent het vaste deel, vanuit de bridge het variabele deel', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    await page.locator('#gripBrug [data-brugstap="vast"]').click();
+    await vastOpen(page);
     await page.locator('#gripVast [data-vastnul]').click();   // v362: Vervoer staat volgens budget, onder de samengevoegde regel
     await page.locator('#gripVast [data-vastpotje="vervoer"]').click();
     await page.waitForSelector('#gripPotje[data-potje="vervoer"][data-terug]');
@@ -177,7 +179,7 @@ test.describe('d. de sheets', () => {
   test('openen schrijft niets', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await page.locator('#gripBrug [data-brugstap="vast"]').click(); await page.waitForSelector('#gripVast');
+    await vastOpen(page); await page.waitForSelector('#gripVast');
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
 });
@@ -220,8 +222,8 @@ for (const w of [360, 390]) {
   test(`g. hoogtes op ${w}px, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page, HUURVAST); await naarGrip(page);
-    const kaart = await page.locator('#gripDezeMaand').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
-    await page.locator('#gripBrug [data-brugstap="vast"]').click(); await page.waitForSelector('#gripVast');
+    const kaart = await page.locator('#gripZien').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
+    await vastOpen(page); await page.waitForSelector('#gripVast');
     const sheet = await page.locator('#gripVast').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
     await page.evaluate(() => openPotAard('vices'));
     const aard = await page.locator('#potAard').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));

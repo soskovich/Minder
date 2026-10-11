@@ -61,12 +61,17 @@ async function boot(page, payload) {
 }
 
 const R = (page) => page.evaluate(() => maandRegels().map((r) => ({ key: r.key, status: r.status, waarde: r.waarde, eenheid: r.eenheid, sub: r.sub, gevolg: r.gevolg, maand: r.maand || null })));   // v314: sub erbij, de linker-sub van de compacte rij
-/* v340: maandOordeel() (de samenvattingszin) is vervallen zonder opvolger. Wat het oordeel TELDE staat nu
-   in de kleur van de tegels op Grip: rood voor tekort, amber voor let op, groen voor ok. */
+/* v340: maandOordeel() (de samenvattingszin) is vervallen zonder opvolger. Wat het oordeel TELDE stond in de kleur
+   van de tegels op Grip. v387: DE TEGELS ZIJN WEG (Grip als regelkring); de kleur van een regel is zijn status zoals Grip
+   hem leest (maandMetAfspraak over maandMetAccept), en de ingang staat in de sheet van de Beleggen-meter. `tegels` leest
+   die status, en eist dat elke regel daar een ingang heeft. */
 const tegels = async (page) => {
   await page.evaluate(() => go('maand'));
-  return page.evaluate(() => [...document.querySelectorAll('#gripTegels [data-tegel]')]
-    .map((t) => ({ key: t.dataset.tegel, kleur: t.dataset.kleur, tekst: t.innerText })));
+  return page.evaluate(() => { const K = { tekort: 'rood', 'let op': 'amber', ok: 'groen' };
+    window._gripMeter = 'beleggen'; renderGripMeter();
+    const ing = [...document.querySelectorAll('#gripMeterSheet [data-meterwv]')].map((e) => e.dataset.meterwv); closeSheet();
+    return maandMetAfspraak(maandMetAccept(maandRegels())).filter((r) => !r.structureel && ing.includes(r.key))
+      .map((r) => ({ key: r.key, kleur: K[r.status] || 'grijs', tekst: r.naam })); });
 };
 const KLEUR = { tekort: 'rood', 'let op': 'amber', ok: 'groen' };
 const VB = (page) => page.evaluate(() => maandVerband(maandRegels()));
@@ -436,16 +441,8 @@ test.describe('e · indeling', () => {
   /* v340: de kaarten zijn tegels geworden, gesorteerd op kleur (rood, amber, groen, grijs) en binnen een
      kleur op de vaste volgorde van MAAND_VOLGORDE. De oude vorm van deze test las kaarten die niet
      meer bestaan en stond daardoor groen op een lege lijst. */
-  test('de tegels staan op kleur, en binnen een kleur in de vaste volgorde', async ({ page }) => {
-    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
-    const t = await tegels(page);
-    const volg = await page.evaluate(() => MAAND_VOLGORDE);
-    const rang = { rood: 0, amber: 1, groen: 2, grijs: 3 };
-    expect(t.length).toBeGreaterThan(1);
-    const sleutel = t.map((x) => [rang[x.kleur], x.key === 'beleggen' ? 99 : volg.indexOf(x.key)]);
-    const gesorteerd = sleutel.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    expect(sleutel).toEqual(gesorteerd);
-  });
+  /* v387: de volgorde op kleur hoorde bij het raster van tegels en is daarmee vervallen. */
+
 
   test('alles ok: geen rode of amber tegel', async ({ page }) => {
     await boot(page);

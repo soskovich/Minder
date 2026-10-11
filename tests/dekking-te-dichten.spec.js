@@ -43,7 +43,7 @@ const lees = (page) => page.evaluate(() => {
   go('maand'); renderMaand();
   /* v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' zijn weg; het oordeel is de kleur
      van de tegel (rood = beslissing, amber = aandacht), en naam en bedrag staan in de sheet erachter. */
-  const t = document.querySelector('#s-maand [data-tegel="dekking"]');
+  const t = (() => { window._gripMeter = 'beleggen'; renderGripMeter(); const e = document.querySelector('#gripMeterSheet [data-meterwv="dekking"]'); const c = e ? e.cloneNode(true) : null; if (c) { c.dataset.kleur = ({ tekort: 'rood', 'let op': 'amber', ok: 'groen' })[e.dataset.status] || 'grijs'; } closeSheet(); return c; })();
   let sheet = '';
   if (t) { openMaandBeslis('dekking'); sheet = document.querySelector('#sheet').innerText; closeSheet(); }
   return { gat: D.gat, status: r.status, eenheid: r.eenheid, gevolg: r.gevolg, perMaandTot: r.perMaandTot,

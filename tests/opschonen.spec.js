@@ -117,11 +117,13 @@ test.describe('b · Logboek', () => {
 
 /* ===== GRIP ===== */
 test.describe('c · Grip', () => {
-  test('de koopcheck staat bovenaan, met zijn subregel, en opent dezelfde check', async ({ page }) => {
+  /* v387: de koopcheck is de vaste knop onderaan Grip (Grip als regelkring), onder de tabs, en opent dezelfde check. */
+  test('de koopcheck is de vaste knop onderaan, en opent dezelfde check', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('maand'));
-    const r = await page.evaluate(() => { const f = document.getElementById('s-maand').firstElementChild; return { id: f.id, t: f.innerText, oc: f.getAttribute('onclick') }; });
+    const r = await page.evaluate(() => { const f = document.getElementById('gripKoopcheck'), ids = [...document.getElementById('s-maand').children].map((e) => e.id).filter(Boolean);
+      return { id: ids[ids.length - 1], t: f.innerText, oc: f.getAttribute('onclick') }; });
     expect(r.id).toBe('gripKoopcheck');
-    expect(r.t).toContain('Ik wil iets kopen'); expect(r.t).toContain('Past het in een potje, of gaat het van je ruimte af?');
+    expect(r.t).toContain('Ik wil iets kopen');
     expect(r.oc).toBe('openBuy()');
   });
   test('"Komende 3 maanden" bestaat niet meer', async ({ page }) => {

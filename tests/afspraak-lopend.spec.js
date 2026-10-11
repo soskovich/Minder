@@ -8,6 +8,7 @@
 // waarde, en verliest suggestie en gespreksingang. Niet via r.opTempo: dat is een meting.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { regelTegels, openRegelUI } = require('./beslis-sheet');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const plusM = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + n, 1);
@@ -45,16 +46,10 @@ const uitkomst = (page) => page.evaluate(() => afspraakUitkomst(vorigeAfspraak()
    draagt zijn status als kleur (tekort rood, let op amber), en de oorzaak die tot v339 op de
    lijstregel stond komt uit dezelfde bron als de sheet erachter (maandBeslisDeel). `tegels` geeft per
    sleutel de kleur, de tekst van de tegel en die oorzaak. */
-const tegels = (page) => page.evaluate(() => {
-  const per = {};
-  for (const el of document.querySelectorAll('#s-maand #gripTegels [data-tegel]')) {
-    const k = el.dataset.tegel; const r = k === 'beleggen' ? null : maandBeslisZoek(k);
-    per[k] = { kleur: el.dataset.kleur, tekst: el.innerText.replace(/\s+/g, ' '),
-      oorzaak: r ? ((maandBeslisDeel(r) || {}).oorzaak || '') : '' };
-  }
-  return per;
-});
-const grip = (page) => page.evaluate(() => document.getElementById('s-maand').innerText);
+/* v387: de tegels zijn weg; `tegels` leest de regels in de sheet van de Beleggen-meter (regelTegels in beslis-sheet.js). */
+const tegels = (page) => regelTegels(page);
+// v387: de lopende afspraken staan op Kiezen; `grip` leest Grip met die tab open
+const grip = (page) => page.evaluate(() => { gripKiesTab('kiezen'); const t = document.getElementById('s-maand').innerText; gripKiesTab('zien'); return t; });
 async function maand(page, p) {
   await open(page, p);
   await page.evaluate(() => go('maand'));
@@ -136,7 +131,8 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     const heel = await grip(page);
     expect(heel).not.toContain('Hier loopt een afspraak over');
     expect((heel.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length).toBe(1);
-    const rij = await page.locator('#gripDezeMaand [data-afspraak="coach"]').innerText();
+    await page.evaluate(() => gripKiesTab('kiezen'));   // v387: de afspraken staan op Kiezen
+    const rij = await page.locator('#gripInhoud [data-afspraak="coach"]').innerText();
     expect(rij).toContain('Ik verhoog het bedrag dat ik per maand opzij zet');
     expect(rij).toContain('Je afspraak deze maand');
     expect(T.buffer.tekst).not.toContain('Ik verhoog');
@@ -170,7 +166,7 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
      eigenschap staat in de tegels: precies twee zijn rood, en de buffer is daar niet een van. */
   test('de tegels tellen de regel niet meer als beslissing', async ({ page }) => {
     await maand(page, metLopende());
-    const rood = await page.$$eval('#gripTegels [data-tegel][data-kleur="rood"]', (L) => L.map((e) => e.dataset.tegel).sort());
+    const T = await tegels(page); const rood = Object.keys(T).filter((k) => T[k].kleur === 'rood').sort();
     expect(rood).toEqual(['dekking', 'doel']);
   });
 
@@ -207,7 +203,7 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     expect(heel).not.toContain('Hier loopt een afspraak over');
     // v324: de acceptatie-zin staat in de sheet achter de regel; v340: die regel is de tegel
     expect(heel).not.toContain('Je hebt dit bewust geaccepteerd');
-    await page.locator('#gripTegels [data-tegel="buffer"]').click();
+    await openRegelUI(page, 'buffer');   // v387: via de sheet van de Beleggen-meter
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
