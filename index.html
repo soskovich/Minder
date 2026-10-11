@@ -9719,6 +9719,15 @@ function gripVorigeReden(pid){
   if(!o || o.klopt!==false || !o.reden || o.reden==='anders') return null;
   const R=GRIP_REDENEN.find(x=>x[0]===o.reden); return R?{reden:o.reden, label:R[1], maand:prev}:null;
 }
+/* De dagen tellen vanaf je salaris en niet vanaf de 1e (v389): de laatste betaling van dezelfde bron als
+   salarisBetalingLaatst() (recurKey), op of voor de eerste onttrekking. Zonder zo'n betaling is er geen telling. */
+function gripSalarisVoor(d){
+  const top=salarisBetalingLaatst(valtOpYmPlus(thisYM(),1)); if(!top) return null;
+  const k=recurKey(top), dd=String(d).slice(0,10);
+  const L=TX.filter(t=>!t.pending && t.amount>0 && recurKey(t)===k && t.date.slice(0,10)<=dd && CATS[catOf(t)] && CATS[catOf(t)].type==='income'
+    && !(SET.onregelmatig && SET.onregelmatig[t.id])).sort((a,b)=>b.date.localeCompare(a.date));
+  return L[0]||null;
+}
 function gripPatronenRuw(){
   const m=thisYM(), prev=valtOpYmPlus(m,-1); let V=null; try{ V=maandVooruit(); }catch(_){}
   const boven=(V && !V.onbekend)?uitschieters(V):[];
@@ -9726,12 +9735,13 @@ function gripPatronenRuw(){
   const out=[]; const gebruikt=new Set();
   let S=null; try{ S=spaarStortStand(m); }catch(_){}
   if(S && S.uitTx && S.uitTx.length){
-    const T=S.uitTx.slice().sort((a,b)=>a.date.localeCompare(b.date)), dag=gripDag(T[0].date);
+    const T=S.uitTx.slice().sort((a,b)=>a.date.localeCompare(b.date)), sal=gripSalarisVoor(T[0].date);
+    const dag=sal?Math.round((new Date(T[0].date.slice(0,10)+'T00:00:00')-new Date(sal.date.slice(0,10)+'T00:00:00'))/864e5):null;
     const sig=[{soort:'onttrekking', naam:'Uit spaargeld', bedrag:Math.round(S.uitExact), n:T.length, data:T.map(t=>t.date)}];
     for(const x of boven){ sig.push(potSig(x)); gebruikt.add(x.k); }
     let vorig=null; try{ vorig=spaarStortStand(prev); }catch(_){}
     const twee=!!(vorig && vorig.uit>0) || sig.some(s=>s.soort==='potje' && s.nr>=2);
-    out.push({id:'spaargeld', soort:'spaargeld', naam:`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'}`, sig, twee,
+    out.push({id:'spaargeld', soort:'spaargeld', naam:dag==null?'Betaalrekening op · salarisdatum onbekend':`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'} na salaris`, salaris:sal?sal.date.slice(0,10):null, sig, twee,
       bedrag:Math.round(S.uitExact), raakt:'budget en doelen',
       bewijs:`${T.length}× uit je spaarrekening (${T.map(t=>gripDag(t.date)).join(', ')} ${MNAMES[+m.slice(5,7)-1]})`+sig.filter(s=>s.soort==='potje'&&s.nr>=2).map(s=>` · ${s.naam} ${s.nr} mnd boven`).join('')});
   }
@@ -9757,7 +9767,8 @@ function gripPatronenRuw(){
     out.push({id:'pot:'+c.k, soort:'potje', naam:c.structureel?`${c.naam} past niet in je potje`:`${c.naam} boven je potje`, sig,
       twee:c.nr>=2, bedrag:c.bedrag, raakt:'budget', bewijs:`${c.naam} ${c.nr>=2?c.nr+' mnd boven':'deze maand boven'} · ${euro0(c.bedrag)} erboven`}); }
   /* jouw reden van vorige maand weegt mee */
-  for(const p of out){ const r=gripVorigeReden(p.id); if(r){ p.vorigeReden=r; p.naamApp=p.naam; p.naam=r.label.charAt(0).toUpperCase()+r.label.slice(1); } }
+  /* Zeg je deze maand "klopt", dan gaat de naam terug naar wat de app ziet (v389); het bewijs staat er altijd. */
+  for(const p of out){ const o=gripOordeel(p.id); if(o && o.klopt===true) continue; const r=gripVorigeReden(p.id); if(r){ p.vorigeReden=r; p.naamApp=p.naam; p.naam=r.label.charAt(0).toUpperCase()+r.label.slice(1); } }
   return out;
 }
 function gripVolgordeApp(L){ const sp=L.filter(p=>p.id==='spaargeld'), rest=L.filter(p=>p.id!=='spaargeld').sort((a,b)=>(b.bedrag-a.bedrag)||(a.naam<b.naam?-1:1)); return sp.concat(rest); }

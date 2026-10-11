@@ -14,7 +14,7 @@ test.describe('v388 begrijpen', () => {
     await grip(page, { opnames: OPNAMES });
     const P = await page.evaluate(() => gripPatronen().map(p => ({ id: p.id, naam: p.naam, sig: p.sig.map(s => s.soort + ':' + (s.k || '')), bewijs: p.bewijs })));
     expect(P[0].id).toBe('spaargeld');
-    expect(P[0].naam).toBe('Betaalrekening op na ~6 dagen');
+    expect(P[0].naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(P[0].sig).toEqual(['onttrekking:', 'potje:uiteten']);
     expect(P[0].bewijs).toBe('2× uit je spaarrekening (6, 9 okt)');
     await tab(page, 'begrijpen');
@@ -39,7 +39,27 @@ test.describe('v388 begrijpen', () => {
     await page.evaluate(() => { SET.gripOordeel = { '2026-09': SET.gripOordeel['2026-10'] }; save(); });
     const p = await page.evaluate(() => gripPatronen()[0]);
     expect(p.naam).toBe('Tekort op betaalrekening');
-    expect(p.naamApp).toBe('Betaalrekening op na ~6 dagen');
+    expect(p.naamApp).toBe('Betaalrekening op na ~12 dagen na salaris');
+  });
+  test('zeg je deze maand "klopt", dan gaat de naam terug naar wat de app ziet en blijft het bewijs staan', async ({ page }) => {
+    await grip(page, { opnames: OPNAMES });
+    await page.evaluate(() => { SET.gripOordeel = { '2026-09': { spaargeld: { klopt: false, reden: 'impuls', op: '2026-09-20' } } }; save(); renderMaand(); });
+    expect(await page.evaluate(() => gripPatronen()[0].naam)).toBe('Impulsaankopen');
+    await tab(page, 'begrijpen'); await page.click('[data-begrijpen] button:has-text("klopt")');
+    const p = await page.evaluate(() => gripPatronen()[0]);
+    expect(p.naam).toBe('Betaalrekening op na ~12 dagen na salaris');
+    expect(p.vorigeReden).toBeUndefined();
+    expect(await tekst(page, '[data-patnaam]')).toBe('Betaalrekening op na ~12 dagen na salaris');
+    expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
+  });
+  test('de dagen tellen vanaf de laatste salarisbetaling op of voor de eerste onttrekking, en zonder salaris staat dat er', async ({ page }) => {
+    await grip(page, { opnames: OPNAMES });   // eerste onttrekking 6 okt, salaris 24 sep: 12 dagen
+    expect(await page.evaluate(() => gripPatronen()[0].salaris)).toBe('2026-09-24');
+    // een salarisbetaling NA de eerste onttrekking telt niet: het geld was toen al op
+    const na = await page.evaluate(() => { const t = { id: 'salvroeg', date: '2026-10-08', amount: 5216, acc: 'NL01MAIN0000001111', name: 'Werkgever', desc: 'SALARIS LOON', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); const p = gripPatronen()[0]; return [p.salaris, p.naam]; });
+    expect(na).toEqual(['2026-09-24', 'Betaalrekening op na ~12 dagen na salaris']);
+    const zonder = await page.evaluate(() => { TX = TX.filter(t => !/SALARIS/.test(t.desc || '')); save(); return gripPatronen()[0].naam; });
+    expect(zonder).toBe('Betaalrekening op · salarisdatum onbekend');
   });
   test('klopt rondt Begrijpen af met een ✓ zodra elk patroon een oordeel heeft', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -131,7 +151,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     expect(await tekst(page, '[data-kiesmoment]')).toBe('per week, vanaf maandag 12 okt ›');
     expect(await page.locator('[data-stapligt]').count()).toBe(0);
     await page.evaluate(() => { SET.gripStapSinds['2026-10'].spaargeld = '2026-10-02'; save(); renderMaand(); });
-    expect(await tekst(page, '[data-stapligt]')).toBe('Betaalrekening op na ~6 dagen staat sinds 2 okt open · 8 dagen.');
+    expect(await tekst(page, '[data-stapligt]')).toBe('Betaalrekening op na ~12 dagen na salaris staat sinds 2 okt open · 8 dagen.');
   });
   test('een signaal opent wat er al was: het potje de signaalkaart met de handelingen, de onttrekkingen de Doelen-meter', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -192,9 +212,20 @@ test.describe('v388 terugblik', () => {
       await grip(page); await zet(page, {}, 1000, stort);
       expect(await page.evaluate(() => gripSpaardoel('2026-09').s)).toBe(s);
     }
-    // een keuze zonder storting telt niet als gehaald
+    // niets gestort is niet gehaald
     await grip(page); await zet(page, {}, 1000, 0);
     expect(await page.evaluate(() => gripSpaardoel('2026-09').s)).toBe('nee');
+  });
+  test('terugzetkeuze zonder storting telt niet als gehaald', async ({ page }) => {
+    await grip(page); await zet(page, {}, 1000, 0);
+    const r = await page.evaluate(() => {
+      const t = { id: 'uitsep', date: '2026-09-12', amount: -500, acc: 'NL01SPAR0000002222', name: 'Naar Main', desc: 'OVERBOEKING NAAR MAIN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+      categorize(t); TX.push(t);
+      SET.terugzet = { '2026-09': { bedrag: 500, keuze: 'alles', bron: [], delen: [500], op: '2026-09-13' } };
+      save(); return { net: savedNet('2026-09'), s: gripSpaardoel('2026-09').s };
+    });
+    expect(r.net).toBe(-500);   // gestort min eruit; de keuze om terug te zetten is geen storting
+    expect(r.s).toBe('nee');
   });
   test('een onttrekking na de datum van de meetlat is ✗', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });

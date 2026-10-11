@@ -15,6 +15,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 *(Staande regels, gedestilleerd uit de changelog. Respecteer deze bij nieuwe code; wil je er een omgooien, doe dat bewust en leg het vast. De versietag verwijst naar de volledige onderbouwing in `CHANGELOG.md`.)*
 
 ### Wat telt als wat (rekenregels)
+- **Het patroon telt vanaf je salaris, en "klopt" geeft de naam terug aan de app** (`v389`, keuze van de gebruiker op `v388`).
+  - "Betaalrekening op na ~X dagen na salaris": X is de afstand van de laatste salarisbetaling (dezelfde bron als `salarisBetalingLaatst()`, op of voor de eerste onttrekking) tot die onttrekking. Een salaris NA de onttrekking telt niet: het geld was toen al op. Zonder salarisbetaling staat er "salarisdatum onbekend", geen telling vanaf de 1e (`v59`/`v73`/`v173`).
+  - Je reden van vorige maand is de naam, tenzij je deze maand "klopt" zegt: dan draagt het patroon weer de naam die de app ziet. Het bewijs staat er in beide gevallen.
+  - Het spaardoel in de terugblik is `savedNet()` (gestort min eruit) tegen Plan opzij van die maand. Een terugzetkeuze is geen storting en telt niet.
 - **Grip deel 2: een patroon is een oorzaak, kiezen heeft een meetlat, en gelukt is alleen minder uitgeven** (`v388`, gevraagd door de gebruiker, mockup "Grip kring proces" v2).
   - DE PATRONEN (`gripPatronenRuw()`, hooguit drie) komen uit drie bronnen, zonder een nieuwe meting:
     1. de onttrekkingen van je spaarrekening deze maand (dezelfde afschrijvingen als de Doelen-meter). Die zijn altijd een patroon en staan altijd eerst: "Betaalrekening op na ~N dagen", met de potjes die boven eindigen als signaal;
