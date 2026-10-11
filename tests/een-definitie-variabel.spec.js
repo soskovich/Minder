@@ -75,17 +75,17 @@ const SITUATIES = [
    bedragen breekt de kop op 360px naar 46px in plaats van 32px, en dat al bij de kleinste getallen.
    Er gaat niets verloren, want de kop toont het restant en de tempo-som is dat restant PLUS het
    gat; die aansluiting is wat de tests hieronder vasthouden. */
-const schermNoot = ({ noot }) => {
-  const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
-  return m ? +m[1].replace(/\./g, '') : null;
-};
+// v382: schermNoot is weg; de tempo-krapte die hij las staat niet meer op Inzichten.
 /* v359: de stand-kaart is vervallen; het restant staat in de tegel "Nog in potjes", met eronder het dagbedrag of de
    tempo-krapte ("bij je tempo EUR X tekort"). Dezelfde vorm als de kop van v309: val, label, noot. */
-const KOP = `(() => { go('ins'); const k=document.querySelector('[data-instegel="potjes"]');
-  const val=k?k.querySelector('.vl').innerText:''; const ms=k?k.querySelector('.ms').innerText.replace(/\\s+/g,' ').trim():'';
-  const eur=t=>{ const m=String(t).match(/\u20ac([\\d.]+)/); return m?(String(t).trim().startsWith('-')?-1:1)*+m[1].replace(/\\./g,''):null; };
-  return { val: k?eur(val):null, label: ms==='te veel uitgegeven'?'te veel uitgegeven':'nog in je potjes',
-    noot: /tekort/.test(ms)?ms:'', achter: ms, alles: k?k.innerText:'' }; })()`;
+/* v382: de tegel is weg. Het restant staat in de rij "in potjes" van de legenda van de maandkaart
+   (`#insMaand [data-insleg="nogpot"]`, onder "Nog te gaan"); zijn bedrag draagt `data-v`. De tempo-krapte
+   ("bij je tempo EUR X tekort") hoorde bij de tegel en staat niet meer op Inzichten; `noot` bestaat dus niet meer.
+   `label` komt uit de rij: "in potjes", of "te veel in potjes" onder nul. */
+const KOP = `(() => { go('ins'); const k=document.querySelector('#insMaand [data-insleg="nogpot"]');
+  const lab=k?k.querySelector('span').innerText.trim().toLowerCase():'';
+  return { val: k?+k.dataset.v:null, label: lab==='te veel in potjes'?'te veel uitgegeven':'nog in je potjes',
+    alles: k?k.innerText:'' }; })()`;
 
 test.describe('a · elke plek leest dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
@@ -105,9 +105,12 @@ test.describe('a · elke plek leest dezelfde bron', () => {
              onder de tegels en werd een tegel. v250: en stond sindsdien in de regel eronder zodra
              hij van de aftrekking afweek. v309: het is het achtervoegsel van het hoofdgetal op de
              stand-kaart, met het GAT erin. */
-          scherm: (function(){ go('ins'); const k=document.querySelector('[data-instegel="potjes"]');   // v359: de tegel
-            const achter=k?k.querySelector('.ms').innerText.replace(/\s+/g,' ').trim():'';
-            return { noot: /tekort/.test(achter)?achter:'', alles: k?k.innerText:'' }; })(),
+          /* v382: wat Inzichten er letterlijk van maakt: de rij "in potjes" van de maandkaart (data-v), en de
+             tekst van de hele kaart om te toetsen dat de tempo-som er nergens als getal staat. */
+          scherm: (function(){ go('ins'); const k=document.querySelector('#insMaand [data-insleg="nogpot"]');
+            const kaart=document.querySelector('#insMaand');
+            return { v: k?+k.dataset.v:null, alles: kaart?kaart.innerText:'' }; })(),
+          nog: varPotjeStand(m).nog,
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -125,42 +128,16 @@ test.describe('a · elke plek leest dezelfde bron', () => {
          blijft: elke plek rekent met dezelfde potjes en dezelfde boekingen, zonder tweede som. */
       expect(r.safe).toBe(r.reserve);
       expect(r.hand).toBe(r.bron);
-      const op = schermNoot(r.scherm);
-      /* v309: de eis is tweezijdig en heeft er een voorwaarde bij. Het achtervoegsel draagt de
-         krapte precies dan als er een gat is EN het restant boven nul staat: bij een negatief
-         restant is het gat per constructie positief (het is de tempo-som PLUS de overschrijding)
-         en zou het een groter getal over dezelfde overschrijding zetten. Een signaal dat in een
-         hele tak altijd vuurt is geen signaal (meetles p). */
-      expect(op != null, 'de krapte staat er precies dan als er een gat is en het restant positief')
-        .toBe(r.gat > 0 && r.inPotjes > 0);
-      /* v309: het achtervoegsel draagt het GAT, en de tempo-som volgt uit het restant erboven.
-         Die aansluiting is strenger dan de oude vorm, want ze bindt twee getallen aan elkaar in
-         plaats van een getal aan een bron. */
-      if (op != null) { expect(op).toBe(r.gat); expect(r.inPotjes + op).toBe(r.bron); }
+      /* v382: de tempo-krapte (het gat) staat niet meer op Inzichten; wat het scherm toont is het restant uit
+         varPotjeStand(), en dat is per constructie de aftrekking (geen terugkerend restant in deze fixture). De tempo-som
+         staat er nergens als getal, behalve als hij toevallig gelijk is aan het restant. */
+      if (r.nog !== 0) expect(r.scherm.v).toBe(r.nog); else expect(r.scherm.v).toBeNull();   // een nulrij staat niet in de legenda
+      expect(r.nog).toBe(r.inPotjes);
+      if (r.bron !== r.inPotjes && r.bron > 0) expect(r.scherm.alles).not.toContain(`\u20ac${r.bron.toLocaleString('nl-NL')}`);
     });
   }
-  /* ZONDER DEZE TEST KAN DE VERGELIJKING HIERBOVEN LEEGLOPEN: staat de regel in geen van de vijf
-     standen, dan is de tweezijdige eis overal met een null vervuld en is 'dat is ook het bedrag dat
-     Inzichten toont' nooit getoetst. Deze stand is de overschreden variant uit de lijst hierboven,
-     nu met de eis dat hij de regel WERKELIJK draagt. */
-  test('minstens een van de standen laat de regel zien, en dan met varPlanRemaining erin', async ({ page }) => {
-    /* EEN POTJE EROVERHEEN EN HET TOTAAL NOG POSITIEF: boodschappen 600 van 500 en uiteten 0 van
-       200 geeft een restant van 100 en een tempo-som erboven. `boodschappen: 900` stond hier en
-       geeft een NEGATIEF restant, en dan draagt het achtervoegsel per constructie niets (zie de
-       voorwaarde hierboven), dus die stand kon deze test niet meer dragen. */
-    await boot(page, seed({ boodschappen: 600, uiteten: 0 }));
-    const k = await page.evaluate(KOP);
-    const r = await page.evaluate(() => {
-      const m = curMonth || months()[months().length - 1];
-      const VP = varPotjeStand(m);
-      return { bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt),
-        inPotjes: VP.budget - VP.gebruikt };
-    });
-    expect(r.gat).toBeGreaterThan(0);
-    expect(r.inPotjes).toBeGreaterThan(0);      // de invoer: anders draagt de kop niets
-    expect(schermNoot(k)).toBe(r.gat);
-    expect(k.val + r.gat).toBe(r.bron);      // en de tempo-som volgt uit het restant erboven
-  });
+  // v382: weg, "minstens een van de standen laat de regel zien": die regel was de tempo-krapte in het achtervoegsel van
+  // de tegel "Nog in potjes", en die tegel en die regel staan niet meer op Inzichten.
 });
 
 /* v192: hier stond de identiteit safe === eigenKracht + spendSaldo - saveReserved, die Home aan
@@ -181,15 +158,12 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
       await boot(page, seed(opt));
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
-        go('ins'); const t = document.getElementById('insTegels').innerText.replace(/\s+/g, ' ');   // v359: de tegels
+        go('ins'); const t = document.getElementById('insMaand').innerText.replace(/\s+/g, ' ');   // v382: de maandkaart
         /* v309: het variabele deel staat op Inzichten in het ACHTERVOEGSEL van het hoofdgetal op de
            stand-kaart. Tot deze reparatie las deze test `.nog-noot` uit `nogDezeMaandBody()`, en die
            is sinds de verhuizing ALTIJD leeg: `op` was dus per constructie null en de assertie
            erachter onbereikbaar (meetles a). */
-        const k = document.querySelector('[data-instegel="potjes"]');   // v359: de tegel Nog in potjes
-        const sp = k ? [k.querySelector('.vl')] : [];
-        const achter = k ? k.querySelector('.ms').innerText.replace(/\s+/g, ' ').trim() : '';
-        const eur = (x) => { const y = String(x).match(/\u20ac([\d.]+)/); return y ? +y[1].replace(/\./g, '') : null; };
+        const k = document.querySelector('#insMaand [data-insleg="nogpot"]');   // v382: de rij "in potjes" van de maandkaart
         /* DE BRON ZONDER COMMENTAAR. Deze assertie las `safeToSpend.toString()`, en dat is de LIVE
            functie MET haar comments; daar staat `varPlanRemaining()` nog in de uitleg terwijl de code
            hem sinds v254 niet meer aanroept. GEMETEN: nul treffers in de code, twee in de comments,
@@ -199,21 +173,17 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
           reserve: varPotjesReserve(m), gat: varPlanRemaining(m) - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
           inPotjes: varPotjeStand(m).budget - varPotjeStand(m).gebruikt,
-          kop: sp.length ? eur(sp[0].innerText) : null,
-          inzichten: { noot: /tekort/.test(achter) ? achter : '' },
+          kop: k ? +k.dataset.v : null, nog: varPotjeStand(m).nog,
           tekst: t,
-          srcSafe: kaal(safeToSpend), srcKaart: kaal(insTegelsNu), srcStand: kaal(varPotjeStand) };
+          srcSafe: kaal(safeToSpend), srcKaart: kaal(insMaandStand), srcStand: kaal(varPotjeStand) };
       });
       for (const k of ['srcSafe', 'srcKaart', 'srcStand']) r[k] = kaalBron(r[k]);   // v309: in Node
       expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
-      const op = schermNoot(r.inzichten);
-      /* v309: het achtervoegsel draagt het GAT en niet de tempo-som, want met beide bedragen breekt
-         de kop op 360px. De tempo-som volgt uit het restant erboven plus dat gat, en die aansluiting
-         is wat hier vastligt. */
-      expect(op != null).toBe(r.gat > 0 && r.inPotjes > 0);
-      if (op != null) { expect(op).toBe(r.gat); expect(r.kop + op).toBe(r.bron); }
+      /* v382: de tempo-krapte staat niet meer op Inzichten; de maandkaart draagt het restant uit varPotjeStand(). */
+      if (r.nog !== 0) expect(r.kop).toBe(r.nog); else expect(r.kop).toBeNull();
+      expect(r.nog).toBe(r.inPotjes);
       /* EEN BRON PER GETAL, op de functie die hem WERKELIJK aanroept en op comment-vrije code.
-         Home telt de reservering (v254), de kaart leest varPotjeStand(), en die ene functie is de
+         Home telt de reservering (v254), de kaart leest varPotjeStand() (v382: insMaandStand), en die ene functie is de
          enige plek die de tempo-som aanroept. */
       expect(r.srcSafe).toContain('varPotjesReserve(');
       expect(r.srcSafe).not.toContain('varPlanRemaining(');
@@ -267,33 +237,29 @@ test.describe('c · het tempo is prognose, geen grondslag', () => {
 });
 
 test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
-  test('de tegel toont de waarneming, het plan staat eronder', async ({ page }) => {
+  /* v382: de tegel "Nog te betalen · vast" is weg. Onder "Nog te gaan" in de legenda van de maandkaart staan nu twee
+     rijen: vast (`[data-insleg="nogvast"]`, de waarneming monthLiquidity().fixDue) en in potjes
+     (`[data-insleg="nogpot"]`, de aftrekking). Wat vastligt is hetzelfde: elk draagt zijn eigen bron, er staat geen
+     tempo-woord, en de twee zijn nergens bij elkaar opgeteld. */
+  test('de legenda toont de waarneming en het restant apart', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
-      go('ins'); const d = document.getElementById('insTegels');   // v359: de tegels
+      go('ins'); const d = document.getElementById('insMaand');
+      const nv = d.querySelector('[data-insleg="nogvast"]');
       const VP = varPotjeStand(m);
-      return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML,
+      return { txt: d.innerText.replace(/\s+/g, ' '), nogvast: nv ? +nv.dataset.v : null,
         fix: Math.round(monthLiquidity().fixDue), plan: varPlanRemaining(m),
         inPotjes: VP.budget - VP.gebruikt };
     });
-    expect(r.txt).toContain('Nog te betalen · vast');
+    expect(r.txt.toLowerCase()).toContain('nog te gaan');   // de kop staat in hoofdletters via CSS
     expect(r.txt).not.toMatch(/\(tempo\)/);
-    /* v308: hier stond r.plan, en het grote getal op die tegel is sinds v250 de AFTREKKING
-       (varBudget min gebruikt) en niet de tempo-som. Die twee waren op deze fixture hetzelfde
-       getal zolang een potje met ruimte zijn hele onbestede deel in de tempo-som droeg; met de klem
-       op de resterende dagen lopen ze uiteen (gemeten 147 tegen 150). Wat deze test vasthoudt is
-       dat de waarneming boven staat en het plan eronder, en het bedrag van die tegel is de
-       aftrekking. */
+    if (r.fix !== 0) expect(r.nogvast).toBe(r.fix); else expect(r.nogvast).toBeNull();
     expect(r.inPotjes).toBeGreaterThan(0);
-    /* v309: de post is naar het hoofdgetal van de stand-kaart verhuisd, dus de waarneming staat nu
-       BOVEN het plan in plaats van eronder. Wat vastligt is hetzelfde: het bedrag van die plek is de
-       aftrekking (varBudget min gebruikt) en niet de tempo-som, en het is nergens bij de
-       waargenomen vaste lasten opgeteld. */
     const kop = await page.evaluate(KOP);
     expect(kop.val).toBe(r.inPotjes);
     expect(kop.label).toBe('nog in je potjes');
-    expect(r.txt.replace(/\s+/g, ' ').toLowerCase()).not.toContain('nog uit je potjes');
+    expect(r.txt.toLowerCase()).not.toContain('nog uit je potjes');
     // en dat bedrag is nergens opgeteld bij de waargenomen vaste lasten
     if (r.fix > 0) expect(r.txt).not.toContain(`€${(r.fix + r.inPotjes).toLocaleString('nl-NL')}`);
   });
@@ -301,7 +267,7 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
   test('kijken verandert niets', async ({ page }) => {
     await boot(page);
     const voor = await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }));
-    await page.evaluate(() => { insTegelsNu('alle'); safeToSpend(); varPlanRemaining(curMonth); });
+    await page.evaluate(() => { insMaandStand(); insMaandKaart(insPeriode(), 'alle'); safeToSpend(); varPlanRemaining(curMonth); });
     expect(await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
   });
 });

@@ -126,11 +126,27 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
     expect(k.vast).not.toBeNull();
   });
 
-  test('het absolute uitgaven-niveau blijft zichtbaar in de maandgrafiek', async ({ page }) => {
+  /* v382: de maandgrafiek op Inzichten ("Over de maanden", spendVsBudgetChart) is weg. Het absolute
+     uitgaven-niveau per maand staat nu in de sheet achter de maandkaart bij het filter "laatste 3
+     maanden": per afgeronde maand een rij met het bedrag, en de rijen tellen op tot de kop. */
+  test('het absolute uitgaven-niveau blijft zichtbaar per maand', async ({ page }) => {
     await openIns(page);
-    const chart = await page.evaluate(() => spendVsBudgetChart());
-    expect(chart).toContain('Over de maanden');   // v359: de kop heet zo
-    expect(chart).toMatch(/€/);                                       // de euro's staan daar nog
+    const r = await page.evaluate(() => {
+      go('ins'); insFilterZet('3', 'alle');
+      const kaart = document.querySelector('#insMaand');
+      openInsTegel('uitgegeven');
+      const sh = document.querySelector('#insTegelSheet');
+      const rijen = [...sh.querySelectorAll('[data-insrij]')].map((e) => +e.dataset.insrij);
+      const P = insPeriode();
+      return { kaart: kaart && kaart.dataset.insmaand, uit: kaart && +kaart.dataset.insuit, kop: +sh.dataset.inswaarde,
+        rijen, n: P.maanden.length, eigen: P.maanden.map((m) => Math.round(maandStaaf(m).spend)), tekst: sh.innerText };
+    });
+    expect(r.kaart).toBe('af');
+    expect(r.n).toBe(3);
+    expect(r.rijen).toEqual(r.eigen);                              // het bedrag per maand, uit dezelfde bron als de staaf
+    expect(r.rijen.reduce((a, v) => a + v, 0)).toBe(r.kop);
+    expect(r.rijen.some((v) => v > 0)).toBe(true);
+    expect(r.tekst).toMatch(/€/);
   });
 });
 

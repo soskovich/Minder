@@ -100,21 +100,34 @@ async function boot(page, o) {
 /* v359: de stand-kaart is vervallen; het restant en zijn dagbedrag staan in de tegel "Nog in potjes". De helper leest
    die tegel en geeft dezelfde vorm terug: `kop` is het bedrag zonder teken, `label` zegt nog in je potjes of te veel
    uitgegeven, en `achter` is het dagbedrag of de tempo-krapte (de rest van de regel onder het bedrag). */
+/* v382: de tegel "Nog in potjes" is weg. Het restant staat nu in de legenda van de maandkaart (de rij "in potjes",
+   `[data-insleg="nogpot"]`, onder "Nog te gaan") en in de kop van de sheet erachter (`openInsTegel('potjes')`). De
+   helper geeft dezelfde vorm terug: `kop` is het bedrag in de sheet zonder teken, `label` zegt nog in je potjes of te
+   veel uitgegeven (uit de kop van de sheet), en `achter` is de regel in de sheet die zegt wat het geld is
+   (INS_POTJES_SUB; sinds v367 is dat geen dagbedrag). `rij` is het bedrag van de legendarij, null als die rij er niet
+   staat (een nulrij staat niet in de legenda). `kaartTekst` is de maandkaart plus de sheet. */
 const potjesPost = (page) => page.evaluate(() => {
   const p = nogDezeMaandPosten().find((x) => /Nog uit je potjes|Te veel uitgegeven/.test(x.lab)) || null;
   const m = kijkMaand();
-  const kaart = document.querySelector('[data-instegel="potjes"]');
-  const val = kaart ? kaart.querySelector('.vl').innerText.trim() : null;
-  const ms = kaart ? kaart.querySelector('.ms').innerText.trim() : '';
+  go('ins');
+  const kaart = document.querySelector('#insMaand');
+  const leg = document.querySelector('#insMaand [data-insleg="nogpot"]');
+  openInsTegel('potjes');
+  const sh = document.querySelector('#insTegelSheet[data-instegelsheet="potjes"]');
+  const kopEl = sh ? sh.querySelector('div[style*="fs-xl"]') : null;
+  const titel = sh ? sh.firstElementChild.innerText.trim() : '';
+  const regel = sh ? [...sh.querySelectorAll('.small.muted')].map((e) => e.innerText.trim()).find((t) => t.startsWith(INS_POTJES_SUB)) : null;
   const VP = varPotjeStand(m);
-  const over = /^te veel uitgegeven$/i.test(kaart ? kaart.querySelector('.lb').innerText.trim() : '');   // v359: het label van de tegel zegt het
-  return { post: p, dagen: maandDagenOver(m), VP,
+  const out = { post: p, dagen: maandDagenOver(m), VP,
     vrijPerDagDagen: vrijPerDag().dagenResterend,
-    kop: val ? val.replace(/^-/, '') : null,
-    label: kaart ? (over ? 'te veel uitgegeven' : 'nog in je potjes') : null,
-    achter: (/per dag|tekort|al bestemd/.test(ms)) ? ms : '',   // v367: zonder tempo-krapte zegt de tegel wat het geld is
+    kop: kopEl ? kopEl.innerText.trim().replace(/^-/, '') : null,
+    rij: leg ? +leg.dataset.v : null,
+    label: sh ? (/^te veel uitgegeven/i.test(titel) ? 'te veel uitgegeven' : 'nog in je potjes') : null,
+    achter: regel ? INS_POTJES_SUB : '',
     gat: VP.rest - (VP.budget - VP.gebruikt),
-    kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
+    kaartTekst: [kaart ? kaart.innerText : '', sh ? sh.innerText : ''].join(' | ').split(String.fromCharCode(10)).join(' | ') };
+  closeSheet();
+  return out;
 });
 
 test.describe('a · de gemelde toestand', () => {
@@ -129,6 +142,7 @@ test.describe('a · de gemelde toestand', () => {
     expect(r.VP.budget).toBe(1832);
     expect(r.VP.gebruikt).toBe(1312);
     expect(r.kop).toBe('€520');
+    expect(r.rij).toBe(520);                   // v382: dezelfde stand in de legenda van de maandkaart
     expect(r.label).toBe('nog in je potjes');
     expect(r.post).toBeNull();                 // v309: en niet meer in de lijst eronder
     /* v263 verschoof het anker van een dagbedrag naar een venster; v309 schuift het terug naar een
@@ -137,7 +151,8 @@ test.describe('a · de gemelde toestand', () => {
        noemer. Zonder tempo-krapte draagt het achtervoegsel dat dagbedrag. */
     expect(r.gat).toBeLessThanOrEqual(0);
     /* v367: DE TEGEL DRAAGT GEEN DAGBEDRAG MEER (gevraagd door de gebruiker): het enige dagbedrag van de app staat op Home,
-       onder vrij te besteden. De tegel zegt wat het geld is. */
+       onder vrij te besteden. De tegel zegt wat het geld is. v382: de tegel is weg; de sheet erachter zegt het, en
+       ook de maandkaart draagt geen dagbedrag. */
     expect(r.achter).toBe('al bestemd, verdeeld over je potjes');
     expect(r.kaartTekst).not.toMatch(/per dag/);
   });
@@ -250,39 +265,40 @@ test.describe('d · de dagregel leest de potjes en niets anders', () => {
    BOVEN, want de stand-kaart staat boven "Wat opvalt". Wat blijft is dat de signalen binnen het
    eerste scherm vallen (de eis van v241, bewaakt door inzichten-indeling.spec.js met 567px op
    360x640 en 771px op 390x844); wat erbij komt is dat het dagbedrag dat nu ook doet. */
-/* v359: "Wat opvalt" is vervallen, dus er is geen signaal meer om boven te staan. Wat blijft is dat het dagbedrag
-   binnen het eerste scherm staat, nu in de tegel "Nog in potjes". */
-test.describe('e · het dagbedrag staat boven de vouw', () => {
+/* v359: "Wat opvalt" is vervallen, dus er is geen signaal meer om boven te staan. Wat blijft is dat het restant
+   binnen het eerste scherm staat. v382: niet meer in de tegel "Nog in potjes" (weg) maar in de rij "in potjes" van de
+   legenda van de maandkaart. Een dagbedrag draagt die rij niet (sinds v367 staat het enige dagbedrag op Home). */
+test.describe('e · het restant staat boven de vouw', () => {
   // shopping gaat 268 over zijn potje; er blijft 20 in de potjes
   const MET_SIGNAAL = { extraTx: (add) => add('x4', CUR, '16', -500, 'Zalando', 'BEA, BETAALPAS ZALANDO') };
 
   for (const [w, h] of [[360, 640], [390, 844]]) {
-    test(`op ${w}x${h} staat de tegel met het dagbedrag binnen het eerste scherm`, async ({ page }) => {
+    test(`op ${w}x${h} staat de rij "in potjes" binnen het eerste scherm`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await boot(page, MET_SIGNAAL);
       const r = await page.evaluate(() => {
-        const el = document.querySelector('[data-instegel="potjes"]');
+        const el = document.querySelector('#insMaand [data-insleg="nogpot"]');
         const nav = document.querySelector('.nav') || document.querySelector('nav');
-        return { bodem: Math.round(el.getBoundingClientRect().bottom + window.scrollY), tekst: el.innerText,
+        return { er: !!el, bodem: el ? Math.round(el.getBoundingClientRect().bottom + window.scrollY) : null, tekst: el ? el.innerText : '',
           zichtbaar: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0) };
       });
-      expect(r.tekst).toMatch(/per dag|bij je tempo/);
+      expect(r.er).toBe(true);
+      expect(r.tekst).toMatch(/in potjes/);
       expect(r.bodem).toBeLessThanOrEqual(r.zichtbaar);
     });
   }
 
-  test('en het achtervoegsel staat er ook bij een overschreden potje, zolang er nog iets in zit', async ({ page }) => {
+  /* v382: hier stond dat het achtervoegsel van de tegel (dagbedrag of tempo-krapte) er ook bij een overschreden potje
+     stond. De tegel en zijn achtervoegsel zijn weg; wat overblijft is dat het restant er staat zolang er iets in je
+     potjes zit, ook met een potje eroverheen, en dat de sheet dan zegt wat het geld is. */
+  test('het restant staat er ook bij een overschreden potje, zolang er nog iets in zit', async ({ page }) => {
     await boot(page, MET_SIGNAAL);
     const r = await potjesPost(page);
     expect(r.VP.over).toBe(false);          // in totaal nog binnen, één potje eroverheen
-    expect(r.kop).toBe('\u20ac20');
-    /* v263 verschoof het anker naar de venstervorm, v309 naar het achtervoegsel. Dat er iets staat
-       zolang er iets in je potjes zit is de eigenschap; WELKE van de twee vormen het is volgt uit
-       het gat, en dat leest deze test uit de app zelf in plaats van het aan te nemen. */
-    expect(r.achter).toBe(r.gat > 0
-      ? `bij je tempo \u20ac${r.gat.toLocaleString('nl-NL')} tekort`
-      : `\u20ac${Math.round((r.VP.budget - r.VP.gebruikt) / r.dagen).toLocaleString('nl-NL')} per dag`);
-    console.log(`### overschreden potje: kop ${r.kop}, gat ${r.gat}, achtervoegsel "${r.achter}"`);
+    expect(r.kop).toBe('€20');
+    expect(r.rij).toBe(20);
+    expect(r.achter).toBe('al bestemd, verdeeld over je potjes');
+    expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 });
 
@@ -315,14 +331,23 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
     expect(m[1]).toMatch(/maandDagenOver\(/);
   });
 
-  test('het dagbedrag deelt varPotjeStand() en niet de aftrekking uit de hero', () => {
-    /* v309: deze afleiding stond in nogDezeMaandPosten(), daarna in insBudgetBlok(); sinds v359 staat ze in de tegel
-       "Nog in potjes" (insTegelsNu). De HARDE VOORWAARDE van het open punt van v257 blijft: hij deelt VP.nog. */
-    const m = /function insTegelsNu\(soort\)\{([\s\S]*?)\n\}/.exec(CODE);
-    expect(m).toBeTruthy();
-    const body = m[1];
-    expect(body).toMatch(/const nog=VP\.nog/);
-    // v367: de tegel deelt niets meer; hij draagt INS_POTJES_SUB in plaats van een dagbedrag
+  test('het restant deelt varPotjeStand() en niet de aftrekking uit de hero', () => {
+    /* v309: deze afleiding stond in nogDezeMaandPosten(), daarna in insBudgetBlok(), sinds v359 in de tegel "Nog in
+       potjes" (insTegelsNu). v382: die tegel is weg; het restant staat in insMaandStand() (de rij "in potjes" van de
+       maandkaart) en in de potjes-sheet van renderInsTegel(). De HARDE VOORWAARDE van het open punt van v257 blijft:
+       beide lezen VP.nog, en geen van beide deelt door de resterende dagen. */
+    const s = /function insMaandStand\(\)\{([\s\S]*?)\n\}/.exec(CODE);
+    expect(s).toBeTruthy();
+    expect(s[1]).toMatch(/nogPot=VP\?VP\.nog/);
+    expect(s[1]).not.toMatch(/maandDagenOver/);
+    const t = /function renderInsTegel\(\)\{([\s\S]*?)\n\}/.exec(CODE);
+    expect(t).toBeTruthy();
+    const i = t[1].indexOf("else if(k==='potjes'){"), j = t[1].indexOf("else if(k==='vast'){");
+    expect(i).toBeGreaterThan(0);
+    expect(j).toBeGreaterThan(i);
+    const body = t[1].slice(i, j);
+    expect(body).toMatch(/VP\.nog/);
+    // v367: geen dagbedrag; de sheet draagt INS_POTJES_SUB
     expect(body).toMatch(/INS_POTJES_SUB/);
     expect(body).not.toMatch(/maandDagenOver/);
     expect(body).not.toMatch(/spendNorm[^;]*\/\s*maandDagenOver/);

@@ -14,8 +14,8 @@ async function openUitgegeven(page, payload) {
   await open(page, payload || seed());
   await page.evaluate(() => go('ins'));
   /* v359: Uitgegeven is een tegel; zijn sheet zegt waaruit het bedrag bestaat en verwijst met "Per categorie"
-     naar dezelfde drill als voorheen. */
-  await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
+     naar dezelfde drill als voorheen. v382: de tegel is weg; de kop van de maandkaart opent dezelfde sheet. */
+  await page.locator('#insMaand [data-insmaandkop]').click();
   await page.waitForSelector(SHEET);
   await page.locator('#sheet >> text=Per categorie').click();
   await page.waitForSelector('#sheet .chips .chip');
@@ -71,7 +71,7 @@ test.describe('a · het derde segment', () => {
     await openFV(page);
     expect(await page.evaluate(() => SET.msDrill)).toBe('fv');
     await page.evaluate(() => closeSheet());
-    await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
+    await page.locator('#insMaand [data-insmaandkop]').click();   // v382: de kop van de maandkaart
     await page.locator('#sheet >> text=Per categorie').click();
     await page.waitForSelector('#sheet .fv-row');   // opent weer op vast/variabel
   });
