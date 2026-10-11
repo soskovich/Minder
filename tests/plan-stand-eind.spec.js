@@ -46,12 +46,12 @@ test.describe('a · de stand van het toestel na de drie keuzes', () => {
     expect(r.toe).not.toBe(16262);
   });
 
-  test('de rij zegt bijna vol, met de vol-datum en wat nog terugkomt', async ({ page }) => {
+  test('de rij zegt bijna vol, met wat er deze maand bijkomt en wat later nog terugkomt (v385)', async ({ page }) => {
     await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => { const e = document.querySelector('.plan-item[data-id="noodfonds"]'); const b = e && e.querySelector('[data-rijsub]');
       return { st: e && e.dataset.status, sub: b ? b.innerText.replace(/\s+/g, ' ').trim() : '' }; });
     expect(r.st).toBe('bijnavol');
-    expect(r.sub).toBe('vol dec 2026 · €100 komt nog terug');
+    expect(r.sub).toBe('+€1.050 deze maand · €100 later');
   });
 
   test('geen ongedekt verschil meer, dus geen melding', async ({ page }) => {

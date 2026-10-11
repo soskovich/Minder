@@ -12011,11 +12011,16 @@ function planDoelRij(p,i,TL,SE,tints){
   const balk=`<div class="bar-track plan-rijbalk" data-rijbalk style="height:7px;margin:6px 0 5px;position:relative">${p.nfOnbekend?'':`<div class="bar-fill" data-geldvat="${p.id}" data-pct="${pct.toFixed(2)}" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" data-groei data-bijvat="${p.id}" data-pct="${bijPct.toFixed(2)}" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}`}</div>`;
   const vol=p.nfOnbekend?'stand onbekend':p.status==='bereikt'?'vol':(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
   const streef=(p.type==='goal'&&p.streefdatum)?doelDatumLabel(p.streefdatum,true):'';
-  const sub=st.k==='bijnavol'?`vol ${t.vol>0?etaDatum(t.vol):'nog niet te zeggen'} · ${euro0(x.nogLater)} komt nog terug`
+  /* v385: REGEL 3 IS VOOR ELK DOEL DAT DEZE MAAND GELD KRIJGT DEZELFDE: "+EUR X deze maand" met X = inleg + terug, de
+     termen die "Deze maand opzij" in de kop optelt (planKpiData()), dus de rijen tellen per constructie op tot dat getal.
+     Daarachter alleen "· EUR Y later" als er na deze maand nog terugzetdelen komen. Dat wint van elke status (ook bijna
+     vol, waar tot v384 "vol <maand> · EUR Y komt nog terug" stond; de vol-datum staat rechts al). De opbouw (terug plus
+     inleg) staat in de detailsheet. De termijn van een schuld zit in de balk en niet in deze regel. */
+  const dezeMaand=Math.max(Math.round((+x.inleg||0)+(+x.tb||0)),0);
+  const sub=dezeMaand>0?`+${euro0(dezeMaand)} deze maand${x.nogLater>0?` · ${euro0(x.nogLater)} later`:''}`
     :st.k==='gepauzeerd'?'krijgt nu niets'
     :st.k==='vol'?'geen inleg meer nodig'
     :st.k==='onbekend'?'wat er al staat is niet bekend'
-    :bij>0?`+${euro0(bij)} deze maand`
     :streef?`streef ${streef} · ${t.warn?'niet haalbaar':'haalbaar'}`
     :planDatumMist(p)?'geen streefdatum'
     :(p.grendel?'wacht op je buffer':'krijgt deze maand niets');
@@ -12024,7 +12029,7 @@ function planDoelRij(p,i,TL,SE,tints){
     <div class="row" style="gap:8px;align-items:baseline">${nr}<span class="wf-naam" data-rijnaam style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
     ${balk}
     <div class="row small" style="gap:8px;align-items:baseline"><span data-rijgeld style="flex:1;min-width:0"><b style="font-weight:700">${p.nfOnbekend?'onbekend':euro0(geld)}</b> <span style="color:var(--mut)">/ ${euro0(doel)}</span></span><span data-rijvol style="white-space:nowrap;color:var(--mut)">${esc(vol)}${voorl?` <span data-voorlopig style="color:var(--mut2)">· voorlopig</span>`:''} ›</span></div>
-    <div class="small" data-rijsub style="color:${t.warn?'var(--amber)':'var(--mut2)'};margin-top:1px">${esc(sub)}</div></div>`;
+    <div class="small" data-rijsub data-rijdezemaand="${dezeMaand}" style="color:${t.warn?'var(--amber)':'var(--mut2)'};margin-top:1px">${esc(sub)}</div></div>`;
 }
 /* v380: DE DETAILSHEET. De rekensom van een doel: wat er nu op je spaarrekening staat, plus wat er deze maand terug gaat,
    plus de inleg van deze maand, is de stand eind deze maand (planStandEind()). "vol" alleen als die stand het doel haalt;

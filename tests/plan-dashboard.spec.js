@@ -84,11 +84,11 @@ test.describe('c · de rijen', () => {
     expect(r.geldregel).toBe(0); expect(r.rij).toBe(r.item);
   });
 
-  test('noodfonds: bijna vol, EUR 2.850 / EUR 4.000, vol dec 2026, en wat nog terugkomt', async ({ page }) => {
+  test('noodfonds: bijna vol, EUR 2.850 / EUR 4.000, vol dec 2026, en +EUR 1.050 deze maand met EUR 100 later (v385)', async ({ page }) => {
     expect(await tekst(page, '[data-id="noodfonds"] [data-planstatus]')).toBe('bijna vol');
     expect(await tekst(page, '[data-id="noodfonds"] [data-rijgeld]')).toBe('€2.850 / €4.000');
     expect(await tekst(page, '[data-id="noodfonds"] [data-rijvol]')).toBe('vol dec 2026 ›');
-    expect(await tekst(page, '[data-id="noodfonds"] [data-rijsub]')).toBe('vol dec 2026 · €100 komt nog terug');
+    expect(await tekst(page, '[data-id="noodfonds"] [data-rijsub]')).toBe('+€1.050 deze maand · €100 later');
   });
 
   test('inrichting: nu actief, +EUR 1.838 deze maand; kosten koper wacht vanaf november met haalbaarheid', async ({ page }) => {
