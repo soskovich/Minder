@@ -116,8 +116,12 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
        varPotjeStand().nog. Het dagbedrag staat op Home en niet hier (v367). De post in "Nog deze maand" en het
        achtervoegsel van de tegel bestaan niet meer (v382: weg, die vormen zijn vervallen). */
     expect(r.nog).toBe(GEMELD.inPotjes);
-    expect(r.rijV).toBe(GEMELD.inPotjes);
-    expect(r.val).toBe('\u20ac319');
+    /* v383: "in potjes" op de maandkaart is per potje budget min uitgegeven, niet onder nul (gevraagd door de
+       gebruiker): de EUR 391 boven het ene potje verrekent niet meer met de ruimte in de andere. Dat is de reservering
+       van Home (v254), dus de rij zegt EUR 710 en niet het netto restant van EUR 319. */
+    expect(r.rijV).toBe(r.reserve);
+    expect(r.rijV).toBe(GEMELD.inPotjes + GEMELD.oudeGat);
+    expect(r.val).toBe('\u20ac' + r.reserve.toLocaleString('nl-NL'));
     expect(r.rijTekst).not.toMatch(/per dag/);
     expect(r.reserve).toBe(GEMELD.oudePlan);    // de reservering is onaangeroerd (v254)
   });

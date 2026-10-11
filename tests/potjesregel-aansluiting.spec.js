@@ -125,7 +125,8 @@ const meet = (page) => page.evaluate(() => {
   const kop = sh ? sh.firstElementChild.innerText.replace(/\s+/g, ' ').trim() : '';
   const out = {
     er: !!rij, sheet: !!sh, sheetWaarde: sh ? +sh.dataset.inswaarde : null,
-    sheetRijen: sh ? sh.querySelectorAll('[data-inspotrij]').length : 0,
+    sheetRijen: sh ? sh.querySelectorAll('[data-inspotrij]').length : 0, sheetOver: sh ? sh.querySelectorAll('[data-insover]').length : 0,
+    sheetTekst: sh ? sh.innerText : '',
     lab: kop ? kop.split(' · ')[0].toLowerCase() : null,
     val: rij ? rij.querySelector('b').innerText.trim() : null, valEur: rij ? Math.abs(+rij.dataset.v) : null, rijV: rij ? +rij.dataset.v : null,
     rijLab: rij ? rij.querySelector('span').innerText.trim().toLowerCase() : null,
@@ -139,14 +140,20 @@ const meet = (page) => page.evaluate(() => {
   return out;
 });
 
-test.describe('a · het getal is de aftrekking budget min gebruikt', () => {
-  test('de gemelde verhouding: het getal is budget min gebruikt, niet de reservering', async ({ page }) => {
+/* v383: DE OMKERING, gevraagd door de gebruiker: "in potjes" is per potje budget min uitgegeven, NIET ONDER NUL. Tot
+   v383 was het de netto aftrekking varBudget() min gebruikt (v250), en dan verrekende een overschrijding in het ene potje
+   met de ruimte in een ander. Per potje niet onder nul is precies de reservering van Home (varPotjesReserve, v254), dus
+   die twee zijn nu hetzelfde getal. De aftrekking blijft een eigenschap van de bron (varPotjeStand) en staat hieronder
+   naast het getal, zodat te zien is waar ze uiteenlopen. */
+test.describe('a · het getal is per potje budget min gebruikt, niet onder nul', () => {
+  test('de gemelde verhouding: het getal is de reservering per potje, niet de netto aftrekking', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
     expect(r.er).toBe(true);
-    expect(r.rijV).toBe(r.nog);                 // de rij leest varPotjeStand().nog
-    expect(r.valEur).toBe(r.inPotjes);          // de aftrekking (geen terugkerend restant in deze fixture)
-    expect(r.valEur).not.toBe(r.rest);          // en in deze fixture wijkt die echt af
+    expect(r.rijV).toBe(r.reserve);             // per potje niet onder nul
+    expect(r.valEur).not.toBe(r.inPotjes);      // en in deze fixture wijkt de netto aftrekking echt af
+    expect(r.valEur).toBeGreaterThan(r.inPotjes);
+    expect(r.sheetOver).toBeGreaterThan(0);     // het potje dat erboven zit zegt dat in de sheet
     expect(r.sheetWaarde).toBe(r.rijV);         // de sheet draagt hetzelfde getal
     expect(r.lab).toBe('nog in potjes');
     expect(r.rijLab).toBe('in potjes');
@@ -167,7 +174,7 @@ test.describe('a · het getal is de aftrekking budget min gebruikt', () => {
        terugkerend potje (huur 1.200) dat volledig is afgeschreven, dus totals().budget is 2.930 en varBudget() 1.730
        terwijl beide restanten op 598 uitkomen. Wat hier vastligt is dat elk van de twee zijn eigen bron leest. */
     const kaartRestant = r.kaartBudget - r.kaartSpend;
-    expect(r.valEur).toBe(r.inPotjes);
+    expect(r.valEur).toBe(r.reserve);           // v383: per potje niet onder nul
     expect(r.budget).not.toBe(r.kaartBudget);
     expect(r.budget).toBe(1730);
     expect(r.kaartBudget).toBe(2930);
@@ -191,7 +198,8 @@ test.describe('b · de reservering is een andere vraag', () => {
     await boot(page, gat());
     const r = await meet(page);
     expect(r.gat).toBeGreaterThan(0);
-    expect(r.valEur + r.gat).toBe(r.rest);
+    expect(r.inPotjes + r.gat).toBe(r.rest);    // de identiteit van de bronnen
+    expect(r.valEur).toBe(r.reserve);           // v383: het scherm draagt de reservering per potje
   });
 
   test('geen enkel potje over zijn grens: de reservering is de aftrekking', async ({ page }) => {
@@ -206,22 +214,29 @@ test.describe('b · de reservering is een andere vraag', () => {
   // v382: weg, "het achtervoegsel draagt geen alarmkleur": dat achtervoegsel bestaat niet meer.
 });
 
+/* v383: elk potje erboven geeft nul in je potjes, geen negatief getal; elk potje zegt in de sheet hoeveel erboven. */
 test.describe('c · meer uitgegeven dan er in je potjes zat', () => {
-  test('het label zegt het, en er staat geen minteken', async ({ page }) => {
+  /* OVERAL: boodschappen en vervoer gaan samen EUR 500 over hun potjes, uit eten (EUR 400) is onaangeroerd. Netto is dat
+     EUR 100 te veel (v250 zei "te veel uitgegeven"); per potje staat de EUR 400 van uit eten er nog (v383). */
+  test('netto te veel: de ruimte per potje blijft staan, en de sheet noemt per potje wat erboven ging, zonder minteken', async ({ page }) => {
     await boot(page, { boekingen: OVERAL });
     const r = await meet(page);
     expect(r.inPotjes).toBeLessThan(0);
-    expect(r.lab).toBe('te veel uitgegeven');
-    expect(r.rijLab).toBe('te veel in potjes');
-    expect(r.val).not.toContain('-');
-    expect(r.valEur).toBe(-r.inPotjes);
+    expect(r.er).toBe(true);
+    expect(r.rijV).toBe(r.reserve);
+    expect(r.rijV).toBeGreaterThan(0);
+    expect(r.sheetWaarde).toBe(r.rijV);
+    expect(r.lab).toBe('nog in potjes');
+    expect(r.rijLab).toBe('in potjes');
+    expect(r.sheetOver).toBe(2);
+    expect(r.sheetTekst).toMatch(/erboven/);
+    expect(r.sheetTekst).not.toMatch(/-€/);
   });
 
-  test('de rij draagt geen percentage', async ({ page }) => {
+  test('de sheet draagt geen percentage', async ({ page }) => {
     await boot(page, { boekingen: OVERAL });
     const r = await meet(page);
-    expect(r.lab).toBe('te veel uitgegeven');
-    expect(r.val).not.toMatch(/%/);
+    expect(r.sheetTekst).not.toMatch(/%/);
   });
 });
 

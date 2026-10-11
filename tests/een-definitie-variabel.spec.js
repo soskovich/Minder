@@ -110,7 +110,7 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           scherm: (function(){ go('ins'); const k=document.querySelector('#insMaand [data-insleg="nogpot"]');
             const kaart=document.querySelector('#insMaand');
             return { v: k?+k.dataset.v:null, alles: kaart?kaart.innerText:'' }; })(),
-          nog: varPotjeStand(m).nog,
+          nog: varPotjeStand(m).nog, nogPot: insMaandStand().nogPot,
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -131,7 +131,11 @@ test.describe('a · elke plek leest dezelfde bron', () => {
       /* v382: de tempo-krapte (het gat) staat niet meer op Inzichten; wat het scherm toont is het restant uit
          varPotjeStand(), en dat is per constructie de aftrekking (geen terugkerend restant in deze fixture). De tempo-som
          staat er nergens als getal, behalve als hij toevallig gelijk is aan het restant. */
-      if (r.nog !== 0) expect(r.scherm.v).toBe(r.nog); else expect(r.scherm.v).toBeNull();   // een nulrij staat niet in de legenda
+      /* v383: "in potjes" op de maandkaart is per potje budget min uitgegeven, niet onder nul (gevraagd door de gebruiker):
+         een overschrijding in het ene potje verrekent niet meer met de ruimte in een ander. Dat is dezelfde vraag als de
+         reservering op Home (varPotjesReserve, v254), en in deze fixture (geen vaste lasten in een potje) hetzelfde getal. */
+      if (r.nogPot !== 0) expect(r.scherm.v).toBe(r.nogPot); else expect(r.scherm.v).toBeNull();   // een nulrij staat niet in de legenda
+      expect(r.nogPot).toBe(r.reserve);
       expect(r.nog).toBe(r.inPotjes);
       if (r.bron !== r.inPotjes && r.bron > 0) expect(r.scherm.alles).not.toContain(`\u20ac${r.bron.toLocaleString('nl-NL')}`);
     });
@@ -173,21 +177,23 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
           reserve: varPotjesReserve(m), gat: varPlanRemaining(m) - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
           inPotjes: varPotjeStand(m).budget - varPotjeStand(m).gebruikt,
-          kop: k ? +k.dataset.v : null, nog: varPotjeStand(m).nog,
+          kop: k ? +k.dataset.v : null, nog: varPotjeStand(m).nog, nogPot: insMaandStand().nogPot,
           tekst: t,
           srcSafe: kaal(safeToSpend), srcKaart: kaal(insMaandStand), srcStand: kaal(varPotjeStand) };
       });
       for (const k of ['srcSafe', 'srcKaart', 'srcStand']) r[k] = kaalBron(r[k]);   // v309: in Node
       expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
       /* v382: de tempo-krapte staat niet meer op Inzichten; de maandkaart draagt het restant uit varPotjeStand(). */
-      if (r.nog !== 0) expect(r.kop).toBe(r.nog); else expect(r.kop).toBeNull();
-      expect(r.nog).toBe(r.inPotjes);
+      /* v383: de maandkaart draagt per potje budget min uitgegeven, niet onder nul; dat is de reservering van Home. */
+      if (r.nogPot !== 0) expect(r.kop).toBe(r.nogPot); else expect(r.kop).toBeNull();
+      expect(r.nogPot).toBe(r.reserve);
       /* EEN BRON PER GETAL, op de functie die hem WERKELIJK aanroept en op comment-vrije code.
          Home telt de reservering (v254), de kaart leest varPotjeStand() (v382: insMaandStand), en die ene functie is de
          enige plek die de tempo-som aanroept. */
       expect(r.srcSafe).toContain('varPotjesReserve(');
       expect(r.srcSafe).not.toContain('varPlanRemaining(');
-      expect(r.srcKaart).toContain('varPotjeStand(');
+      /* v383: de kaart leest maandSplitsing(), de ene definitie van vast en potjes, en niet de tempo-som. */
+      expect(r.srcKaart).toContain('maandSplitsing(');
       expect(r.srcKaart).not.toContain('varPlanRemaining(');
       expect(r.srcStand).toContain('varPlanRemaining(');
       // en er staat geen getal meer dat die planrest bij een waarneming optelt

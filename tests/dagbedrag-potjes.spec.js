@@ -125,6 +125,8 @@ const potjesPost = (page) => page.evaluate(() => {
     label: sh ? (/^te veel uitgegeven/i.test(titel) ? 'te veel uitgegeven' : 'nog in je potjes') : null,
     achter: regel ? INS_POTJES_SUB : '',
     gat: VP.rest - (VP.budget - VP.gebruikt),
+    S: (() => { const S = insMaandStand(); return { nogPot: S.nogPot, potBud: S.potBud, rijen: S.potRijen }; })(), reserve: varPotjesReserve(m),
+    overRij: sh ? sh.querySelectorAll('[data-insover]').length : 0,
     kaartTekst: [kaart ? kaart.innerText : '', sh ? sh.innerText : ''].join(' | ').split(String.fromCharCode(10)).join(' | ') };
   closeSheet();
   return out;
@@ -203,23 +205,33 @@ test.describe('c · wanneer de regel er niet staat', () => {
   /* De opdracht vroeg om een constatering bij een negatief bedrag. Die zit al in het label:
      inPotjes onder nul heet "Te veel uitgegeven". Een dagbedrag hoort daar niet bij, want een
      negatief dagbedrag zegt niets (dezelfde grond als v158). */
-  test('potjes overschreden: Te veel uitgegeven, en geen dagregel', async ({ page }) => {
+  /* v383: "in potjes" is per potje budget min uitgegeven, niet onder nul (gevraagd door de gebruiker). Een overschrijding
+     verrekent dus niet meer met de ruimte in andere potjes, en "te veel uitgegeven" bestaat als label niet meer: het
+     overschreden potje zegt in de sheet hoeveel het erboven zit. Wat blijft: geen dagregel. */
+  test('potjes overschreden: het potje zegt erboven, de rest staat er nog, en geen dagregel', async ({ page }) => {
     await boot(page, { extraTx: (add) => add('x1', CUR, '17', -900, 'Zalando', 'BEA, BETAALPAS ZALANDO') });
     const r = await potjesPost(page);
     expect(r.VP.gebruikt).toBeGreaterThan(r.VP.budget);
-    expect(r.label).toBe('te veel uitgegeven');
-    expect(r.achter).toBe('');
+    expect(r.label).toBe('nog in je potjes');
+    expect(r.overRij).toBeGreaterThan(0);
+    expect(r.kop).toBe('€' + r.S.nogPot.toLocaleString('nl-NL'));
+    expect(r.S.nogPot).toBe(r.reserve);
+    expect(r.achter).toBe(r.S.nogPot > 0 ? 'al bestemd, verdeeld over je potjes' : '');   // v383: er zit nog geld in een ander potje
     expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 
   /* Precies op nul: het grote getal zegt het al, dus "€0 per dag" zou datzelfde herhalen. */
-  test('restant precies nul: het label blijft staan, de dagregel niet', async ({ page }) => {
+  /* v383: netto op nul is niet meer "niets in je potjes": de ruimte in een ander potje blijft staan. */
+  test('netto op nul: het label blijft staan, de ruimte per potje ook, de dagregel niet', async ({ page }) => {
     await boot(page, { extraTx: (add) => add('x2', CUR, '17', -520, 'Zalando', 'BEA, BETAALPAS ZALANDO') });
     const r = await potjesPost(page);
     expect(r.VP.budget - r.VP.gebruikt).toBe(0);
     expect(r.label).toBe('nog in je potjes');
-    expect(r.kop).toBe('€0');
-    expect(r.achter).toBe('');
+    const over = r.S.rijen.reduce((a, x) => a + x.over, 0), uit = r.S.rijen.reduce((a, x) => a + x.uit, 0);
+    expect(over).toBeGreaterThan(0);
+    expect(uit + r.S.nogPot - over).toBe(r.S.potBud);
+    expect(r.kop).toBe('€' + r.S.nogPot.toLocaleString('nl-NL'));
+    expect(r.achter).toBe(r.S.nogPot > 0 ? 'al bestemd, verdeeld over je potjes' : '');   // v383: er zit nog geld in een ander potje
     expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 });
@@ -295,8 +307,11 @@ test.describe('e · het restant staat boven de vouw', () => {
     await boot(page, MET_SIGNAAL);
     const r = await potjesPost(page);
     expect(r.VP.over).toBe(false);          // in totaal nog binnen, één potje eroverheen
-    expect(r.kop).toBe('€20');
-    expect(r.rij).toBe(20);
+    /* v383: per potje niet onder nul; dat is de reservering op Home, en meer dan het netto restant van v382. */
+    expect(r.S.nogPot).toBe(r.reserve);
+    expect(r.S.nogPot).toBeGreaterThan(r.VP.budget - r.VP.gebruikt);
+    expect(r.kop).toBe('€' + r.S.nogPot.toLocaleString('nl-NL'));
+    expect(r.rij).toBe(r.S.nogPot);
     expect(r.achter).toBe('al bestemd, verdeeld over je potjes');
     expect(r.kaartTekst).not.toMatch(/per dag/);
   });
@@ -338,7 +353,9 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
        beide lezen VP.nog, en geen van beide deelt door de resterende dagen. */
     const s = /function insMaandStand\(\)\{([\s\S]*?)\n\}/.exec(CODE);
     expect(s).toBeTruthy();
-    expect(s[1]).toMatch(/nogPot=VP\?VP\.nog/);
+    /* v383: het restant komt uit maandSplitsing(), per potje niet onder nul. */
+    expect(s[1]).toMatch(/maandSplitsing\(/);
+    expect(s[1]).toMatch(/nogPot=potRijen\.reduce/);
     expect(s[1]).not.toMatch(/maandDagenOver/);
     const t = /function renderInsTegel\(\)\{([\s\S]*?)\n\}/.exec(CODE);
     expect(t).toBeTruthy();
@@ -346,7 +363,7 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
     expect(i).toBeGreaterThan(0);
     expect(j).toBeGreaterThan(i);
     const body = t[1].slice(i, j);
-    expect(body).toMatch(/VP\.nog/);
+    expect(body).toMatch(/S\.nogPot/);
     // v367: geen dagbedrag; de sheet draagt INS_POTJES_SUB
     expect(body).toMatch(/INS_POTJES_SUB/);
     expect(body).not.toMatch(/maandDagenOver/);

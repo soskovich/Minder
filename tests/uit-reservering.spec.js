@@ -136,7 +136,9 @@ test.describe('a - zonder vlag: de huidige situatie, ongewijzigd', () => {
     expect(r.overCat).toBe('belasting +363');
     /* v309: deze stand stond als post onder "Nog deze maand" en staat nu als hoofdgetal op de
        stand-kaart. De lijst draagt hem niet meer, en dat is de andere helft van de verhuizing. */
-    expect(r.kopPotjes).toMatch(/^te veel in potjes /);
+    /* v383: per potje niet onder nul (gevraagd door de gebruiker): belasting gaat EUR 363 over zijn potje, maar de ruimte
+       in de andere potjes blijft staan, dus de rij zegt "in potjes" en niet meer "te veel". */
+    expect(r.kopPotjes).toMatch(/^in potjes /);
     expect(r.posten.some((p) => /Te veel uitgegeven|uit je potjes/.test(p))).toBe(false);
   });
 });

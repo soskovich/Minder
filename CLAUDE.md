@@ -138,7 +138,10 @@ genoemde versietag.)*
   afgeronde maanden. Vast is per boeking `isFixed()` of een potje op vast (`potHeelVast`); nog vast is per vaste last wat
   er nog komt (een `inPotje`-post van een vast potje erbij); bij B telt het hele potje als nog vast en bij C is de post
   vast, ook op Grip, met EUR 0 budget en `zonderPotje` (keuzes van de gebruiker). Nog in potjes is per potje (het
-  variabele deel van een gemengd potje) budget min uitgegeven, niet onder nul (`S.potRijen`). Op Inzichten is uitgegeven
+  variabele deel van een gemengd potje) budget min uitgegeven, niet onder nul (`S.potRijen`). DAT DRAAIT `v250` OM: een overschrijding
+  verrekent niet meer met de ruimte in een ander potje, het label "te veel uitgegeven" bestaat niet meer, en het getal is
+  per constructie de reservering van Home (`varPotjesReserve()`, `v254`); gemeten gelijk op alle standen van
+  `een-definitie-variabel.spec.js`. Vijf specs pinden de netto aftrekking en zijn daarop gemigreerd. Op Inzichten is uitgegeven
   vast de som op Grip min nog vast, dus vast + nog vast is per constructie die som; de sheets achter "Nog te gaan · vast"
   en "in potjes" lezen dezelfde rijen en tellen op tot hun getal. Spec `vast-een-definitie.spec.js` met een eigen orakel
   uit de boekingen en de verwachte posten. INZICHTEN, VERDER: geen regel "boven budget"; zonder potje "EUR X · buiten
