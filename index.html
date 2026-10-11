@@ -2932,6 +2932,18 @@ function recurringSchedule(){
   const ym0=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const out=[];
   for(const k in map){ const r=map[k];
+    /* v384: DE CADANS KOMT UIT DE AFSTAND TUSSEN BETALINGEN, NIET UIT DE KALENDERMAAND (gevraagd door de gebruiker na
+       Shurgard: 3 aug, 1 sep en 30 sep). Tot v384 hield deze lus per kalendermaand alleen de grootste betaling; twee
+       betalingen in september werden er een, de afstand werd 58 dagen en Shurgard las als KWARTAALPOST (volgende in
+       december, in oktober EUR 0 verwacht). Nu: betalingen binnen VAST_CLUSTER_DAGEN (7) van elkaar zijn een betaling
+       (een herhaalde poging, geen tweede termijn), en de mediane afstand beslist (`vastCadans()`). Een vaste last met
+       een mediane afstand van 26 tot en met 29 dagen is 4-WEKELIJKS: de volgende is de laatste plus die afstand, en een
+       kalendermaand kan er twee hebben. 30 tot en met 32 is KALENDERMAANDELIJKS: een per periode, met de betaaldag als
+       mediaan over de maanden, en een betaling hoort bij de periode waarvan de verwachte dag het dichtst bij ligt, dus
+       huur die door het weekend op 30 september valt in plaats van 1 oktober IS de huur van oktober (keuze van de
+       gebruiker: splitsen op 29/30, want met "laatste plus afstand" krijgt een huur met mediaan 30 op 1 okt een tweede
+       verwachting op 31 okt). Andere afstanden en inkomen houden de vorm van voor v384. */
+    if(r.type==='fixed'){ const C=vastCadans(Object.assign({key:k}, r), now, today); if(C){ if(C.stil) continue; out.push(C.item); continue; } }
     const byYm={}; for(const o of r.occ){ if(!byYm[o.ym]||o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
     const occ=Object.values(byYm).sort((a,b)=>a.date.localeCompare(b.date));
     if(occ.length<2) continue;
@@ -2954,6 +2966,58 @@ function recurringSchedule(){
       amts:occ.map(o=>o.amt)});   // v231: één bedrag per maand, zodat een lezer de spreiding kan meten zonder zelf te detecteren
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
+}
+const VAST_CLUSTER_DAGEN=7, VAST_4W={min:26, max:29}, VAST_MAAND={min:30, max:32};
+/* v384: de cadans van een vaste last uit de afstand tussen betalingen. Geeft null als de afstand in geen van de twee
+   vormen valt (dan houdt het schema de vorm van voor v384), {stil:true} als de post niet meer loopt, en anders het
+   item met `verwacht` (de termijnen die in de lopende kalendermaand nog komen, een of twee) en `komend` (de volgende
+   vier verwachte dagen, voor wie wil zien dat er geen maand mist). Het bedrag is het LAATSTE bedrag (keuze van de
+   gebruiker), nooit een som over een kalendermaand. */
+function vastCadans(r, now, today){
+  const dag=86400000, lok=s=>{ const d=new Date(s); d.setHours(0,0,0,0); return d; };
+  const srt=r.occ.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const occ=[]; for(const o of srt){ const p=occ[occ.length-1];
+    if(p && (lok(o.date)-lok(p.date))/dag<=VAST_CLUSTER_DAGEN){ if(o.amt>=p.amt){ occ[occ.length-1]=o; } continue; }
+    occ.push(o); }
+  if(occ.length<2) return null;
+  const gaps=[]; for(let i=1;i<occ.length;i++) gaps.push(Math.round((lok(occ[i].date)-lok(occ[i-1].date))/dag));
+  gaps.sort((a,b)=>a-b); const med=gaps[Math.floor(gaps.length/2)];
+  const vier=med>=VAST_4W.min && med<=VAST_4W.max, maand=med>=VAST_MAAND.min && med<=VAST_MAAND.max;
+  if(!vier && !maand) return null;
+  const last=occ[occ.length-1], lastD=lok(last.date);
+  if((today-lastD.getTime())/dag > 30*1.6+7) return {stil:true};
+  const j=now.getFullYear(), mo=now.getMonth();
+  const mStart=new Date(j,mo,1).getTime(), mEind=new Date(j,mo+1,0).getTime();
+  const verwacht=[], komend=[];
+  if(vier){
+    let d=new Date(lastD); d.setDate(d.getDate()+med); let achter=false;
+    for(let g=0; g<40 && komend.length<4; g++){ const t=d.getTime();
+      if(t<mStart){ if(!achter){ achter=true; verwacht.push(new Date(now)); } }
+      else { const sd=shiftWeekendToMonday(d);
+        if(t<=mEind){ verwacht.push(t<today?new Date(now):sd); }
+        if(t>=today) komend.push(sd); }
+      d=new Date(d); d.setDate(d.getDate()+med); }
+  } else {
+    // de betaaldag als mediaan, met de laatste drie dagen van een maand als dagen VOOR de volgende periode
+    const offs=occ.map(o=>{ const d=lok(o.date), dim=new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(), dom=d.getDate();
+      return dom<=dim-3 ? dom-1 : dom-1-dim; }).sort((a,b)=>a-b);
+    const off=offs[Math.floor(offs.length/2)];
+    const due=(y,m)=>new Date(y, m, 1+off);
+    const betaald=new Set();
+    for(const o of occ){ const d=lok(o.date); let best=null, bd=Infinity;
+      for(const dm of [-1,0,1]){ const p=new Date(d.getFullYear(), d.getMonth()+dm, 1), x=Math.abs(due(p.getFullYear(), p.getMonth())-d);
+        if(x<bd){ bd=x; best=p.getFullYear()+'-'+p.getMonth(); } }
+      betaald.add(best); }
+    for(let dm=-1; dm<=12 && komend.length<4; dm++){ const p=new Date(j, mo+dm, 1), dd=due(p.getFullYear(), p.getMonth()), t=dd.getTime();
+      if(betaald.has(p.getFullYear()+'-'+p.getMonth())) continue;
+      if(t>=mStart && t<=mEind) verwacht.push(t<today?new Date(now):shiftWeekendToMonday(dd));
+      else if(t<mStart && t>=mStart-VAST_CLUSTER_DAGEN*dag) verwacht.push(new Date(now));   // vlak voor de maand verwacht en nog niet gezien: nu, zoals voor v384
+      if(t>=today || (t>=mStart && t<=mEind)) komend.push(shiftWeekendToMonday(dd)); }
+  }
+  const next=verwacht.length?verwacht[0]:(komend[0]||new Date(now));
+  return {item:{key:r.key, name:r.name, cat:r.cat, type:r.type, amount:last.amt, day:next.getDate(), intervalM:1, cadans:vier?'4w':'maand', afstand:med,
+    verwacht, komend:komend.map(ymdVan), nextDate:new Date(next), lastDate:last.date, count:r.occ.length, monthlyEq:Math.round(last.amt), acc:last.acc,
+    incasso:(r.tot>0 && r.inc/r.tot>=0.5), periodic:(r.tot>0 && r.per/r.tot>=0.5), amts:occ.map(o=>o.amt)}};
 }
 // Herkende herhaling: sleutels van de gedetecteerde terugkerende vaste betalingen (incasso/periodieke overboeking, >=2x, regelmatig).
 // Bron van waarheid voor isFixed. Licht gememoïseerd op _dataGen (recurringSchedule loopt over alle TX; roept isFixed NIET aan -> geen circulariteit).
@@ -3017,7 +3081,7 @@ function liquidityDaily(days){
       /* v369: een opgezegde post telt per voorkomen, tot en met de maand van zijn laatste afschrijving (verwachtInMaand). */
       if(d.getTime()>=start.getTime() && (s.type!=='fixed' || verwachtInMaand(s.key, ymdVan(d).slice(0,7)))){ const ed=shiftWeekendToMonday(d);
         if(!V || ed.getTime()>=maandEind.getTime()) events.push({date:new Date(ed),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat}); }
-      d.setMonth(d.getMonth()+s.intervalM); g++; } }
+      if(s.cadans==='4w') d.setDate(d.getDate()+s.afstand); else d.setMonth(d.getMonth()+s.intervalM); g++; } }   // v384: 4-wekelijks loopt per afstand
   events.sort((a,b)=>a.date-b.date);
   const dailyVar=f?f.fVar/30:0; let b=V?V.eind:totalBalance().sum; const dates=[],bal=[];
   const opDag=(e,d)=>e.date.getFullYear()===d.getFullYear()&&e.date.getMonth()===d.getMonth()&&e.date.getDate()===d.getDate();
@@ -3265,11 +3329,17 @@ function maandLiqBasis(){
   const incomeThisMonth=maandInkomen(ym).norm;
   // maandelijkse vaste last die deze maand nog niet langskwam = komt deze maand nog (de afschrijfdatum kan een paar dagen variëren,
   // dus niet uitsluiten omdat de voorspelde dag al voorbij is). Kwartaal/jaar blijven op de voorspelde maand.
-  const fixDueItems=sched.filter(s=>{
-    if(s.type!=='fixed' || seen.has(s.key) || !(s.incasso||s.periodic)) return false;
-    if(s.intervalM===1) return true;
-    return s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth();
-  });
+  /* v384: een vaste last met een cadans (`vastCadans()`, 4-wekelijks of kalendermaandelijks) draagt zelf welke termijnen
+     er deze kalendermaand nog komen, gerekend vanaf zijn laatste betaling. Hij staat er dus per termijn (een 4-wekelijkse
+     post kan er twee keer staan, en dan tellen ze allebei), en een betaling eerder deze maand sluit hem niet uit: die
+     zit al in de projectie. De andere posten houden de toets van voor v384 (deze maand nog niet langsgekomen). */
+  const fixDueItems=[];
+  for(const s of sched){
+    if(s.type!=='fixed' || !(s.incasso||s.periodic)) continue;
+    if(s.verwacht){ s.verwacht.forEach((d,i)=>fixDueItems.push(Object.assign({}, s, {nextDate:new Date(d), day:new Date(d).getDate(), termijn:i+1, termijnen:s.verwacht.length}))); continue; }
+    if(seen.has(s.key)) continue;
+    if(s.intervalM===1 || (s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth())) fixDueItems.push(s);
+  }
   // robuust vangnet: vaste lasten die VORIGE maand langskwamen maar deze maand nog niet (vangt incasso's die het strikte schema mist door wisselende omschrijvingen of korte historie)
   try{ const _ms=months(); const _idx=_ms.indexOf(ym); const _prev=_idx>0?_ms[_idx-1]:null;
     /* v328: de terugval vangt posten die het SCHEMA niet kent. Hij toetste alleen tegen wat er DEZE
@@ -3278,16 +3348,23 @@ function maandLiqBasis(){
        komt per kwartaal (maart, juni, september), het schema zegt interval 3 met de volgende in
        december, en de terugval zette hem toch als maandlast in oktober. Een post die het schema kent
        laat de terugval dus met rust; het schema weet wanneer hij komt. */
+    /* v384: PER BETALING EN NIET PER KALENDERMAAND. De terugval telde alle betalingen van vorige maand per sleutel op,
+       en GEMELD gaf dat voor Shurgard (1 sep EUR 66,26 en 30 sep EUR 71,00) EUR 137 verwacht in oktober, terwijl er een
+       betaling komt. Nu is het bedrag dat van de LAATSTE betaling (keuze van de gebruiker), net als in het schema. */
     if(_prev){ const _have=new Set(fixDueItems.map(s=>s.key)); sched.forEach(s=>{ if(s.type==='fixed') _have.add(s.key); }); const _byk={};
-      for(const t of txOfMonth(_prev)){ if(t.amount<0 && (isIncasso(t)||isPeriodicTransfer(t))){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd,tot:0,inc:0,per:0,cat:null,catAmt:0}); e.amt+=-t.amount; if(-t.amount>e.catAmt){ e.catAmt=-t.amount; e.cat=catOf(t); } if(dd>e.day) e.day=dd; e.tot++; if(isIncasso(t)) e.inc++; if(isPeriodicTransfer(t)) e.per++; } }
+      for(const t of txOfMonth(_prev)){ if(t.amount<0 && (isIncasso(t)||isPeriodicTransfer(t))){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,laatst:'',name:t.name,day:dd,tot:0,inc:0,per:0,cat:null,catAmt:0}); if(t.date>=e.laatst){ e.laatst=t.date; e.amt=-t.amount; } if(-t.amount>e.catAmt){ e.catAmt=-t.amount; e.cat=catOf(t); } if(dd>e.day) e.day=dd; e.tot++; if(isIncasso(t)) e.inc++; if(isPeriodicTransfer(t)) e.per++; } }
       // betaalvorm meegeven met dezelfde meerderheidsregel als recurringSchedule, anders komen vangnet-posten zonder incasso/periodic binnen
       for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1,cat:it.cat||null,terugval:true,incasso:(it.tot>0 && it.inc/it.tot>=0.5),periodic:(it.tot>0 && it.per/it.tot>=0.5)}); }
     } }catch(_){}
   // provider-dedupe: schreef ditzelfde bedrijf deze maand al iets af (ook een afwijkend/incidenteel bedrag), dan die vaste last niet nog eens voorspellen
   try{ const _cl=x=>(x||'').toUpperCase().replace(/[0-9]/g,'').replace(/[^A-Z ]/g,'').replace(/\s+/g,' ').trim();
-    const _paid=txOfMonth(ym).filter(t=>t.amount<0).map(t=>_cl(t.name)).filter(x=>x.length>=5);
-    const _match=name=>{ const a=_cl(name); if(a.length<5) return false; return _paid.some(bb=>{ const sh=a.length<=bb.length?a:bb, lo=a.length<=bb.length?bb:a; return sh.length>=5 && lo.startsWith(sh.slice(0,Math.min(sh.length,16))); }); };
-    for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i].name)) fixDueItems.splice(i,1); }
+    const _paid=txOfMonth(ym).filter(t=>t.amount<0).map(t=>({n:_cl(t.name), k:recurKey(t), d:t.date})).filter(x=>x.n.length>=5);
+    /* v384: een post met een cadans rekent zijn termijnen vanaf zijn eigen laatste betaling, dus zijn eigen betaling deze
+       maand sluit hem niet uit; alleen een betaling van hetzelfde bedrijf onder een andere sleutel, op of na een week voor
+       de verwachte dag, doet dat (dan is het de termijn onder een gewijzigde omschrijving). */
+    const _match=s=>{ const a=_cl(s.name); if(a.length<5) return false; const grens=s.cadans?ymdVan(new Date(new Date(s.nextDate).getTime()-7*86400000)):null;
+      return _paid.some(p=>{ if(s.cadans && (p.k===s.key || p.d<grens)) return false; const bb=p.n, sh=a.length<=bb.length?a:bb, lo=a.length<=bb.length?bb:a; return sh.length>=5 && lo.startsWith(sh.slice(0,Math.min(sh.length,16))); }); };
+    for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i])) fixDueItems.splice(i,1); }
   }catch(_){}
   // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
   /* v369: niet meer het aan/uit van de vlag maar verwachtInMaand(): een opgezegde post met een laatste afschrijving

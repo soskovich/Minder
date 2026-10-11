@@ -127,6 +127,19 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN VERWACHTE VASTE LAST IS PER BETALING, EN DE CADANS KOMT UIT DE AFSTAND** (`v384`, gevraagd door de gebruiker na
+  Shurgard: 3 aug EUR 85,90, 1 sep EUR 66,26, 30 sep EUR 71,00). GEMETEN: de terugval op vorige maand telde de twee
+  septemberbetalingen op tot EUR 137 verwacht in oktober, en het schema hield per kalendermaand een betaling, zodat de afstand
+  58 dagen werd en Shurgard als kwartaalpost met EUR 0 in oktober las. `vastCadans()` (alleen `type==='fixed'`): betalingen
+  binnen `VAST_CLUSTER_DAGEN` (7) zijn een betaling, de mediane afstand beslist. `VAST_4W` (26 tot en met 29) is 4-wekelijks:
+  laatste plus afstand, en twee termijnen in een kalendermaand tellen allebei (`fixDueItems` krijgt er een per termijn, met
+  `termijn`, en de eigen betaling deze maand sluit hem niet uit). `VAST_MAAND` (30 tot en met 32) is kalendermaandelijks: een per
+  periode, de betaaldag als mediaan (de laatste drie dagen van een maand zijn dagen voor de volgende periode) en een betaling
+  hoort bij de periode met de dichtstbijzijnde verwachte dag. DE SPLITSING OP 29/30 IS DE KEUZE VAN DE GEBRUIKER: met laatste
+  plus afstand voor alles krijgt een huur op de 1e met mediaan 30 een tweede verwachting op 31 oktober. Het schema-item draagt
+  `cadans`, `afstand`, `verwacht` (termijnen van deze maand) en `komend` (de volgende vier dagen). Het bedrag is het LAATSTE,
+  ook in de terugval. Andere afstanden en inkomen houden de vorm van voor v384. De "EUR 278 betaald" van `v383` was het
+  verschil op de tegel van v381 ("EUR 767 · van EUR 1.045"): 141 betaald plus de terugvalpost. Spec `vaste-last-cadans.spec.js`.
 - **EEN DEFINITIE VAN VAST, VOOR INZICHTEN EN GRIP** (`v383`, gevraagd door de gebruiker na echte data). GEMETEN: op
   Inzichten stond uitgegeven vast EUR 141 + nog vast EUR 767 = EUR 908 tegen EUR 1.045 vaste lasten op Grip. Drie
   gevallen liepen uiteen: (A) een post uit de terugval op vorige maand (`inPotje`, `v327`) in een potje dat je op vast
@@ -7070,7 +7083,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v383` → `minder-v384`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v384` → `minder-v385`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -7106,7 +7119,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382` en `v383` naar `minder-v383`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382`, `v383` naar `minder-v383` en `v384` naar `minder-v384`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
