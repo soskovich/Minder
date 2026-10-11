@@ -127,17 +127,33 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN DEFINITIE VAN VAST, VOOR INZICHTEN EN GRIP** (`v383`, gevraagd door de gebruiker na echte data). GEMETEN: op
+  Inzichten stond uitgegeven vast EUR 141 + nog vast EUR 767 = EUR 908 tegen EUR 1.045 vaste lasten op Grip. Drie
+  gevallen liepen uiteen: (A) een post uit de terugval op vorige maand (`inPotje`, `v327`) in een potje dat je op vast
+  zette (Shurgard EUR 137 in Huur) was op Grip vast en op Inzichten "nog in potjes", want `monthLiquidity().fixDue` laat
+  `inPotje` weg; dat was de EUR 137. (B) Een vast potje zonder betaling was op Grip met zijn hele bedrag vast (`v354`) en
+  op Inzichten potje. (C) Een herkende vaste last zonder potje was op Inzichten vast en op Grip "zonder potje".
+  `maandSplitsing(m, L)` IS DE ENE DEFINITIE, met drie lezers: `maandVooruit()` (de bridge en de sheet op Grip),
+  `vasteLastenStand()` en `insMaandStand()`. Hij leest geen geschiedenis, dus Inzichten heeft hem ook zonder drie
+  afgeronde maanden. Vast is per boeking `isFixed()` of een potje op vast (`potHeelVast`); nog vast is per vaste last wat
+  er nog komt (een `inPotje`-post van een vast potje erbij); bij B telt het hele potje als nog vast en bij C is de post
+  vast, ook op Grip, met EUR 0 budget en `zonderPotje` (keuzes van de gebruiker). Nog in potjes is per potje (het
+  variabele deel van een gemengd potje) budget min uitgegeven, niet onder nul (`S.potRijen`). Op Inzichten is uitgegeven
+  vast de som op Grip min nog vast, dus vast + nog vast is per constructie die som; de sheets achter "Nog te gaan · vast"
+  en "in potjes" lezen dezelfde rijen en tellen op tot hun getal. Spec `vast-een-definitie.spec.js` met een eigen orakel
+  uit de boekingen en de verwachte posten. INZICHTEN, VERDER: geen regel "boven budget"; zonder potje "EUR X · buiten
+  budget ›" (breekt op een smalle kolom als geheel naar een eigen regel); de weektegel zie de regel van `v382`; een
+  nieuwe partij als patroon zegt "Partij · eerste keer" (de categorie in de sheet); de fit-test telt de menubalk mee.
 - **INZICHTEN OP EEN SCHERM: MAANDKAART MET TRAP-TEMPO, WEEKTEGEL, PATRONEN EN VERSCHUIVINGEN** (`v382`, gevraagd
   door de gebruiker, mockup "Inzichten met de weektegel", sectie 1 leidend). DE MAANDKAART (`insMaandKaart()`,
   `#insMaand`): kop `[data-insuit]` van `[data-insbudget]` met `[data-instempoverschil]`; balk `#insMbBalk` met
   `[data-insseg]` vast betaald, potjes, zonder potje, nog vast (gearceerd) en nog in potjes (lichtgroen), de
   tempostreep `em[data-instempo]`; legenda `.ins-leg2` (Uitgegeven: vast, potjes, zonder potje ›; Nog te gaan: vast,
-  in potjes ›), nulrijen weg, en bij een enkel deel "alles" in plaats van het bedrag. `[data-insboven]` alleen als
-  boven budget groter dan nul is EN afwijkt van zonder potje (keuze van de gebruiker). ELK GETAL EEN KEER
+  in potjes ›), nulrijen weg, en bij een enkel deel "alles" in plaats van het bedrag. SINDS `v383` geen regel "boven
+  budget" meer; zonder potje zegt "EUR X · buiten budget ›" (`[data-insbuiten]`). ELK GETAL EEN KEER
   (`[data-insgetal]`). De delen komen uit `insMaandStand()`: `totals().spendNorm` gesplitst per boeking
-  (`insTxSoort()`) en afgerond met `brugAfronden()`, nog vast is `monthLiquidity().fixDue`, nog in potjes
-  `varPotjeStand().nog`. HET TRAP-TEMPO: vaste lasten met een datum tot en met vandaag (betaald, of een verwachte
-  incasso zonder `excl` en zonder `inPotje`) plus het potjesdeel maal dag gedeeld door dagen; op de laatste dag is
+  (`insTxSoort()`); SINDS `v383` komen vast, nog vast en nog in potjes uit `maandSplitsing()` (zie de regel bovenaan). HET TRAP-TEMPO: vaste lasten met een datum tot en met vandaag (betaald, of een verwachte
+  incasso zonder `excl`, en sinds `v383` ook een `inPotje`-post van een vast potje) plus het potjesdeel maal dag gedeeld door dagen; op de laatste dag is
   het het maandbudget. Het patroon-tempo (`insTempo()`) is vervallen. HET POTJE-DETAIL (`openInsPotje()`,
   `#insPotjeSheet`) rekent lineair en zet het patroon als grijze stip (`[data-potnormaal]`, "normaal op dag X:
   EUR Y"); "verwacht eind maand" (`[data-potverwacht]`) blijft.
@@ -146,8 +162,9 @@ genoemde versietag.)*
   plus zonder potje (`weekTelt()`). Het weekbedrag is (wekelijkse potjes min variabel voor deze week) / dagen over x
   dagen van de week (`weekRekensom()`), en staat vast binnen de week (`weekNu()`, `SET.weekStand={start, bedrag,
   sleutel}`; de sleutel is de wekelijks-keuze met de bedragen, dus een eigen wijziging rekent opnieuw). De tegel
-  (`.ins-week`, `[data-weekbedrag]`, `[data-weeknog]`, `[data-weekring]`) zegt "nog EUR X", "nog te besteden · van
-  EUR Y" met een ring; over het weekbedrag neutraal met een lege ring (`[data-weekover]`). Een tik opent de
+  (`.ins-week`, `[data-weekbedrag]`, `[data-weeknog]`, `[data-weekring]`) zegt sinds `v383` "EUR X", "nog te besteden ·
+  van EUR Y" met een ring die het deel toont dat OP is; boven het weekbedrag "-EUR X" in oker, "boven je weekbedrag van
+  EUR Y" en de ring vol in oker met het echte percentage (`[data-weekover]`, `[data-weekop]`). Een tik opent de
   rekensom (`#weekSheet`), zonder terugblik. WEKELIJKS PER POTJE ZONDER DEFAULT (`SET.potWekelijks`,
   `potWekelijks()` geeft true, false of null): een eenmalige sheet (`openWekelijks()`, `#wekSheet`, bevestigen pas
   als alles gekozen is, met het gevolg live), de keuze in de sheet van een potje (`[data-potwekelijks]`) en een
@@ -159,7 +176,7 @@ genoemde versietag.)*
   `VERSCHUIF_LOS` (4) potjes los en de rest als "Overige potjes", rood is meer en groen minder; de lopende maand
   vergelijkt tot en met vandaag met dezelfde dagen van de vorige maand. VERVALLEN: zie de horizon hierboven.
   GEMETEN op de fixture `inzichten-stand.js` (10 oktober): EUR 406 van EUR 3.376, tempo EUR 825, week nog EUR 109
-  van EUR 257 (42 procent), de pagina 844px hoog op 390x844, zonder scrollen. Zonder potjes heet de noemer "inkomen-limiet"
+  van EUR 257 (42 procent), en sinds `v383` gemeten boven de menubalk: de inhoud eindigt op 680px bij een menubalk vanaf 772px op 390x844. Zonder potjes heet de noemer "inkomen-limiet"
   (`v173`), de onbekend-stand draagt "In je potjes EUR X" (`v311`), en "Nog te gaan · vast" opent `openInsTegel('vast')`.
   Het renderen zet het weekbedrag vast (`weekNu(true)` schrijft `SET.weekStand`): de enige schrijver op Inzichten, en hij
   schrijft geen geld. Spec `inzichten-week.spec.js`; twaalf sabotages, alle twaalf rood.
@@ -7050,7 +7067,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v382` → `minder-v383`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v383` → `minder-v384`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -7086,7 +7103,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381` en `v382` naar `minder-v382`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382` en `v383` naar `minder-v383`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

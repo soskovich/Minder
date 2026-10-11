@@ -136,17 +136,36 @@ test.describe('c · het weekbedrag', () => {
       TX.push(t); categorize(t); save(); const R = weekRekensom(); return { a, b: R.weken[2].bedrag, dagen: R.dim - R.weken[2].van + 1, d: R.weken[2].dagen }; });
     expect(r.a - r.b).toBe(Math.round(200 / r.dagen * r.d));
   });
-  test('boven het weekbedrag: neutraal, met de ring leeg', async ({ page }) => {
+  /* v383 (gevraagd door de gebruiker): de ring is het deel dat op is; boven het weekbedrag is hij vol in oker met het
+     echte percentage, en het grote getal is "-EUR X" in oker met "boven je weekbedrag van EUR Y". Nooit de vorm van "nog". */
+  const amber = (page) => page.evaluate(() => { const d = document.createElement('div'); d.style.color = 'var(--amber)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; });
+  test('binnen het weekbedrag: groot het bedrag dat over is, de ring het deel dat op is', async ({ page }) => {
+    await boot(page, '2026-10-10'); await kies(page);
+    const w = page.locator('#insWeek');
+    const r = await w.evaluate((e) => ({ b: +e.dataset.weekbedrag, nog: +e.dataset.weeknog, uit: +e.dataset.weekuit, ring: +e.querySelector('[data-weekring]').dataset.weekring, groot: e.querySelector('.ins-wk-v').textContent, regel: e.querySelector('.ins-wk-s').textContent, pct: e.querySelector('.ins-ring span').textContent }));
+    expect(r.nog).toBeGreaterThan(0); expect(r.uit).toBeGreaterThan(0);
+    expect(r.ring).toBe(Math.round(r.uit / r.b * 100));
+    expect(r.pct).toBe(r.ring + '%');
+    expect(r.groot).not.toMatch(/nog/); expect(r.groot).toMatch(/^€/);
+    expect(r.regel).toMatch(/^nog te besteden · van €/);
+    expect(await w.getAttribute('data-weekover')).toBeNull();
+  });
+  test('boven het weekbedrag: ring vol in oker met het echte percentage, groot -EUR X in oker', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     await page.evaluate(() => { const t = { id: 'veel1', date: '2026-10-09', amount: -900, acc: TX[0].acc, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       TX.push(t); categorize(t); save(); render(); go('ins'); });
     const w = page.locator('#insWeek');
-    expect(await w.innerText()).toMatch(/over je weekbedrag/);
-    expect(await w.getAttribute('data-weekring')).toBe(null);
-    expect(await page.locator('[data-weekring]').getAttribute('data-weekring')).toBe('0');
-    const kleur = await page.locator('[data-weekover]').evaluate((e) => getComputedStyle(e).color);
-    const rood = await page.evaluate(() => { const d = document.createElement('div'); d.style.color = 'var(--red)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; });
-    expect(kleur).not.toBe(rood);
+    expect(await w.getAttribute('data-weekover')).not.toBeNull();
+    const r = await w.evaluate((e) => ({ b: +e.dataset.weekbedrag, nog: +e.dataset.weeknog, uit: +e.dataset.weekuit, ring: e.querySelector('[data-weekring]').dataset.weekring, op: +e.querySelector('[data-weekring]').dataset.weekop, bg: e.querySelector('[data-weekring]').style.background, groot: e.querySelector('.ins-wk-v').textContent, gk: getComputedStyle(e.querySelector('.ins-wk-v')).color, regel: e.querySelector('.ins-wk-s').textContent, pct: e.querySelector('.ins-ring span').textContent }));
+    expect(r.nog).toBeLessThan(0);
+    expect(r.ring).toBe('100');
+    expect(r.op).toBe(Math.round(r.uit / r.b * 100)); expect(r.op).toBeGreaterThan(100);
+    expect(r.pct).toBe(r.op + '%');
+    expect(r.bg).toContain('--amber');
+    expect(r.groot).toBe('-€' + (-r.nog).toLocaleString('nl-NL'));
+    expect(r.gk).toBe(await amber(page));
+    expect(r.regel).toBe('boven je weekbedrag van €' + r.b.toLocaleString('nl-NL'));
+    expect(await w.innerText()).not.toMatch(/nog te besteden|\bnog €/);
   });
   test('de tik opent de rekensom', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
@@ -216,16 +235,29 @@ test.describe('e · de maandkaart', () => {
     await page.locator('[data-insleg="nogpot"]').click();
     await expect(page.locator('#insTegelSheet[data-instegelsheet="potjes"]')).toHaveCount(1);
   });
-  test('boven budget staat er alleen als het afwijkt van zonder potje', async ({ page }) => {
+  /* v383: de regel "boven budget" is weg; zonder potje zegt "EUR X · buiten budget". Eén getal, niet twee. */
+  test('geen regel boven budget; zonder potje zegt buiten budget, ook als een potje erboven gaat', async ({ page }) => {
     await S.boot(page, { dag: '2026-10-10', extraTx: [{ id: 'kap1', date: '2026-10-08', amount: -45, name: 'Kapper Jan', desc: 'BEA, BETAALPAS KAPPER JAN' }] });
     await page.evaluate(() => { const t = TX.find((x) => x.name === 'Kapper Jan'); OVR[t.id] = 'zorg'; save(); render(); go('ins'); });
-    const r = await page.evaluate(() => { const M = insMaandStand(); return { boven: M.boven, zonder: M.zonder, n: document.querySelectorAll('[data-insboven]').length }; });
-    expect(r.zonder).toBe(45);
-    if (r.boven === r.zonder || r.boven <= 0) expect(r.n).toBe(0); else expect(r.n).toBe(1);
-    // een potje dat over zijn grens gaat laat boven budget afwijken van zonder potje
+    const rij = page.locator('[data-insleg="zonder"]');
+    expect(await rij.innerText()).toMatch(/€45 · buiten budget ›/);
     await page.evaluate(() => { const t = { id: 'vic2', date: '2026-10-09', amount: -300, acc: TX[0].acc, name: 'Coffeeshop', desc: 'BEA, BETAALPAS COFFEESHOP DE DAMPKRING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; TX.push(t); categorize(t); save(); render(); go('ins'); });
-    const s = await page.evaluate(() => { const M = insMaandStand(); const e = document.querySelector('[data-insboven]'); return { boven: M.boven, zonder: M.zonder, el: e ? +e.dataset.insboven : null }; });
-    if (s.boven > 0 && s.boven !== s.zonder) expect(s.el).toBe(s.boven); else expect(s.el).toBeNull();
+    const s = await page.evaluate(() => { const M = insMaandStand(); return { boven: M.boven, zonder: M.zonder, n: document.querySelectorAll('[data-insboven]').length, txt: document.getElementById('insMaand').innerText }; });
+    expect(s.boven).toBeGreaterThan(s.zonder);   // het geval waarin de oude regel er stond
+    expect(s.n).toBe(0);
+    expect(s.txt).not.toMatch(/boven budget/);
+    expect(s.txt).toMatch(/buiten budget/);
+  });
+  /* v383: de cel zelf mag niet overlopen; een meting op de kaart zag niet dat "buiten budget" over de buurkolom liep. */
+  for (const w of [360, 390]) test(`zonder potje met buiten budget blijft in zijn eigen kolom op ${w}px, ook bij een groot bedrag`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 844 });
+    await S.boot(page, { dag: '2026-10-10', extraTx: [{ id: 'kap1', date: '2026-10-08', amount: -1188, name: 'Kapper Jan', desc: 'BEA, BETAALPAS KAPPER JAN' }] });
+    await page.evaluate(() => { const t = TX.find((x) => x.name === 'Kapper Jan'); OVR[t.id] = 'zorg'; save(); render(); go('ins'); });
+    const r = await page.evaluate(() => [...document.querySelectorAll('.ins-leg2 [data-insleg]')].map((rij) => { const R = rij.getBoundingClientRect(); let uit = 0;
+      for (const e of rij.querySelectorAll('*')) { const q = e.getBoundingClientRect(); if (q.width) uit = Math.max(uit, q.right - R.right, R.left - q.left); }
+      return { k: rij.dataset.insleg, uit, txt: rij.innerText }; }));
+    const z = r.find((x) => x.k === 'zonder'); expect(z.txt).toMatch(/€1\.188 · buiten budget ›/);
+    for (const x of r) expect(x.uit).toBeLessThanOrEqual(0.5);
   });
   test('elk getal staat een keer op Inzichten', async ({ page }) => {
     await S.boot(page, { dag: '2026-10-10', extraTx: [{ id: 'kap1', date: '2026-10-08', amount: -45, name: 'Kapper Jan', desc: 'BEA, BETAALPAS KAPPER JAN' }] });
@@ -267,11 +299,22 @@ test.describe('g · patronen als tegels', () => {
     const t = await page.evaluate(() => [...document.querySelectorAll('#insPatronen .ins-pt')].map((e) => ({ s: e.dataset.patroon, k: e.querySelector('.ins-pt-k').textContent, d: e.querySelector('.ins-pt-d').textContent })));
     expect(t.length).toBeLessThanOrEqual(4); expect(t.length).toBeGreaterThan(0);
     const h = t.find((x) => x.s === 'herhaalt'); expect(h.k).toBe('2e maand'); expect(h.d).toMatch(/Uit eten & café · sep \+€194/);
-    const n = t.find((x) => x.s === 'nieuw'); expect(n.d).toMatch(/eerste keer$/);
+    const n = t.find((x) => x.s === 'nieuw'); expect(n.d).toMatch(/^[^·]+ · eerste keer$/);   // v383: partij · eerste keer, zonder categorie
     const r = t.find((x) => x.s === 'herstelt'); expect(r.k).toMatch(/^−€/); expect(r.d).toMatch(/gewoonlijk €\d+/);
     for (const x of t) expect(x.d).not.toMatch(/verwacht/);
     await page.locator('#insPatronen .ins-pt[data-patroon="herhaalt"]').click();
     await expect(page.locator('#insPatroonSheet [data-insgrip]')).toHaveCount(1);
+  });
+  /* v383: een patroontegel draagt hooguit twee regels tekst onder het kerngetal; de categorie van een nieuwe partij staat
+     in de sheet en niet op de tegel. */
+  for (const w of [360, 390]) test(`op ${w}px heeft elke patroontegel hooguit twee regels, en de sheet noemt de categorie`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 844 });
+    await boot(page, '2026-10-10'); await kies(page);
+    const r = await page.evaluate(() => [...document.querySelectorAll('#insPatronen .ins-pt-d')].map((e) => { const lh = parseFloat(getComputedStyle(e).lineHeight); return Math.round(e.getBoundingClientRect().height / lh); }));
+    expect(r.length).toBeGreaterThan(0);
+    for (const n of r) expect(n).toBeLessThanOrEqual(2);
+    await page.locator('#insPatronen .ins-pt[data-patroon="nieuw"]').click();
+    expect(await page.locator('#insPatroonSheet').innerText()).toMatch(/Vervoer/);
   });
 });
 
@@ -320,16 +363,28 @@ test.describe('h · verschuivingen', () => {
 });
 
 test.describe('i · een scherm', () => {
-  test('Inzichten past op 390x844 zonder scrollen', async ({ page }) => {
+  /* v383: de menubalk onderaan telt mee. Een scherm past als de onderkant van de laatste inhoud op Inzichten boven de
+     bovenkant van de menubalk ligt (zichtbare hoogte = viewport min menubalk), niet als scrollHeight binnen de viewport
+     valt: de menubalk ligt eroverheen. */
+  const meet = (page) => page.evaluate(() => {
+    const nav = document.querySelector('.nav').getBoundingClientRect();
+    const scr = document.getElementById('s-ins');
+    let onder = 0; for (const el of scr.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.height > 0 && r.width > 0) onder = Math.max(onder, r.bottom + scrollY); }
+    return { onder, navTop: nav.top + scrollY, navH: nav.height, h: innerHeight };
+  });
+  test('Inzichten past op 390x844 boven de menubalk', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await boot(page, '2026-10-10'); await kies(page);
-    const r = await page.evaluate(() => ({ sh: document.scrollingElement.scrollHeight, h: innerHeight }));
-    expect(r.sh).toBeLessThanOrEqual(r.h);
+    const r = await meet(page);
+    expect(r.navH).toBeGreaterThan(40);
+    expect(r.navTop).toBeLessThan(r.h);
+    expect(r.onder).toBeLessThanOrEqual(r.h - r.navH);
   });
   test('ook zonder keuze over wekelijks', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await boot(page, '2026-10-10');
-    const r = await page.evaluate(() => ({ sh: document.scrollingElement.scrollHeight, h: innerHeight }));
-    expect(r.sh).toBeLessThanOrEqual(r.h);
+    const r = await meet(page);
+    expect(r.onder).toBeLessThanOrEqual(r.h - r.navH);
   });
 });
+
