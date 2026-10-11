@@ -15,6 +15,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 *(Staande regels, gedestilleerd uit de changelog. Respecteer deze bij nieuwe code; wil je er een omgooien, doe dat bewust en leg het vast. De versietag verwijst naar de volledige onderbouwing in `CHANGELOG.md`.)*
 
 ### Wat telt als wat (rekenregels)
+- **Elk getal op Grip noemt zijn basis, een ✓ is een afronding, en Kiezen is alleen kiezen** (`v390`, correcties na schermen van het toestel).
+  - Verwacht (Doelen-meter: Plan opzij min eruit) en gestort (Terugblik: `savedNet()`) staan nooit zonder label naast elkaar.
+  - De Terugblik oordeelt over een afgesloten maand; zonder gemeten maand staat er dat, en geen "0 van 0". De lopende maand is een tussenstand.
+  - Een tab-✓ volgt de afronding: Terugblik pas na afsluiten van de maand, openen telt niet.
+  - Kiezen draagt alleen de rijen van de patronen; afspraken staan in het logboek. De afspraak uit het gesprek blijft, als ingang terug naar dat gesprek.
+  - Beleggen vóór fundament volgt gemeten inleg die loopt (deze maand of vorige maand gekoppeld), niet alleen inleg in deze maand. Een ingevulde periodieke inleg (`a.per`) is geen meting (`v332`). "Voorwaarden gelden niet" en een keuze van deze maand blijven buiten.
 - **Het patroon telt vanaf je salaris, en "klopt" geeft de naam terug aan de app** (`v389`, keuze van de gebruiker op `v388`).
   - "Betaalrekening op na ~X dagen na salaris": X is de afstand van de laatste salarisbetaling (dezelfde bron als `salarisBetalingLaatst()`, op of voor de eerste onttrekking) tot die onttrekking. Een salaris NA de onttrekking telt niet: het geld was toen al op. Zonder salarisbetaling staat er "salarisdatum onbekend", geen telling vanaf de 1e (`v59`/`v73`/`v173`).
   - Je reden van vorige maand is de naam, tenzij je deze maand "klopt" zegt: dan draagt het patroon weer de naam die de app ziet. Het bewijs staat er in beide gevallen.

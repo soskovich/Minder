@@ -43,7 +43,8 @@ const kaart = async (page) => {
       /* v365: de afspraken staan niet meer in de afsluiting (die telt alleen afsluittaken). Hun stand is dezelfde
          rij (afspraakRij) voor dezelfde lijst (afsprakenVoor), hier los getekend. */
       inSheet: k.querySelectorAll('[data-afspraak]').length,
-      afspraken: (() => { const d = document.createElement('div'); d.innerHTML = afsprakenVoor(afsluitMaand()).map((a) => afspraakRij(a)).join('');
+      afspraken: (() => { const d = document.createElement('div'); d.innerHTML = afsprakenVoor(afsluitMaand()).map((a) => { const S = afspraakStand(a) || { status: 'loopt', feit: '' };   // v390: afspraakRij() is vervallen; dezelfde stand
+          return `<div data-afspraak="${a.id}" data-afstatus="${S.status}">${afspraakBox(S.status)}<span>${esc(a.wat || '')}</span> <span>${esc(S.feit || '')}</span></div>`; }).join('');
         return [...d.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e) || e.textContent.replace(/\s+/g, ' ').trim(), box: e.querySelector('[data-box]').dataset.box })); })(),
       knop: k.querySelector('[data-afsluit]') ? k.querySelector('[data-afsluit]').dataset.afsluit : null,
       grip: !!document.querySelector('#s-maand #afsluitKaart, #s-maand [data-afteller]'),
@@ -93,8 +94,9 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   expect(k.knop).toBe('open');                               // met open punten alleen via die knop
   // v340: de lopende afspraken staan onder Deze maand op Grip; v367: alleen wat deze maand geldt (de storting), de stop
   // van Abonnementen vanaf november telt in de regel "1 afspraak voor november"
-  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak]').length))).toBe(1);
-  expect(await page.evaluate(() => document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
+  // v390: Kiezen draagt geen afsprakenlijst meer; de afspraken staan in het logboek
+  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak], #gripInhoud [data-afsprakenlater]').length))).toBe(0);
+  expect(await page.evaluate(() => (go('logboek'), document.querySelector('#logAfspraken').innerText))).toContain('Abonnementen');
   // v365: de teller telt alleen de vijf afsluittaken, en de afspraken staan niet in de sheet
   expect(k.teller).toBe('4/5');
   expect(k.inSheet).toBe(0);
@@ -145,8 +147,9 @@ test('d. afsluiten met open punten bewaart ze bij september, en de kaart wordt e
   expect(r.tekst).not.toContain('gewijzigd na afsluiten');
   expect(await kaart(page)).toBeNull();
   // doorlopende afspraken staan onder Deze maand; v367: die van november in de regel eronder
-  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak]').length))).toBe(1);
-  expect(await page.evaluate(() => document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater)).toBe('1');
+  // v390: Kiezen draagt geen afsprakenlijst meer; de afspraken staan in het logboek
+  expect(await page.evaluate(() => (go('maand'), gripKiesTab('kiezen'), document.querySelectorAll('#gripInhoud [data-afspraak], #gripInhoud [data-afsprakenlater]').length))).toBe(0);
+  expect(await page.evaluate(() => (go('logboek'), document.querySelector('#logAfspraken').innerText))).toContain('Abonnementen');
 });
 
 test('e. zonder open punten kan het gewoon, en niets sluit vanzelf', async ({ page }) => {

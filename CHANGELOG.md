@@ -1145,3 +1145,23 @@
   - Zeg je deze maand "klopt", dan vervalt de naam uit je reden van vorige maand. Het bewijs blijft staan.
   - Spaardoel in de terugblik is nagegaan: het is al `savedNet()` tegen Plan opzij. Een nieuwe test zet een terugzetkeuze zonder storting vast als niet gehaald.
   - Vier tests erbij (suite 4119 groen, rood alleen decimaalteken en piekdag-diagnose) in `grip-kring-deel2.spec.js`. Vijf sabotages, alle vijf rood; "een salaris na de onttrekking telt mee" pas nadat de spec zo'n betaling droeg.
+- **Grip: correcties na schermen van het toestel** (`minder-v390`, gevraagd door de gebruiker).
+  - (1) Het spaardoel en de Doelen-meter noemen hun basis. De meter zegt "verwacht €X van €Y" (Plan opzij min eruit). De Terugblik zegt "gestort €X van €Y (na €Z eruit) · loopt nog" (`savedNet()`, gestort min eruit). De sheet van de meter verwijst voor gestort naar de Terugblik.
+  - (2) Boodschappen "+€57, 3e mnd boven" op Grip tegen "herstelt −€35" op Inzichten: GEMETEN EN NIET GEWIJZIGD, op verzoek eerst gemeld.
+    - Nagebouwd op `grip-kring-stand` (potje €400, juli tot september €492, oktober €145 in 10 dagen tegen gewoonlijk €180): Grip zegt +€57 en Inzichten "herstelt" −€35, tegelijk.
+    - De oorzaak is een andere horizon en geen andere bron. Grip leest `maandVooruit().potjes[].overR`, het VERWACHTE eind (wat er uit is plus de gewone rest van de maand) min het potje: €457 tegen €400, aard "past niet".
+    - Inzichten (`insPatronen()`, tak "herstelt") vergelijkt alleen TOT VANDAAG met dezelfde dagen van de afgeronde maanden (`x.uit < x.typisch`), en toetst niet of het eind boven het potje uitkomt.
+    - "3e mnd" komt uit `insMaandenBoven()`: de lopende maand telt als 1 op grond van de verwachting, de maanden ervoor op hun werkelijke uitgave (`insVorigeBoven()`).
+    - Voorstel, niet gebouwd: "boven" is voor beide schermen `potjeUitschieter(x)` (het verwachte eind). "Herstelt" vuurt alleen als het potje verwacht NIET boven eindigt. Een potje dat vorige maand boven was en verwacht weer boven eindigt, heet op Inzichten "herhaalt" (ook als het nu achter op tempo is), met het verwachte bedrag.
+  - (3) Terugblik: bovenaan de laatste afgesloten maand met iets gemeten (`gripTerugblikGemeten()`), anders "Nog geen afgesloten maand gemeten". Geen "0 van 0". De lopende maand staat eronder als tussenstand.
+  - (4) Tab-✓ alleen na afronding. Terugblik pas als de vorige maand is afgesloten; openen telt niet meer.
+  - (5) Kiezen opgeschoond. De afvinkregels, "N afspraken voor nov–dec" en de losse "Kies voor"-link zijn weg; de rij is de knop. De afspraken staan in het logboek. Alleen de afspraak uit het gesprek blijft, want dat is de ingang terug naar dat gesprek. `afsprakenDezeMaand()`, `afsprakenLaterRegel()` en `afspraakRij()` hadden daarna geen lezer meer en zijn weg.
+  - (6) De Beleggen-meter noemt de ontbrekende voorwaarde ("reserveringen nov open", `gripVoorwaardeKort()`; de dekkingsrij draagt `gatMaand`).
+    - Het patroon "Beleggen vóór fundament" volgt de inleg die loopt (`gripBelegLopend()`): gekoppelde inleg deze maand of vorige maand.
+    - Een ingevulde periodieke inleg (`a.per`) telt bewust niet. `bezit-koppeling` f legt sinds `v332` vast dat dat geen meting is, en de volle suite viel op mijn eerste vorm, die hem wel meetelde.
+    - Tot nu eiste het een geboekte inleg in deze maand (`belegVragen()`), en op 10 oktober was Peaks daar nog niet.
+    - Een tik op zo'n signaal opent de meter.
+  - (7) De patroonkaart is een boom: de oorzaak als knoop met het bedrag rechts, de signalen als takken. Het bewijs en klopt/niet blijven.
+  - (8) De patroonnaam telt vanaf de salarisdatum; dat zat al in `v389`.
+  - Nieuwe spec `grip-correcties.spec.js` (11 tests). Volle suite 4131 groen, rood alleen decimaalteken. Gemigreerd: grip-kring, grip-dashboard e en n, maand-afsluiting b en d, afspraak-schema c, vrij-uitschieters c (ze lazen de afspraken op Kiezen).
+  - Twintig sabotages, alle twintig rood (op 1 en 3 tot en met 7). "Terugblik bij openen" werd pas rood in de tweede vorm, want de eerste bootste het oude gedrag niet na.

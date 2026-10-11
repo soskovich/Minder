@@ -107,21 +107,20 @@ test.describe('c · een potje dat later hoger gaat telt in de regel naar het log
     await I.boot(page, { set: { budgetsNext: { vices: 50, boodschappen: 350 }, budgetPlan: { '2027-01': { uiteten: 200 } } } });
     await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });   // v387: de afspraken staan op Kiezen
     const r = await page.evaluate(() => ({ o: potjeOmhoogRegels().map((x) => x.k + '|' + x.ym), rij: document.querySelectorAll('#gripInhoud [data-potomhoog]').length,
-      later: (document.querySelector('#gripInhoud [data-afsprakenlater]') || {}).innerText || '' }));
+      later: document.querySelectorAll('#gripInhoud [data-afsprakenlater]').length }));
     expect(r.o).toEqual(['vices|2026-11', 'uiteten|2027-01']);
     expect(r.rij).toBe(0);
-    expect(r.later).toContain('2 afspraken voor nov–jan');
+    expect(r.later).toBe(0);   // v390: Kiezen draagt geen regel "N afspraken voor ..."; het schema staat in het logboek
     const b = await page.evaluate(() => ({ v: budgetVoorMaand('2026-11').vices, u: budgetVoorMaand('2027-01').uiteten }));
     expect(b).toEqual({ v: 50, u: 200 });
   });
-  test('hoger en lager tellen samen, en een tik opent het logboek', async ({ page }) => {
+  test('v390: een lager potje vanaf later staat niet op Kiezen maar in het logboek', async ({ page }) => {
     await I.boot(page, { set: { budgetsNext: { vices: 50 } } });
     await page.evaluate(() => { potPlanZet('boodschappen', '2026-11', 350); potjeAfspraak('boodschappen', 350, '2026-11'); go('maand'); gripKiesTab('kiezen'); });
-    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripInhoud [data-afspraak]').length,
-      later: document.querySelector('#gripInhoud [data-afsprakenlater]').dataset.afsprakenlater }));
-    expect(r).toEqual({ af: 0, later: '2' });
-    await page.click('#gripInhoud [data-afsprakenlater]');
-    await expect(page.locator('#s-logboek')).toBeVisible();
+    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripInhoud [data-afspraak], #gripInhoud [data-afsprakenlater]').length }));
+    expect(r).toEqual({ af: 0 });
+    await page.evaluate(() => go('logboek'));
+    expect(await page.locator('#logAfspraken [data-potschema="boodschappen"]').count()).toBe(1);
   });
   test('zonder geplande wijziging staat er geen regel', async ({ page }) => {
     await I.boot(page);

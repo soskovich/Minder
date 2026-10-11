@@ -138,24 +138,22 @@ test.describe('b · Inzichten: geen tweede dagbedrag, en de uitschieters zijn de
 });
 
 test.describe('c · Grip: Deze maand draagt alleen deze maand', () => {
-  test('een afspraak voor later staat niet als regel, maar telt in "N afspraken voor ..."', async ({ page }) => {
+  test('v390: afspraken staan niet op Kiezen maar in het logboek', async ({ page }) => {
     await I.boot(page);
     const r = await page.evaluate(() => {
       const nu = thisYM(), nov = nextYM(nu), dec = nextYM(nov);
       const a1 = afspraakMaak({ soort: 'potje', cat: 'uiteten', bedrag: 120, van: nov, tot: nov, wat: 'Potje Uit eten €120 vanaf november' });
       const a2 = afspraakMaak({ soort: 'potje', cat: 'boodschappen', bedrag: 400, van: nu, tot: nu, wat: 'Potje Boodschappen €400 in oktober' });
       potPlanZet('vices', dec, 60); save(); go('maand'); gripKiesTab('kiezen');   // v387: de afspraken staan op Kiezen
-      return { a1: a1.id, a2: a2.id, later: (document.querySelector('[data-afsprakenlater]') || {}).dataset,
-        tekst: (document.querySelector('[data-afsprakenlater]') || {}).innerText || '',
-        r1: !!document.querySelector(`#gripInhoud [data-afspraak="${a1.id}"]`), r2: !!document.querySelector(`#gripInhoud [data-afspraak="${a2.id}"]`),
-        omhoog: document.querySelectorAll('#gripInhoud [data-potomhoog]').length };
+      const kz = { later: document.querySelectorAll('[data-afsprakenlater]').length, rijen: document.querySelectorAll('#gripInhoud [data-afspraak]').length };
+      go('logboek'); const lb = document.querySelector('#logAfspraken').innerText;
+      return { a1: a1.id, a2: a2.id, kz, lb,
+      };
     });
-    expect(r.r1).toBe(false);
-    expect(r.r2).toBe(true);
-    expect(r.omhoog).toBe(0);
-    expect(r.later.afsprakenlater).toBe('2');
-    expect(r.tekst).toContain('2 afspraken voor nov–dec');
-    expect(r.tekst).toContain('Logboek');
+    // v390: Kiezen draagt geen afsprakenlijst en geen regel "N afspraken voor ..."; beide afspraken staan in het logboek
+    expect(r.kz).toEqual({ later: 0, rijen: 0 });
+    expect(r.lb).toContain('Uit eten');
+    expect(r.lb).toContain('Boodschappen');
   });
   test('de regel van deze maand toont het verwachte bedrag uit dezelfde bron als de bridge', async ({ page }) => {
     await I.boot(page);
@@ -163,8 +161,8 @@ test.describe('c · Grip: Deze maand draagt alleen deze maand', () => {
       const nu = thisYM(), V = maandVooruit();
       const vp = V.vastePotjes[0], k = vp.k, alle = [...V.vastePotjes, ...V.potjes].filter((x) => x.k === k);
       const eind = Math.round(alle.reduce((t, x) => t + (x.eindR != null ? x.eindR : x.eind), 0)), g = Math.round(+SET.budgets[k]) + 300;
-      const a = afspraakMaak({ soort: 'potje', cat: k, bedrag: g, van: nu, tot: nu, wat: 'Potje test' }); save(); go('maand'); gripKiesTab('kiezen');
-      return { eind, g, feit: document.querySelector(`[data-afspraak="${a.id}"] [data-affeit]`).innerText };
+      const a = afspraakMaak({ soort: 'potje', cat: k, bedrag: g, van: nu, tot: nu, wat: 'Potje test' }); save();
+      return { eind, g, feit: afspraakStand(a).feit };   // v390: de stand van de afspraak (de rij op Kiezen is vervallen)
     });
     expect(r.feit).toBe(`€${r.eind.toLocaleString('nl-NL')} verwacht · €${(r.g - r.eind).toLocaleString('nl-NL')} ruimte`);
     expect(r.feit).not.toMatch(/tot nu/);

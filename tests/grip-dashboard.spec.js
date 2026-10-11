@@ -84,8 +84,8 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   await stand(page, null, { extraTx: NETFLIX });
   await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
   const r = await page.evaluate(() => { const V = maandVooruit(); const z = document.getElementById('gripZien').dataset.zien;
-    gripKiesTab('kiezen'); const k = document.querySelector('#gripInhoud');   // v387: de afspraken staan op Kiezen
-    return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, zien: +z, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
+    gripKiesTab('kiezen'); const kz = document.querySelectorAll('#gripInhoud [data-afspraak]').length; go('logboek'); const k = document.querySelector('#logAfspraken');   // v390: de afspraken staan in het logboek
+    return { kz, V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, zien: +z, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-logafspraak]').length }; });
   expect(r.V.projectie).toBe(r.V.uit + r.V.vast + r.V.rest);
   // de huur is een vaste last en staat al in "vast nog": hij telt niet nog eens mee in wat er gemiddeld bijkomt
   expect(r.V.vast).toBeGreaterThanOrEqual(900);
@@ -106,6 +106,8 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   expect(r.zien).toBe(r.V.projectie);   // v387: Zien draagt de uitkomst
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
+  expect(r.kz).toBe(0);
+  await page.evaluate(() => go('maand'));
   await page.evaluate(() => openGripVooruit());
   // v352: de sheet draagt geen tweede bridge meer, alleen de band als regel (grip-deze-maand-sheet.spec.js)
   const w = await page.evaluate(() => { const g = document.getElementById('gripVooruit');
@@ -239,7 +241,8 @@ test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt ee
   expect(a).toMatchObject({ cat: 'uiteten', bedrag: 150, van: '2026-10', tot: '2026-10' });
   const st = await page.evaluate((id) => afspraakStand(afsprakenLijst().find((x) => x.id === id)), a.id);
   expect(st.status).toBe('loopt');
-  expect(await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); return document.getElementById('gripInhoud').innerText; })).toContain('Grens Uit eten & café: nog €50 tot 31 oktober');   // v387: op Kiezen
+  expect(a.wat).toBe('Grens Uit eten & café: nog €50 tot 31 oktober');   // v390: de afspraak zelf; ze staat in het logboek
+  expect(await page.evaluate(() => { closeSheet(); go('logboek'); return document.getElementById('logAfspraken').innerText; })).toContain('Uit eten');
 });
 
 test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die opent de kaart die er was', async ({ page }) => {

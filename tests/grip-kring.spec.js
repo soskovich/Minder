@@ -31,12 +31,14 @@ test.describe('v387 structuur', () => {
     expect(r.knop).toBeLessThanOrEqual(r.nav);
     expect(r.sw).toBeLessThanOrEqual(390);
   });
-  test('een tab die je verliet is afgerond; Terugblik zodra je hem opent', async ({ page }) => {
+  test('een tab die je verliet is afgerond; Terugblik pas na afsluiten van de maand (v390)', async ({ page }) => {
     await grip(page);
     expect(await page.locator('[data-griptab][data-afgerond]').count()).toBe(0);
     await page.evaluate(() => gripKiesTab('begrijpen'));
     expect(await page.locator('[data-griptab="zien"]').innerText()).toBe('Zien ✓');
     await page.evaluate(() => gripKiesTab('terugblik'));
+    expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien']);   // openen is geen afronding
+    await page.evaluate(() => { SET.maandAfsluiting = Object.assign({}, SET.maandAfsluiting, { '2026-09': { op: '2026-10-10', punten: [], afspraken: [], open: [] } }); save(); renderMaand(); });
     expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien', 'terugblik']);
     expect(await page.locator('[data-stapopen]').count()).toBe(1);   // v388: Uit eten boven is een stap die openstaat
   });
