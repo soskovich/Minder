@@ -245,10 +245,11 @@ test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt ee
 test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die opent de kaart die er was', async ({ page }) => {
   await stand(page, UITSET, { extraTx: [...UIT, { id: 'u10', date: '2026-10-03', amount: -90, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }] });
   await page.evaluate(() => { closeSheet(); go('maand'); });
-  const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => [e.dataset.letop, e.innerText.replace(/\s+/g, ' ')]));
-  expect(L).toEqual([['sig', 'Uit eten & café €40 boven je potje ›']]);
-  // v387: de lijst staat op Zien, direct onder de bridge
-  expect(await page.evaluate(() => document.getElementById('gripZien').nextElementSibling.id)).toBe('gripLetOp');
+  /* v388: het potje is een signaal van het patroon "Uit eten & café boven je potje" in Begrijpen, en staat daarom niet
+     meer onder Let op (verplaatsen is geen kopiëren); een tik op het signaal opent dezelfde kaart. */
+  const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => e.dataset.letop));
+  expect(L).toEqual([]);
+  expect(await page.evaluate(() => gripPatronen().map((p) => p.id))).toContain('pot:uiteten');
   await page.evaluate(() => openGripLetOp('sig', valtOpSignals(thisYM())[0].id));
   const t = await page.evaluate(() => document.getElementById('gripLetOpSheet').innerText);
   expect(t).toContain('Zo laten');
@@ -299,19 +300,20 @@ const DRIE = [
   { id: 'g1', date: '2026-10-03', amount: -100, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT KOESTRAAT' },
 ];
 test('s. Let op toont twee regels en "nog 1 ›", en die opent een lijst met de rest', async ({ page }) => {
-  await stand(page, { budgets: { boodschappen: 500, huur: 900, abonnement: 30, uiteten: 150, shopping: 50 } }, { extraTx: DRIE });
+  /* v388: een potje boven is een signaal van een patroon en geen Let op-regel meer, dus de drie regels zijn hier drie
+     signalen die geen patroon zijn: contant, een uitgesloten incasso en een terugblik. */
+  await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); });
-  const r = await page.evaluate(() => { const k = document.getElementById('gripLetOp');
-    return { alle: window._gripLetOpL.map((x) => x.soort), rijen: [...k.querySelectorAll('[data-letop]')].map((e) => e.innerText.replace(/\s+/g, ' ')), nog: k.querySelector('[data-letopnog]') ? k.querySelector('[data-letopnog]').innerText : null }; });
-  // invoermeting: er zijn er werkelijk drie, anders toetst de grens niets
-  expect(r.alle).toEqual(['sig', 'sig', 'contant']);
-  expect(r.rijen).toEqual(['Online shopping €90 boven je potje ›', 'Uit eten & café €40 boven je potje ›']);
+  const L = [{ soort: 'contant', naam: 'Contant tellen', sub: 'a', dot: 'let op', act: "openGripLetOp('contant')" },
+    { soort: 'uit', naam: 'Uitgesloten incasso', sub: 'b', dot: 'let op', act: "openGripLetOp('uit')" },
+    { soort: 'accept', naam: 'Wat je accepteerde', sub: 'c', dot: 'let op', act: "openGripLetOp('accept')" }];
+  const r = await page.evaluate((L) => { document.getElementById('gripInhoud').insertAdjacentHTML('beforeend', gripLetOpKaart(L)); const k = document.getElementById('gripLetOp');
+    return { rijen: [...k.querySelectorAll('[data-letop]')].map((e) => e.dataset.letop), nog: k.querySelector('[data-letopnog]') ? k.querySelector('[data-letopnog]').innerText : null }; }, L);
+  expect(r.rijen).toEqual(['contant', 'uit']);
   expect(r.nog).toBe('nog 1 ›');
   await page.evaluate(() => document.querySelector('[data-letopnog]').click());
   const l = await page.evaluate(() => [...document.querySelectorAll('#gripLetOpLijst [data-letop]')].map((e) => e.dataset.letop));
-  expect(l).toEqual(['contant']);                         // de rest, en niet nog eens de eerste twee
-  await page.evaluate(() => document.querySelector('#gripLetOpLijst [data-letop]').click());
-  expect(await page.evaluate(() => document.getElementById('gripLetOpSheet').dataset.soort)).toBe('contant');
+  expect(l).toEqual(['accept']);                         // de rest, en niet nog eens de eerste twee
 });
 
 test('t. een tekort gaat voor een let op, en daarbinnen houdt Let op de bestaande volgorde', async ({ page }) => {

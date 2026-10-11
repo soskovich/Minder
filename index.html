@@ -7636,7 +7636,7 @@ function renderLogboek(){
   /* v340: de open vraag staat bovenaan het logboek. Grip draagt geen logboekkaart meer; zolang de maand
      open is staat de vraag ook in de pop-up van de afsluiting, en daarna alleen hier. */
   let vraag=''; try{ const v=valtOpOpenVraag(); if(v) vraag=`<div class="card" id="logVraag">${valtOpVraagKaart(v)}</div>`; }catch(_){}
-  el.innerHTML = head + vraag + logTijdlijn() + logAfsprakenBlok() + valtOpUitzKaart() + (blok || '<div class="card"><div class="small muted">Er staat nog niets in je logboek. Gaat een potje deze maand over zijn grens, dan staat hier wat je ermee deed.</div></div>');
+  el.innerHTML = head + vraag + logTijdlijn() + logGripKeuzesBlok() + logAfsprakenBlok() + valtOpUitzKaart() + (blok || '<div class="card"><div class="small muted">Er staat nog niets in je logboek. Gaat een potje deze maand over zijn grens, dan staat hier wat je ermee deed.</div></div>');
 }
 function valtOpLogBlok(){
   const T=valtOpTelling(); if(!T.totaal) return '';
@@ -9504,8 +9504,11 @@ const GRIP_TABS=[['zien','Zien'],['begrijpen','Begrijpen'],['kiezen','Kiezen'],[
 function gripTab(){ const t=window._gripTab; return GRIP_TABS.some(x=>x[0]===t)?t:'zien'; }
 /* Afgerond per maand: Zien zodra je een andere tab opent (je hebt hem gezien), Terugblik zodra je hem opent. Begrijpen
    en Kiezen ronden af op hun eigen inhoud (deel 2). Het is een stand van het scherm en geen teller. */
-function gripAfgerond(){ const G=SET.gripGezien||{}; return G.maand===thisYM()?(G.tabs||{}):{}; }
-function gripStapOpen(){ return false; }   // deel 2: een stap in Kiezen die nog openstaat
+function gripAfgerond(){ const G=SET.gripGezien||{}, A=Object.assign({}, G.maand===thisYM()?(G.tabs||{}):{});
+  /* v388: Begrijpen is af als elk patroon een oordeel heeft, Kiezen als elk patroon een keuze heeft. */
+  try{ const P=gripPatronen(); if(P.length){ const O=gripMaandLees('gripOordeel', thisYM()), K=gripMaandLees('gripKeuze', thisYM());
+    if(P.every(p=>O[p.id])) A.begrijpen=1; if(P.every(p=>K[p.id])) A.kiezen=1; } }catch(_){}
+  return A; }
 function gripKiesTab(t){
   const nu=gripTab();
   if(t!==nu){ const G=SET.gripGezien&&SET.gripGezien.maand===thisYM()?SET.gripGezien:{maand:thisYM(), tabs:{}};
@@ -9675,24 +9678,412 @@ function renderMaand(){
     /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
        ander signaal dan een potje boven zijn grens of de lek-regel. */
     const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek');
-    inhoud=gripZien(V)+gripLetOpKaart(L)
+    inhoud=gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'')
       +`<div class="small" data-gripcta style="margin:10px 2px 0;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('begrijpen')">Waarom? Bekijk wat erachter zit ›</div>`;
   } else if(tab==='begrijpen'){
-    let Br=null; try{ Br=V&&!V.onbekend?dezeMaandBrug(V):null; }catch(_){}
-    inhoud=`<div class="card gm-stage" data-begrijpen><div class="small" style="line-height:1.5">${Br?esc(dezeMaandZin(Br)):'Waar je maand uitkomt rekent Minder met je laatste '+VOORUIT_MAANDEN+' afgeronde maanden, en die zijn er nog niet allemaal.'}</div>
-      ${Br?`<div class="small" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVooruit()">Wat je deze maand kunt doen ›</div>`:''}</div>`;
+    inhoud=gripBegrijpenHtml();
   } else if(tab==='kiezen'){
-    const af=gripAfsprakenHtml();
-    inhoud=`<div class="card gm-stage" data-kiezen><div class="hlabel" style="margin:0 0 6px">Jouw keuzes deze maand</div>${af||'<div class="small muted">Er loopt deze maand geen afspraak.</div>'}</div>`;
+    inhoud=gripKiezenHtml();
   } else {
-    inhoud=`<div class="card gm-stage" data-terugblik><div class="small" id="gripNaarLogboek" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
+    inhoud=gripTerugblikHtml();
   }
+  gripOpzijBewaar();
   $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}">${inhoud}</div>
     <button class="btn sec" id="gripKoopcheck" data-koopknop style="margin-top:10px" onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button>
     <div style="height:8px"></div>`;
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
   try{ if(document.getElementById('gripLetOpLijst') && $('#sheetBg').classList.contains('show')) renderGripLetOpLijst(); }catch(_){}
+}
+/* ===== v388: GRIP DEEL 2: BEGRIJPEN, KIEZEN EN TERUGBLIK =====
+   Een PATROON is een oorzaak met de signalen die eruit volgen. Er zijn drie bronnen en geen nieuwe meting:
+   (1) ONTTREKKINGEN van je spaarrekening deze maand (spaarStortStand().uitTx, dezelfde afschrijvingen als de
+       Doelen-meter). Die zijn ALTIJD een patroon en staan ALTIJD eerst; de potjes die deze maand boven eindigen
+       (uitschieters, dezelfde lijst als de bridge op Zien) zijn er de signalen van, want samen maken ze dat je
+       betaalrekening op is.
+   (2) BELEGGEN VOOR FUNDAMENT: inleg naar een bezitting terwijl de voorwaarden niet gehaald zijn (belegVragen()).
+   (3) EEN POTJE BOVEN: zonder onttrekkingen een uitschieter, en altijd een potje dat insPatronen() structureel
+       of herhalend noemt. Een potje dat al signaal van (1) is, wordt geen eigen patroon.
+   Hooguit GRIP_PATROON_MAX (3). Volgorde: spaargeld eerst, daarna op bedrag, of jouw eigen volgorde
+   (SET.gripVolgorde), waarin spaargeld eerst blijft. */
+const GRIP_PATROON_MAX=3;
+const GRIP_REDENEN=[['impuls','impulsaankopen'],['emotie','emotioneel kopen'],['tekort','tekort op betaalrekening'],['anders','anders']];
+const GRIP_STAP_LIGT=7;   // dagen waarna een stap die openstaat een neutrale melding krijgt
+function gripMaandMap(naam, ym){ SET[naam]=SET[naam]||{}; SET[naam][ym]=SET[naam][ym]||{}; return SET[naam][ym]; }
+function gripMaandLees(naam, ym){ return ((SET[naam]||{})[ym])||{}; }
+const gripDag=d=>{ try{ return new Date(String(d).slice(0,10)+'T00:00:00').getDate(); }catch(_){ return 0; } };
+const gripKortDatum=d=>{ try{ return new Date(String(d).slice(0,10)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); }catch(_){ return String(d||''); } };
+/* De reden die je vorige maand bij "niet" gaf, weegt mee: het patroon draagt die naam en dat staat erbij. */
+function gripVorigeReden(pid){
+  const prev=valtOpYmPlus(thisYM(),-1), o=gripMaandLees('gripOordeel', prev)[pid];
+  if(!o || o.klopt!==false || !o.reden || o.reden==='anders') return null;
+  const R=GRIP_REDENEN.find(x=>x[0]===o.reden); return R?{reden:o.reden, label:R[1], maand:prev}:null;
+}
+function gripPatronenRuw(){
+  const m=thisYM(), prev=valtOpYmPlus(m,-1); let V=null; try{ V=maandVooruit(); }catch(_){}
+  const boven=(V && !V.onbekend)?uitschieters(V):[];
+  const potSig=x=>({soort:'potje', k:x.k, naam:x.naam, bedrag:Math.round(x.overR), bud:x.bud, nr:insMaandenBoven(x.k)});
+  const out=[]; const gebruikt=new Set();
+  let S=null; try{ S=spaarStortStand(m); }catch(_){}
+  if(S && S.uitTx && S.uitTx.length){
+    const T=S.uitTx.slice().sort((a,b)=>a.date.localeCompare(b.date)), dag=gripDag(T[0].date);
+    const sig=[{soort:'onttrekking', naam:'Uit spaargeld', bedrag:Math.round(S.uitExact), n:T.length, data:T.map(t=>t.date)}];
+    for(const x of boven){ sig.push(potSig(x)); gebruikt.add(x.k); }
+    let vorig=null; try{ vorig=spaarStortStand(prev); }catch(_){}
+    const twee=!!(vorig && vorig.uit>0) || sig.some(s=>s.soort==='potje' && s.nr>=2);
+    out.push({id:'spaargeld', soort:'spaargeld', naam:`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'}`, sig, twee,
+      bedrag:Math.round(S.uitExact), raakt:'budget en doelen',
+      bewijs:`${T.length}× uit je spaarrekening (${T.map(t=>gripDag(t.date)).join(', ')} ${MNAMES[+m.slice(5,7)-1]})`+sig.filter(s=>s.soort==='potje'&&s.nr>=2).map(s=>` · ${s.naam} ${s.nr} mnd boven`).join('')});
+  }
+  let BV=[]; try{ BV=belegVragen(m); }catch(_){}
+  const BK=SET.belegKeuze||{};
+  /* Een bezitting waarover je deze maand al koos (belegKies) staat niet meer in belegVragen(); het patroon blijft
+     dan staan als je keuze in Grip het droeg, zodat de rij ● gekozen blijft. */
+  if(BV.length){ const mist=BV[0].mist||[];
+    const sig=BV.map(v=>({soort:'inleg', id:v.asset.id, naam:v.asset.naam||'Bezitting', bedrag:Math.round(v.inleg), nr:1, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald'}));
+    const twee=BV.some(v=>{ try{ return bezitInleg(v.asset.id, prev)>0; }catch(_){ return false; } });
+    out.push({id:'beleggen', soort:'beleggen', naam:'Beleggen vóór fundament', sig, twee, mist,
+      bedrag:sig.reduce((a,s)=>a+s.bedrag,0), raakt:'beleggen',
+      bewijs:sig.map(s=>`${euro0(s.bedrag)} naar ${s.naam}`).join(' · ')+(mist.length?' · '+mist.map(x=>`${x.naam} ${x.waarde} tegen ${x.drempel}`).join(' · '):'')}); }
+  else if(Object.keys(BK).some(id=>BK[id] && BK[id].maand===m) && gripMaandLees('gripKeuze', m).beleggen){
+    const K=gripMaandLees('gripKeuze', m).beleggen; out.push(Object.assign({}, K.patroon||{id:'beleggen', soort:'beleggen', naam:'Beleggen vóór fundament', sig:[], bedrag:0, raakt:'beleggen', bewijs:''})); }
+  /* Potjes: zonder onttrekking elke uitschieter, en elk potje dat insPatronen() structureel of herhalend noemt. */
+  const kand=[]; if(!out.some(p=>p.id==='spaargeld')) for(const x of boven) kand.push({k:x.k, naam:x.naam, bedrag:Math.round(x.overR), bud:x.bud, nr:insMaandenBoven(x.k)});
+  let IP=[]; try{ IP=insPatronen('var')||[]; }catch(_){}
+  for(const p of IP){ if(!['structureel','herhaalt'].includes(p.soort) || !p.k || gebruikt.has(p.k) || kand.some(c=>c.k===p.k)) continue;
+    const x=V&&V.potjes?V.potjes.find(y=>y.k===p.k):null;
+    kand.push({k:p.k, naam:p.potNaam||p.naam, bedrag:Math.round(p.bedrag), bud:x?x.bud:(p.bud||0), nr:p.nMaanden||insMaandenBoven(p.k), structureel:p.soort==='structureel'}); }
+  for(const c of kand){ const sig=[{soort:'potje', k:c.k, naam:c.naam, bedrag:c.bedrag, bud:c.bud, nr:c.nr}];
+    out.push({id:'pot:'+c.k, soort:'potje', naam:c.structureel?`${c.naam} past niet in je potje`:`${c.naam} boven je potje`, sig,
+      twee:c.nr>=2, bedrag:c.bedrag, raakt:'budget', bewijs:`${c.naam} ${c.nr>=2?c.nr+' mnd boven':'deze maand boven'} · ${euro0(c.bedrag)} erboven`}); }
+  /* jouw reden van vorige maand weegt mee */
+  for(const p of out){ const r=gripVorigeReden(p.id); if(r){ p.vorigeReden=r; p.naamApp=p.naam; p.naam=r.label.charAt(0).toUpperCase()+r.label.slice(1); } }
+  return out;
+}
+function gripVolgordeApp(L){ const sp=L.filter(p=>p.id==='spaargeld'), rest=L.filter(p=>p.id!=='spaargeld').sort((a,b)=>(b.bedrag-a.bedrag)||(a.naam<b.naam?-1:1)); return sp.concat(rest); }
+function gripPatronen(){ return gripVolgordeToepassen(gripVolgordeApp(gripPatronenRuw()).slice(0,GRIP_PATROON_MAX), SET.gripVolgorde); }
+function gripVolgordeToepassen(L, VO){
+  if(!VO || VO.modus!=='zelf' || !Array.isArray(VO.ids)) return L;
+  const pos=id=>{ const i=VO.ids.indexOf(id); return i<0?99:i; };
+  const sp=L.filter(p=>p.id==='spaargeld'), rest=L.filter(p=>p.id!=='spaargeld').sort((a,b)=>pos(a.id)-pos(b.id));
+  return sp.concat(rest);   // spaargeld blijft eerst, ook in je eigen volgorde
+}
+/* ===== BEGRIJPEN ===== */
+function gripOordeel(pid){ return gripMaandLees('gripOordeel', thisYM())[pid]||null; }
+function gripOordeelZet(pid, klopt, reden){
+  if(!gripPatronen().some(p=>p.id===pid)) return;
+  if(klopt===false && reden && !GRIP_REDENEN.some(x=>x[0]===reden)) return;
+  const M=gripMaandMap('gripOordeel', thisYM());
+  M[pid]={klopt:!!klopt, reden:klopt?null:(reden||null), op:vandaagYMD()};
+  save(); renderMaand();
+}
+function gripBegrijpenHtml(){
+  const P=gripPatronen();
+  if(!P.length) return `<div class="card gm-stage" data-begrijpen data-geenpatroon><div class="small" style="line-height:1.5">Er is deze maand geen patroon: geen geld uit je spaargeld, geen potje dat boven uitkomt en geen inleg vóór je fundament. Wat je maand doet staat op Zien.</div></div>`;
+  let i=Math.min(Math.max(+window._gripPatroonI||0,0), P.length-1); window._gripPatroonI=i;
+  const p=P[i], o=gripOordeel(p.id), nvraag=window._gripNiet===p.id;
+  const sigRij=s=>`<div class="row" data-patsig="${esc(s.soort)}" data-patsigk="${esc(s.k||s.id||'')}" role="button" onclick="gripSigTik('${esc(s.soort)}','${esc(s.k||s.id||'')}')" style="justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--line);cursor:pointer">
+      <span class="small" style="flex:1;min-width:0">${esc(s.naam)}${s.sub?`<span data-patsigsub style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(s.sub)}</span>`:''}</span>
+      <span class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${s.soort==='onttrekking'?s.n+'× '+esc(MNAMES[+thisYM().slice(5,7)-1]):(s.nr>=2?s.nr+'e mnd':'deze mnd')}</span>
+      <span class="small" style="font-weight:700;min-width:58px;text-align:right">${s.soort==='potje'?'+':''}${euro0(s.bedrag)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const knop=(on,txt,fn)=>`<button class="btn sec" style="flex:1${on?';outline:2px solid var(--teal)':''}" onclick="${fn}">${txt}</button>`;
+  const redenen=GRIP_REDENEN.map(([k,l])=>`<span class="chip${o&&o.reden===k?' on':''}" data-patreden="${k}" style="cursor:pointer" onclick="gripOordeelZet('${esc(p.id)}',false,'${k}')">${l}</span>`).join(' ');
+  return `<div class="card gm-stage" data-begrijpen data-patroon="${esc(p.id)}">
+    <div class="row" style="justify-content:space-between;align-items:center"><span class="hlabel" style="margin:0">Wat erachter zit · ${i+1} van ${P.length}</span>
+      <span class="small" style="color:var(--teal);font-weight:700">${i>0?`<span data-patvorige style="cursor:pointer;padding:0 8px" onclick="window._gripPatroonI=${i-1};renderMaand()">‹</span>`:''}${i<P.length-1?`<span data-patvolgende style="cursor:pointer;padding:0 8px" onclick="window._gripPatroonI=${i+1};renderMaand()">›</span>`:''}</span></div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">PATROON</div>
+    <div data-patnaam style="font-weight:800;font-size:var(--fs-lg)">${esc(p.naam)}</div>
+    ${p.vorigeReden?`<div class="small" data-patreden-vorig style="color:var(--mut2);font-size:var(--fs-xs)">jouw reden in ${esc(ymFull(p.vorigeReden.maand))} · de app zag: ${esc(p.naamApp)}</div>`:''}
+    <div style="margin-top:6px">${p.sig.map(sigRij).join('')}</div>
+    <div class="small" data-patbewijs style="margin-top:6px;line-height:1.45"><b>Gezien:</b> ${esc(p.bewijs)}</div>
+    <div class="small" style="margin-top:10px;font-weight:600">Klopt dit?</div>
+    <div class="row" style="gap:8px;margin-top:6px">${knop(o&&o.klopt===true,'klopt',`gripOordeelZet('${esc(p.id)}',true)`)}${knop((o&&o.klopt===false)||nvraag,'niet ▾',`window._gripNiet='${esc(p.id)}';renderMaand()`)}</div>
+    ${(nvraag||(o&&o.klopt===false))?`<div data-patnietvraag style="margin-top:8px"><div class="small muted" style="margin-bottom:6px">Wat was het dan?</div>${redenen}</div>`:''}
+    <div class="small" data-patnaarkiezen style="margin-top:12px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">Kies wat je eraan doet ›</div>
+  </div>`;
+}
+/* Een signaal opent wat er al was (v61): een potje boven zijn grens de kaart met de handelingen uit Let op (v340,
+   met bijstellen, volgende maand anders, de grens en zo laten), anders het potje zelf; inleg de sheet van de belegging;
+   de onttrekkingen de Doelen-meter. Verplaatsen is geen kopiëren: dat signaal staat sindsdien niet meer in Let op. */
+function gripSigTik(soort, k){
+  if(soort==='potje'){ const id=valtOpId(thisYM(), k);
+    let S=[]; try{ S=valtOpSignals(thisYM())||[]; }catch(_){}
+    if(S.some(s=>s.id===id)) return openGripLetOp('sig', id);
+    return gripBrugTik('potje', k); }
+  if(soort==='inleg'){ try{ if(belegVragen().some(v=>v.asset.id===k)) return openBelegVraag(k); }catch(_){} return; }
+  if(soort==='onttrekking') return openGripMeter('doelen');
+}
+/* Ga naar het patroon waarin een signaal staat (voor een ingang van buiten, en voor tests). */
+function gripNaarSignaal(k){ const i=gripPatronen().findIndex(p=>(p.sig||[]).some(s=>(s.k||s.id)===k)); if(i<0) return false;
+  window._gripTab='begrijpen'; window._gripPatroonI=i; renderMaand(); return true; }
+/* ===== DE OPTIES PER PATROON =====
+   Elke optie draagt drie effectlabels met ≈ (een verwachting), een meetlat die de app voorstelt, en of hij deze maand
+   werkt (dan een bridge vóór en ná) of pas volgende maand. Een optie die geld verschuift tussen potjes of je spaarinleg
+   verlaagt, is SCHUIVEN: de terugblik telt hem apart als "geschoven" en nooit als gelukt. */
+function gripPotSignalen(p){ return (p.sig||[]).filter(s=>s.soort==='potje'); }
+function gripOpties(p){
+  const pots=gripPotSignalen(p), O=pots.reduce((a,s)=>a+Math.max(s.bedrag,0),0), nm=pots.map(s=>s.naam).join(' en ');
+  const lat=()=>pots.map(s=>({soort:'potmax', k:s.k, naam:s.naam, max:Math.round(s.bud), potje:Math.round(s.bud)}));
+  const vn=ymFull(nextYM(thisYM()));
+  const opt=[];
+  if(p.soort==='beleggen'){
+    opt.push({id:'stil', titel:'Inleg zelf stilzetten', sub:'tot je fundament er staat', eff:{budget:'=', doelen:'=', beleggen:'≈ inleg stil'}, werkt:'nu', schuift:false,
+      lat:(p.sig||[]).map(s=>({soort:'inlegstil', id:s.id, naam:s.naam, na:vandaagYMD()}))});
+    opt.push({id:'door', titel:'Bewust doorgaan', sub:'geldt voor deze maand', eff:{budget:'=', doelen:'=', beleggen:'='}, werkt:'nu', schuift:false, bewust:true, lat:[]});
+    return opt;
+  }
+  if(p.soort==='spaargeld'){
+    const grens={id:'grens', titel:'Niets meer uit je spaargeld', sub:nm?`en ${nm} binnen hun potje`:'de rest van de maand', eff:{budget:O?`≈ −${euro0(O)}`:'=', doelen:'=', beleggen:'='}, werkt:'nu', schuift:false,
+      lat:[{soort:'onttrekking', na:vandaagYMD()}].concat(lat())};
+    const terug={id:'terug', titel:'Zet het terug', sub:`${euro0(p.bedrag)} naar je spaargeld`, eff:{budget:'=', doelen:`≈ +${euro0(p.bedrag)}`, beleggen:'='}, werkt:'nu', schuift:false, route:'terug',
+      lat:[{soort:'spaardoel'}]};
+    const eerlijk={id:'sparen', titel:`${nm||'Je potjes'} eerlijk begroten`, sub:`+${euro0(O)} vanaf ${vn}, minder spaarinleg`, eff:{budget:'=', doelen:`≈ −${euro0(O)}/mnd`, beleggen:'='}, werkt:'later', schuift:true, route:'sparen', lat:[]};
+    if(p.twee && O>0) opt.push(eerlijk, grens, terug); else { opt.push(grens, terug); if(O>0) opt.push(eerlijk); }
+    return opt;
+  }
+  const grens={id:'grens', titel:`${nm} binnen het potje`, sub:'de rest van de maand', eff:{budget:O?`≈ −${euro0(O)}`:'=', doelen:'=', beleggen:'='}, werkt:'nu', schuift:false, lat:lat()};
+  const dek={id:'dekken', titel:`${nm} herzien`, sub:`naar wat je echt uitgeeft, uit een ander potje, vanaf ${vn}`, eff:{budget:'=', doelen:'=', beleggen:'='}, werkt:'later', schuift:true, route:'dekken', lat:[]};
+  const sparen={id:'sparen', titel:`${nm} omhoog, minder sparen`, sub:`+${euro0(O)} vanaf ${vn}`, eff:{budget:'=', doelen:`≈ −${euro0(O)}/mnd`, beleggen:'='}, werkt:'later', schuift:true, route:'sparen', lat:[]};
+  if(p.twee) opt.push(dek, grens, sparen); else opt.push(grens, dek, sparen);   // de 2e maand op rij: eerst herzien
+  return opt;
+}
+/* De bridge na een optie die deze maand werkt: de potjes van het patroon eindigen op hun potje. */
+function gripBrugNa(V, p, optie){
+  const Br=gripZienBrug(V); if(!Br) return null;
+  if(!optie || optie.werkt!=='nu') return {voor:Br, na:Br, delta:0};
+  const ks=new Set(gripPotSignalen(p).map(s=>s.k)); let delta=0;
+  const st=Br.stappen.map(s=>{ if(s.soort==='potje' && ks.has(s.k)){ delta+=s.waarde; return Object.assign({}, s, {waarde:0}); } return Object.assign({}, s); });
+  /* een potje uit het patroon dat niet los in de bridge staat (in overig), telt via zijn eigen overschrijding */
+  for(const s of gripPotSignalen(p)) if(!Br.stappen.some(x=>x.soort==='potje'&&x.k===s.k)){ const o=st.find(x=>x.soort==='overig'); if(o){ o.waarde-=Math.max(s.bedrag,0); delta+=Math.max(s.bedrag,0); } }
+  const e=st.find(s=>s.soort==='eind'); if(e) e.waarde=Math.round(e.waarde-delta);
+  return {voor:Br, na:Object.assign({}, Br, {stappen:st, voorStappen:Br.stappen}), delta:Math.round(delta)};
+}
+function gripMeetlatTekst(r){
+  if(r.soort==='onttrekking') return `geen geld uit je spaargeld na ${gripKortDatum(r.na)}`;
+  if(r.soort==='potmax') return `${r.naam} ≤ ${euro0(r.max)}`;
+  if(r.soort==='inlegstil') return `geen inleg naar ${r.naam} na ${gripKortDatum(r.na)}`;
+  if(r.soort==='spaardoel') return 'netto naar je doelen ≥ Plan opzij';
+  return '';
+}
+function openGripKeuze(pid){ window._gripK={pid, optie:null, lat:null, latOk:false, aanpas:false}; renderGripKeuze(); showSheetBg(); }
+function renderGripKeuze(){
+  const S=window._gripK; if(!S) return;
+  const p=gripPatronen().find(x=>x.id===S.pid); if(!p){ closeSheet(); return; }
+  const OP=gripOpties(p), o=OP.find(x=>x.id===S.optie)||null;
+  const K=gripMaandLees('gripKeuze', thisYM())[p.id];
+  const lab=(t,v)=>`<span class="small" data-effect="${t}" style="font-size:var(--fs-xs);color:var(--mut2);margin-right:8px">${t} <b style="color:var(--txt)">${esc(v)}</b></span>`;
+  const rij=x=>`<div data-gripoptie="${esc(x.id)}" style="padding:9px 10px;border:1px solid ${S.optie===x.id?'var(--teal)':'var(--line)'};border-radius:10px;margin-top:8px;cursor:pointer" onclick="window._gripK.optie='${esc(x.id)}';window._gripK.lat=null;window._gripK.latOk=false;renderGripKeuze()">
+      <div style="font-weight:700">${esc(x.titel)}${S.optie===x.id?' ✓':''}</div><div class="small muted">${esc(x.sub)}</div>
+      <div style="margin-top:4px">${lab('Budget',x.eff.budget)}${lab('Doelen',x.eff.doelen)}${lab('Beleggen',x.eff.beleggen)}</div></div>`;
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  let brug='';
+  if(o){ const B=gripBrugNa(V, p, o), mb=gripMeterBudget(V);
+    if(B && mb){ const boven=v=>v>0?`${euro0(v)} boven`:(v<0?`${euro0(-v)} onder`:'op budget'); const na=mb.verschil-B.delta;
+      brug=`<div style="margin-top:12px" data-keuzebrug><div class="small"><b>Effect op ${esc(ymFull(thisYM()))}</b> · vóór gestippeld, ná gevuld</div>${brugGrafiek(Object.assign({}, B.na, {gap:2, tik:null}))}
+        <div class="small" data-keuzeboven style="margin-top:4px">budget ${boven(mb.verschil)} → ${boven(na)}</div>
+        ${o.werkt==='later'?`<div class="small" data-keuzelater style="color:var(--mut2);font-size:var(--fs-xs)">Werkt vanaf ${esc(ymFull(nextYM(thisYM())))}: Budget ${esc(MNAMES[+nextYM(thisYM()).slice(5,7)-1])} rekent ermee, ${esc(ymFull(thisYM()))} blijft zoals hij is.</div>`:''}</div>`; } }
+  const lat=o?(S.lat||o.lat.map(r=>Object.assign({}, r))):[];
+  if(o && !S.lat) S.lat=lat;
+  const latHtml=o?(lat.length?`<div style="margin-top:12px" data-meetlat><div class="small"><b>Gelukt als</b> <span class="muted">(voorstel van de app)</span></div>
+      ${lat.map((r,i)=>S.aanpas&&r.soort==='potmax'?`<div class="row small" style="gap:6px;align-items:center;margin-top:4px">• ${esc(r.naam)} ≤ € <input data-latmax="${i}" inputmode="decimal" type="text" value="${r.max}" style="width:80px" oninput="window._gripK.lat[${i}].max=Math.round(numIn(this.value)||0)"></div>`
+        :`<div class="small" data-latregel="${esc(r.soort)}" style="margin-top:3px">• ${esc(gripMeetlatTekst(r))}</div>`).join('')}
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn sec" data-latok style="flex:1${S.latOk?';outline:2px solid var(--teal)':''}" onclick="window._gripK.latOk=true;window._gripK.aanpas=false;renderGripKeuze()">Meetlat ok</button>
+        <button class="btn sec" data-lataanpas style="flex:1" onclick="window._gripK.aanpas=true;window._gripK.latOk=false;renderGripKeuze()">Aanpassen</button></div></div>`
+      :`<div class="small" data-meetlat data-geenlat style="margin-top:12px;color:var(--mut2)">${o.bewust?'Een bewuste keuze heeft geen meetlat: hij telt niet mee in je terugblik.':'Dit schuift geld en telt in je terugblik als geschoven, niet als gelukt.'}</div>`):'';
+  const klaar=!!o && (!lat.length || S.latOk);
+  const reden=!o?'Kies eerst een optie':(!klaar?'Bevestig of pas de meetlat aan':'');
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripKeuzeSheet">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(p.naam)}</div>
+    <div class="small muted">kies wat het patroon aanpakt${K?` · gekozen op ${esc(gripKortDatum(K.op))}: ${esc(K.titel)}`:''}</div>
+    ${OP.map(rij).join('')}${brug}${latHtml}
+    ${sheetVoet(`<button class="btn" data-keuzebevestig ${klaar?'':'disabled'} onclick="gripKeuzeZet()">Bevestig</button>`, reden)}</div>`;
+}
+/* Bevestigen leest het patroon en de opties opnieuw (v319) en eist de keuze en de meetlat zelf ook. Een optie die een
+   bestaande handeling vraagt, opent daarna die bestaande ingang: Minder bouwt er geen tweede editor bij (v61). */
+function gripKeuzeZet(){
+  const S=window._gripK; if(!S) return;
+  const p=gripPatronen().find(x=>x.id===S.pid); if(!p) return;
+  const o=gripOpties(p).find(x=>x.id===S.optie); if(!o) return;
+  const lat=(S.lat||o.lat||[]).map(r=>Object.assign({}, r));
+  if(lat.length && !S.latOk) return;
+  const M=gripMaandMap('gripKeuze', thisYM());
+  M[p.id]={pid:p.id, optie:o.id, titel:o.titel, schuift:!!o.schuift, bewust:!!o.bewust, lat, op:vandaagYMD(),
+    patroon:{id:p.id, soort:p.soort, naam:p.naam, sig:p.sig, bedrag:p.bedrag, raakt:p.raakt, bewijs:p.bewijs}};
+  SET.gripKeuzeLog=SET.gripKeuzeLog||[]; SET.gripKeuzeLog.push({maand:thisYM(), pid:p.id, naam:p.naam, optie:o.titel, lat:lat.map(gripMeetlatTekst), op:vandaagYMD()});
+  save(); window._gripK=null; closeSheet();
+  const pot=gripPotSignalen(p)[0];
+  if(o.route==='terug'){ try{ openSpaarKeuzeHome(); }catch(_){} }
+  else if(o.route==='dekken' && pot){ try{ if(potjeBijstelVoorstel(pot.k)){ openPotjeBijstel(pot.k); showSheetBg(); } else openPotForm(pot.k); }catch(_){} }
+  else if(o.route==='sparen' && pot){ try{ openPotForm(pot.k); }catch(_){} }
+  else if(o.id==='stil'){ for(const s of p.sig||[]) try{ if(s.id) belegKies(s.id,'pauze'); }catch(_){} }
+  else if(o.id==='door'){ for(const s of p.sig||[]) try{ if(s.id) belegKies(s.id,'door'); }catch(_){} }
+  render();
+}
+/* ===== KIEZEN ===== */
+function gripMomentDatum(){
+  const nu=new Date(vandaagYMD()+'T00:00:00');
+  if((SET.gripMoment||'salaris')==='week'){ const d=new Date(nu); d.setDate(d.getDate()+((8-d.getDay())%7||7)); return {soort:'week', d:ymdVan(d)}; }
+  let dag=null; try{ const t=salarisBetalingLaatst(thisYM()); if(t) dag=gripDag(t.date); }catch(_){}
+  if(!dag) return {soort:'salaris', d:null};
+  const maak=ym=>{ const [y,mo]=ym.split('-').map(Number), dim=new Date(y,mo,0).getDate(); return ymdVan(shiftWeekendToMonday(new Date(y,mo-1,Math.min(dag,dim)))); };
+  let d=maak(thisYM()); if(d<=vandaagYMD()) d=maak(nextYM(thisYM()));
+  return {soort:'salaris', d};
+}
+function gripMomentTekst(){ const M=gripMomentDatum();
+  if(M.soort==='week') return `per week, vanaf maandag ${gripKortDatum(M.d)}`;
+  return M.d?`vóór ${gripKortDatum(M.d)}`:'vóór je salaris (datum nog onbekend)'; }
+function gripStapOpen(){ try{ const K=gripMaandLees('gripKeuze', thisYM()); return gripPatronen().some(p=>!K[p.id]); }catch(_){ return false; } }
+/* Sinds wanneer een stap openstaat: de eerste dag dat Grip hem toonde. Renderen schrijft dat een keer per patroon. */
+function gripStapSinds(P){
+  const M=gripMaandMap('gripStapSinds', thisYM()); let nw=false;
+  for(const p of P) if(!M[p.id]){ M[p.id]=vandaagYMD(); nw=true; }
+  if(nw) save(); return M;
+}
+function gripTeRuimUitgevoerd(ym){ return (SET.teRuimLog||[]).filter(x=>x && x.maand===ym); }
+function gripKiezenHtml(){
+  const P=gripPatronen(), K=gripMaandLees('gripKeuze', thisYM()), sinds=gripStapSinds(P);
+  const n=P.length, gek=P.filter(p=>K[p.id]).length, nuId=(P.find(p=>!K[p.id])||{}).id;
+  const rij=(p,i)=>{ const k=K[p.id]; const st=k?`● gekozen · ${esc(k.titel)}`:(p.id===nuId?`nu · raakt ${esc(p.raakt)}`:`daarna · raakt ${esc(p.raakt)}`);
+    return `<div class="row" data-kiesrij="${esc(p.id)}" data-kiesstand="${k?'gekozen':(p.id===nuId?'nu':'daarna')}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripKeuze('${esc(p.id)}')">
+      <span style="width:22px;height:22px;border-radius:50%;background:${k?'var(--teal)':'var(--card2)'};color:${k?'var(--bg)':'var(--txt)'};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-xs)">${i+1}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${st}</span></span>
+      <span class="small" style="font-weight:700">${p.soort==='beleggen'?euro0(p.bedrag)+'/mnd':euro0(p.bedrag)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`; };
+  let ligt='';
+  if(nuId && sinds[nuId]){ const d=Math.round((new Date(vandaagYMD()+'T00:00:00')-new Date(sinds[nuId]+'T00:00:00'))/864e5); const M=gripMomentDatum();
+    if(d>=GRIP_STAP_LIGT || (M.d && M.d<=vandaagYMD())){ const p=P.find(x=>x.id===nuId);
+      ligt=`<div class="small" data-stapligt style="margin-top:8px;color:var(--mut2);line-height:1.45">${esc(p.naam)} staat sinds ${esc(gripKortDatum(sinds[nuId]))} open · ${d} ${d===1?'dag':'dagen'}.</div>`; } }
+  const TRL=gripTeRuimUitgevoerd(thisYM());
+  const meld=TRL.map(x=>`<div class="small" data-uitgevoerd="${esc(x.k)}" style="margin-top:6px;line-height:1.45"><b>Melding uit Zien:</b> ${esc(x.naam)} verlaagd naar ${euro0(x.naar)} · budget eerlijk: ${euro0(x.van-x.naar)} minder ruimte op papier, uitgaven gelijk</div>`).join('');
+  const balk=n?`<div style="height:6px;border-radius:3px;background:var(--card2);margin:6px 0 4px;overflow:hidden"><i data-kiesbalk style="display:block;height:100%;width:${Math.round(gek/n*100)}%;background:var(--teal)"></i></div>`:'';
+  const volg=(SET.gripVolgorde&&SET.gripVolgorde.modus==='zelf')?'zelf':'app';
+  return `<div class="card gm-stage" data-kiezen>
+    <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Jouw keuzes deze maand</span><span class="small" data-kiesvoortgang style="font-weight:700">${gek} van ${n}</span></div>${balk}
+    ${n?P.map(rij).join(''):'<div class="small muted" data-geenstap>Er staat deze maand geen stap open: er is geen patroon.</div>'}
+    ${ligt}${meld}
+    <div class="small" style="margin-top:8px;color:var(--mut2);font-size:var(--fs-xs)">volgorde <span data-kiesvolgorde style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVolgorde()">${volg} ›</span> · moment <span data-kiesmoment style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripMoment()">${esc(gripMomentTekst())} ›</span></div>
+    ${nuId?`<div class="small" data-kiesnu style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripKeuze('${esc(nuId)}')">Kies voor: ${esc(P.find(p=>p.id===nuId).naam)} ›</div>`:''}
+    <div style="margin-top:10px">${gripAfsprakenHtml()}</div></div>`;
+}
+function openGripMoment(){ renderGripMoment(); showSheetBg(); }
+function renderGripMoment(){
+  const m=SET.gripMoment||'salaris';
+  const k=(id,t,s)=>`<div data-momentkeuze="${id}" style="padding:9px 10px;border:1px solid ${m===id?'var(--teal)':'var(--line)'};border-radius:10px;margin-top:8px;cursor:pointer" onclick="SET.gripMoment='${id}';save();renderGripMoment();renderMaand()"><b>${t}${m===id?' ✓':''}</b><div class="small muted">${s}</div></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripMomentSheet"><div style="font-weight:800;font-size:var(--fs-lg)">Wanneer kies je?</div>
+    <div class="small muted">Het moment bepaalt wanneer een stap die openstaat een melding krijgt. Er verandert niets aan je geld.</div>
+    ${k('salaris','Vóór je salaris','de dag dat je salaris binnenkomt')}${k('week','Per week','elke maandag')}</div>`;
+}
+/* De volgorde: van de app (spaargeld eerst, daarna op bedrag) of door je te slepen. Spaargeld blijft eerst. */
+function openGripVolgorde(){ renderGripVolgorde(); showSheetBg(); }
+function gripVolgordeZet(ids){
+  const P=gripPatronen(), geldig=ids.filter(id=>id!=='spaargeld' && P.some(p=>p.id===id));
+  SET.gripVolgorde={modus:'zelf', ids:geldig, op:vandaagYMD()}; save(); renderGripVolgorde(); renderMaand(); }
+function renderGripVolgorde(){
+  const P=gripPatronen(), zelf=SET.gripVolgorde&&SET.gripVolgorde.modus==='zelf';
+  const rij=(p,i)=>{ const vast=p.id==='spaargeld';
+    return `<div class="row" data-volgrij="${esc(p.id)}" ${vast?'data-volgvast':`draggable="true" ondragstart="window._gripSleep='${esc(p.id)}'" ondragover="event.preventDefault()" ondrop="gripVolgordeDrop('${esc(p.id)}')" onpointerdown="gripVolgordeSleepStart(event,'${esc(p.id)}')"`} style="gap:10px;align-items:center;padding:9px 6px;border-top:1px solid var(--line);${vast?'':'cursor:grab;touch-action:none'}">
+      <span style="color:var(--mut2)">${vast?'·':'≡'}</span><span style="flex:1">${i+1}. ${esc(p.naam)}</span>${vast?'<span class="small muted">blijft eerst</span>':''}</div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVolgordeSheet"><div style="font-weight:800;font-size:var(--fs-lg)">Volgorde</div>
+    <div class="small muted">${zelf?'Je eigen volgorde. Sleep om te verplaatsen.':'Van de app: spaargeld eerst, daarna op bedrag. Sleep om zelf te kiezen.'}</div>
+    <div style="margin-top:8px">${P.map(rij).join('')}</div>
+    ${zelf?`<div class="small" data-volgapp style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="SET.gripVolgorde=null;save();renderGripVolgorde();renderMaand()">Terug naar de volgorde van de app</div>`:''}</div>`;
+}
+function gripVolgordeVerplaats(id, naarId){
+  const ids=gripPatronen().map(p=>p.id).filter(x=>x!=='spaargeld');
+  const i=ids.indexOf(id), j=ids.indexOf(naarId); if(i<0||j<0||i===j) return;
+  ids.splice(i,1); ids.splice(j,0,id); gripVolgordeZet(ids);
+}
+function gripVolgordeDrop(naarId){ const id=window._gripSleep; window._gripSleep=null; if(id) gripVolgordeVerplaats(id, naarId); }
+function gripVolgordeSleepStart(ev, id){
+  if(ev.pointerType==='mouse') return;   // de muis gebruikt drag-and-drop
+  const sh=document.getElementById('gripVolgordeSheet'); if(!sh) return;
+  const op=e=>{ document.removeEventListener('pointerup', op);
+    const el=document.elementFromPoint(e.clientX, e.clientY), r=el&&el.closest('[data-volgrij]');
+    const naar=r&&r.getAttribute('data-volgrij'); if(naar && naar!=='spaargeld') gripVolgordeVerplaats(id, naar); };
+  document.addEventListener('pointerup', op);
+}
+/* ===== TERUGBLIK =====
+   Per meetlatregel ✓ of ✗, en per patroon ✓ (alles gehaald), ½ (deels) of ✗. GELUKT IS ALLEEN MINDER UITGEVEN DAN HET
+   OORSPRONKELIJKE POTJE: was het potje van die maand opgehoogd en kom je alleen daardoor binnen, dan is de regel
+   GESCHOVEN, en een keuze die schuift (herzien uit een ander potje, minder sparen) is als geheel geschoven. Geschoven
+   staat apart en telt niet mee in de score; een bewuste keuze en een instelling ook niet. De vaste regel Spaardoel:
+   werkelijk gestort min eruit (savedNet) tegen Plan opzij: ✓ vanaf 100%, ½ vanaf 80%, anders ✗. */
+const GRIP_SPAAR_HALF=0.8;
+function gripOpzijVan(ym){ if(ym===thisYM()){ try{ return Math.round(planKpiData().opzij); }catch(_){ return null; } }
+  const s=gripMaandLees('gripOpzij', ym); return (s && s.opzij!=null)?s.opzij:null; }
+function gripOpzijBewaar(){ try{ const o=planKpiData().opzij; if(o==null) return; const ym=thisYM(); SET.gripOpzij=SET.gripOpzij||{};
+  if(!SET.gripOpzij[ym] || SET.gripOpzij[ym].opzij!==Math.round(o)){ SET.gripOpzij[ym]={opzij:Math.round(o)}; save(); } }catch(_){} }
+function gripRegelUitkomst(r, ym){
+  if(r.soort==='potmax'){ const sp=Math.round((catSpendMap(ym)||{})[r.k]||0);
+    const potEind=ym===thisYM()?(+(SET.budgets||{})[r.k]||0):(+(maandPotjes(ym).B||{})[r.k]||0);
+    if(sp<=r.max) return {s:'ok', t:`${r.naam} ${euro0(sp)} van ${euro0(r.max)}`};
+    if(potEind>r.potje && sp<=potEind) return {s:'geschoven', t:`${r.naam} ${euro0(sp)}: binnen het opgehoogde potje van ${euro0(potEind)}, boven je ${euro0(r.max)}`};
+    return {s:'nee', t:`${r.naam} ${euro0(sp)} van ${euro0(r.max)}`}; }
+  if(r.soort==='onttrekking'){ let T=[]; try{ T=(spaarStortStand(ym).uitTx||[]).filter(t=>t.date>r.na); }catch(_){}
+    return T.length?{s:'nee', t:`${T.length}× uit spaargeld na ${gripKortDatum(r.na)}`}:{s:'ok', t:`niets uit spaargeld na ${gripKortDatum(r.na)}`}; }
+  if(r.soort==='inlegstil'){ let T=[]; try{ T=bezitInlegTx(r.id, ym).filter(t=>t.date>r.na); }catch(_){}
+    return T.length?{s:'nee', t:`inleg naar ${r.naam} na ${gripKortDatum(r.na)}`}:{s:'ok', t:`geen inleg naar ${r.naam} na ${gripKortDatum(r.na)}`}; }
+  if(r.soort==='spaardoel'){ const S=gripSpaardoel(ym); return {s:S.s==='ok'?'ok':'nee', t:S.t}; }
+  return {s:'nee', t:''};
+}
+function gripSpaardoel(ym){
+  const opzij=gripOpzijVan(ym); let net=null; try{ net=savedNet(ym); }catch(_){}
+  if(!(opzij>0) || net==null) return {s:'onbekend', t:'niet gemeten: Plan opzij van die maand is niet bewaard'};
+  const netto=Math.round(net), pct=netto/opzij;
+  let uit=0; try{ uit=spaarStortStand(ym).uit; }catch(_){}
+  const t=`netto ${euro0(netto)} van ${euro0(opzij)}${uit>0?` · ${euro0(uit)} eruit gehaald`:''}`;
+  /* De lopende maand is pas aan het eind af: tot dan is het spaardoel een tussenstand en geen oordeel. */
+  const s=pct>=1?'ok':(ym===thisYM()?'loopt':(pct>=GRIP_SPAAR_HALF?'half':'nee'));
+  return {s, t, pct:Math.max(Math.round(pct*100),0)};
+}
+function gripTerugblik(ym){
+  const K=gripMaandLees('gripKeuze', ym), items=[];
+  for(const id of Object.keys(K)){ const k=K[id]; if(!k) continue;
+    const naam=(k.patroon&&k.patroon.naam)||id;
+    if(k.bewust){ items.push({id, naam, s:'bewust', sub:`bewust: ${k.titel}`, regels:[]}); continue; }
+    const regels=(k.lat||[]).map(r=>Object.assign({tekst:gripMeetlatTekst(r)}, gripRegelUitkomst(r, ym)));
+    let s;
+    if(k.schuift) s='geschoven';
+    else if(!regels.length) s='nee';
+    else { const n=regels.length, ok=regels.filter(r=>r.s==='ok').length, sch=regels.filter(r=>r.s==='geschoven').length;
+      s=ok===n?'ok':(ok>0?'half':(sch===n?'geschoven':'nee')); }
+    items.push({id, naam, s, sub:s==='geschoven'&&k.schuift?`geschoven: ${k.titel}`:({ok:'gelukt', half:'deels gelukt', nee:'niet gelukt', geschoven:'geschoven'}[s]), regels}); }
+  const sd=gripSpaardoel(ym);
+  items.push({id:'spaardoel', naam:`Spaardoel ${ymFull(ym)}`, s:sd.s, vast:true, sub:sd.s==='onbekend'?'niet gemeten':({ok:'gehaald', half:'deels gehaald', nee:'niet gehaald', loopt:'loopt nog'}[sd.s])+(sd.pct!=null?` · ${sd.pct}%`:''), regels:[{s:sd.s==='ok'?'ok':(sd.s==='half'?'half':'nee'), tekst:sd.t}]});
+  const telt=items.filter(x=>['ok','half','nee'].includes(x.s));
+  const score=telt.reduce((a,x)=>a+(x.s==='ok'?1:(x.s==='half'?0.5:0)),0);
+  const inst=gripTeRuimUitgevoerd(ym).map(x=>({naam:`${x.naam} → ${euro0(x.naar)}`, sub:'instelling · budget klopt nu'}));
+  return {ym, items, score, n:telt.length, inst};
+}
+const gripScoreTekst=(T)=>`${String(T.score).replace('.',',')} van ${T.n}`;
+function gripTerugblikHtml(){
+  const m=thisYM(), prev=valtOpYmPlus(m,-1), T=gripTerugblik(m), Tp=gripTerugblik(prev);
+  const teken={ok:'✓', half:'½', nee:'✗', geschoven:'↔', bewust:'i', onbekend:'?', loopt:'…'};
+  const rij=x=>`<div class="row" data-terugrij="${esc(x.id)}" data-terugstand="${x.s}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">
+      <b style="width:18px;text-align:center">${teken[x.s]||''}</b>
+      <span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(x.sub)}</span>
+      ${x.regels.length&&!x.vast?`<span class="small" style="display:block;font-size:var(--fs-xs);color:var(--mut2)">${x.regels.map(r=>`${r.s==='ok'?'✓':(r.s==='geschoven'?'↔':'✗')} ${esc(r.t||r.tekst)}`).join(' · ')}</span>`:''}</span></div>`;
+  const inst=T.inst.map(x=>`<div class="row" data-terugrij="instelling" style="gap:10px;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">i</b><span style="flex:1"><span style="display:block;font-weight:700">${esc(x.naam)}</span><span class="small" style="color:var(--mut2)">${esc(x.sub)}</span></span></div>`).join('');
+  return `<div class="card gm-stage" data-terugblik>
+    <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Terugblik ${esc(ymFull(m))}</span><span class="small" data-terugscore style="font-weight:700">${gripScoreTekst(T)}</span></div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">loopt nog · eind ${esc(ymFull(m))} definitief</div>
+    ${T.items.map(rij).join('')}${inst}
+    <div class="small" data-terugvergelijk style="margin-top:8px">${esc(ymFull(prev).charAt(0).toUpperCase()+ymFull(prev).slice(1))} ${gripScoreTekst(Tp)} · ${esc(ymFull(m))} ${gripScoreTekst(T)}</div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
+    <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
+}
+/* Het logboek draagt je keuzes in Grip, per maand, met de meetlat. */
+function logGripKeuzesBlok(){
+  const L=(SET.gripKeuzeLog||[]).slice().reverse(); if(!L.length) return '';
+  return `<div class="card" data-loggripkeuze><div class="hlabel" style="margin:0 0 6px">Je keuzes in Grip</div>${L.slice(0,12).map(x=>`<div class="small" style="padding:6px 0;border-top:1px solid var(--line);line-height:1.45"><b>${esc(x.naam)}</b> · ${esc(x.optie)} · ${esc(gripKortDatum(x.op))}${x.lat&&x.lat.length?`<div style="color:var(--mut2);font-size:var(--fs-xs)">gelukt als: ${esc(x.lat.join(' · '))}</div>`:''}</div>`).join('')}</div>`;
+}
+/* v388: LET OP DRAAGT WAT GEEN PATROON IS. Een potje boven zijn grens of beleggen vóór je fundament staat sinds deel 2
+   als signaal van een patroon in Begrijpen; de rest (een structureel signaal, uitgaven zonder potje, een uitgesloten
+   incasso, een schatting, contant, een terugblik) heeft daar geen plek en blijft hier, zodat er geen signaal wegvalt. */
+function gripLetOpZonderPatroon(L){
+  let P=[]; try{ P=gripPatronen(); }catch(_){ return L; }
+  const ks=new Set(), beleg=P.some(p=>p.soort==='beleggen');
+  for(const p of P) for(const s of (p.sig||[])) if(s.k) ks.add(s.k);
+  return (L||[]).filter(x=>!((x.soort==='sig' && ks.has(String(x.key).split('|').pop())) || (x.soort==='beleg' && beleg)));
 }
 /* De terugblik op een acceptatie, en de enige plek waar er een komt. Hij verschijnt zodra de maand
    waarin het gat zou vallen is bereikt - dat kan maanden na de keuze zijn, en daarom past hij niet
@@ -19037,12 +19428,16 @@ function brugTeken(w){ return w>0?'+'+euro0(w):euro0(w); }
 function brugGrafiek(Br){
   const PH=112;
   const lv=[]; let run=0;
-  const kol=Br.stappen.map(s=>{
+  const loop=(st)=>{ run=0; return st.map(s=>{
     let lo, hi;
     if(s.soort==='begin'||s.soort==='eind'){ lo=0; hi=s.waarde; run=s.waarde; }
     else { const van=run; run+=s.waarde; lo=Math.min(van,run); hi=Math.max(van,run); }
     lv.push(hi); return {s, lo, hi, na:run};
-  });
+  }); };
+  /* v388: een bridge vóór en ná een keuze. De stappen van vóór (Br.voorStappen, dezelfde lengte) staan gestippeld
+     achter de gevulde stappen van ná, op dezelfde schaal. */
+  const kolV=Array.isArray(Br.voorStappen)&&Br.voorStappen.length===Br.stappen.length?loop(Br.voorStappen):null;
+  const kol=loop(Br.stappen);
   /* v349: een as die niet bij nul begint (Br.basis). Een balk van begin of eind staat dan op die
      ondergrens en niet op nul, en de ondergrens staat links op de as (data-asbasis).
      v352: zonder bedrag erbij, op keuze van de gebruiker: het label stond op 360px half buiten de kaart en
@@ -19064,7 +19459,7 @@ function brugGrafiek(Br){
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>
-        <i${c.s.soort==='teruim'?' data-gearceerd':''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px)':kleur(c.s)};border-radius:3px"></i>${lijn}
+        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i${c.s.soort==='teruim'?' data-gearceerd':''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px)':kleur(c.s)};border-radius:3px"></i>${lijn}
       </div>
       <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.label)}</div>
     </div>`;}).join('')}</div>`;

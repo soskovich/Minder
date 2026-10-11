@@ -12,13 +12,15 @@ const koppel = (page, asset) => page.evaluate(([id, a]) => { zetBezitKoppel(id, 
    'Let op' (#gripLetOp); een tik opent openBelegVraag(id). 'beslis' is nu de tegelrij (#gripTegels), want
    de kaart 'Vraagt een beslissing' bestaat niet meer. De regel draagt geen asset-id meer, dus hij wordt
    herkend aan de naam van de bezitting. */
+/* v388: beleggen vóór je fundament is een PATROON in Begrijpen op Grip; de inleg staat er als signaal
+   ([data-patsig="inleg"]), en een tik opent openBelegVraag(id). Tot v387 stond hij als regel onder Let op. */
 const grip = (page) => page.evaluate(() => {
-  go('maand'); renderMaand();
-  const a = document.querySelector('#s-maand #gripLetOp'), b = document.querySelector('#s-maand #gripTegels');
-  const rij = [...document.querySelectorAll('#s-maand #gripLetOp [data-letop="beleg"]')].find((x) => x.innerText.includes('Peaks (Kayani)'));
-  return { aandacht: a ? a.innerText : '', beslis: b ? b.innerText : '', rij: !!rij, rijTekst: rij ? rij.innerText : '' };
+  go('maand'); renderMaand(); gripNaarSignaal('kayani');
+  const rij = document.querySelector('#s-maand [data-patsig="inleg"][data-patsigk="kayani"]');
+  const kaart = document.querySelector('#s-maand [data-begrijpen]');
+  return { aandacht: rij && kaart ? kaart.innerText : '', beslis: '', rij: !!rij, rijTekst: rij ? rij.innerText : '' };
 });
-const belegRij = (page) => page.locator('#s-maand #gripLetOp [data-letop="beleg"]', { hasText: 'Peaks (Kayani)' });
+const belegRij = (page) => page.locator('#s-maand [data-patsig="inleg"][data-patsigk="kayani"]');
 
 /* ===== a) de meting: wat er was voor deze ronde ===== */
 test.describe('a · de beleggingsinleg in de spaarquote, en geen koppeling', () => {
@@ -205,8 +207,8 @@ test.describe('f · Je belegde EUR 100 in Peaks (Kayani) onder Vraagt aandacht',
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
     const g = await grip(page);
     expect(g.rij).toBe(true);
-    expect(g.aandacht).toContain('Je belegde €100 in Peaks (Kayani)');
-    expect(g.rijTekst).toMatch(/voorwaarden nog niet gehaald\s*›?$/);
+    expect(g.aandacht).toContain('€100 naar Peaks (Kayani)');
+    expect(g.rijTekst).toContain('voorwaarden nog niet gehaald');
     expect(g.beslis).not.toContain('Peaks');
   });
   test('de sheet noemt de voorwaarde die ontbreekt, met zijn waarde en drempel, en de twee keuzes', async ({ page }) => {
@@ -295,7 +297,7 @@ test.describe('g · een keuze geldt voor de maand', () => {
     await page.evaluate((id) => { zetBezitVoorwaarden('kayani', true); bezitRegelZet(id, 'kayani', 'kenmerk', 'KAYANI'); delete SET.bezitKoppel[id]; save(); }, ID.okt);
     const g = await grip(page);
     expect(g.rij).toBe(true);
-    expect(g.aandacht).toContain('Je belegde €100 in Peaks (Kayani)');
+    expect(g.aandacht).toContain('€100 naar Peaks (Kayani)');
   });
   /* v337: "Ik zet de inleg zelf stil" (tot v337 "Inleg pauzeren") verandert NIETS: de periodieke inleg
      blijft staan en de keuze wordt een afspraak. Een pauze van voor v337 (a.pauze) blijft te hervatten. */
@@ -325,21 +327,15 @@ test.describe('g · een keuze geldt voor de maand', () => {
   });
 });
 
-/* ===== h) hoogte ===== */
+/* ===== h) breedte ===== */
 for (const w of [360, 390]) {
-  test(`h · de Let op-kaart op ${w}px, zonder overloop`, async ({ page }) => {
+  test(`h · het signaal in Begrijpen op ${w}px, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await start(page);
-    const voor = await page.evaluate(() => { go('maand'); renderMaand();
-      const c = document.querySelector('#s-maand #gripLetOp');
-      return c ? Math.round(c.getBoundingClientRect().height) : 0; });
     await koppel(page, 'kayani');
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
-    const na = await page.evaluate(() => { go('maand'); renderMaand();
-      const c = document.querySelector('#s-maand #gripLetOp');
-      return { h: Math.round(c.getBoundingClientRect().height), over: document.documentElement.scrollWidth > window.innerWidth }; });
-    console.log(`Let op-kaart ${w}px: ${voor} -> ${na.h}`);
-    expect(na.over).toBe(false);
-    expect(na.h).toBeGreaterThan(voor);
+    const g = await grip(page);
+    expect(g.rij).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   });
 }

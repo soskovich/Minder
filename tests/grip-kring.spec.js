@@ -17,7 +17,7 @@ test.describe('v387 structuur', () => {
   test('vaste bovenkant: drie meters, vier tabs en de knop Ik wil iets kopen; de oude blokken zijn weg', async ({ page }) => {
     await grip(page);
     expect(await page.locator('#gripMeters [data-meter]').evaluateAll(e => e.map(x => x.dataset.meter))).toEqual(['budget', 'doelen', 'beleggen']);
-    expect(await page.locator('#gripTabs [data-griptab]').evaluateAll(e => e.map(x => x.textContent.trim()))).toEqual(['Zien', 'Begrijpen', 'Kiezen', 'Terugblik']);
+    expect(await page.locator('#gripTabs [data-griptab]').evaluateAll(e => e.map(x => x.textContent.replace('•', '').trim()))).toEqual(['Zien', 'Begrijpen', 'Kiezen', 'Terugblik']);
     expect(await page.locator('#gripKoopcheck').innerText()).toContain('Ik wil iets kopen');
     for (const sel of ['#gripTegels', '[data-tegel]', '#gripDezeMaand']) expect(await page.locator(sel).count()).toBe(0);
     expect(await page.locator('#gripNaarLogboek').count()).toBe(0);   // het logboek staat op Terugblik, een keer
@@ -38,7 +38,7 @@ test.describe('v387 structuur', () => {
     expect(await page.locator('[data-griptab="zien"]').innerText()).toBe('Zien ✓');
     await page.evaluate(() => gripKiesTab('terugblik'));
     expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien', 'terugblik']);
-    expect(await page.locator('[data-stapopen]').count()).toBe(0);   // deel 1: geen stap in Kiezen
+    expect(await page.locator('[data-stapopen]').count()).toBe(1);   // v388: Uit eten boven is een stap die openstaat
   });
 });
 

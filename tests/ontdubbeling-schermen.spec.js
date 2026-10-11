@@ -11,6 +11,7 @@
 //     Inzichten en staat nu op Grip, en op precies één van de twee.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { sigKaart } = require('./beslis-sheet');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
@@ -202,7 +203,7 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     expect(src).toMatch(/valtOpSignals\(/);
     expect(src).not.toMatch(/budgetOverCat|budgetBand|effectiveBudgets/);
     await page.evaluate(() => { go('maand'); renderMaand(); });
-    await page.locator('#s-maand #gripLetOp [data-letop="sig"]', { hasText: sig[0].naam }).click();
+    await sigKaart(page, sig[0].potjeId);   // v388: via het signaal in Begrijpen, of Let op als het in geen patroon staat
     expect(await page.locator('#gripLetOpSheet .valtop-open').innerText()).toContain(sig[0].naam);
     await expect(page.locator('#s-maand .valtop-open')).toHaveCount(0);
   });
@@ -217,7 +218,9 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     /* v340: op Grip staat het signaal als Let op-regel, en de kaart pas in de sheet erachter */
     await page.evaluate(() => { go('maand'); renderMaand(); });
     const regels = await page.locator('#s-maand [data-letop="sig"]').allInnerTexts();
-    expect(regels.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
+    /* v388: hij staat precies een keer: onder Let op, of als signaal van een patroon in Begrijpen */
+    const inPat = await page.evaluate((k) => gripPatronen().filter((p) => p.sig.some((s) => s.k === k)).length, sig[0].potjeId);
+    expect(regels.filter((t) => t.includes(sig[0].naam)).length + inPat).toBe(1);
     expect(await page.locator('#s-maand .valtop-kaart').count()).toBe(0);
   });
 });

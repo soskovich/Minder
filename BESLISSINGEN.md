@@ -15,6 +15,36 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 *(Staande regels, gedestilleerd uit de changelog. Respecteer deze bij nieuwe code; wil je er een omgooien, doe dat bewust en leg het vast. De versietag verwijst naar de volledige onderbouwing in `CHANGELOG.md`.)*
 
 ### Wat telt als wat (rekenregels)
+- **Grip deel 2: een patroon is een oorzaak, kiezen heeft een meetlat, en gelukt is alleen minder uitgeven** (`v388`, gevraagd door de gebruiker, mockup "Grip kring proces" v2).
+  - DE PATRONEN (`gripPatronenRuw()`, hooguit drie) komen uit drie bronnen, zonder een nieuwe meting:
+    1. de onttrekkingen van je spaarrekening deze maand (dezelfde afschrijvingen als de Doelen-meter). Die zijn altijd een patroon en staan altijd eerst: "Betaalrekening op na ~N dagen", met de potjes die boven eindigen als signaal;
+    2. beleggen vóór je fundament (`belegVragen()`);
+    3. een potje boven: zonder onttrekking een uitschieter, en altijd een potje dat `insPatronen()` structureel of herhalend noemt.
+  - Een signaal draagt het bedrag en de hoeveelste maand (`insMaandenBoven()`). De bewijsregel noemt de dagen ("2× uit je spaarrekening (6, 9 okt)").
+  - INTERPRETATIE, gemeld: de mockup noemt het spaargeld-patroon "Leefgeld op na ~10 dagen". De app kent de naam van de ontvangende rekening niet als oorzaak, dus het heet naar de dag van de eerste onttrekking.
+  - KLOPT/NIET (`SET.gripOordeel[ym][id]`): de reden kies je zonder voorkeuze. DE REDEN WEEGT MEE: zei je vorige maand "niet" met een reden (niet "anders"), dan draagt hetzelfde patroon die reden als naam, met "jouw reden in <maand> · de app zag: …".
+  - DE OPTIES (`gripOpties()`): twee of drie per patroon, elk met drie effectlabels met ≈.
+    - Spaargeld: niets meer uit je spaargeld, terugzetten, of de potjes eerlijk begroten.
+    - Potje: binnen het potje, herzien uit een ander potje, of omhoog met minder sparen.
+    - Beleggen: zelf stilzetten of bewust doorgaan.
+    - De 2e maand op rij boven: de eerste optie is herzien.
+  - DE SHEET (`openGripKeuze()`):
+    - Niets is voorgekozen, en openen en kiezen schrijven niets.
+    - De bridge vóór (gestippeld, `voorStappen` in `brugGrafiek()`) en ná, met "budget €X onder → €Y onder". Een optie die pas volgende maand werkt, zegt dat.
+    - De meetlat "Gelukt als" stelt de app voor; jij bevestigt ("Meetlat ok") of past aan, en pas dan kan Bevestig.
+    - `gripKeuzeZet()` leest alles opnieuw, bewaart de keuze in `SET.gripKeuze[ym]` en `SET.gripKeuzeLog` (in het logboek) en opent bij een optie die een handeling vraagt de BESTAANDE ingang: de terugzetkeuze, `openPotjeBijstel()`, `openPotForm()` of `belegKies()`.
+  - KIEZEN: een rij per patroon (gekozen, nu, daarna) met "X van N". Daaronder staan:
+    - de uitgevoerde meldingen uit Zien (`SET.teRuimLog`);
+    - de volgorde (van de app of gesleept, `SET.gripVolgorde`; spaargeld blijft eerst);
+    - het moment (vóór de salarisdatum of per week vanaf maandag, `SET.gripMoment`);
+    - een neutrale regel als de stap die nu aan de beurt is `GRIP_STAP_LIGT` (7) dagen openstaat of het moment voorbij is (`SET.gripStapSinds`, geschreven bij het renderen).
+  - De oker stip staat er zolang er een patroon zonder keuze is.
+  - TERUGBLIK (`gripTerugblik(ym)`): elke meetlatregel ✓ of ✗, en het patroon ✓, ½ of ✗.
+    - GELUKT IS ALLEEN MINDER UITGEVEN DAN HET OORSPRONKELIJKE POTJE: een regel die alleen binnen een opgehoogd potje blijft, is "geschoven", en een keuze die schuift (herzien uit een ander potje, minder sparen) is als geheel geschoven.
+    - Geschoven, een bewuste keuze en een instelling staan apart en tellen niet mee in de score.
+    - SPAARDOEL: gestort min eruit (`savedNet()`) tegen Plan opzij van die maand (`SET.gripOpzij`, bewaard bij het renderen). ✓ vanaf 100%, ½ vanaf 80%, anders ✗. Een keuze zonder storting telt dus niet als gehaald. In de lopende maand is het een tussenstand en geen oordeel.
+    - De score staat naast die van de vorige maand.
+  - LET OP BLIJFT, gemeld: een potje of beleggen dat al signaal van een patroon is, staat er niet meer (`gripLetOpZonderPatroon()`). De rest (structureel, uitgaven zonder potje, een uitgesloten incasso, een schatting, contant, de terugblikken) heeft in Begrijpen geen plek en zou anders wegvallen. VERPLAATSEN IS GEEN KOPIEREN, EN DE INGANG GAAT MEE: een tik op het potje-signaal in Begrijpen opent dezelfde signaalkaart met bijstellen, volgende maand anders, de grens en zo laten (`gripSigTik()`), de inleg opent `openBelegVraag()` en de onttrekkingen de Doelen-meter. GEMETEN: de eerste vorm haalde de regels uit Let op zonder die tik, en dan waren de handelingen van de signaalkaart (v314/v315) op Grip niet meer te bereiken; negentien tests vielen erop en hadden gelijk.
 - **Grip is een regelkring: drie meters, vier tabs, en te ruim begroot is geen ruimte** (`v387`, deel 1, gevraagd door de gebruiker, mockup "Grip kring proces" versie 2). Bovenaan staan altijd drie meters: Budget, Doelen en Beleggen. Daaronder vier tabs: Zien, Begrijpen, Kiezen en Terugblik. Grip opent altijd op Zien, en een tab die je hebt afgerond krijgt een ✓.
   - BUDGET is verwacht gedeeld door het EERLIJKE budget: het budget min wat te ruim begroot is. Met het volle budget eronder zou te ruim de meter laten zakken zonder dat je minder uitgeeft.
   - DOELEN is Plan "deze maand opzij" min elke afschrijving op je spaarrekeningen (`spaarStortStand().uitExact`, de bron van `v386`). Een overboeking tussen twee spaarrekeningen telt niet; een opname telt altijd, ook als er een keuze over ligt (aanvulling van de gebruiker).

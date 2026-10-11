@@ -1109,3 +1109,34 @@
   - Nieuwe spec `grip-kring.spec.js` met fixture `grip-kring-stand.js`. Zevenendertig specs zijn gemigreerd: ze lazen de tegels of de kaart Deze maand en lezen nu de meters, hun sheet of Zien.
   - Acht sabotages, alle acht rood: Doelen zonder onttrekking, te ruim als ruimte, Grip op de laatste tab, geen arcering, 4-wekelijks een keer, geen betaling als te ruim (pas rood met alle drie de guards weg), en kiezen dat al schrijft.
   - Volle suite: 4092 groen, rood alleen decimaalteken, piekdag-diagnose, de bekende flake diag-entry-merge, en twee v358-specs die daarna op Verzekeringen EUR 700 zijn gezet.
+- **Grip als regelkring, deel 2: Begrijpen, Kiezen, de keuze-sheet en Terugblik** (`minder-v388`, gevraagd door de gebruiker):
+  - Begrijpen:
+    - patronen als oorzaak (`gripPatronen()`, hooguit drie, met ‹ › te bladeren);
+    - onttrekkingen van je spaarrekening altijd eerst;
+    - signalen met bedrag en de hoeveelste maand, en een bewijsregel;
+    - klopt/niet, met een reden die wordt bewaard (`SET.gripOordeel`) en de maand erna de naam van het patroon wordt.
+  - Kiezen:
+    - een rij per patroon met "X van N";
+    - uitgevoerde meldingen uit Zien met hun effect;
+    - volgorde van de app of gesleept (`SET.gripVolgorde`, spaargeld eerst);
+    - een moment vóór het salaris of per week (`SET.gripMoment`);
+    - een neutrale regel voor een stap die blijft liggen;
+    - de oker stip op de tab.
+  - De keuze-sheet (`openGripKeuze()`):
+    - twee of drie opties met ≈ voor Budget, Doelen en Beleggen, zonder voorkeuze;
+    - een bridge vóór (gestippeld) en ná;
+    - een meetlat die je bevestigt of aanpast;
+    - Bevestig bewaart de keuze (`SET.gripKeuze`, in het logboek als "Je keuzes in Grip") en opent bij een handeling de bestaande ingang.
+    - De 2e maand op rij boven: eerst herzien.
+  - Terugblik (`gripTerugblik()`):
+    - ✓ ½ ✗ per patroon;
+    - geschoven apart (dekken, schuiven, of alleen binnen een opgehoogd potje);
+    - het spaardoel als gestort min eruit tegen Plan opzij, met ½ vanaf 80%;
+    - een score met halven, naast de vorige maand;
+    - instellingen tellen niet mee.
+  - Let op blijft op Zien voor wat geen patroon is. Een potje boven of beleggen vóór je fundament staat als signaal in Begrijpen, en een tik daarop opent de kaart die er was (`gripSigTik()`).
+  - Zeven specs gemigreerd naar die route (`sigKaart()` in `tests/beslis-sheet.js`): bezit-koppeling, grip-dashboard o en s, grip-lek-jaar, grip-vorm, ontdubbeling-schermen en volgende-maand-actie.
+  - Nieuwe spec `grip-kring-deel2.spec.js` (21 tests). In `grip-kring.spec.js` zijn twee asserties bijgewerkt: de stip staat er nu bij een open stap.
+  - Zeventien sabotages, alle zeventien rood: veertien op deel 2 (dekken als gelukt, binnen een opgehoogd potje als gelukt, ½ vanaf 70%, deels als heel, spaargeld niet eerst (ook in je eigen volgorde), een reden die niet wordt bewaard of niet meeweegt, een voorgekozen optie, herzien niet eerst, Let op zonder filter, een onttrekking na de meetlatdatum die niet telt, een stap die nooit blijft liggen, een signaal dat niets opent), plus drie van deel 1 opnieuw (onttrekking niet in Doelen, te ruim als ruimte, Grip op een andere tab).
+  - Volle suite: 4116 groen, rood alleen decimaalteken en piekdag-diagnose.
+  - "Optie voorgekozen" en "eigen volgorde" werden pas rood nadat de spec het geval droeg.

@@ -24,6 +24,7 @@
  * assertie niets.
  */
 const { test, expect } = require('@playwright/test');
+const { sigKaart } = require('./beslis-sheet');
 const { regelTegels } = require('./beslis-sheet');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
@@ -83,9 +84,10 @@ async function boot(page, o = {}) {
   await page.evaluate(() => go('maand'));
 }
 
-/* v340: de valt-op-kaart staat achter de regel onder 'Let op' op Grip, in een sheet. */
+/* v340: de valt-op-kaart staat achter de regel onder 'Let op' op Grip, in een sheet. v388: het potje is een signaal
+   van een patroon in Begrijpen, en een tik daarop opent dezelfde kaart (sigKaart). */
 async function kaart(page) {
-  await page.locator('#gripLetOp [data-letop="sig"]').first().click();
+  await sigKaart(page);
   await page.locator('#gripLetOpSheet .valtop-open').waitFor();
 }
 

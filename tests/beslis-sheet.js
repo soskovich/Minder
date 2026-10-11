@@ -127,3 +127,15 @@ const regelTegels = (page) => page.evaluate(() => {
   return per;
 });
 module.exports.regelTegels = regelTegels;
+
+/* v388: een potje boven zijn grens is een signaal van een patroon in Begrijpen. Deze helper opent de signaalkaart
+   (de kaart met de handelingen uit Let op) langs de echte route: het patroon in Begrijpen en een tik op het
+   signaal. Staat het potje in geen patroon, dan staat het nog onder Let op, en dan tikt hij daar. */
+async function sigKaart(page, k) {
+  k = k || await page.evaluate(() => (valtOpSignals(thisYM())[0] || {}).potjeId);
+  const inPatroon = await page.evaluate((k) => { go('maand'); return gripNaarSignaal(k); }, k);
+  if (inPatroon) await page.locator(`#s-maand [data-patsig="potje"][data-patsigk="${k}"]`).click();
+  else { await page.evaluate(() => gripKiesTab('zien')); await page.locator('#gripLetOp [data-letop="sig"]', { hasText: await page.evaluate((k) => CATS[k].name, k) }).click(); }
+  return inPatroon;
+}
+module.exports.sigKaart = sigKaart;

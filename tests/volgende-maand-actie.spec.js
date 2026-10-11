@@ -10,6 +10,7 @@
    verschil is "volgend_voor is het potje van DEZE maand" niet te onderscheiden van "volgend_voor is
    de stand die er voor volgende maand al klaar stond" (meetles a). */
 const { test, expect } = require('@playwright/test');
+const { sigKaart } = require('./beslis-sheet');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
@@ -148,7 +149,7 @@ test('b3 de knop "Volgende maand anders" op Grip komt in het logboek als volgend
   await boot(page,{dagen:2});
   await page.evaluate(()=>go('maand'));
   expect(await page.locator('#s-maand .valtop-open').count()).toBe(0);
-  await page.locator('#gripLetOp [data-letop="sig"]').first().click();
+  await sigKaart(page);   // v388: het signaal in Begrijpen opent dezelfde kaart
   await expect(page.locator('#gripLetOpSheet .valtop-open')).toContainText('Volgende maand anders');
   const oc=await page.evaluate(()=>{
     const el=[...document.querySelectorAll('.valtop-open [onclick]')]

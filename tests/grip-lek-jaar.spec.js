@@ -2,6 +2,7 @@
    staan nu op Grip. (1) Het jaarbedrag onder een overschrijding staat in de sheet van dat potje (v313: s.over maal
    twaalf, geen tempo). (2) De lek-regel staat onder Let op; die tests staan in valt-op-signalen.spec.js. */
 const { test, expect } = require('@playwright/test');
+const { sigKaart } = require('./beslis-sheet');
 const S = require('./inzichten-stand');
 
 const OVER = [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }];
@@ -11,7 +12,10 @@ test('het jaarbedrag staat in de sheet van het potje op Grip, en is het bedrag v
   await page.evaluate(() => go('maand'));
   const s = await page.evaluate(() => (valtOpSignals(thisYM()) || []).find((x) => x.potjeId === 'boodschappen'));
   expect(s, 'boodschappen staat werkelijk boven zijn potje').toBeTruthy();
-  await expect(page.locator('#gripLetOp [data-letop="sig"]').first()).toContainText(`€${s.over.toLocaleString('nl-NL')} boven je potje`);
+  /* v388: het potje is een signaal van een patroon in Begrijpen; de kaart erachter noemt hetzelfde bedrag */
+  await sigKaart(page, 'boodschappen');
+  await expect(page.locator('#gripLetOpSheet')).toContainText(`€${s.over.toLocaleString('nl-NL')}`);
+  await page.evaluate(() => closeSheet());
   await page.evaluate(() => openGripPotje('boodschappen'));
   const r = page.locator('#gripPotje [data-jaarbedrag]');
   await expect(r).toHaveCount(1);
