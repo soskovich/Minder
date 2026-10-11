@@ -68,8 +68,11 @@ test.describe('b · wekelijks per potje, zonder standaard', () => {
   test('een nieuw potje vraagt de keuze, zonder voorkeuze', async ({ page }) => {
     await boot(page, '2026-10-10');
     const r = await page.evaluate(() => { openPotForm(); potFormZetVeld('cat', 'zorg'); potFormZetVeld('bedrag', '50'); potFormZetVeld('vanaf', thisYM());
-      const P = potFormVoorstel(); return { nodig: P.wekNodig, wek: P.wek, chips: document.querySelectorAll('[data-potwek].on').length, n: document.querySelectorAll('[data-potwek]').length, reden: potFormReden(P, window._potForm) }; });
+      const P = potFormVoorstel(); return { nodig: P.wekNodig, wek: P.wek, chips: document.querySelectorAll('[data-potwek].on').length, n: document.querySelectorAll('[data-potwek]').length, reden: (potFormZetVeld('bron', 'verhoog'), potFormReden(potFormVoorstel(), window._potForm)), klaar: potFormVoorstel().klaar,
+        na: (potFormZetVeld('wek', 'ja'), potFormVoorstel().klaar) }; });
     expect(r.nodig).toBe(true); expect(r.wek).toBeNull(); expect(r.n).toBe(2); expect(r.chips).toBe(0);
+    expect(r.klaar).toBe(false); expect(r.reden).toBe('Kies of dit potje meetelt in je weekbedrag');
+    expect(r.na).toBe(true);
   });
   test('in de sheet van een potje is de keuze aan te passen', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
