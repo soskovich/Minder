@@ -3533,10 +3533,17 @@ function safeToSpend(){
      keuze telt de opname niet meer als iets dat je nog moet aanvullen; wat er wel terug gaat staat als extra
      inleg van deze maand. Alles deze maand geeft daarmee hetzelfde als tot v364, niet terugzetten EUR B minder. */
   let tzS={extra:0, afgehandeld:0}; try{ tzS=terugzetSpaar(ym); }catch(_){}
-  const saveRemaining=Math.max(saveTarget+tzS.extra-(savedThisMonth+tzS.afgehandeld),0);
+  /* v386: NOG TE SPAREN = PLAN "DEZE MAAND OPZIJ" MIN WAT ER AL GESTORT IS, EN EEN OPNAME UIT VRIJ SPAARGELD
+     VULT JE NIET AAN (keuze A van de gebruiker). Tot v385 telde alleen de opname-keuze als afgehandeld, dus een
+     keuze over toegewezen zonder geld (EUR 407 alles, EUR 150 gespreid) stond in savedNet EN in de terugzet-extra,
+     en het gespreide deel van november en december telde volledig in oktober. Nu dekken ALLE keuzes van deze maand
+     samen hun opname (spaarStortStand()), en wat er dan nog uit is gegaan telt alleen als aan te vullen voor zover
+     het uit toegewezen geld kwam (spaarOver().zonder); de rest kwam uit vrij spaargeld en staat apart. */
+  let SS={gestort:savedThisMonth, aanvullen:0, vrijOpname:0}; try{ SS=spaarStortStand(ym); }catch(_){}
+  const saveRemaining=Math.max(saveTarget+tzS.extra-SS.gestort+SS.aanvullen,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), resBal:Math.round(resBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
-    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, tzExtra:Math.round(tzS.extra||0), gestort:SS.gestort, aanvullen:SS.aanvullen, vrijOpname:SS.vrijOpname, safe};
 }
 /* v321: WELKE POSTEN EEN CLAIM OP JE SALDO ZIJN, OP EEN PLEK, MET TWEE LEZERS (v104). De
    opbouw-sheet droeg de naam en de route van elke post als losse string in zijn eigen rij, en de
@@ -4321,9 +4328,19 @@ function openSafeToSpend(){
       }
       // v262: onSav kan nu onder nul staan, en dan is 'al gespaard' onwaar. Zelfde woorden als op
       // Inzichten, want het is hetzelfde feit op een tweede oppervlak (v91).
-      if(S.saveReserved>0) return line(safeClaim('saveReserved').label, S.saveReserved, 'var(--mut)', safeClaim('saveReserved').act, `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:(onSav<0?` plus ${euro0(-onSav)} die je eruit haalde`:``)}`);
-      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${safeClaim('saveReserved').act}"><div style="flex:1"><div style="font-size:var(--fs-md)">${safeClaim('saveReserved').label}</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
-      return '';
+      /* v386: de regel is de exacte optelling van safeToSpend(): maandbedrag + terug - al gestort + eruit gehaald
+         zonder keuze. Dat laatste deel tikt naar dezelfde keuze als op Plan (openSpaarKeuzeHome()), en een opname
+         uit vrij spaargeld staat als eigen regel eronder, want die telt als vrij te besteden. */
+      const vrijR=(S.vrijOpname>0)?`<div class="small muted" data-spaarvrijopname="${S.vrijOpname}" style="padding:6px 0 8px;border-bottom:1px solid var(--line)">${euro0(S.vrijOpname)} uit vrij spaargeld · telt als vrij te besteden</div>`:'';
+      if(S.saveReserved>0){
+        const deel=[`maandbedrag ${euro0(tgt)}`];
+        if(S.tzExtra>0) deel.push(`+ terug ${euro0(S.tzExtra)}`);
+        if(S.gestort>0) deel.push(`− ${euro0(S.gestort)} al gestort`);
+        if(S.aanvullen>0) deel.push(`+ <span data-spaaraanvullen="${S.aanvullen}" onclick="event.stopPropagation();openSpaarKeuzeHome()" style="color:var(--teal);font-weight:700;cursor:pointer">${euro0(S.aanvullen)} eruit gehaald zonder keuze ›</span>`);
+        return line(safeClaim('saveReserved').label, S.saveReserved, 'var(--mut)', safeClaim('saveReserved').act, `<span data-spaaroptelling>${deel.join(' ')}</span>`)+vrijR;
+      }
+      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${safeClaim('saveReserved').act}"><div style="flex:1"><div style="font-size:var(--fs-md)">${safeClaim('saveReserved').label}</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`+vrijR;
+      return vrijR;
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Vrij te besteden</div>
@@ -4388,7 +4405,7 @@ const JARGON={
   onvoorzien:'Een kost die je niet kon voorzien, zoals een wegsleep of een kapotte wasmachine. Geen potje, telt niet mee tegen je budget. Weet je niet waar een boeking hoort, dan is dat Overig.',
   contant:'Wat je contant hebt uitgegeven sinds je voor het laatst telde. Dit is een verschil en geen boeking per aankoop, dus de app weet het bedrag wel en de bestemming niet. Geen potje, telt niet mee tegen je budget.',
   veiligtebesteden:'Je saldo plus het salaris dat nog komt, min wat al op je spaarrekening en je reserveringsrekening staat, de vaste lasten die nog komen, wat er in je potjes zit en wat je deze maand nog spaart.',   // v378: dezelfde posten als de opbouw-sheet
-  nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand netto naar je spaarrekening ging. Netto, dus wat je er in dezelfde maand weer af haalde gaat eraf.',
+  nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag plus wat er na een keuze terug gaat, min wat er netto al naar je spaarrekening ging. Haal je zonder keuze geld uit toegewezen spaargeld, dan komt dat erbij; geld uit vrij spaargeld niet, dat telt als vrij te besteden.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
   restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
   afwijkendbedrag:'Hoger dan je gebruikelijke bedrag bij deze winkel — of, als we die historie nog niet hebben, hoger dan het gemiddelde in deze categorie. Een signaal om even te kijken, geen oordeel.',
@@ -10201,6 +10218,44 @@ function terugzetSpaar(ym){
   const O=A.find(T=>!T.gat);
   return {extra:Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0)), afgehandeld:(O&&O.i===0)?Math.round(+O.r.bedrag||0):0};
 }
+/* v386: WAT ER DEZE MAAND AL GESTORT IS, EN WAT EEN OPNAME ZONDER KEUZE NOG VRAAGT. Een bron, met drie lezers
+   (safeToSpend, de opbouw op Home en blok 3). De opnames zijn de afschrijvingen op je spaarrekeningen, zonder een
+   overboeking tussen twee spaarrekeningen (zelfde dag, zelfde bedrag, andere spaarrekening): die verplaatst niets.
+   ELKE KEUZE VAN DEZE MAAND DEKT ZIJN EIGEN BEDRAG: de opname-keuze (SET.terugzet[ym]) en elke keuze over
+   toegewezen zonder geld met M deze maand (SET.terugzetGat), welke keuze ook. Samen dekken ze hooguit wat er uit
+   ging. Wat de keuzes niet dekken (`open`) kwam uit toegewezen geld voor zover er nu toegewezen geld zonder geld
+   staat (spaarOver().zonder), en dat vul je aan (v365); de rest kwam uit vrij spaargeld en telt als vrij te
+   besteden. gestort = savedNet plus het gedekte deel: de opnames met een keuze zitten in de terugzet-extra van
+   deze maand of in de delen van latere maanden, en tellen hier dus niet nog eens. Bij een netto storting vraagt
+   niets aanvulling: wat er heen en weer ging, ging eerst uit je eigen storting (v262). */
+function spaarStortStand(ym){
+  ym=ym||thisYM();
+  let net=null; try{ net=savedNet(ym); }catch(_){}
+  const n=(net==null?0:net);
+  const sav=new Set(n26SavingsAccounts());
+  let uit=0;
+  if(sav.size){ const rij=txOfMonth(ym).filter(t=>sav.has(t.acc)), bij=rij.filter(t=>t.amount>0), gebruikt=new Set();
+    for(const t of rij){ if(!(t.amount<0)) continue;
+      const m=bij.find(b=>!gebruikt.has(b) && b.acc!==t.acc && b.date===t.date && Math.abs(b.amount+t.amount)<0.005);
+      if(m){ gebruikt.add(m); continue; }
+      uit+=-t.amount; } }
+  /* Een keuze over toegewezen zonder geld dekt eerst het gat dat er aan het begin van de maand al was (G0: wat er
+     toegewezen staat min het saldo van toen, min wat keuzes van eerdere maanden nog terugzetten), en pas daarna een
+     opname van deze maand. Zonder dat dekt een keuze over een oud gat een nieuwe opname die nog geen keuze heeft. */
+  let G0=0; try{ const V=spaarVrij();
+    if(V.savedExact!=null && V.toegewezen>0){ let dektVorig=0;
+      for(const T of terugzetActief(ym)) if(T.M!==ym) dektVorig+=(T.r.delen||[]).slice(T.i).reduce((a,x)=>a+(+x||0),0);
+      G0=Math.max(V.toegewezen-(V.savedExact-n)-dektVorig, 0); } }catch(_){}
+  let Kop=0, Kgat=0; const R=terugzetRecs()[ym]; if(R && R.keuze) Kop=(+R.bedrag||0);
+  for(const r of terugzetGatRecs()) if(r && r.M===ym && r.keuze) Kgat+=(+r.bedrag||0);
+  const K=Kop+Math.max(Kgat-G0, 0);
+  const gedekt=Math.min(uit, K);
+  const netto=n+gedekt;
+  let aanvullen=0, vrijOpname=0;
+  if(netto<0){ const open=-netto; let z=0; try{ z=+spaarOver().zonder||0; }catch(_){}
+    aanvullen=Math.min(open, z); vrijOpname=open-aanvullen; }
+  return {gestort:Math.round(Math.max(netto,0)), aanvullen:Math.round(aanvullen), vrijOpname:Math.round(vrijOpname), uit:Math.round(uit), gedekt:Math.round(gedekt), G0:Math.round(G0*100)/100};
+}
 /* v371: WAT DE LOPENDE KEUZES NOG DEKKEN. Een keuze dekt alleen zijn eigen bedrag, en alleen zolang het geld er nog
    niet is: wat er na deze maand nog terug moet, plus het deel van deze maand dat nog niet binnen is. Binnen is wat er
    deze maand netto op je spaarrekening kwam, met de opname zelf eruit (die ging eraf en is geen storting). DE STORTING
@@ -10298,6 +10353,14 @@ function terugzetHerstel(ym){
   if(r.keuze==='niet' && r.voor) for(const id in r.voor){ const v=Math.round(+r.voor[id]||0);
     if(id===PLAN_NF) SET.nfToegewezen=v; else { const g=(SET.goals||[]).find(x=>x.id===id); if(g) g.gespaard=v; } }
   const R=Object.assign({}, terugzetRecs()); delete R[ym]; SET.terugzet=R;
+}
+/* v386: de tik op "eruit gehaald zonder keuze" op Home opent dezelfde keuze als op Plan: de opname-keuze als er deze
+   maand een opname zonder keuze is, anders de keuze over toegewezen zonder geld. Niets voorgekozen, het gevolg staat
+   er voor je bevestigt; het zijn de sheets van Plan zelf (v61). */
+function openSpaarKeuzeHome(){
+  let D=null; try{ D=terugzetData(); }catch(_){}
+  if(D && !(D.rec && D.rec.keuze)){ openTerugzetSheet(); return; }
+  openSpaarOver();
 }
 function openTerugzetSheet(){ const D=terugzetData(); if(!D){ render(); return; } $('#sheet').innerHTML=`<div class="grab"></div>${terugzetKaart(D)}`; showSheetBg(); }
 function terugzetWijzig(){ window._terugzetWijzig=true; render(); }
@@ -19147,10 +19210,17 @@ function renderInsTegel(){
       ${insRij('Nog te ontvangen', 'je gewone maandinkomen min wat er al binnen is, niet onder nul', euro0(L.incDue))}</div>`;
   } else if(k==='sparen'){
     const S=safeToSpend(); const lijst=savedTx(m);
-    h=`<div id="insTegelSheet" data-instegelsheet="sparen" data-inswaarde="${Math.max(S.saveReserved,0)}">${insSheetKop('Nog te sparen', 'je spaarinleg in Plan min wat er deze maand netto opzij ging', euro0(Math.max(S.saveReserved,0)))}
+    /* v386: dezelfde optelling als de regel op Home (spaarStortStand()): inleg + terug - al gestort + eruit gehaald
+       zonder keuze. De boekingen staan eronder als bron, en een opname uit vrij spaargeld telt niet mee. */
+    h=`<div id="insTegelSheet" data-instegelsheet="sparen" data-inswaarde="${Math.max(S.saveReserved,0)}">${insSheetKop('Nog te sparen', 'je spaarinleg in Plan plus wat er terug gaat, min wat er deze maand al gestort is', euro0(Math.max(S.saveReserved,0)))}
       ${insRij('Je spaarinleg in Plan', '', euro0(S.saveTarget), ` data-insinleg="${S.saveTarget}"`)}
+      ${S.tzExtra>0?insRij('Terug deze maand', 'een keuze na een opname', '+'+euro0(S.tzExtra), ` data-insterug="${S.tzExtra}"`):''}
+      ${S.gestort>0?insRij('Al gestort', 'deze maand', '−'+euro0(S.gestort), ` data-insgestort="${S.gestort}"`):''}
+      ${S.aanvullen>0?insRij('Eruit gehaald zonder keuze', 'uit toegewezen geld', '+'+euro0(S.aanvullen), ` data-insaanvullen="${S.aanvullen}"`):''}
+      ${lijst.length?`<div class="small muted" style="margin:10px 0 2px">Je boekingen deze maand</div>`:''}
       ${lijst.map(t=>insRij(esc(txNaam(t)), new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+(t.amount<0?' · eruit gehaald':' · opzij'), (t.amount<0?'+':'−')+euro0(Math.abs(t.amount)), ` data-insspaartx="${t.amount}"`)).join('')}
-      <div class="small muted" style="margin-top:8px;line-height:1.5">Wat je eruit haalt komt bij wat je nog opzij wilt zetten; wat je opzij zet gaat ervan af.</div></div>`;
+      ${S.vrijOpname>0?`<div class="small muted" data-spaarvrijopname="${S.vrijOpname}" style="margin-top:8px">${euro0(S.vrijOpname)} uit vrij spaargeld · telt als vrij te besteden</div>`:''}
+      <div class="small muted" style="margin-top:8px;line-height:1.5">Wat je opzij zet gaat ervan af. Wat je uit toegewezen geld haalt zonder keuze komt erbij; wat je uit vrij spaargeld haalt niet.</div></div>`;
   } else if(k==='cash'){
     const T=contantTelling(), V=contantVerwacht();
     const ops=contantOpnamesSinds(), ins=contantInSinds(), sts=contantStortingenSinds();
@@ -21967,6 +22037,10 @@ function diagGrendel(){
     }
     const som=ST.saldo+ST.incDue-SAFE_CLAIMS.reduce((a,c)=>a+Math.round(ST[c.key]||0),0);
     L.push('   = safe:           '+ST.safe+'   sluit aan: '+(Math.abs(som-ST.safe)<=1?'JA':'NEE (nagerekend '+som+')'));
+    /* v386: de opbouw van nog te sparen, uit spaarStortStand(): maandbedrag + terug - al gestort + aanvullen. */
+    const SS=_dT(()=>spaarStortStand(),null);
+    L.push('   saveReserved = saveTarget '+ST.saveTarget+' + terug '+(ST.tzExtra||0)+' - al gestort '+(ST.gestort||0)+' + aanvullen '+(ST.aanvullen||0)
+      +(SS?'   (uit '+SS.uit+', met keuze gedekt '+SS.gedekt+', gat aan het begin '+SS.G0+', uit vrij spaargeld '+SS.vrijOpname+')':''));
     L.push('   de regel die Home hierbij toont:');
     L.push('     '+_dS(()=>{ const h=vrijPerDagLine();
       return h?String(h).replace(/<br\s*\/?>/g,' | ').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim():'(geen regel)'; }));

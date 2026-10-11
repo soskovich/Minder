@@ -327,7 +327,10 @@ test.describe('j · de sheets tellen op tot hun getal', () => {
     expect(r).toEqual([5216, 5216, 0]);
     await page.evaluate(() => { closeSheet(); openInsTegel('sparen'); });
     r = await page.evaluate(() => { const s = document.getElementById('insTegelSheet'); return [+s.dataset.inswaarde, +s.querySelector('[data-insinleg]').dataset.insinleg, ...[...s.querySelectorAll('[data-insspaartx]')].map((e) => +e.dataset.insspaartx)]; });
-    expect(r).toEqual([2431, 2200, -231]);
+    /* v386: de EUR 231 kwam uit vrij spaargeld (EUR 9.231 aan het begin van de maand tegen EUR 9.000 toegewezen),
+       dus hij vult niets aan (keuze A), en de sheet zegt dat. */
+    expect(r).toEqual([2200, 2200, -231]);
+    expect(await page.getAttribute('#insTegelSheet [data-spaarvrijopname]', 'data-spaarvrijopname')).toBe('231');
   });
 });
 

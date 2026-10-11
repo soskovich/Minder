@@ -148,7 +148,7 @@ test.describe('f · Verwacht eind van de maand', () => {
     expect(s.t[0].v).toBe(r.saldo);
     expect(s.tekst).toContain('bijgewerkt 3 okt');
     expect(s.tekst).toContain('Sparen verlaagt dit getal niet');
-    expect(s.tekst).toMatch(/waarvan op je spaarrekening ≈ €11\.431 \(€9\.000 nu \+ €2\.431 inleg deze maand\)/);
+    expect(s.tekst).toMatch(/waarvan op je spaarrekening ≈ €11\.200 \(€9\.000 nu \+ €2\.200 inleg deze maand\)/);   // v386: de EUR 231 kwam uit vrij spaargeld
     expect(s.tekst).not.toContain('met de bonus erbij');
   });
   test('de bonus staat apart en zit niet in de eindstand', async ({ page }) => {

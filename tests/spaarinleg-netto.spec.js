@@ -42,7 +42,11 @@ function seed(extra, opt) {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify(Object.assign({
       limit: 70, mode: 'begeleid', autoIncome: false, income: 5216,
-      manualBal: opt.bal || { [ACC]: 4200, [SPA]: 9000 },
+      /* v386: het saldo loopt met de boekingen mee vanaf EUR 9.000 aan het begin van de maand, en dat is allemaal
+         toegewezen aan het noodfonds. De netto-regel van v262 geldt voor toegewezen geld (keuze A); een opname uit
+         vrij spaargeld telt als vrij te besteden, en dat staat in blok e. */
+      manualBal: opt.bal || { [ACC]: 4200, [SPA]: 9000 + (extra || []).filter((e) => e.acc === SPA).reduce((a, e) => a + e.bedrag, 0) },
+      nfDoelVast: 20000, nfToegewezen: opt.vrij ? 0 : 9000, nfToegewezenMigrated: 1,
       savingsAcc: opt.geenSpaarrek ? {} : { [SPA]: true },
       savingsAccMigrated: 1, budgets: { boodschappen: 700 },
       savingMode: 'amount', savingAmount: DOEL, goals: [],
@@ -113,7 +117,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.nog).toBe(2000);
     const rij = await spaarRij(page);
     expect(rij).toContain('€3.000');
-    expect(rij).toContain('min €1.000 deze maand al gespaard');
+    expect(rij).toContain('− €1.000 al gestort');   // v386: de exacte optelling
     expect(rij).not.toContain('gehaald');
   });
 
@@ -132,7 +136,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.nog).toBe(4500);          // je maandbedrag plus wat je eruit haalde
     const rij = await spaarRij(page);
     expect(rij).toContain('€3.000');
-    expect(rij).toContain('plus €1.500 die je eruit haalde');   // v365: de woorden van de opbouw-sheet
+    expect(rij).toContain('+ €1.500 eruit gehaald zonder keuze');   // v386: de exacte optelling
     expect(rij).not.toContain('gehaald ·');
     expect(rij).not.toContain('opzij');
   });
@@ -143,7 +147,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.opzij).toBe(0);
     expect(c.nog).toBe(3000);
     const rij = await spaarRij(page);
-    expect(rij).toContain('je maandbedrag €3.000');
+    expect(rij).toContain('maandbedrag €3.000');
     expect(rij).not.toContain('opzij');
     expect(rij).not.toContain('eruit gehaald');
     // en dat is letterlijk dezelfde regel als een maand waarin je niets deed
@@ -193,14 +197,14 @@ test.describe('d - de lezers van savedThisMonth', () => {
     await boot(page, seed([naarSpaar(1000), uitSpaar(2500)]));
     const txt = await page.evaluate(() => { openSafeToSpend(); return document.body.innerText.replace(/\s+/g, ' '); });
     expect(txt).toContain('Nog te sparen deze maand');
-    expect(txt).toContain('€1.500 die je eruit haalde');
-    expect(txt).not.toContain('€1.500 deze maand al gespaard');
+    expect(txt).toContain('€1.500 eruit gehaald zonder keuze');
+    expect(txt).not.toContain('€1.500 al gestort');
   });
 
   test('Home bij een gewone deelbetaling blijft zeggen wat je al spaarde', async ({ page }) => {
     await boot(page, seed([naarSpaar(3000), uitSpaar(2000)]));
     const txt = await page.evaluate(() => { openSafeToSpend(); return document.body.innerText.replace(/\s+/g, ' '); });
-    expect(txt).toContain('min €1.000 deze maand al gespaard');
+    expect(txt).toContain('− €1.000 al gestort');
   });
 
   test('Plan leest hetzelfde netto getal en zwijgt zodra er niets opzij ging', async ({ page }) => {
@@ -275,4 +279,25 @@ test.describe('f - layout', () => {
       expect(r.binnen).toBe(true);
     });
   }
+});
+
+/* v386: DE NETTO-REGEL GELDT VOOR TOEGEWEZEN GELD (keuze A). Is er niets toegewezen, dan kwam een opname uit vrij
+   spaargeld: die vult niets aan, telt als vrij te besteden en staat als eigen regel in de opbouw. Heen en weer binnen
+   dezelfde maand gaat eerst uit je eigen storting, dus dat blijft invariant. */
+test.describe('g - een opname uit vrij spaargeld', () => {
+  test('vult niets aan, en safe stijgt met precies dat bedrag', async ({ page }) => {
+    await boot(page, seed([], { vrij: true, bal: { [ACC]: 4200, [SPA]: 9000 } }));
+    const niets = await cijfers(page);
+    await boot(page, seed([uitSpaar(1500)], { vrij: true, bal: { [ACC]: 5700, [SPA]: 7500 } }));
+    const c = await cijfers(page);
+    expect(c.nog).toBe(3000); expect(c.safe).toBe(niets.safe + 1500);
+    expect(await page.evaluate(() => safeToSpend().vrijOpname)).toBe(1500);
+    expect(await page.evaluate(() => { openSafeToSpend(); return document.querySelector('[data-spaarvrijopname]').innerText; })).toBe('€1.500 uit vrij spaargeld · telt als vrij te besteden');
+  });
+  test('heen en weer in dezelfde maand gaat eerst uit je eigen storting', async ({ page }) => {
+    await boot(page, seed([naarSpaar(3000), uitSpaar(1500)], { vrij: true, bal: { [ACC]: 2700, [SPA]: 10500 } }));
+    const c = await cijfers(page);
+    expect(c.nog).toBe(1500);
+    expect(await page.evaluate(() => safeToSpend().vrijOpname)).toBe(0);
+  });
 });
