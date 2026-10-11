@@ -51,8 +51,10 @@ test.describe('a · Home', () => {
   });
   test('verplaatst en niet gekopieerd: de tegels ontvangen, sparen en contant staan niet meer op Inzichten', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
-    const keys = await page.evaluate(() => [...document.querySelectorAll('#s-ins [data-instegel]')].map((e) => e.dataset.instegel));
-    for (const k of ['ontvangen', 'sparen', 'cash']) expect(keys).not.toContain(k);
+    /* v382: Inzichten draagt geen tegels meer; ontvangen, sparen en contant staan er in geen enkele vorm */
+    const r = await page.evaluate(() => ({ tegels: document.querySelectorAll('#s-ins [data-instegel]').length, t: document.getElementById('s-ins').innerText }));
+    expect(r.tegels).toBe(0);
+    expect(r.t).not.toMatch(/te ontvangen|te sparen|contant/i);
     await page.evaluate(() => go('dash'));
     expect(await page.locator('#homeOntvangen').count()).toBe(1);
   });
@@ -131,101 +133,74 @@ test.describe('c · Grip', () => {
 });
 
 /* ===== INZICHTEN ===== */
-const AFR = { extraTx: [{ id: 'r1', date: '2026-10-06', amount: -10.4, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] };
-const mb = (page) => page.evaluate(() => { const el = document.getElementById('insMaandBudget'); if (!el) return null;
-  return { budget: +el.dataset.budget, som: (el.querySelector('[data-somregel]') || {}).dataset ? el.querySelector('[data-somregel]').dataset.somregel : null,
-    segs: [...el.querySelectorAll('[data-mbseg]')].map((s) => s.dataset.mbseg), tempo: !!el.querySelector('[data-mbtempo]'),
-    tegels: [...el.querySelectorAll('[data-mbtegel]')].map((t) => ({ k: t.dataset.mbtegel, v: +t.dataset.waarde, vl: t.querySelector('.vl').innerText })) }; });
+/* v382: het blok "Maandbudget <maand>" met drie tegels als legenda en een somregel (insMaandBudget) is vervangen door de
+   maandkaart (insMaandKaart, #insMaand): een balk met segmenten [data-insseg], een tempostreep em[data-instempo] en een
+   legenda met rijen [data-insleg] onder "Uitgegeven" en "Nog te gaan". */
+const mk = (page) => page.evaluate(() => { const el = document.getElementById('insMaand'); if (!el) return null;
+  return { stand: el.dataset.insmaand, uit: +el.dataset.insuit, budget: +el.dataset.insbudget,
+    segs: [...el.querySelectorAll('[data-insseg]')].map((s) => s.dataset.insseg), tempo: el.querySelector('em[data-instempo]') ? +el.querySelector('em[data-instempo]').dataset.instempo : null,
+    leg: [...el.querySelectorAll('[data-insleg]')].map((t) => ({ k: t.dataset.insleg, v: +t.dataset.v })) }; });
 test.describe('d · Inzichten', () => {
-  test('de som van de delen is exact het budget, ook als per tegel afronden er een euro naast zit', async ({ page }) => {
-    await I.boot(page, AFR); await page.evaluate(() => go('ins'));
-    // de fixture draagt het geval: per tegel afronden geeft EUR 1 minder dan het budget
-    const oud = await page.evaluate(() => { const m = thisYM(); return Math.round(insSoortUit(m, 'alle')) + Math.round(monthLiquidity().fixDue) + varPotjeStand(m).nog; });
-    const D = await mb(page);
-    expect(oud).toBe(D.budget - 1);
-    const delen = D.tegels.map((t) => t.v);
-    expect(delen.reduce((a, b) => a + b, 0)).toBe(D.budget);
-    expect(D.som).toBe(`${delen.join('+')}=${D.budget}`);
-    expect(await page.locator('[data-somregel]').innerText()).toBe(`${D.tegels.map((t) => t.vl).join(' + ')} = €3.376`);
-  });
-  test('een uitgave buiten je potjes is geen afronding: Nog in potjes blijft wat erin zit, en het verschil staat in de som', async ({ page }) => {
+  // v382: weg, 'de som van de delen is exact het budget' las de somregel van Maandbudget ([data-somregel]); die is weg
+  /* v382: de somregel is weg, de eigenschap van de tweede test blijft: een uitgave buiten je potjes laat "in potjes"
+     staan op wat erin zit (varPotjeStand().nog), en het verschil staat apart als "zonder potje". */
+  test('een uitgave buiten je potjes is geen afronding: in potjes blijft wat erin zit, en zonder potje staat apart', async ({ page }) => {
     await I.boot(page, { extraTx: [{ id: 'k1', date: '2026-10-06', amount: -200, name: 'Kapper Knip', desc: 'BEA, BETAALPAS KAPPER KNIP' }] });
     await page.evaluate(() => go('ins'));
-    const D = await mb(page);
-    const r = await page.evaluate(() => ({ nog: varPotjeStand(thisYM()).nog, som: document.querySelector('[data-somregel]').innerText }));
-    expect(D.tegels[2].v).toBe(r.nog);
-    const gat = D.budget - D.tegels.reduce((a, t) => a + t.v, 0);
-    expect(Math.abs(gat)).toBeGreaterThan(1);
-    expect(r.som).toContain('buiten je potjes'); expect(r.som).toContain('= €3.376');
-    expect(await page.evaluate(() => document.querySelector('[data-somregel]').dataset.somregel)).toBe(`${D.tegels.map((t) => t.v).join('+')}${gat}=${D.budget}`);
+    const D = await mk(page);
+    const r = await page.evaluate(() => ({ nog: varPotjeStand(thisYM()).nog, S: insMaandStand() }));
+    const leg = Object.fromEntries(D.leg.map((x) => [x.k, x.v]));
+    expect(leg.nogpot).toBe(r.nog);
+    expect(r.S.zonder, 'invoer: de kapper valt op geen potje').toBeGreaterThanOrEqual(200);
+    expect(leg.zonder).toBe(r.S.zonder);
+    expect(D.uit).toBe((leg.vast || 0) + (leg.potjes || 0) + leg.zonder);
   });
-  test('drie delen in vaste volgorde met een tempostreepje op wat je tot vandaag mocht', async ({ page }) => {
+  test('de delen in vaste volgorde met een tempostreep op het trap-tempo', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
-    const D = await mb(page);
-    expect(D.segs).toEqual(['uitgegeven', 'vast', 'potjes']);
-    expect(D.tegels.map((t) => t.v)).toEqual([406, 817, 2153]);
-    const t = await page.evaluate(() => ({ s: +document.querySelector('[data-mbtempo]').dataset.mbtempo, m: insTempo().mocht, lab: document.querySelector('.mb-tlab').innerText }));
-    expect(t.s).toBe(t.m); expect(t.lab).toBe('tempo €578');
+    const D = await mk(page);
+    expect(D.stand).toBe('nu');
+    expect(D.segs).toEqual(['vast', 'potjes', 'zonder', 'nogvast', 'nogpot']);
+    const S = await page.evaluate(() => insMaandStand());
+    expect(D.uit).toBe(406); expect(S.nogVast).toBe(817); expect(S.nogPot).toBe(2153);
+    const t = await page.evaluate(() => document.querySelector('#insMaand .ins-tlab').innerText);
+    expect(D.tempo).toBe(S.tempo); expect(t).toBe('tempo €' + S.tempo.toLocaleString('nl-NL'));
   });
-  test('de kleur van elke tegel is de kleur van zijn stuk in de balk', async ({ page }) => {
+  test('de kleur van elke legendarij is de kleur van zijn stuk in de balk', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
-    const r = await page.evaluate(() => [...document.querySelectorAll('[data-mbtegel]')].map((t) => {
-      const seg = document.querySelector(`[data-mbseg="${t.dataset.mbtegel}"]`);
-      return { k: t.dataset.mbtegel, dot: getComputedStyle(t.querySelector('.lb i')).backgroundColor, seg: getComputedStyle(seg).backgroundColor }; }));
-    for (const x of r) expect(x.dot).toBe(x.seg);
-    expect(new Set(r.map((x) => x.seg)).size).toBe(3);
+    const r = await page.evaluate(() => [...document.querySelectorAll('#insMaand [data-insleg]')].map((t) => {
+      const seg = document.querySelector(`#insMaand [data-insseg="${t.dataset.insleg}"]`);
+      return { k: t.dataset.insleg, dot: getComputedStyle(t.querySelector('.ins-sq')).backgroundImage + getComputedStyle(t.querySelector('.ins-sq')).backgroundColor,
+        seg: getComputedStyle(seg).backgroundImage + getComputedStyle(seg).backgroundColor }; }));
+    expect(r.length).toBeGreaterThan(2);
+    for (const x of r) expect(x.dot, x.k).toBe(x.seg);
+    expect(new Set(r.map((x) => x.seg)).size).toBe(r.length);
   });
-  test('een afgesloten maand toont twee delen en geen tempostreepje', async ({ page }) => {
+  test('een afgesloten maand toont alleen wat uitging en geen tempostreep', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => { go('ins'); insFilterZet('vorige', null); });
-    const D = await mb(page);
-    expect(D.segs.length).toBe(2); expect(D.segs[0]).toBe('uitgegeven'); expect(['over', 'erboven']).toContain(D.segs[1]);
-    expect(D.tempo).toBe(false);
+    const D = await mk(page);
+    expect(D.stand).toBe('af');
+    expect(D.segs.every((k) => ['vast', 'potjes', 'zonder'].includes(k))).toBe(true);
+    expect(D.tempo).toBe(null);
     const st = await page.evaluate(() => maandStaaf('2026-09'));
-    expect(D.tegels[0].v).toBe(Math.round(st.spend)); expect(D.budget).toBe(Math.round(st.budget));
+    expect(D.uit).toBe(Math.round(st.spend)); expect(D.budget).toBe(Math.round(st.budget));
   });
-  test('de patronen staan niet op de pagina en openen als sheet met dezelfde inhoud', async ({ page }) => {
+  /* v382: de patronen staan weer op de pagina, als tegels (hooguit vier); een tik opent het patroon in een sheet met
+     dezelfde inhoud als insPatronenKaart() voor dat ene patroon. */
+  test('de patronen staan als tegels op de pagina en openen als sheet met dezelfde inhoud', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
-    expect(await page.locator('#s-ins #insPatronen').count()).toBe(0);
-    const verwacht = await page.evaluate(() => insPatronen('alle').map((p) => p.soort + '|' + p.k));
+    const verwacht = await page.evaluate(() => insPatronen('alle').slice(0, 4).map((p) => p.soort));
     expect(verwacht.length).toBeGreaterThan(0);
-    await page.locator('[data-patronenteller]').click();
-    const r = await page.evaluate(() => [...document.querySelectorAll('#insPatronenSheet [data-patroon]')].map((e) => e.dataset.patroon + '|' + e.dataset.patk));
-    expect(r).toEqual(verwacht);
-    const zelfde = await page.evaluate(() => document.querySelector('#insPatronenSheet #insPatronen').innerHTML === (() => { const d = document.createElement('div'); d.innerHTML = insPatronenKaart(insPatronen('alle')); return d.firstElementChild.innerHTML; })());
-    expect(zelfde).toBe(true);
+    const tegels = await page.evaluate(() => [...document.querySelectorAll('#s-ins #insPatronen .ins-pt[data-patroon]')].map((e) => e.dataset.patroon));
+    expect(tegels).toEqual(verwacht);
+    await page.locator('#s-ins #insPatronen .ins-pt[data-patroon]').first().click();
+    const r = await page.evaluate(() => ({ soort: document.querySelector('#insPatroonSheet').dataset.patroon,
+      zelfde: document.querySelector('#insPatroonSheet').innerHTML === (() => { const d = document.createElement('div');
+        d.innerHTML = insPatronenKaart([insPatronen('alle')[0]]).replace('class="card" id="insPatronen"', 'id="insPatroonDetail"'); return d.innerHTML; })() }));
+    expect(r.soort).toBe(verwacht[0]);
+    expect(r.zelfde).toBe(true);
   });
-  test('tegen je potje: de EUR 0-groep is dicht, bevat alleen nul, en klapt op dezelfde plek uit', async ({ page }) => {
-    /* v367: de nulgroep staat in de drilldown "Alle N potjes", niet meer op de kaart */
-    await I.boot(page); await page.evaluate(() => { SET.insKeuze = 'potje'; go('ins'); });
-    expect(await page.locator('#insKeuze [data-insnulgroep]').count()).toBe(0);
-    await page.click('[data-insalleknop="potje"]');
-    const g = page.locator('[data-insnulgroep="potje"]');
-    expect(await g.getAttribute('data-open')).toBe('0');
-    expect(await page.locator('[data-insnulgroep="potje"] [data-inspotrij]').count()).toBe(0);
-    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insAlle > [data-inspotrij]')].map((e) => +e.dataset.uit));
-    expect(buiten.every((u) => u !== 0)).toBe(true);
-    const kop = await g.innerText();
-    await g.locator('[role=button]').click();
-    const r = await page.evaluate(() => ({ open: document.querySelector('[data-insnulgroep="potje"]').dataset.open,
-      uit: [...document.querySelectorAll('[data-insnulgroep="potje"] [data-inspotrij]')].map((e) => +e.dataset.uit),
-      pot: [...document.querySelectorAll('[data-insnulgroep="potje"] [data-inspotrij]')].map((e) => +e.dataset.potje) }));
-    expect(r.open).toBe('1'); expect(r.uit.length).toBeGreaterThan(1); expect(r.uit.every((u) => u === 0)).toBe(true);
-    expect(kop).toContain(`${r.uit.length} potjes nog niets uitgegeven`);
-    expect(kop).toContain('€' + r.pot.reduce((a, b) => a + b, 0).toLocaleString('nl-NL'));
-    await page.evaluate(() => { closeSheet(); go('dash'); go('ins'); openInsAlle('potje'); });
-    expect(await page.locator('[data-insnulgroep="potje"]').getAttribute('data-open')).toBe('0');
-  });
-  test('tegen vorige maanden: alleen precies EUR 0 verschil staat in de groep', async ({ page }) => {
-    await I.boot(page); await page.evaluate(() => { go('ins'); insKeuzeZet('vorige'); openInsAlle('vorige'); });   // v367: in de drilldown
-    const g = page.locator('[data-insnulgroep="vorige"]');
-    expect(await g.getAttribute('data-open')).toBe('0');
-    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insAlle > [data-insvorigrij]')].map((e) => +e.dataset.verschil));
-    expect(buiten.every((d) => d !== 0)).toBe(true);
-    await g.locator('[role=button]').click();
-    const binnen = await page.evaluate(() => [...document.querySelectorAll('[data-insnulgroep="vorige"] [data-insvorigrij]')].map((e) => +e.dataset.verschil));
-    expect(binnen.length).toBeGreaterThan(1); expect(binnen.every((d) => d === 0)).toBe(true);
-    expect(await g.innerText()).toContain(`${binnen.length} potjes gelijk aan normaal`);
-  });
+  // v382: weg, 'tegen je potje: de EUR 0-groep' las de keuzekaart en de drilldown (openInsAlle, [data-insnulgroep]); die zijn weg
+  // v382: weg, 'tegen vorige maanden: alleen precies EUR 0 verschil' las de keuzekaart (insKeuzeZet, openInsAlle); die is weg
 });
 
 /* ===== PLAN ===== */

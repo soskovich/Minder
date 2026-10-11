@@ -19195,7 +19195,8 @@ function insMaandStand(){
   const vastSom=R.vast+nogVast, potDeel=Math.max(B-vastSom,0);
   const vastTempo=Math.round(vastTot+achterSom), potTempo=Math.round(potDeel*E.elapsed/E.dim);
   return {m, B, uit, vast:R.vast, potjes:R.potjes, zonder:R.zonder, nogVast, nogPot, boven:uit+nogVast+nogPot-B,
-    tempo:vastTempo+potTempo, vastTempo, potTempo, potDeel, vastSom, el:E.elapsed, dim:E.dim, zTx, vastTx, achter, onbekend:false};
+    tempo:vastTempo+potTempo, vastTempo, potTempo, potDeel, vastSom, el:E.elapsed, dim:E.dim, zTx, vastTx, achter, onbekend:false,
+    limiet:!(T0.potTotal>0)};   // v173: zonder potjes is het budget de inkomen-limiet, en dan heet het zo
 }
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
    v309), en wat er over bleef of erboven ging. Geen tempo en niets meer te gaan. */
@@ -19212,9 +19213,11 @@ const INS_SEG={vast:'var(--mut2)', potjes:'var(--green)', zonder:'var(--amber)',
 function insMaandKaart(P, soort){
   const Li=laatsteImport(), m=thisYM();
   if(P.key==='nu' && Li && Li.datum < m+'-01'){
+    /* v311: je potjes verdwijnen niet van de pagina op een dag zonder boekingen; het is een budget, geen restant. */
+    let vbO=0; try{ vbO=Math.round(varBudget()); }catch(_){}
     /* v173/v311: nul uitgaven en geen data zijn niet hetzelfde; de reden en de stap om bij te werken staan in de sheet. */
     return `<div class="card" id="insMaand" data-insmaand="onbekend" role="button" onclick="openInsTegel('uitgegeven')"><div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}</div>
-      <div><b style="font-size:var(--fs-lg)">onbekend</b> <span class="small muted">uitgegeven · nog geen boekingen van deze maand ›</span></div></div>`;
+      <div><b style="font-size:var(--fs-lg)">onbekend</b> <span class="small muted">uitgegeven · nog geen boekingen van deze maand ›</span></div>${vbO>0?`<div class="small muted" data-insonbekendpot="${vbO}">In je potjes ${euro0(vbO)} deze maand</div>`:''}</div>`;
   }
   if(P.key!=='nu'){
     if(!P.maanden.length) return `<div class="card" id="insMaand" data-insmaand="leeg"><div class="small muted">Er is nog geen afgeronde maand om naar terug te kijken.</div></div>`;
@@ -19251,7 +19254,7 @@ function insMaandKaart(P, soort){
   const tempoTxt=!(bud>0)?'':(dt>0?`${euro0(dt)} boven tempo`:(dt<0?`${euro0(-dt)} onder tempo`:'precies op tempo'));
   return `<div class="card" id="insMaand" data-insmaand="nu" data-insuit="${uit}" data-insbudget="${bud}" data-instempoverschil="${dt}">
     <div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}</div>
-    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b> <span class="muted" data-insgetal>van ${euro0(bud)}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b> <span class="muted" data-insgetal>van ${euro0(bud)}${soort==='alle'&&S.limiet?' inkomen-limiet':''}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${bud>0?20:4}px">${segs}${streep}</div>
     <div class="ins-leg2"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>
       ${insLegPaar(delen.filter(d=>d.v!==0), nog.filter(d=>d.v!==0))}
@@ -19264,7 +19267,7 @@ function insSoortDelen(S, soort){
 }
 const INS_LEG={vast:'vast', potjes:'potjes', zonder:'zonder potje', nogvast:'vast', nogpot:'in potjes'};
 function insLegRij(k, v, alles){
-  const tik=k==='zonder'?` role="button" onclick="openInsZonder()"`:(k==='nogpot'?` role="button" onclick="openInsTegel('potjes')"`:'');
+  const tik=k==='zonder'?` role="button" onclick="openInsZonder()"`:(k==='nogpot'?` role="button" onclick="openInsTegel('potjes')"`:(k==='nogvast'?` role="button" onclick="openInsTegel('vast')"`:''));
   const pijl=tik?' ›':'';
   const lab=k==='nogpot'&&v<0?'te veel in potjes':INS_LEG[k];
   return `<div class="row ins-legr" data-insleg="${k}" data-v="${v}"${tik}><span${k==='zonder'?' style="color:var(--amber);font-weight:700"':(tik?' style="color:var(--teal);font-weight:700"':'')}><i class="ins-sq" style="background:${INS_SEG[k]}"></i>${lab}</span>${alles?`<b>alles${pijl}</b>`:`<b data-insgetal>${euro0(Math.abs(v))}${pijl}</b>`}</div>`;

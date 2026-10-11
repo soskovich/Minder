@@ -3,6 +3,7 @@
 // één volgende stap. Deze specs leggen per plek vast dat er gezwegen wordt in plaats van gerekend.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
@@ -116,7 +117,8 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
   test('met potjes heet het gewoon je maandbudget', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/van €[\d.]+ budget|tot vandaag mocht/);
+    // v382: de maandkaart heet "Maandbudget <maand>" en draagt "EUR X van EUR Y"
+    expect(t).toMatch(/Maandbudget \w+ €[\d.]+ van €[\d.]+/i);
     expect(t).not.toMatch(/inkomen-limiet/);
   });
 });
@@ -145,9 +147,11 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
 
   test('één detectie, geen tweede: beide lezen laatsteImport', async ({ page }) => {
     await boot(page, seed({ oudeImport: true }));
-    const r = await page.evaluate(() => ({
-      rem: renderReminder.toString(), blok: insTegelsNu.toString() + renderInsTegel.toString(),
-      L: laatsteImport(), cta: importCta() }));
+    /* v382: de tegels (insTegelsNu) zijn weg; de onbekend-stand staat in de maandkaart (insMaandKaart) en de reden met
+       de stap in de sheet (renderInsTegel). */
+    const r = await page.evaluate(() => ({ L: laatsteImport(), cta: importCta() }));
+    r.rem = await kaalUit(page, 'renderReminder');
+    r.blok = await kaalUit(page, 'insMaandKaart', 'renderInsTegel');
     expect(r.rem).toContain('laatsteImport()');
     expect(r.blok).toContain('laatsteImport()');
     expect(r.blok).toContain('importCta()');
@@ -158,8 +162,10 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
   test('verse data rekent gewoon door', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/Uitgegeven €800/);
-    expect(t).not.toMatch(/onbekend uitgegeven/);
+    // v382: de maandkaart rekent: data-insmaand="nu" met EUR 800 uitgegeven
+    expect(await page.evaluate(() => { const e = document.querySelector('#s-ins #insMaand'); return [e.dataset.insmaand, +e.dataset.insuit]; })).toEqual(['nu', 800]);
+    expect(t).toMatch(/€800 van/);
+    expect(t).not.toMatch(/onbekend/);
   });
 });
 
@@ -200,8 +206,10 @@ test.describe('7 · één keer melden dat er te weinig historie is', () => {
     // v178: de maandgrafiek die de zin draagt staat op Maand; de tegels staan op Inzichten
     // v232: de tegel staat op Vermogen, en bij één maand (geen afgeronde) staat hij daar niet eens
     const t = (await scherm(page, 'ins')) + ' ' + (await scherm(page, 'maand')) + ' ' + (await scherm(page, 'vermogen'));
-    // v359: de grafiek op Inzichten zegt het in zijn eigen woorden; de eis blijft precies een keer
-    expect((t.match(/staan je maanden hier naast elkaar|maanden zie je hier je verloop/gi) || []).length).toBe(1);
+    /* v382: de grafiek "Over de maanden" is weg, en daarmee zijn zin. De mededeling over te weinig historie op Inzichten
+       staat nu bij de patronen ("na drie maanden boekingen"); de eis blijft precies een keer. */
+    expect(t).not.toMatch(/staan je maanden hier naast elkaar|maanden zie je hier je verloop/i);
+    expect((t.match(/na drie maanden boekingen/gi) || []).length).toBe(1);
     expect(await page.evaluate(() => document.querySelectorAll('#maandKpiBlok').length)).toBe(0);
   });
 });
@@ -210,9 +218,10 @@ test.describe('r · regressie op een volledige dataset', () => {
   test('niets zwijgt wat wel bekend is', async ({ page }) => {
     await boot(page, seed({ spaar: true }));
     const ins = await scherm(page, 'ins');
-    expect(ins).toMatch(/Uitgegeven €800/);
-    expect(ins).toMatch(/van €[\d.]+ budget|tot vandaag mocht/);
-    expect(ins).not.toMatch(/onbekend uitgegeven/);
+    // v382: de maandkaart draagt "EUR 800 van EUR Y" en rekent (data-insmaand="nu")
+    expect(ins).toMatch(/€800 van €[\d.]+/);
+    expect(await page.evaluate(() => document.querySelector('#s-ins #insMaand').dataset.insmaand)).toBe('nu');
+    expect(ins).not.toMatch(/onbekend/);
     expect(await plan(page)).toMatch(/toegewezen/);
     const dash = await scherm(page, 'dash');
     expect(dash).not.toMatch(/Veilig te besteden onbekend/);

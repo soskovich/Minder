@@ -13,7 +13,7 @@ const { test, expect } = require('@playwright/test');
    dag van de maand is hij nul: dan staat de regel onder de tegel in geen enkele stap, en is de eis
    dat hij de bron draagt nergens getoetst. Dezelfde pin als de zes potjes-tests van v306. */
 const { pinDag } = require('./vaste-dag');
-const { kaalBron, kaalUit } = require('./bron-kaal');
+const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -54,23 +54,17 @@ async function boot(page, extra) {
 // Elk bedrag in het blok, aan zijn eigen label gehangen. Geen enkele waarde wordt herrekend:
 // we lezen wat er staat.
 /* v359: de posten zijn tegels op Inzichten geworden (#insTegels), en het restant van je potjes is de tegel "Nog in
-   potjes". De eigenschap is dezelfde: geen getal op die tegels wordt gunstiger doordat je meer uitgeeft. */
+   potjes". v382: de tegels zijn weg; dezelfde posten staan in de maandkaart (#insMaand) onder "Nog te gaan", als
+   legendarijen met hun eigen waarde ([data-insleg="nogvast"] is monthLiquidity().fixDue, [data-insleg="nogpot"] is
+   varPotjeStand().nog). De eigenschap is dezelfde: geen getal in die kaart wordt gunstiger doordat je meer uitgeeft. */
 const meet = (page) => page.evaluate(() => {
-  go('ins'); const d = document.getElementById('insTegels');
-  const eur = (s) => { const m = String(s).match(/-?€\s?([\d.]+)/); if (!m) return null;
-    return (/-€/.test(s) ? -1 : 1) * +m[1].replace(/\./g, ''); };
-  const tegels = {};
-  for (const t of d.querySelectorAll('[data-instegel]')) {
-    const l = t.querySelector('.lb'), v = t.querySelector('.vl');
-    if (l && v && t.dataset.instegel !== 'potjes' && t.dataset.instegel !== 'uitgegeven') tegels[l.innerText.trim()] = eur(v.innerText);
-  }
-  const tekst = d.innerText.replace(/\s+/g, ' ');
-  const k = d.querySelector('[data-instegel="potjes"]');
-  const vp = k ? k.querySelector('.vl').innerText.match(/€([\d.]+)/) : null;
+  go('ins'); const d = document.getElementById('insMaand');
+  const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : 0; };
+  const tegels = { 'Nog te betalen \u00b7 vast': leg('nogvast') };
+  const tekst = document.getElementById('s-ins').innerText.replace(/\s+/g, ' ');
   // v365: Nog te ontvangen staat op Home (dezelfde bron, monthLiquidity().incDue)
   tegels['Nog te ontvangen'] = Math.round(monthLiquidity().incDue);
-  return { tegels, varPlan: vp ? +vp[1].replace(/\./g, '') : 0, tekst,
-    kaartTekst: k ? k.innerText.replace(/\s+/g, ' ') : '',
+  return { tegels, varPlan: leg('nogpot'), tekst, heeftVast: !!d.querySelector('[data-insleg="nogvast"]'),
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
 });
 
@@ -89,7 +83,7 @@ test.describe('a \u00b7 de vier stappen', () => {
       expect(rijen[i].uitgegeven).toBeGreaterThan(rijen[i - 1].uitgegeven);
     }
     // en er staat iets in het blok, anders toetst dit niets
-    expect(Object.keys(rijen[0].tegels).length).toBeGreaterThan(0);
+    expect(rijen[0].heeftVast).toBe(true);
 
     // de fout, nagerekend: binnen het potje steeg incDue - fixDue - varPlan met precies het
     // uitgegeven bedrag, zonder dat er iets ten goede was veranderd
@@ -107,57 +101,8 @@ test.describe('a \u00b7 de vier stappen', () => {
     }
   });
 
-/* v250: het grote getal op de potjesregel is de aftrekking (varBudget min gebruikt) geworden; de
-   reservering uit varPlanRemaining() staat als eigen regel eronder, en alleen wanneer die twee
-   uiteenlopen.
-   v251: die regel wordt hier op zijn ELEMENT gezocht (.nog-noot) en niet op zijn zin. De eerste
-   versie matchte "heb je nog EUR X nodig", en toen de zin korter moest om op 360px op één regel te
-   passen viel deze spec om op de formulering terwijl de eigenschap ongemoeid was.
-   v308: DE TERUGVAL OP HET GROTE GETAL IS VERVALLEN. Die leunde op "zonder gat zijn het per
-   definitie dezelfde twee getallen", en dat gold zolang een potje MET ruimte zijn hele onbestede
-   deel in de tempo-som droeg. Sinds de klem op de resterende dagen ligt de tempo-som eronder zodra
-   een potje achterloopt, en dan staat hij niet op het scherm. De helper geeft dus null als de regel
-   er niet is. */
-/* v309: DE REGEL IS HET ACHTERVOEGSEL VAN HET HOOFDGETAL OP DE STAND-KAART GEWORDEN, met EEN bedrag
-   in plaats van twee: het GAT en niet ook de tempo-som. GEMETEN: met beide bedragen breekt de kop op
-   360px naar 46px in plaats van 32px, al bij de kleinste getallen. De tempo-som volgt uit het
-   restant erboven plus het gat, en die aansluiting is wat de test hieronder vasthoudt. EN HIJ STAAT
-   ER ALLEEN BIJ EEN POSITIEF RESTANT: bij een negatief restant is het gat per constructie positief
-   en zou het een groter getal over dezelfde overschrijding zetten (meetles p). */
-const schermNoot = ({ noot }) => {
-  const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
-  return m ? +m[1].replace(/\./g, '') : null;
-};
-
-  test('de planrest blijft de planrest, ook boven het potje', async ({ page }) => {
-    let gezien = 0;
-    for (const extra of STAPPEN) {
-      await boot(page, extra);
-      const r = await page.evaluate(() => {
-        const m = curMonth || months()[months().length - 1];
-        const VP = varPotjeStand(m);
-        /* v359: de stand-kaart is de tegel "Nog in potjes"; het restant is zijn waarde en de krapte zijn
-           maatregel ("bij je tempo EUR X tekort"). */
-        go('ins'); const k = document.querySelector('#insTegels [data-instegel="potjes"]');
-        const ms = k && k.querySelector('.ms') ? k.querySelector('.ms').innerText.replace(/\s+/g, ' ').trim() : '';
-        const eur = (t) => { const x = String(t).match(/\u20ac([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
-        return { getoond: { noot: /tekort/.test(ms) ? ms : '', alles: k ? k.innerText : '' },
-          val: k ? eur(k.querySelector('.vl').innerText) : null,
-          inPotjes: VP.budget - VP.gebruikt,
-          bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt) };
-      });
-      const op = schermNoot(r.getoond);
-      expect(op != null, `bij +${extra}: de krapte staat er precies dan als er een gat is en het restant positief`)
-        .toBe(r.gat > 0 && r.inPotjes > 0);
-      // v309: het achtervoegsel draagt het gat; de tempo-som volgt uit het restant erboven
-      if (op != null) { expect(op, `bij +${extra}`).toBe(r.gat);
-        expect(r.val + op, `bij +${extra}`).toBe(r.bron); gezien++; }
-    }
-    /* ZONDER DEZE EIS LOOPT DE VERGELIJKING LEEG: zonder enige stap met een gat is de tweezijdige
-       eis overal met een null vervuld en is de bron nooit tegen het scherm gelegd. De stappen gaan
-       tot ver over het potje, dus er is er minstens een. */
-    expect(gezien, 'geen enkele stap toont de regel, dus de bron is nergens tegen het scherm gelegd').toBeGreaterThan(0);
-  });
+  /* v382: weg, "de planrest blijft de planrest, ook boven het potje" las de krapte op de tegel "Nog in potjes" ("bij je
+     tempo EUR X tekort", v309); die tegel is weg en de maandkaart draagt geen krapte-regel. */
 
   test('de tegels zijn waarnemingen en bewegen niet mee met een variabele uitgave', async ({ page }) => {
     const rijen = [];
@@ -186,14 +131,14 @@ const schermNoot = ({ noot }) => {
 test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
   test('geen tegel die een waarneming bij een planrest optelt', async ({ page }) => {
     await boot(page, 0);
-    /* v359: de posten zijn tegels (insTegelsNu); er is geen tegel en geen bron die netto, naSparen of
-       eigenkracht noemt. */
+    /* v359: de posten waren tegels (insTegelsNu). v382: ze zijn legendarijen van de maandkaart (insMaandKaart, uit
+       insMaandStand); er is geen rij en geen bron die netto, naSparen of eigenkracht noemt. */
     const r = await page.evaluate(() => {
-      go('ins'); const d = document.getElementById('insTegels');
-      return { keys: [...d.querySelectorAll('[data-instegel]')].map((t) => t.dataset.instegel),
-        src: insTegelsNu.toString() };
+      go('ins'); const d = document.getElementById('insMaand');
+      return { keys: [...d.querySelectorAll('[data-insleg], [data-insseg]')].map((t) => t.dataset.insleg || t.dataset.insseg) };
     });
-    r.src = kaalBron(r.src);
+    expect(r.keys.length).toBeGreaterThan(0);
+    r.src = await kaalUit(page, 'insMaandKaart', 'insMaandStand');
     expect(r.keys.some((k) => /netto|kracht/.test(k))).toBe(false);
     expect(r.src).not.toContain('naSparen');
     expect(r.src).not.toContain('eigenkracht');
@@ -209,15 +154,13 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
     const r = await page.evaluate(() => {
       const L = monthLiquidity(), S = safeToSpend();
       const m = curMonth || months()[months().length - 1];
-      go('ins'); const d = document.getElementById('insTegels');
-      const eur = (s) => { const x = String(s).match(/€\s?([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
-      const tg = {};
-      for (const t of d.querySelectorAll('[data-instegel]')) tg[t.querySelector('.lb').innerText.trim()] = eur(t.querySelector('.vl').innerText);
-      // v359: het vierde feit is de tegel "Nog in potjes"
-      const k = d.querySelector('[data-instegel="potjes"]');
-      const vp = k ? k.querySelector('.vl').innerText.match(/€([\d.]+)/) : null;
+      /* v382: de feiten zijn legendarijen van de maandkaart onder "Nog te gaan" */
+      go('ins'); const d = document.getElementById('insMaand');
+      const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : null; };
+      const tg = { 'Nog te betalen · vast': leg('nogvast') };
+      // v359: het vierde feit is "Nog in potjes"; v382: de rij "in potjes"
       const VP = varPotjeStand(m);
-      return { tg, varPlan: vp ? +vp[1].replace(/\./g, '') : 0,
+      return { tg, varPlan: leg('nogpot'),
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),
         saveReserved: Math.max(Math.round(S.saveReserved), 0), bron: varPlanRemaining(m),
         inPotjes: VP.budget - VP.gebruikt };

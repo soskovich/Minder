@@ -73,91 +73,68 @@ test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat er
 });
 
 test.describe('b · Inzichten: geen tweede dagbedrag, en de uitschieters zijn de rode stappen van Grip', () => {
-  test('de potjestegel zegt wat het geld is, zonder per dag', async ({ page }) => {
+  /* v382: de potjestegel is weg; de zin staat in de sheet achter "in potjes ›" (openInsTegel('potjes')), en het scherm
+     draagt nog steeds geen dagbedrag. */
+  test('de potjes-sheet zegt wat het geld is, zonder per dag', async ({ page }) => {
     await I.boot(page);
     await page.evaluate(() => go('ins'));
-    const ms = await page.evaluate(() => document.querySelector('[data-instegel="potjes"] .ms').innerText);
-    expect(ms).toBe('al bestemd, verdeeld over je potjes');
     expect(await page.evaluate(() => document.getElementById('s-ins').innerText)).not.toMatch(/per dag/);
+    await page.evaluate(() => openInsTegel('potjes'));
+    const sh = await page.evaluate(() => document.getElementById('insTegelSheet').innerText);
+    expect(sh).toContain('al bestemd, verdeeld over je potjes');
+    expect(sh).not.toMatch(/per dag/);
   });
-  test('tegen je potje: dezelfde set en volgorde als de rode stappen in de bridge', async ({ page }) => {
+  /* v382: "Tegen je potje" op Inzichten is weg (de keuzekaart). Wat blijft is dat uitschieters(V) de rode stappen van de
+     bridge op Grip zijn, in dezelfde set en volgorde. */
+  test('uitschieters(): dezelfde set en volgorde als de rode stappen in de bridge', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => { SET.insKeuze = 'potje'; go('ins'); });
     const r = await page.evaluate(() => ({
-      ins: [...document.querySelectorAll('[data-insuitschieter]')].map((e) => e.dataset.insuitschieter),
-      afw: [...document.querySelectorAll('[data-insuitschieter]')].map((e) => +e.dataset.afwijking),
       rood: dezeMaandBrug(maandVooruit()).stappen.filter((s) => s.soort === 'potje' && s.waarde > 0).map((s) => s.k),
-      bron: uitschieters(maandVooruit()).map((x) => [x.k, Math.round(x.overR)]),
-      geen: !!document.querySelector('[data-insgeenander]') }));
-    expect(r.ins).toEqual(['uiteten', 'vices']);
-    expect(r.ins).toEqual(r.rood);
-    expect(r.afw).toEqual(r.bron.map((x) => x[1]));
+      bron: uitschieters(maandVooruit()).map((x) => [x.k, Math.round(x.overR)]) }));
+    expect(r.bron.map((x) => x[0])).toEqual(['uiteten', 'vices']);
+    expect(r.rood).toEqual(r.bron.map((x) => x[0]));
     /* gesorteerd op de verwachte afwijking en NIET op uitgegeven: Uit eten heeft er 110 uit, Vices 0 */
-    expect(r.afw[0]).toBeGreaterThan(r.afw[1]);
-    expect(r.geen).toBe(true);
+    expect(r.bron[0][1]).toBeGreaterThan(r.bron[1][1]);
   });
   /* DE VOLGORDE IS DE AFWIJKING EN NIET WAT ER AL UIT IS, op een stand waar de twee uiteenlopen. De test hierboven
      vergelijkt twee lezers van dezelfde functie, en een sabotage IN die functie schuift beide kanten mee (meetles x).
      Met Uit eten op EUR 200 eindigt Uit eten verwacht 80 erboven met 110 uitgegeven, en Vices 101 met 0 uitgegeven. */
   test('de volgorde is de verwachte afwijking, ook als uitgegeven de andere kant op wijst', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => { SET.budgets.uiteten = 200; SET.insKeuze = 'potje'; save(); go('ins'); renderIns(); });
+    await page.evaluate(() => { SET.budgets.uiteten = 200; save(); });
     const r = await page.evaluate(() => { const P = maandVooruit().potjes;
       const v = (k) => P.find((x) => x.k === k);
       return { ui: [Math.round(v('uiteten').uit), Math.round(v('uiteten').overR)], vi: [Math.round(v('vices').uit), Math.round(v('vices').overR)],
-        ins: [...document.querySelectorAll('[data-insuitschieter]')].map((e) => e.dataset.insuitschieter),
         los: dezeMaandBrug(maandVooruit()).los.map((x) => x.k) }; });
     expect(r.ui[0], 'invoer: Uit eten heeft meer uit').toBeGreaterThan(r.vi[0]);
     expect(r.vi[1], 'invoer: Vices eindigt verder boven').toBeGreaterThan(r.ui[1]);
-    expect(r.ins).toEqual(['vices', 'uiteten']);
     expect(r.los).toEqual(['vices', 'uiteten']);
   });
-  test('met een uitschieter staat er een regel en "geen andere uitschieters"', async ({ page }) => {
+  /* v382: "geen andere uitschieters" was de voet van "Tegen je potje" op Inzichten; de keuzekaart is weg. Wat blijft:
+     met een uitschieter staat er precies een rode stap. */
+  test('met een uitschieter staat er precies een rode stap in de bridge', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => { SET.budgets.vices = 200; SET.insKeuze = 'potje'; save(); go('ins'); renderIns(); });
-    const r = await page.evaluate(() => ({ n: document.querySelectorAll('[data-insuitschieter]').length,
-      geen: (document.querySelector('[data-insgeenander]') || {}).innerText || '' }));
-    expect(r.n).toBe(1);
-    expect(r.geen).toContain('geen andere uitschieters (drempel ≥ €10 én ≥ 25%, of ≥ €50)');
+    await page.evaluate(() => { SET.budgets.vices = 200; save(); });
+    const r = await page.evaluate(() => ({ uit: uitschieters(maandVooruit()).map((x) => x.k), los: dezeMaandBrug(maandVooruit()).los.map((x) => x.k) }));
+    expect(r.uit).toEqual(['uiteten']);
+    expect(r.los).toEqual(['uiteten']);
   });
   test('de drempel: een potje dat er net boven komt is geen uitschieter, ook niet in de bridge of de zin', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => { SET.budgets.boodschappen = 380; SET.insKeuze = 'potje'; save(); go('ins'); renderIns(); });
+    await page.evaluate(() => { SET.budgets.boodschappen = 380; save(); });
     const r = await page.evaluate(() => { const V = maandVooruit(), b = V.potjes.find((x) => x.k === 'boodschappen'), Br = dezeMaandBrug(V);
-      return { over: Math.round(b.overR), aard: b.aard, uit: b.uit, typ: b.typisch, ins: [...document.querySelectorAll('[data-insuitschieter]')].map((e) => e.dataset.insuitschieter),
+      return { over: Math.round(b.overR), aard: b.aard, uit: b.uit, typ: b.typisch, bron: uitschieters(V).map((x) => x.k),
         los: Br.los.map((x) => x.k), zin: dezeMaandZin(Br) }; });
     expect(r.over).toBeGreaterThan(0);              // invoer: Boodschappen eindigt verwacht boven zijn potje
     expect(r.over).toBeLessThan(380 * 0.25);         // maar onder de drempel
     expect(r.over).toBeLessThan(50);                // en onder de EUR 50 van v368
     expect(r.uit).toBeLessThan(r.typ);               // en loopt achter op het gewone tempo
-    expect(r.ins).not.toContain('boodschappen');
+    expect(r.bron).not.toContain('boodschappen');
     expect(r.los).not.toContain('boodschappen');
     expect(r.zin).not.toContain('Boodschappen');
   });
-  test('tegen vorige maanden: de drie grootste verschillen, plus of min, op het absolute verschil', async ({ page }) => {
-    await I.boot(page);
-    await page.evaluate(() => { insKeuzeZet('vorige'); });
-    const r = await page.evaluate(() => ({ top: [...document.querySelectorAll('#insKeuze [data-insvorigrij]')].map((e) => +e.dataset.verschil),
-      alle: insVorigeRijen(insKeuzeData()).map((x) => x.d), sub: (document.querySelector('[data-insallesub]') || {}).innerText || '' }));
-    expect(r.top.length).toBeLessThanOrEqual(3);
-    const abs = r.top.map(Math.abs);
-    expect(abs).toEqual([...abs].sort((a, b) => b - a));
-    const groter = r.alle.filter((d) => !r.top.includes(d)).map(Math.abs);
-    for (const g of groter) expect(g).toBeLessThanOrEqual(Math.min(...abs));
-  });
-  test('alle potjes: de drilldown toont elk potje met de nulgroep', async ({ page }) => {
-    await I.boot(page);
-    await page.evaluate(() => { SET.insKeuze = 'potje'; go('ins'); });
-    const knop = await page.evaluate(() => document.querySelector('[data-insalleknop="potje"]').innerText);
-    await page.click('[data-insalleknop="potje"]');
-    const r = await page.evaluate(() => ({ rij: document.querySelectorAll('#insAlle [data-inspotrij]').length, nul: !!document.querySelector('#insAlle [data-insnulgroep]'),
-      n: insKeuzeData().rows.filter((x) => x.potje > 0).length, kaartNul: !!document.querySelector('#insKeuze [data-insnulgroep]') }));
-    expect(knop).toContain(`Alle ${r.n} potjes`);
-    expect(r.nul).toBe(true);
-    expect(r.kaartNul).toBe(false);
-    await page.click('#insAlle [data-insnulgroep] [role=button]');
-    expect(await page.evaluate(() => document.querySelectorAll('#insAlle [data-inspotrij]').length)).toBe(r.n);
-  });
+  // v382: weg, "tegen vorige maanden: de drie grootste verschillen" las de keuzekaart (insVorigeRijen, #insKeuze); die is weg
+  // v382: weg, "alle potjes: de drilldown toont elk potje met de nulgroep" las openInsAlle en de nulgroep; die zijn weg
 });
 
 test.describe('c · Grip: Deze maand draagt alleen deze maand', () => {
@@ -299,17 +276,16 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
    afwijking, in uitschieterAfw(), de ENE toets voor Inzichten, de bridge en de zin. */
 const Z = require('./deze-maand-stand');
 test.describe('e · de drempel van v368: of minstens EUR 50', () => {
-  test('Boodschappen +61 op EUR 500 is een uitschieter: los in de bridge, in de zin en op Inzichten', async ({ page }) => {
+  test('Boodschappen +61 op EUR 500 is een uitschieter: los in de bridge en in de zin', async ({ page }) => {
     await Z.boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), b = V.potjes.find((x) => x.k === 'boodschappen'), Br = dezeMaandBrug(V);
-      return { over: Math.round(b.overR), bud: b.bud, uit: uitschieters(V).map((x) => x.k), los: Br.los.map((x) => x.k), zin: dezeMaandZin(Br),
-        ins: insUitschieters(insKeuzeData(thisYM())).map((x) => x.k) }; });
+      return { over: Math.round(b.overR), bud: b.bud, uit: uitschieters(V).map((x) => x.k), los: Br.los.map((x) => x.k), zin: dezeMaandZin(Br) }; });
     expect(r.over).toBe(61);                          // invoer: EUR 61 erboven
     expect(r.over).toBeLessThan(r.bud * 0.25);        // invoer: onder de 25 procent, dus alleen de EUR 50 draagt hem
     expect(r.uit).toContain('boodschappen');
     expect(r.los).toContain('boodschappen');
     expect(r.zin).toContain('Boodschappen');
-    expect(r.ins).toContain('boodschappen');
+    // v382: weg, de lezer op Inzichten ("Tegen je potje", insUitschieters) is weg; bridge en zin blijven de lezers
   });
   test('Vices +8 op EUR 20 is geen uitschieter: onder de EUR 10 en onder de EUR 50', async ({ page }) => {
     await I.boot(page);
@@ -319,10 +295,5 @@ test.describe('e · de drempel van v368: of minstens EUR 50', () => {
     expect(r.bood).toBe(true);
     expect(r.rand).toEqual([false, true]);
   });
-  test('tegen vorige maanden leest dezelfde toets, op de absolute afwijking', async ({ page }) => {
-    await I.boot(page);
-    const r = await page.evaluate(() => insVorigeTop({ rows: [{ k: 'a', naam: 'A', uit: 340, normaal: 400 }, { k: 'b', naam: 'B', uit: 470, normaal: 400 },
-      { k: 'c', naam: 'C', uit: 430, normaal: 400 }] }).map((x) => x.k));
-    expect(r).toEqual(['b', 'a']);   // -60 haalt de EUR 50, +70 ook, +30 niet (en 30 is onder 25 procent van 400)
-  });
+  // v382: weg, "tegen vorige maanden leest dezelfde toets" las insVorigeTop; die lezer is weg met de keuzekaart
 });

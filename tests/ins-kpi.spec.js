@@ -36,16 +36,7 @@ async function openIsMaand(page, payload) {
   await page.evaluate((m) => { curMonth = m; go('vermogen'); }, M1);
   await page.waitForSelector('#s-vermogen #maandKpiBlok');
 }
-/* v178: de meermaands-grafiek zet deze maand naast eerdere maanden en staat sindsdien op Maand.
-   De grafiek zelf is onveranderd, alleen het scherm waar hij op staat verschilt. */
-/* v227: de uitgaven-vs-budget-grafiek staat op Inzichten, onder het blok over deze maand.
-   go() rendert alleen 'maand' opnieuw, dus de andere schermen komen uit de render bij het
-   opstarten; dat is hier genoeg, want er wordt niets in SET gewijzigd. */
-async function openGrafiek(page, payload) {
-  await open(page, payload || seed(HIST));
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
-}
+/* v382: openGrafiek() is weg met de grafiek "Over de maanden" op Inzichten. */
 
 function tweak(fn) {
   const p = seed(HIST);
@@ -282,11 +273,12 @@ test.describe('b · historische reeksen', () => {
        scherm. De grafiek zegt het nu als enige, en dat is wat deze test bewaakt: precies één keer in
        de hele app. v178 zette die grafiek op Maand, v227 bracht hem terug naar Inzichten, dus de zin
        staat nu op Inzichten en niet op Maand. Hij hangt nog steeds niet aan een tegel. */
-    const pagina = await page.evaluate(() => $('#s-ins').innerText + ' ' + $('#s-maand').innerText);
-    // v359: de kaart "Over de maanden" zegt het zonder afgesloten maand
-    expect((pagina.match(/staan je maanden hier naast elkaar/gi) || []).length).toBe(1);
-    expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/staan je maanden hier naast elkaar/i);
-    expect(s).not.toMatch(/staan je maanden hier naast elkaar/i);   // niet meer per tegel
+    const pagina = await page.evaluate(() => { go('ins'); const a = $('#s-ins').innerText; go('maand'); return a + ' ' + $('#s-maand').innerText; });
+    /* v382: de kaart "Over de maanden" is weg en daarmee zijn zin. De mededeling over te weinig historie op Inzichten
+       staat bij de patronen ("na drie maanden boekingen"); de eis blijft precies een keer, en niet per tegel. */
+    expect(pagina).not.toMatch(/staan je maanden hier naast elkaar/i);
+    expect((pagina.match(/na drie maanden boekingen/gi) || []).length).toBe(1);
+    expect(s).not.toMatch(/na drie maanden boekingen|staan je maanden hier naast elkaar/i);   // niet per tegel
     expect(await page.locator('#maandKpiProbe .spark, #maandKpiProbe svg.spk').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél
   });
@@ -311,28 +303,7 @@ test.describe('b · historische reeksen', () => {
   });
 });
 
-test.describe('b2 · maandgrafiek', () => {
-  /* v194: de lopende maand had hier een eigen accentkleur en een sterretje. Die staaf staat er niet
-     meer in, dus er is nog precies een datakleur. En alle staven dragen nu een waardelabel, niet
-     alleen de uitschieter: anders kun je twee maanden niet vergelijken zonder te tikken. */
-  test('één datakleur, elke staaf gelabeld, tooltip op elke maand', async ({ page }) => {
-    await openGrafiek(page);
-    const c = page.locator('#insSpendChart');
-    const kleuren = await c.locator('rect.cbar').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('fill')))]);
-    expect(kleuren).toEqual(['var(--bar)']);                               // een datakleur, geen accent
-    expect(await c.locator('rect.cbar[rx="3"]').count()).toBe(await c.locator('rect.cbar').count());
-    expect(await c.locator('rect.cbar[fill="var(--teal)"]').count()).toBe(0);
-    expect(await page.locator('#insSpendChart').innerHTML()).not.toContain('*</text>');
-
-    const staven = await c.locator('rect.cbar').count();
-    const vals = await c.locator('text[font-weight="700"]').evaluateAll((els) => els.map((e) => e.textContent));
-    expect(vals.filter((t) => !/budget/.test(t)).length).toBe(staven);      // elke staaf een waarde
-    // v359: de lopende maand staat er lichter bij en heeft geen bridge, dus ook geen tik
-    expect(await c.locator('rect[fill="transparent"] title').count()).toBe(await c.locator('rect.cbar:not([data-lopend])').count());
-    expect(await page.locator('#insSpendChart line[stroke-dasharray]').count()).toBeGreaterThan(0);   // referentielijn
-    expect(await page.locator('#insSpendChart line:not([stroke-dasharray])').count()).toBe(1);        // alleen de basislijn
-  });
-});
+// v382: weg, describe 'b2 · maandgrafiek' ging alleen over de grafiek "Over de maanden" op Inzichten (#insSpendChart), die is weg
 
 test.describe('c · tik op een tegel', () => {
   test('opent uitleg plus de volledige historie', async ({ page }) => {
@@ -418,17 +389,7 @@ test.describe('c · tik op een tegel', () => {
 test.describe('d · uitgaven-vs-budget-grafiek', () => {
   /* v359: 'de budgettag staat er alleen als' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, met het bedrag in de balk en het budgetlabel van nu; inzichten-dashboard.spec.js draagt dat */
 
-  test('een tik op een kolom leest hem uit, met de bridge eronder', async ({ page }) => {
-    await openGrafiek(page);
-    const label = await page.evaluate((m) => monthLabel(m), M1);
-    await page.locator(`#insSpendChart rect[onclick*="${M1}"]`).click();
-    await page.waitForTimeout(150);
-    const read = await page.locator('#spendRead').innerText();
-    expect(read.toLowerCase()).toContain(label.toLowerCase());                 // exacte maand
-    expect(read).toContain('€1.495');                                          // exact bedrag
-    // v359: de uitlezing opent geen sheet meer; de bridge staat eronder (maand-brug.spec.js)
-    expect(await page.locator('#insBrug').count()).toBe(1);
-  });
+  // v382: weg, 'een tik op een kolom leest hem uit, met de bridge eronder' las de grafiek op Inzichten (#insSpendChart, #insBrug); de bridge van een afgesloten maand staat in het logboek (openLogMaand)
 
   /* v359: 'onder de drempel: lege staat' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, met het bedrag in de balk en het budgetlabel van nu; inzichten-dashboard.spec.js draagt dat */
 });
@@ -438,15 +399,14 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
   // status staat in het label. Rood blijft alleen bestaan als oordeel-kleur (en wordt amber in Rustig).
   test('status zit in het label, niet in de datakleur; Rustig kent geen alarmrood', async ({ page }) => {
     await openIns(page, tweak((set) => { set.budgets = { boodschappen: 300 }; set.budgetsNext = {} }));
-    const begeleid = await page.evaluate((m) => ({ bad: kpiCol('bad'), strip: maandKpiBlok(m), chart: spendVsBudgetChart() }), M1);
+    /* v382: spendVsBudgetChart() is weg (de grafiek op Inzichten); de eis over de datakleur blijft op de strip */
+    const begeleid = await page.evaluate((m) => ({ bad: kpiCol('bad'), strip: maandKpiBlok(m) }), M1);
     expect(begeleid.bad).toBe('var(--red)');
-    expect(begeleid.chart).not.toContain('var(--red)');                   // grafiek: één datakleur
     expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(1);   // neutrale lijnen
 
-    const rustig = await page.evaluate((m) => { SET.mode = 'rustig'; save(); return { bad: kpiCol('bad'), strip: maandKpiBlok(m), chart: spendVsBudgetChart() }; }, M1);
+    const rustig = await page.evaluate((m) => { SET.mode = 'rustig'; save(); return { bad: kpiCol('bad'), strip: maandKpiBlok(m) }; }, M1);
     expect(rustig.bad).toBe('var(--amber)');
     expect(rustig.strip).not.toContain('var(--red)');
-    expect(rustig.chart).not.toContain('var(--red)');
   });
 
   // v235: de Valt op-kaart is vervallen. Een patroon uit insSignals() staat nu als stille regel

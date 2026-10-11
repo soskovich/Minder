@@ -5,6 +5,7 @@
 // Een verplaatsing: nogDezeMaandBody() en nogDezeMaandCard() zijn niet aangeraakt.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -39,7 +40,7 @@ async function boot(page, scherm, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof insTegelsNu === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof renderIns === 'function');
   await page.evaluate((s) => go(s), scherm);
 }
 
@@ -47,8 +48,8 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
   test('geen kop en geen tegels', async ({ page }) => {
     await boot(page, 'vooruit');
     // de tegels hebben wel degelijk inhoud: dit is een keuze, geen lege staat
-    // v359: de posten zijn tegels op Inzichten; ze hebben inhoud, dus dit is een keuze en geen lege staat
-    expect(await page.evaluate(() => insTegelsNu('alle').map((t) => t.key))).toContain('vast');
+    // v382: de tegels zijn weg; wat er nog vast komt staat in de maandkaart (insMaandStand().nogVast) en heeft inhoud
+    expect(await page.evaluate(() => insMaandStand().nogVast)).toBeGreaterThan(0);
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);
     expect(await page.locator('#s-vooruit .wvo-tiles').count()).toBe(0);
@@ -72,22 +73,26 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
   });
 });
 
-/* v359: "Nog deze maand" als losse regels is verdwenen; de posten zijn tegels op het dashboard (#insTegels). Wat
-   deze spec vasthoudt is onveranderd: ze staan op precies een scherm, en daar precies een keer. */
+/* v359: "Nog deze maand" als losse regels is verdwenen. v382: de tegels ook; wat er nog vast komt is het deel "nog te gaan ·
+   vast" van de maandkaart ([data-insleg="nogvast"], segment [data-insseg="nogvast"]). Wat deze spec vasthoudt is
+   onveranderd: het staat op precies een scherm, en daar precies een keer. */
 test.describe('b · Inzichten is de enige lezer', () => {
-  test('Inzichten draagt de posten precies één keer, als tegels', async ({ page }) => {
+  test('Inzichten draagt wat er nog vast komt precies één keer, in de maandkaart', async ({ page }) => {
     await boot(page, 'ins');
     const el = page.locator('#s-ins');
-    const t = await el.innerText();
-    expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
-    expect(await el.locator('#insTegels [data-instegel="vast"]').count()).toBe(1);
+    expect(await el.locator('#insMaand[data-insmaand="nu"]').count()).toBe(1);
+    expect(await el.locator('[data-insleg="nogvast"]').count()).toBe(1);
+    expect(await el.locator('[data-insseg="nogvast"]').count()).toBe(1);
+    const v = await page.evaluate(() => ({ leg: +document.querySelector('#s-ins [data-insleg="nogvast"]').dataset.v, bron: insMaandStand().nogVast }));
+    expect(v.leg).toBe(v.bron);
     expect(await el.locator('.wvo-tiles').count()).toBe(0);
     expect(await el.locator('#insNogLijst').count()).toBe(0);
   });
 
-  test('de tegel opent de lijst van wat er nog komt', async ({ page }) => {
+  /* v382: de rij "vast" onder Nog te gaan draagt geen tik; de sheet (openInsTegel('vast')) bestaat nog en toont de lijst. */
+  test('de sheet vast toont de lijst van wat er nog komt', async ({ page }) => {
     await boot(page, 'ins');
-    await page.locator('#insTegels [data-instegel="vast"]').click();
+    await page.evaluate(() => openInsTegel('vast'));
     await expect(page.locator('#insTegelSheet[data-instegelsheet="vast"]')).toHaveCount(1);
     expect(await page.locator('#insTegelSheet').innerText()).toContain('Woningcorporatie');
   });
@@ -96,17 +101,17 @@ test.describe('b · Inzichten is de enige lezer', () => {
 test.describe('c · de functies zijn niet aangeraakt', () => {
   test('renderVooruit en renderIns roepen nogDezeMaand niet aan', async ({ page }) => {
     await boot(page, 'vooruit');
-    expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
-    expect(await page.evaluate(() => /nogDezeMaand/.test(renderIns.toString()))).toBe(false);
+    expect(await kaalUit(page, 'renderVooruit')).not.toMatch(/nogDezeMaand/);
+    expect(await kaalUit(page, 'renderIns')).not.toMatch(/nogDezeMaand/);
   });
 });
 
-test.describe('d · zonder budget staan de tegels er ook', () => {
-  test('de posten staan er één keer, zonder losse kaart', async ({ page }) => {
+/* v382: de tegels zijn weg; zonder budget staat de maandkaart er, met wat er nog vast komt een keer erin. */
+test.describe('d · zonder budget staat de maandkaart er ook', () => {
+  test('wat er nog vast komt staat er één keer, zonder losse kaart', async ({ page }) => {
     await boot(page, 'ins', seed({ income: 0, budgets: {} }));
-    const t = await page.locator('#s-ins').innerText();
-    expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
+    expect(await page.locator('#s-ins [data-insleg="nogvast"]').count()).toBe(1);
     expect(await page.locator('#s-ins .wvo-tiles').count()).toBe(0);
-    expect(await page.locator('#insTegels').count()).toBe(1);
+    expect(await page.locator('#s-ins #insMaand').count()).toBe(1);
   });
 });
