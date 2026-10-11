@@ -105,6 +105,18 @@ test.describe('c · het weekbedrag', () => {
       TX.push(t); categorize(t); OVR[t.id] = 'zorg'; save(); const s = insTxSoort(t); return { s, telt: weekTelt(t) }; });
     expect(z.s).toBe('zonder'); expect(z.telt).toBe(true);
   });
+  test('een uitgave in een potje dat niet wekelijks is verandert het weekbedrag niet; in een wekelijks potje wel', async ({ page }) => {
+    await boot(page, '2026-10-10'); await kies(page);
+    const r = await page.evaluate(() => { const a = weekRekensom().cur.bedrag;
+      const mk = (id, cat) => { const t = { id, date: '2026-10-02', amount: -100, acc: TX[0].acc, name: 'Test ' + id, desc: 'BEA, BETAALPAS TEST ' + id, typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+        TX.push(t); categorize(t); OVR[t.id] = cat; save(); return t; };
+      const v = mk('vak1', 'vakantie'); const b1 = weekRekensom().cur.bedrag, telt = weekTelt(v);
+      mk('bood1', 'boodschappen'); const b2 = weekRekensom().cur.bedrag;
+      return { a, b1, b2, telt, vak: SET.potWekelijks.vakantie }; });
+    expect(r.vak).toBe(false); expect(r.telt).toBe(false);
+    expect(r.b1).toBe(r.a);
+    expect(r.b2).toBeLessThan(r.a);
+  });
   test('het bedrag staat vast binnen de week: een late boeking van vorige week verschuift het niet', async ({ page }) => {
     await boot(page, '2026-10-07'); await kies(page);
     const a = await page.evaluate(() => +document.querySelector('#insWeek').dataset.weekbedrag);
@@ -243,6 +255,13 @@ test.describe('f · weg van Inzichten', () => {
 });
 
 test.describe('g · patronen als tegels', () => {
+  test('herhaalt telt de maanden op rij boven het potje', async ({ page }) => {
+    await boot(page, '2026-10-10'); await kies(page);
+    await page.evaluate(() => { const t = { id: 'aug1', date: '2026-08-15', amount: -400, acc: TX[0].acc, name: 'Restaurant Aug', desc: 'BEA, BETAALPAS RESTAURANT AUG', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+      TX.push(t); categorize(t); OVR[t.id] = 'uiteten'; save(); render(); go('ins'); });
+    const k = await page.evaluate(() => { const e = document.querySelector('#insPatronen .ins-pt[data-patroon="herhaalt"] .ins-pt-k'); return e ? e.textContent : null; });
+    expect(k).toBe('3e maand');
+  });
   test('hooguit vier, met chip, kerngetal en een regel; een tik opent de uitleg met bijsturen op Grip', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     const t = await page.evaluate(() => [...document.querySelectorAll('#insPatronen .ins-pt')].map((e) => ({ s: e.dataset.patroon, k: e.querySelector('.ins-pt-k').textContent, d: e.querySelector('.ins-pt-d').textContent })));
@@ -280,6 +299,17 @@ test.describe('h · verschuivingen', () => {
     expect(r.V.lopend).toBe(true); expect(r.V.dag).toBe(10);
     expect(r.V.begin).toBe(r.a);
     expect(r.V.begin).toBeLessThan(r.heel);
+  });
+  test('met centen telt de bridge nog steeds exact op, want de stappen worden samen afgerond', async ({ page }) => {
+    await boot(page, '2026-10-10');
+    const r = await page.evaluate(() => {
+      const cats = ['boodschappen', 'uiteten', 'vervoer', 'shopping', 'abonnement'];
+      cats.forEach((c, i) => { const t = { id: 'ct' + i, date: '2026-09-12', amount: -0.6, acc: TX[0].acc, name: 'Cent ' + i, desc: 'BEA, BETAALPAS CENT ' + i, typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+        TX.push(t); categorize(t); OVR[t.id] = c; });
+      save(); const V = verschuiving('2026-08', '2026-09');
+      return { begin: V.begin, eind: V.eind, som: V.stappen.reduce((a, x) => a + x.waarde, 0), n: V.stappen.length }; });
+    expect(r.n).toBeGreaterThan(2);
+    expect(r.begin + r.som).toBe(r.eind);
   });
   test('rood is meer, groen is minder', async ({ page }) => {
     await boot(page, '2026-10-10');

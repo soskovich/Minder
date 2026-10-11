@@ -159,7 +159,10 @@ genoemde versietag.)*
   `VERSCHUIF_LOS` (4) potjes los en de rest als "Overige potjes", rood is meer en groen minder; de lopende maand
   vergelijkt tot en met vandaag met dezelfde dagen van de vorige maand. VERVALLEN: zie de horizon hierboven.
   GEMETEN op de fixture `inzichten-stand.js` (10 oktober): EUR 406 van EUR 3.376, tempo EUR 825, week nog EUR 109
-  van EUR 257 (42 procent), de pagina 844px hoog op 390x844, zonder scrollen. Spec `inzichten-week.spec.js`.
+  van EUR 257 (42 procent), de pagina 844px hoog op 390x844, zonder scrollen. Zonder potjes heet de noemer "inkomen-limiet"
+  (`v173`), de onbekend-stand draagt "In je potjes EUR X" (`v311`), en "Nog te gaan · vast" opent `openInsTegel('vast')`.
+  Het renderen zet het weekbedrag vast (`weekNu(true)` schrijft `SET.weekStand`): de enige schrijver op Inzichten, en hij
+  schrijft geen geld. Spec `inzichten-week.spec.js`; twaalf sabotages, alle twaalf rood.
 - **TOEGEWEZEN ZONDER GELD ZONDER KEUZE IS VOORLOPIG, EN DAT STAAT ER** (`v381`, gevraagd door de gebruiker): de rekensom
   van `v380` blijft (deze maand telt het niet mee, vanaf volgende maand vult de inleg aan), maar het is een voorlopige
   stand en geen keuze. `planVoorlopig(x)` (zonder geld boven nul) is de toets. De rij zegt "vol <maand jaar> · voorlopig"
