@@ -16,6 +16,21 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v395` · De bridge op Zien begint bij het eerlijke budget, en zijn stappen tellen op tot de kop.** Na een review op het
+  toestel: de te-ruim-kolommen (Huur, Vervoer) zeiden iets wat de meter al zegt, en de kop (verschil met het EERLIJKE
+  budget) was niet uit de stappen af te lezen, want die liepen van het BUDGET. Nu is de eerste balk het budget met het te
+  ruime deel gearceerd erop, loopt de stand vanaf eerlijk, en is de som van de stappen per constructie het kopgetal (hele
+  euro's, `brugAfronden()` op round(verwacht) min eerlijk). Gevolg, gemeld: een potje dat je laat staan zit in eerlijk en is
+  dus niet gearceerd; zijn afwijking zit in overig, en de grijze stap van `v394` bestaat niet meer. Valkuil: het te ruime
+  deel van een potje telt dan niet nog eens in overig (`gripOverigSamen()` telt het bij zijn potje op, Huur is daar nul),
+  anders tellen de potjes in de sheet een ander verhaal dan de bridge. Het label "overig · N onder, M boven" past op een
+  regel niet naast kolommen van 40px (`v357`), dus de telling staat op een tweede regel.
+
+- **`v395` · Een signaal per geldstroom in Let op.** De splitsing van `v391` (categorie zonder potje en de partij op twee
+  regels) gaf twee regels over dezelfde boekingen zodra de partij terugkomt. Voor dat geval (`kind` 'missing-pot') is het
+  een regel met een actie (potje maken of categorie wijzigen); een losse aankoop houdt twee regels, want de vraag van de
+  gebruiker ging over "dit geval".
+
 - **`v394` · Laten staan is een keuze en telt dus mee.** Tot `v393` bleef een potje dat je liet staan gearceerd en buiten je
   eerlijke budget; alleen de melding verdween. De gebruiker koos: wie bewust kiest het potje te houden, krijgt het als
   ruimte terug voor deze maand. Daarom is `ruim` de som over `teRuimOpen()`, en blijft de stap in de bridge staan (de

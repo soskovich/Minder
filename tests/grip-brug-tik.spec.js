@@ -66,7 +66,10 @@ test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', a
   await boot(page);
   for (const sel of ['#gripBrug [data-brugstap="begin"]', '#gripBrug [data-brugstap="eind"]']) {   // v387: de kop van de kaart is weg
     await grip(page);
-    await tik(page, sel);
+    // v395: bovenop de begin-balk staat het te ruime deel gearceerd met een eigen tik; tik dus onderin de kolom
+    await page.waitForTimeout(350);
+    const b = await page.evaluate((s) => { const r = document.querySelector(s).querySelector('i').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom - 4 }; }, sel);
+    await page.mouse.click(b.x, b.y); await page.waitForTimeout(150);
     const s = await sheet(page);
     expect(s.id, sel).toBe('gripVooruit');
     expect(s.tekst.toUpperCase()).toContain('WAT JE DEZE MAAND KUNT DOEN');

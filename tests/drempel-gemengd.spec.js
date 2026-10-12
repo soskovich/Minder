@@ -43,7 +43,7 @@ test.describe('A · onder de drempel', () => {
   test('de bridge telt het bedrag wel mee: begin plus de stappen is de uitkomst', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V);
-      return { som: B.stappen.slice(0, -1).reduce((a, x) => a + x.waarde, 0), eind: V.projectie, budget: V.budget, verwacht: gripMeterBudget(V).verwacht }; });
+      return { som: B.stappen.slice(1, -1).reduce((a, x) => a + x.waarde, B.stappen[0].start), eind: V.projectie, budget: V.budget, verwacht: gripMeterBudget(V).verwacht }; });   // v395: vanaf het eerlijke budget
     expect(r.som).toBe(r.eind); expect(r.verwacht).toBe(r.eind);
   });
   test('zonder potje onder de drempel geen noot', async ({ page }) => {

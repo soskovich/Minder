@@ -23,7 +23,10 @@ test.describe('3 · overig in potjes', () => {
     expect(r.R.reduce((a, x) => a + x[1], 0)).toBe(r.rest);
     expect(r.V.reduce((a, x) => a + x[1], 0)).toBe(r.vast);
     expect(r.rest + r.vast + r.terug + r.zonder).toBe(r.tot);
-    expect(r.V).toContainEqual(['huur', -629]);
+    // v395: de bridge begint bij het eerlijke budget, dus het te ruime deel van Huur (EUR 629) staat gearceerd in de
+    // eerste balk en niet meer als -629 in overig; de rij "Te ruim begroot" is weg.
+    expect(r.terug).toBe(0);
+    expect(r.V.map(x => x[0])).not.toContain('huur');
     expect(r.R.map(x => x[0])).toContain('boodschappen');
   });
   test('met centen: de potjes tellen nog steeds exact op tot hun groep (de groep rondt een keer af, niet per potje)', async ({ page }) => {

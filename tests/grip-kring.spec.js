@@ -122,17 +122,19 @@ test.describe('v387 te ruim begroot', () => {
       teRuimTermijnen({ intervalM: 3, nextDate: new Date(2026, 11, 27) }, '2027-03'), teRuimTermijnen({ intervalM: 3, nextDate: new Date(2026, 11, 27) }, '2027-02')]);
     expect(n).toEqual([2, 1, 1, 0]);
   });
-  test('te ruim is geen ruimte: een gearceerde stap in de bridge, geen uitschieter en geen patroon', async ({ page }) => {
+  /* v395: te ruim is geen stap meer maar een gearceerd stuk bovenop de eerste balk (het budget); de bridge loopt vanaf
+     het eerlijke budget. */
+  test('te ruim is geen ruimte: gearceerd bovenop de budgetbalk, geen uitschieter en geen patroon', async ({ page }) => {
     await grip(page);
-    const st = await page.locator('#gripBrug [data-brugstap="teruim"]');
-    expect(await st.count()).toBe(2);   // v392: Huur en het variabele deel van Vervoer
-    expect(await st.evaluateAll(e => e.map(x => x.getAttribute('data-brugwaarde')))).toEqual(['-629', '-390']);
-    expect(await st.locator('[data-gearceerd]').count()).toBe(2);
+    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(0);
+    const ar = page.locator('#gripBrug [data-brugstap="begin"] [data-gearceerd]');
+    expect(await ar.evaluateAll(e => e.map(x => x.dataset.teruimk))).toEqual(['huur', 'vervoer']);   // v392: Huur en het variabele deel van Vervoer
     const r = await page.evaluate(() => { const V = maandVooruit(); const Br = gripZienBrug(V);
-      return { som: Br.stappen.slice(0, -1).reduce((a, s) => a + s.waarde, 0), eind: V.projectie, uit: uitschieters(V).map(x => x.k), pat: (insPatronen() || []).map(p => p.k) }; });
+      return { som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, Br.stappen[0].start), start: Br.stappen[0].start, bud: Br.stappen[0].waarde, eind: V.projectie, uit: uitschieters(V).map(x => x.k), pat: (insPatronen() || []).map(p => p.k) }; });
+    expect(r.bud - r.start).toBe(1019);
     expect(r.som).toBe(r.eind);
     expect(r.uit).not.toContain('huur'); expect(r.pat).not.toContain('huur');
-    expect(await page.locator('[data-zienas]').innerText()).toContain('gearceerd = te ruim begroot, telt niet als ruimte');
+    expect(await page.locator('[data-zienas]').innerText()).toContain('gearceerd = te ruim, telt niet');
   });
   test('het gevolg staat er voor bevestigen, en kiezen schrijft niets', async ({ page }) => {
     await grip(page);
@@ -148,13 +150,13 @@ test.describe('v387 te ruim begroot', () => {
     expect(na.b).toBe(71); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 71 })); expect(na.ruim).toEqual(['vervoer']);
     expect((await page.locator('[data-eerlijkregel]').innerText()).replace(/\s+/g, ' ')).toContain('Vervoer & auto −€390');   // Huur is weg
   });
-  test('laten staan (v394): telt weer mee in het eerlijke budget, en de stap wordt grijs "laten staan"', async ({ page }) => {
+  test('laten staan (v394): telt weer mee in het eerlijke budget, en is niet meer gearceerd (v395)', async ({ page }) => {
     await grip(page);
     await page.click('[data-eerlijkregel]'); await page.click('[data-teruimlaten="huur"]');
     await page.evaluate(() => closeSheet());
     expect(await page.locator('[data-eerlijkregel]').innerText()).not.toContain('Huur');   // alleen Vervoer staat er nog
-    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);
-    expect(await page.locator('#gripBrug [data-laten]').count()).toBe(1);
+    expect(await page.locator('#gripBrug [data-gearceerd]').evaluateAll(e => e.map(x => x.dataset.teruimk))).toEqual(['vervoer']);
+    expect(await page.locator('#gripBrug [data-laten]').count()).toBe(0);
     expect(await page.evaluate(() => gripMeterBudget().ruim)).toBe(390);
     expect(await page.evaluate(() => SET.budgets.huur)).toBe(700);
   });

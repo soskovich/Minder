@@ -1205,3 +1205,18 @@
 - Blok 19 noemt de potjes die je liet staan.
 - Gemeten op `grip-kring-stand` (390×844): koopknop eindigt op 711px (was 770), menubalk op 772px.
 - Spec `te-ruim-laten.spec.js`; gemigreerd: `grip-kring` (fit-test, gevolg, laten staan), `drempel-gemengd` (label in de meter-sheet), `eerlijk-regel` (beide laten staan: eerlijk is het hele budget).
+
+## v395 · Zien: de bridge start bij het eerlijke budget, en Let op is een regel per geldstroom (`minder-v395`)
+- Gevraagd na een review op het toestel. De eerste balk van de bridge op Zien is het budget, met het te ruim begrote deel (van de potjes die nog open staan) gearceerd bovenop, per potje een stuk met een eigen tik naar `openTeRuim(k)`. Het label is "eerlijk €X" en de lopende stand begint daar. Geen te-ruim-kolommen meer.
+- Daarna alleen de afwijkingen: uitschieters, zonder potje en overig. De eindbalk "verwacht" draagt een stippellijn op het eerlijke budget (`data-eerlijklijn`) en een haakje "+€X boven" of "−€X onder" (`data-haaktekst`).
+- De som van de stappen is het getal in de kop ("€X boven eerlijk budget", `data-zienverschil`): eerlijk en verwacht zijn hele euro's en de stappen zijn afgerond met `brugAfronden()` op `round(verwacht) − eerlijk`.
+- Overig zegt hoeveel potjes erin onder en boven hun potje eindigen ("8 onder, 1 boven"), op een tweede regel onder "overig" (`data-brugeen2`). Die komt uit dezelfde afronding als de sheet (`gripOverigSamen()`); het te ruime deel van een potje telt niet nog eens in overig, dus de rij "Te ruim begroot, al apart gearceerd" in de sheet is weg.
+- De noot onder de drempel draagt de potjenaam in `title`, heeft een tikvlak van 6px rondom en toont de naam in de toast (ge-escaped).
+- Let op: een terugkerende partij (`kind` 'missing-pot') in een categorie zonder potje geeft één regel: "<categorie> €X zonder potje · <partij> komt vaker terug ›". De sheet erachter heeft "Potje maken" en "Categorie wijzigen ›", met het gesprek als link. Een losse aankoop houdt twee regels (v391).
+- "Waarom? Bekijk wat erachter zit ›" is weg van Zien.
+- Afwijkingen van v394, gemeld:
+  - Een potje dat je laat staan is niet meer gearceerd en heeft geen grijze stap meer; zijn afwijking zit in overig.
+  - Het label van overig staat op twee regels: op één regel past het niet naast kolommen van 40px (v357).
+- Fit op `grip-kring-stand` (390×844): koopknop eindigt op 693px (was 711), menubalk op 772px. Met zes kolommen 693px op 390 en 708px op 360, met labels zonder afkapping.
+- Spec `zien-eerlijk-brug.spec.js` (12).
+- Gemigreerd: deze-maand-bridge, drempel-gemengd, grip-brug-tik, grip-kiezen-v391, grip-kring, lek-categorie en te-ruim-laten.

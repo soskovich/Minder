@@ -8166,10 +8166,15 @@ function gripLetOpItems(RO, SIG, BV){
   /* v391: EEN SIGNAAL PER REGEL. De categorie zonder potje en de partij die het meest weegt waren een regel met de
      partij als zin eronder; nu twee regels, elk met een eigen tik. De categorie opent haar boekingen, de partij de
      sheet met spiegel, gevolg en het gesprek. Heet de partij zoals de categorie, dan is het een regel. */
+  /* v395: EEN SIGNAAL PER GELDSTROOM (gevraagd na een review op het toestel). Is de partij een terugkerende uitgave
+     (kind 'missing-pot') binnen de categorie zonder potje, dan zijn het dezelfde boekingen en is het EEN regel:
+     "<categorie> EUR X zonder potje · <partij> komt vaker terug ›", met een actie (de sheet: potje maken of de categorie
+     wijzigen). Dat draait de splitsing van v391 terug voor dit geval; een losse aankoop (impulse) houdt twee regels. */
   try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk){
     const twee=Lk.kpiLabel!==Lk.catNaam;
-    if(twee) L.push({soort:'lekcat', key:Lk.cat, naam:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:'geen potje voor deze categorie · de boekingen', dot:'let op', act:`openCategory('${esc(Lk.cat)}','${esc(m)}')`});
-    L.push({soort:'lek', key:Lk.cat, naam:twee?`${Lk.kpiLabel}: ${Lk.kpiVal}`:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); } }catch(_){}
+    if(twee && Lk.kind==='missing-pot'){ L.push({soort:'lek', key:Lk.cat, naam:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:`${Lk.kpiLabel} komt vaker terug`, dot:'let op', act:"openGripLetOp('lek')", een:true}); }
+    else { if(twee) L.push({soort:'lekcat', key:Lk.cat, naam:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:'geen potje voor deze categorie · de boekingen', dot:'let op', act:`openCategory('${esc(Lk.cat)}','${esc(m)}')`});
+    L.push({soort:'lek', key:Lk.cat, naam:twee?`${Lk.kpiLabel}: ${Lk.kpiVal}`:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); } } }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -8220,7 +8225,8 @@ function gripLekKaart(){
     ${sub?`<div class="small muted" style="margin-top:2px" data-lekwinkel>${esc(sub)}</div>`:''}
     <div class="small" style="line-height:1.5;margin-top:8px">${esc(Lk.hyp)}</div>
     <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>
-    <button class="btn" data-lekcoach style="margin-top:12px" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek</button></div>`;
+    <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-lekpotje style="width:auto;padding:9px 14px" onclick="openPotForm('${esc(Lk.cat)}')">Potje maken</button><button class="btn sec" data-lekcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${esc(Lk.cat)}','${esc(m)}')">Categorie wijzigen ›</button></div>
+    <div class="small" data-lekcoach style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek ›</div></div>`;
 }
 /* De sheet zoekt zijn inhoud opnieuw op (v319/v320) en sluit als het signaal weg is. */
 function renderGripLetOp(){
@@ -9563,51 +9569,52 @@ function gripTabsHtml(){
   const A=gripAfgerond(), t=gripTab();
   return `<div class="gm-tabs" id="gripTabs">${GRIP_TABS.map(([k,l])=>`<span data-griptab="${k}"${k===t?' class="on"':''}${A[k]?' data-afgerond':''} onclick="gripKiesTab('${k}')">${l}${A[k]?' ✓':''}${k==='kiezen'&&gripStapOpen()?'<b data-stapopen style="color:var(--amber)"> •</b>':''}</span>`).join('')}</div>`;
 }
-/* ===== ZIEN: DE BRIDGE VAN BUDGET NAAR VERWACHT =====
-   Dezelfde stappen als dezeMaandBrug() (uitschieters en zonder potje), met elk te ruim begroot potje als eigen
-   GEARCEERDE stap (soort 'teruim', -teRuim) en de rest als "overig". De kop is het verschil met het EERLIJKE budget,
-   het getal van de Budget-meter. Afgerond met brugAfronden(), dus de stappen tellen exact op tot de uitkomst.
-   v394: een potje dat je deze maand laat staan houdt zijn stap (het bedrag gaat nog steeds niet uit), maar GRIJS
-   gearceerd met het label "laten staan" (laten:true; de naam staat in de title). Samengevoegd zijn het twee stappen:
-   te ruim (open) en laten staan. Een tik op een stap opent de te-ruim-sheet op dat potje. */
+/* ===== ZIEN: DE BRIDGE VAN HET EERLIJKE BUDGET NAAR VERWACHT =====
+   v395 (gevraagd na een review op het toestel): de eerste balk is het BUDGET, met het te ruim begrote deel van de potjes
+   die nog open staan (teRuimOpen()) GEARCEERD bovenop dezelfde balk, per potje een eigen stuk dat de te-ruim-sheet op dat
+   potje opent. Het label onder de balk is "eerlijk EUR X", en de lopende stand begint daar. Daarna alleen de afwijkingen:
+   de uitschieters, zonder potje en overig. De eindbalk "verwacht" draagt een stippellijn op het eerlijke budget en een
+   haakje met het verschil. DE STAPPEN TELLEN OP TOT HET VERSCHIL MET HET EERLIJKE BUDGET, het getal in de kop: eerlijk,
+   verwacht en de stappen zijn hele euro's, en de stappen zijn afgerond met brugAfronden() op round(verwacht) min eerlijk.
+   Een potje dat je deze maand laat staan telt volledig mee (v394) en staat dus niet in de arcering; zijn afwijking zit in
+   overig, met de andere potjes. De losse te-ruim-kolommen en de grijze stap "laten staan" van v394 zijn vervallen. */
 function gripZienBrug(V, TR){
   if(!V || V.onbekend || !(V.budget>0)) return null;
   TR=TR||teRuim(V);
-  const Lt=(SET.teRuimLaten||{})[thisYM()]||{};
-  const diff=V.projectie-V.budget, boven=uitschieters(V);
-  const maak=(n, teLos)=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
-    let zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonder', v:zonder});
-    if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim});
-    else { const O=TR.filter(x=>!Lt[x.k]), Ll=TR.filter(x=>Lt[x.k]);
-      if(O.length) rauw.push({k:'~tr', v:-O.reduce((a,x)=>a+x.teRuim,0)}); if(Ll.length) rauw.push({k:'~trl', v:-Ll.reduce((a,x)=>a+x.teRuim,0)}); }
-    rauw.push({k:'~overig', v:diff-rauw.reduce((a,x)=>a+x.v,0)});
-    const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>R[x.k]||(x.k==='~overig'&&(V.vastePotjes||[]).length)).length;
-    return {los, R, kol, teLos, zonder}; };
-  /* Hooguit DEZEMAAND_KOL kolommen (v357): eerst gaan de te ruime potjes samen in een stap, en pas daarna valt een
-     uitschieter in overig, want een uitschieter vraagt iets en te ruim is een instelling. */
-  let M=maak(Math.min(DEZEMAAND_LOS, boven.length), true);
-  if(M.kol>DEZEMAAND_KOL) M=maak(M.los.length, false);
-  while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1, false);
-  const {los, R}=M, stappen=[{soort:'begin', label:'budget', waarde:V.budget}];
+  const O=teRuimOpen(TR), Bud=Math.round(V.budget), ruim=O.reduce((a,x)=>a+Math.round(x.teRuim),0), E=Bud-ruim, P=Math.round(V.projectie);
+  if(!(E>0)) return null;
+  const diffE=P-E, boven=uitschieters(V);
+  const maak=n=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
+    const zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonder', v:zonder});
+    rauw.push({k:'~overig', v:(V.projectie-(V.budget-ruim))-rauw.reduce((a,x)=>a+x.v,0)});
+    const R=brugAfronden(rauw, diffE), kol=2+rauw.filter(x=>R[x.k]||x.k==='~overig').length;
+    return {los, R, kol}; };
+  let M=maak(Math.min(DEZEMAAND_LOS, boven.length));
+  while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1);
+  const {los, R}=M;
+  const stappen=[{soort:'begin', label:`eerlijk ${euro0(E)}`, waarde:Bud, start:E,
+    ruim:O.map(x=>({k:x.k, naam:x.naam, v:Math.round(x.teRuim)})).filter(x=>x.v>0), breed:1.55}];
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
   if(R['~zonder']) stappen.push({soort:'zonder', label:'z. potje', waarde:R['~zonder']});
-  if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push(Lt[x.k]?{soort:'teruim', k:x.k, label:'laten staan', titel:`${x.naam} · laten staan`, laten:true, waarde:R['~tr:'+x.k]}
-    :{soort:'teruim', k:x.k, label:x.naam, waarde:R['~tr:'+x.k]}); }
-  else { const een=L=>L.length===1?L[0].k:'';
-    if(R['~tr']) stappen.push({soort:'teruim', k:een(TR.filter(x=>!Lt[x.k])), label:'te ruim', waarde:R['~tr']});
-    if(R['~trl']) stappen.push({soort:'teruim', k:een(TR.filter(x=>Lt[x.k])), label:'laten staan', laten:true, waarde:R['~trl']}); }
-  /* Overig staat er ook op nul zolang er vaste potjes zijn: zijn sheet is de ingang naar de vaste lasten (v357). */
-  if(R['~overig'] || (V.vastePotjes||[]).length || gripOnderDrempelLijst(V).length) stappen.push({soort:'overig', label:'overig', waarde:R['~overig']||0});
+  /* Overig staat er altijd: zijn sheet is de ingang naar de vaste lasten (v357) en naar de potjes die niet los staan.
+     v395: het label zegt hoeveel potjes erin onder en hoeveel boven hun potje eindigen, uit dezelfde afronding als zijn
+     sheet (gripOverigSamen()). */
+  const S=gripOverigSamen(V, los.map(x=>x.k), R['~overig']||0, O);
+  const tel=[S.onder?`${S.onder} onder`:'', S.boven?`${S.boven} boven`:''].filter(Boolean).join(', ');
+  /* De telling staat op een tweede regel onder "overig": op een regel past "overig · 8 onder, 1 boven" (100px bij 9px)
+     niet naast kolommen van 40px (v357, het tikvlak), gemeten op 360 en 390px met zes kolommen. */
+  const ov={soort:'overig', label:'overig', label2:tel, titel:tel?`overig · ${tel}`:'overig', waarde:R['~overig']||0, breed:tel?1.9:1, onder:S.onder, boven:S.boven};
   /* v393: een potje boven zijn budget maar onder de drempel valt in overig, en staat daar als kleine grijze noot. */
-  const OD=gripOnderDrempelLijst(V), ov=stappen.find(x=>x.soort==='overig');
-  if(OD.length && ov) ov.noot={tekst:'+'+euro0(OD.reduce((a,x)=>a+Math.round(x.overR),0)), tik:'gripOnderDrempelTik()'};
-  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
-  let run=V.budget; const lv=[V.budget, V.projectie];
+  const OD=gripOnderDrempelLijst(V);
+  if(OD.length) ov.noot={tekst:'+'+euro0(OD.reduce((a,x)=>a+Math.round(x.overR),0)), tik:'gripOnderDrempelTik()', titel:gripOnderDrempelTekst(V)};
+  stappen.push(ov);
+  stappen.push({soort:'eind', label:'verwacht', waarde:P, eerlijk:E, breed:1.3});
+  let run=E; const lv=[Bud, E, P];
   for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
   const lo=Math.min(...lv), hi=Math.max(...lv);
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, eenRegel:true};
+  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, eenRegel:true, eerlijk:E, verschil:diffE, budget:Bud, ruim};
 }
 function gripZienTik(soort,k){
   if(soort==='teruim'){ openTeRuim(k||undefined); return; }
@@ -9615,27 +9622,41 @@ function gripZienTik(soort,k){
   gripBrugTik(soort,k);
 }
 /* WAARUIT "OVERIG" BESTAAT: de andere variabele potjes (naar renderGripRest()), de vaste lasten (naar renderGripVast()) en
-   het te ruime deel dat al apart gearceerd staat en dus hier terugkomt. Afgerond met brugAfronden() op de stap, dus de
-   regels tellen op tot het getal waarop je tikte. */
-function gripOverigDelen(V){
-  const Br=gripZienBrug(V); if(!Br) return null;
-  const st=Br.stappen.find(x=>x.soort==='overig'); const tot=st?st.waarde:0;
-  const los=Br.stappen.filter(x=>x.soort==='potje').map(x=>x.k), TR=teRuim(V);
-  const rest=V.variabel.eind-V.variabel.budget-V.potjes.filter(x=>los.includes(x.k)).reduce((a,x)=>a+x.overR,0);
-  const vast=V.vaste.eind-V.vaste.budget, terug=TR.reduce((a,x)=>a+x.teRuim,0), zonder=Math.min(+V.zonder||0,0);
-  const R=brugAfronden([{k:'rest',v:rest},{k:'vast',v:vast},{k:'terug',v:terug},{k:'zonder',v:zonder}], tot);
-  /* v391: OVERIG IN POTJES. Per groep de potjes met hun verwachte verschil (eind min potje), afgerond met dezelfde
-     brugAfronden() op het bedrag van de groep, dus de potjes van een groep tellen per constructie op tot die groep en
-     alle groepen samen tot de stap overig. Wat in een groep niet bij een potje hoort heet "overige". */
+   wat zonder potje terugkwam. Afgerond met brugAfronden() op de stap, dus de regels tellen op tot het getal waarop je
+   tikte. v395: de bridge begint bij het eerlijke budget, dus een potje dat te ruim begroot is telt hier met zijn
+   afwijking PLUS het te ruime deel (dat staat al gearceerd in de eerste balk): Huur 750 met 121 verwacht en 629 te ruim
+   is hier nul. De telling onder/boven is per potje, ook als het potje een vast en een variabel deel heeft. */
+function gripOverigSamen(V, losKs, tot, O){
+  O=O||teRuimOpen(teRuim(V));
+  const tr={}; for(const x of O) tr[x.k]=Math.round(x.teRuim);
+  const vp=V.vastePotjes||[], vastK=new Set(vp.map(x=>x.k));
+  /* het te ruime deel hoort bij het vaste deel, behalve bij het variabele deel van een gemengd potje (v392) */
+  const kant=k=>((O.find(r=>r.k===k)||{}).deel==='variabel'||!vastK.has(k))?'rest':'vast';
+  const restI=V.potjes.filter(x=>!losKs.includes(x.k)).map(x=>({k:x.k, naam:x.naam, v:x.overR+(kant(x.k)==='rest'?(tr[x.k]||0):0)}));
+  const vastI=vp.map(x=>({k:x.k, naam:x.naam||(CATS[x.k]||{}).name||x.k, v:(+x.eind||0)-(+x.bud||0)+(kant(x.k)==='vast'?(tr[x.k]||0):0)}));
+  const trKant=g=>O.filter(x=>kant(x.k)===g).reduce((a,x)=>a+Math.round(x.teRuim),0);
+  const restT=V.variabel.eind-V.variabel.budget-V.potjes.filter(x=>losKs.includes(x.k)).reduce((a,x)=>a+x.overR,0)+trKant('rest');
+  const vastT=V.vaste.eind-V.vaste.budget+trKant('vast');
+  const zonder=Math.min(+V.zonder||0,0);
+  const R=brugAfronden([{k:'rest',v:restT},{k:'vast',v:vastT},{k:'zonder',v:zonder}], tot);
+  /* v391: OVERIG IN POTJES. Per groep de potjes met hun verwachte verschil, afgerond met brugAfronden() op het bedrag
+     van de groep; wat in een groep niet bij een potje hoort heet "overige". */
   const P={rest:[], vast:[]};
   const groep=(g, items, totaal)=>{ const rauw=items.map(x=>({k:x.k, v:x.v})); const som=rauw.reduce((a,x)=>a+x.v,0);
     if(Math.abs(totaal-som)>=0.5) rauw.push({k:'~overige', v:totaal-som});
     const A=brugAfronden(rauw, R[g]||0);
     P[g]=rauw.map(x=>{ const it=items.find(i=>i.k===x.k); return {k:x.k, naam:it?it.naam:'overige', waarde:A[x.k]||0}; })
       .filter(x=>x.waarde).sort((a,b)=>Math.abs(b.waarde)-Math.abs(a.waarde) || (a.naam<b.naam?-1:1)); };
-  groep('rest', V.potjes.filter(x=>!los.includes(x.k)).map(x=>({k:x.k, naam:x.naam, v:x.overR})), rest);
-  groep('vast', (V.vastePotjes||[]).map(x=>({k:x.k, naam:x.naam||(CATS[x.k]||{}).name||x.k, v:(+x.eind||0)-(+x.bud||0)})), vast);
-  return {tot, R, P};
+  groep('rest', restI, restT); groep('vast', vastI, vastT);
+  /* De telling voor het label: per potje (een gemengd potje een keer) het teken van zijn afgeronde afwijking. */
+  const per={}; for(const x of [...P.rest, ...P.vast]) if(x.k!=='~overige') per[x.k]=(per[x.k]||0)+x.waarde;
+  const w=Object.values(per);
+  return {tot, R, P, onder:w.filter(v=>v<0).length, boven:w.filter(v=>v>0).length};
+}
+function gripOverigDelen(V){
+  const Br=gripZienBrug(V); if(!Br) return null;
+  const st=Br.stappen.find(x=>x.soort==='overig');
+  return gripOverigSamen(V, Br.stappen.filter(x=>x.soort==='potje').map(x=>x.k), st?st.waarde:0);
 }
 function openGripOverig(){ renderGripOverig(); showSheetBg(); }
 function renderGripOverig(){
@@ -9648,7 +9669,7 @@ function renderGripOverig(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripOverig" data-overig="${D.tot}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Overig · ${brugTeken(D.tot)}</div>
     <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Wat niet los in de bridge staat.</div>
-    ${rij('rest','Andere variabele potjes',"openGripRest()")}${pot('rest')}${rij('vast','Vaste lasten',"openGripVast()")}${pot('vast')}${rij('terug','Te ruim begroot, al apart gearceerd',"openTeRuim()")}${rij('zonder','Zonder potje','')}${gripAllesLink}</div>`;
+    ${rij('rest','Andere variabele potjes',"openGripRest()")}${pot('rest')}${rij('vast','Vaste lasten',"openGripVast()")}${pot('vast')}${rij('zonder','Zonder potje','')}${gripAllesLink}</div>`;
 }
 /* De potjes die je deze maand niet liet staan. Sinds v394 is er geen melding op Zien meer (teRuimRegel() is weg): de
    regel onder de Budget-meter (gripEerlijkRegel()) is de ingang, plus een tik op een gearceerde stap in de bridge. */
@@ -9707,10 +9728,13 @@ function gripZien(V){
       <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div>
       <div class="small" style="margin-top:6px;text-align:right">${GRIP_BUDGETLINK}</div></div>`; }
   const TR=teRuim(V), MB=gripMeterBudget(V), Br=gripZienBrug(V, TR);
-  const kop=MB.onbekend?'':(MB.verschil>0?`${euro0(MB.verschil)} boven`:MB.verschil<0?`${euro0(-MB.verschil)} onder`:'op budget');
-  const as=[Br&&Br.basis>0?`as begint bij ${euro0(Br.basis)}`:'', MB.open&&MB.open.length?'gearceerd = te ruim begroot, telt niet als ruimte':'', MB.laten&&MB.laten.length?'grijs = laten staan, telt mee':''].filter(Boolean).join(' · ');
+  /* v395: de kop is het verschil met het eerlijke budget, en het is HETZELFDE getal als de som van de stappen in de bridge
+     (Br.verschil, hele euro's). Zonder bridge valt hij terug op de meter. */
+  const vs=Br?Br.verschil:(MB.onbekend?null:Math.round(MB.verschil));
+  const kop=vs==null?'':(vs>0?`${euro0(vs)} boven eerlijk budget`:vs<0?`${euro0(-vs)} onder eerlijk budget`:'op eerlijk budget');
+  const as=[Br&&Br.basis>0?`as begint bij ${euro0(Br.basis)}`:'', Br&&Br.ruim>0?'gearceerd = te ruim, telt niet':'', Br?'stippellijn = eerlijk budget':''].filter(Boolean).join(' · ');
   return `<div class="card gm-stage" id="gripZien" data-zien="${V.projectie}">
-    <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))} · budget → verwacht</span><span data-zienkop style="font-weight:800;color:${MB.verschil>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
+    <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))}</span><span data-zienkop data-zienverschil="${vs==null?'':vs}" style="font-weight:800;color:${vs>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
     ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div>`:''}
     <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div></div>`;
 }
@@ -9725,7 +9749,7 @@ function gripOnderDrempelLijst(V){
 /* v393: geen eigen regel meer (de fit-eis van Zien geldt ook in deze stand); een tik op de noot bij overig zegt welk potje
    het is. */
 function gripOnderDrempelTekst(V){ const L=gripOnderDrempelLijst(V); return L.length?`${L.map(x=>x.naam).join(', ')} · onder de drempel`:''; }
-function gripOnderDrempelTik(){ let V=null; try{ V=maandVooruit(); }catch(_){} const t=gripOnderDrempelTekst(V); if(t) toast(t); }
+function gripOnderDrempelTik(){ let V=null; try{ V=maandVooruit(); }catch(_){} const t=gripOnderDrempelTekst(V); if(t) toast(esc(t)); }
 /* De lopende afspraken van deze maand (uit dezeMaandKaart(), die tot v386 de kaart Deze maand droeg). */
 /* v390: KIEZEN DRAAGT GEEN AFSPRAKENLIJST MEER (keuze van de gebruiker, na schermen van het toestel). De afvinkregels
    ("Potje Huur EUR 700") en "N afspraken voor nov–dec" stonden er naast de rijen van de patronen; een potje dat te ruim
@@ -9756,8 +9780,8 @@ function renderMaand(){
        ander signaal dan een potje boven zijn grens of de lek-regel. */
     const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat');
     inhoud=gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
-      +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'')
-      +`<div class="small" data-gripcta style="margin:10px 2px 0;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('begrijpen')">Waarom? Bekijk wat erachter zit ›</div>`;
+      +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');
+    /* v395: "Waarom? Bekijk wat erachter zit" is weg (gevraagd door de gebruiker): de tab Begrijpen is de ingang. */
   } else if(tab==='begrijpen'){
     inhoud=gripBegrijpenHtml();
   } else if(tab==='kiezen'){
@@ -19597,12 +19621,17 @@ function brugZin(Br){
   return `<b>${kop}</b>${z}`;
 }
 function brugTeken(w){ return w>0?'+'+euro0(w):euro0(w); }
+/* De plek van de balk in zijn kolom, in procenten: gewoon 12% aan elke kant; een bredere kolom (s.breed) houdt een balk
+   van gewone breedte in het midden; de eindbalk met een haakje (s.eerlijk) staat links, het haakje rechts ervan. */
+function brugIns(s){ const br=+s.breed||1;
+  if(s.soort==='eind' && s.eerlijk!=null) return {l:6, r:50};
+  const x=br>1?+(50-38/br).toFixed(1):12; return {l:x, r:x}; }
 function brugGrafiek(Br){
   const PH=112;
   const lv=[]; let run=0;
   const loop=(st)=>{ run=0; return st.map(s=>{
     let lo, hi;
-    if(s.soort==='begin'||s.soort==='eind'){ lo=0; hi=s.waarde; run=s.waarde; }
+    if(s.soort==='begin'||s.soort==='eind'){ lo=0; hi=s.waarde; run=s.start!=null?s.start:s.waarde; }
     else { const van=run; run+=s.waarde; lo=Math.min(van,run); hi=Math.max(van,run); }
     lv.push(hi); return {s, lo, hi, na:run};
   }); };
@@ -19626,14 +19655,27 @@ function brugGrafiek(Br){
   return `<div class="brug" data-brug style="display:flex;gap:${gap}px;margin-top:8px;position:relative">${as}${kol.map((c,i)=>{
     const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
     const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);
-    const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + ${gap}px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
+    const lijn=i<n-1?`<i style="position:absolute;left:${100-brugIns(c.s).r}%;width:calc(${brugIns(c.s).r}% + ${gap}px + ${(brugIns(kol[i+1].s).l*(+kol[i+1].s.breed||1)/(+c.s.breed||1)).toFixed(1)}%);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
     const tik=Br.tik?` data-brugtik role="button" onclick="event.stopPropagation();${Br.tik}('${c.s.soort}','${esc(c.s.k||'')}')"`:'';
-    return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
+    /* v395: de eerste balk van Zien draagt het te ruim begrote deel gearceerd bovenop (c.s.ruim, per potje een stuk met een
+       eigen tik), en de eindbalk een stippellijn op het eerlijke budget met een haakje (c.s.eerlijk). */
+    /* een bredere kolom (c.s.breed, voor een langer label) houdt een balk van gewone breedte in het midden */
+    const smal=c.s.soort==='eind'&&c.s.eerlijk!=null, I=brugIns(c.s), lr=`left:${I.l}%;right:${I.r}%`;
+    let arc='';
+    if(c.s.soort==='begin' && Array.isArray(c.s.ruim) && c.s.ruim.length){ let v=c.s.start;
+      arc=c.s.ruim.map(r=>{ const a=v; v+=r.v; const t=y(v), hh=Math.max(y(a)-t,1);
+        return `<i data-gearceerd data-teruimk="${esc(r.k)}" title="${esc(r.naam)} · ${euro0(r.v)} te ruim"${Br.tik?` role="button" onclick="event.stopPropagation();${Br.tik}('teruim','${esc(r.k)}')"`:''} style="position:absolute;${lr};top:${t.toFixed(1)}px;height:${hh.toFixed(1)}px;background:repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px);border-top:1px solid var(--card);border-radius:3px"></i>`; }).join(''); }
+    let haak='';
+    if(smal){ const d=c.s.waarde-c.s.eerlijk, ye=y(c.s.eerlijk), yw=y(c.s.waarde), a=Math.min(ye,yw), b=Math.max(ye,yw);
+      haak=`<i data-eerlijklijn style="position:absolute;left:0;right:44%;top:${ye.toFixed(1)}px;border-top:1px dashed var(--txt)"></i>`
+        +(d?`<i data-haakje style="position:absolute;left:54%;width:4px;top:${a.toFixed(1)}px;height:${Math.max(b-a,1).toFixed(1)}px;border:1px solid var(--mut);border-left:0"></i>`
+        +`<span data-haaktekst style="position:absolute;left:62%;white-space:nowrap;top:${Math.max(Math.min((a+b)/2-10,PH-20),0).toFixed(1)}px;font-size:9px;line-height:1.1;font-weight:700;color:${d>0?'var(--red)':'var(--mut)'}">${d>0?'+':'−'}${euro0(Math.abs(d))}<br><span style="font-weight:400">${d>0?'boven':'onder'}</span></span>`:''); }
+    return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:${+c.s.breed||1} 1 0;min-width:${Br.tik?'40px':'0'}${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
-        <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
-        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i${c.s.soort==='teruim'?(c.s.laten?' data-gearceerd data-laten':' data-gearceerd'):''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?`repeating-linear-gradient(45deg,var(--card2) 0 3px,${c.s.laten?'var(--bar)':'var(--ref)'} 3px 5px)`:kleur(c.s)};border-radius:3px"></i>${lijn}
+        <span data-brugval style="position:absolute;left:${smal?'28%':'50%'};transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
+        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i style="position:absolute;${lr};top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${kleur(c.s)};border-radius:3px"></i>${arc}${haak}${lijn}
       </div>
-      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>${c.s.label2?`<div data-brugeen2 style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(c.s.titel||c.s.label2)}">${esc(c.s.label2)}</div>`:''}
     </div>`;}).join('')}</div>`;
 }
 /* v393: EEN KLEINE GRIJZE NOOT BIJ EEN STAP (c.s.noot={tekst, tik}), binnen het grafiekvlak zodat de bridge er niet
@@ -19642,7 +19684,9 @@ function brugGrafiek(Br){
 function brugNoot(c, y, PH, yt){
   const N=c.s.noot, boven=yt-24>=0, onder=y(c.lo)+2;
   const pos=boven?`bottom:${(PH-yt+13).toFixed(1)}px`:`top:${Math.min(onder, PH-10).toFixed(1)}px`;
-  return `<span data-brugnoot role="button" onclick="event.stopPropagation();${N.tik}" style="position:absolute;left:50%;transform:translateX(-50%);${pos};font-size:9px;white-space:nowrap;color:var(--mut2);cursor:pointer">${esc(N.tekst)}</span>`;
+  /* v395: een tikvlak van 6px rondom (padding met een even grote negatieve marge, dus de tekst staat op dezelfde plek),
+     en de naam in title: op het toestel kwam een tik op 9px tekst bij de kolom terecht en niet bij de noot. */
+  return `<span data-brugnoot role="button"${N.titel?` title="${esc(N.titel)}"`:''} onclick="event.stopPropagation();${N.tik}" style="position:absolute;left:50%;transform:translateX(-50%);${pos};font-size:9px;white-space:nowrap;color:var(--mut2);cursor:pointer;padding:6px;margin:-6px;z-index:1">${esc(N.tekst)}</span>`;
 }
 function brugBlok(m){
   const tegen=window._brugTegen==='vorige'?'vorige':'budget';
@@ -19741,7 +19785,7 @@ function lekSignaal(m, exclude){
      hoort bij het label: met de categorie als label is het de categorie, ook als er meer winkels in zitten. */
   let catBedrag=bedrag; try{ const v=Math.round(+catSpendMap(m)[L.cat]||0); if(v>0) catBedrag=v; }catch(_){}
   return {pri:12, cat:L.cat, act:`coStart('lek','${esc(m)}')`,
-    kpiLabel:L.name, kpiVal:euro0(bedrag), kpiSub:(cat===L.name?'':cat),
+    kpiLabel:L.name, kpiVal:euro0(bedrag), kpiSub:(cat===L.name?'':cat), kind:L.kind,
     catNaam:cat, catVal:euro0(catBedrag),
     hyp:T.hyp, imp:T.imp};
 }

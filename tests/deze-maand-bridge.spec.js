@@ -60,17 +60,21 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
       { soort: 'eind', k: null, waarde: 2672, aard: null },
     ]);
   });
-  test('de afgeronde stappen tellen exact op van het budget tot de uitkomst, dezelfde als in de sheet', async ({ page }) => {
+  /* v395: de bridge van Zien begint bij het BUDGET (de balk) en loopt vanaf het EERLIJKE budget (budget min het te
+     ruime deel, gearceerd bovenop die balk), dus begin plus de stappen is het eerlijke budget plus de stappen. */
+  test('de afgeronde stappen tellen exact op van het eerlijke budget tot de uitkomst, dezelfde als in de sheet', async ({ page }) => {
     await boot(page); await grip(page);
     const r = await page.evaluate(() => {
       const kol = [...document.querySelectorAll('#gripZien [data-brugstap]')].map((e) => [e.dataset.brugstap, +e.dataset.brugwaarde]);
+      const M = gripMeterBudget();
       openGripVooruit();
-      return { kol, sheet: +document.getElementById('gripVooruit').dataset.projectie,
+      return { kol, eerlijk: Math.round(M.eerlijk), sheet: +document.getElementById('gripVooruit').dataset.projectie,
         kaart: +document.querySelector('#gripZien').dataset.zien };   // v387: de bridge van Zien
     });
     const begin = r.kol[0][1], eind = r.kol[r.kol.length - 1][1];
-    const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], begin);
+    const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], r.eerlijk);
     expect(begin).toBe(3375);
+    expect(r.eerlijk).toBeLessThan(3375);
     expect(som).toBe(eind);
     expect(eind).toBe(2672);
     expect(r.kaart).toBe(eind);
@@ -98,7 +102,7 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     expect(M.verwacht).toBe(2672);
     expect(M.eerlijk).toBe(3375 - M.ruim);
     expect(M.verschil).toBeGreaterThan(0);
-    expect(await page.locator('#gripZien [data-zienkop]').innerText()).toBe(`€${M.verschil.toLocaleString('nl-NL')} boven`);
+    expect(await page.locator('#gripZien [data-zienkop]').innerText()).toBe(`€${M.verschil.toLocaleString('nl-NL')} boven eerlijk budget`);   // v395
   });
 ;
 });
