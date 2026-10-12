@@ -1,6 +1,7 @@
 // v392 (keuzes van de gebruiker). A: de uitschieter-drempel blijft voor de signalen in Begrijpen; de bridge en de meter
-// tellen elk bedrag mee, en een potje dat boven budget eindigt maar onder de drempel blijft krijgt op Zien een grijze
-// regel "<potje> +EUR X · onder de drempel", zonder signaal en zonder patroon. B: een gemengd potje toetst zijn variabele
+// tellen elk bedrag mee, en een potje dat boven budget eindigt maar onder de drempel blijft staat sinds v393 als kleine
+// grijze noot "+EUR X" bij de stap overig in de bridge op Zien (geen eigen regel meer); een tik zegt "<potje> · onder de
+// drempel". Geen signaal en geen patroon. B: een gemengd potje toetst zijn variabele
 // deel apart met RUIMER_DREMPEL; het vaste deel blijft beschermd door de posten in hun eigen maand.
 // Fixture: grip-kring-stand (10 okt 2026). Vices eindigt EUR 5 boven EUR 20 (onder de drempel van EUR 10), Uit eten
 // EUR 67 boven (een uitschieter). Vervoer: vast 603, variabel 497 met drie maanden EUR 0 en verwacht eind EUR 99.
@@ -11,13 +12,26 @@ const K = require('./grip-kring-stand');
 const grip = async page => { await page.setViewportSize({ width: 390, height: 844 }); await K.boot(page); await page.evaluate(() => go('maand')); };
 
 test.describe('A · onder de drempel', () => {
-  test('Vices +EUR 5 staat grijs op Zien, Uit eten niet; geen tik', async ({ page }) => {
+  test('Vices +EUR 5 staat als noot bij overig, Uit eten niet; een tik zegt "Vices · onder de drempel" (v393)', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), x = V.potjes.find(p => p.k === 'vices');
-      return { over: Math.round(x.overR), uit: potjeUitschieter(x),
-        regels: [...document.querySelectorAll('#gripZien [data-onderdrempel]')].map(e => [e.dataset.onderdrempel, e.innerText, !!e.getAttribute('onclick')]) }; });
+      const noten = [...document.querySelectorAll('#gripZien [data-brugnoot]')].map(e => [e.closest('[data-brugstap]').dataset.brugstap, e.innerText]);
+      const toasts = []; const t0 = window.toast; window.toast = m => toasts.push(m);
+      let kolom = 0; const o0 = window.openGripOverig; window.openGripOverig = () => { kolom++; };
+      document.querySelector('#gripZien [data-brugnoot]').click(); window.toast = t0; window.openGripOverig = o0;
+      return { over: Math.round(x.overR), uit: potjeUitschieter(x), noten, toasts, kolom,
+        regels: document.querySelectorAll('[data-onderdrempel]').length }; });
     expect(r.over).toBe(5); expect(r.uit).toBe(false);
-    expect(r.regels).toEqual([['vices', 'Vices +€5 · onder de drempel', false]]);
+    expect(r.noten).toEqual([['overig', '+€5']]);
+    expect(r.toasts).toEqual(['Vices · onder de drempel']);
+    expect(r.kolom).toBe(0);   // de noot heeft een eigen tik; de kolom (de sheet overig) opent niet
+    expect(r.regels).toBe(0);  // geen eigen grijze regel meer
+  });
+  test('de noot staat binnen het grafiekvlak: de bridge wordt er niet hoger van', async ({ page }) => {
+    await grip(page);
+    const r = await page.evaluate(() => { const h = () => document.querySelector('#gripBrug').getBoundingClientRect().height;
+      const met = h(); SET.budgets.vices = 60; save(); renderMaand(); return { met, zonder: h(), n: document.querySelectorAll('[data-brugnoot]').length }; });
+    expect(r.n).toBe(0); expect(r.met).toBe(r.zonder);
   });
   test('geen signaal en geen patroon: Vices staat niet in uitschieters, Begrijpen of de patronen op Inzichten', async ({ page }) => {
     await grip(page);
@@ -32,9 +46,9 @@ test.describe('A · onder de drempel', () => {
       return { som: B.stappen.slice(0, -1).reduce((a, x) => a + x.waarde, 0), eind: V.projectie, budget: V.budget, verwacht: gripMeterBudget(V).verwacht }; });
     expect(r.som).toBe(r.eind); expect(r.verwacht).toBe(r.eind);
   });
-  test('zonder potje onder de drempel geen regel', async ({ page }) => {
+  test('zonder potje onder de drempel geen noot', async ({ page }) => {
     await grip(page);
-    const n = await page.evaluate(() => { SET.budgets.vices = 60; save(); renderMaand(); return document.querySelectorAll('[data-onderdrempel]').length; });
+    const n = await page.evaluate(() => { SET.budgets.vices = 60; save(); renderMaand(); return document.querySelectorAll('[data-brugnoot]').length; });
     expect(n).toBe(0);
   });
 });

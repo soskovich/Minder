@@ -9479,7 +9479,16 @@ function gripMeters(){
   const l=ML.onbekend||!ML.n?dial('beleggen','Beleggen',{onbekend:true},0,'?','nog niet',ML.leeg?'geen doel of bezitting':(lsub||'voorwaarden'))
     :dial('beleggen','Beleggen',ML,ML.gehaald/ML.n*100,`${ML.gehaald}/${ML.n}`,`${ML.gehaald}/${ML.n}`,lsub);
   return `<div class="gm" id="gripMeters">${b}${d}${l}</div>
-    ${MD.onbekend?'':`<div class="small" data-meternuverwacht style="color:var(--mut2);font-size:var(--fs-xs);margin:-2px 2px 8px;line-height:1.35">${gripDoelenNuTekst(MD)}</div>`}`;
+    ${MB.onbekend?'':gripEerlijkRegel(MB.TR)}${MD.onbekend?'':`<div class="small" data-meternuverwacht style="color:var(--mut2);font-size:var(--fs-xs);margin:-2px 2px 8px;line-height:1.35">${gripDoelenNuTekst(MD)}</div>`}`;
+}
+/* v393: EERLIJK BUDGET LAGER. Onder de Budget-meter een regel zolang een te ruim potje nog open staat (teRuimOpen(), dus
+   weg na verlagen of laten staan). Een potje: zijn naam en wat het scheelt; meer potjes: het totaal en het aantal. De tik
+   opent dezelfde sheet als de melding op Zien (openTeRuim()). */
+function gripEerlijkRegel(TR){
+  const O=teRuimOpen(TR||[]); if(!O.length) return '';
+  const som=O.reduce((a,x)=>a+x.teRuim,0);
+  const t=O.length===1?`${esc(O[0].naam)} −${euro0(O[0].teRuim)}`:`${euro0(som)} (${O.length} potjes)`;
+  return `<div class="small" data-eerlijkregel="${O.length}" role="button" onclick="openTeRuim()" style="color:var(--mut);font-size:var(--fs-xs);margin:-2px 2px 4px;line-height:1.35;cursor:pointer">Eerlijk budget lager: ${t} <span style="color:var(--teal);font-weight:700">›</span></div>`;
 }
 /* v391: onder de meters EEN regel met het verschil tussen nu en verwacht: wat er nu netto naar je spaarrekening ging
    (savedNet, dezelfde bron als het spaardoel in de Terugblik) en waar de Doelen-meter op uitkomt (Plan opzij min eruit).
@@ -9575,14 +9584,17 @@ function gripZienBrug(V, TR){
   if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push({soort:'teruim', k:x.k, label:x.naam, waarde:R['~tr:'+x.k]}); }
   else if(R['~tr']) stappen.push({soort:'teruim', label:'te ruim', waarde:R['~tr']});
   /* Overig staat er ook op nul zolang er vaste potjes zijn: zijn sheet is de ingang naar de vaste lasten (v357). */
-  if(R['~overig'] || (V.vastePotjes||[]).length) stappen.push({soort:'overig', label:'overig', waarde:R['~overig']||0});
+  if(R['~overig'] || (V.vastePotjes||[]).length || gripOnderDrempelLijst(V).length) stappen.push({soort:'overig', label:'overig', waarde:R['~overig']||0});
+  /* v393: een potje boven zijn budget maar onder de drempel valt in overig, en staat daar als kleine grijze noot. */
+  const OD=gripOnderDrempelLijst(V), ov=stappen.find(x=>x.soort==='overig');
+  if(OD.length && ov) ov.noot={tekst:'+'+euro0(OD.reduce((a,x)=>a+Math.round(x.overR),0)), tik:'gripOnderDrempelTik()'};
   stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
   let run=V.budget; const lv=[V.budget, V.projectie];
   for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
   const lo=Math.min(...lv), hi=Math.max(...lv);
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2};
+  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, eenRegel:true};
 }
 function gripZienTik(soort,k){
   if(soort==='teruim'){ openTeRuim(); return; }
@@ -9693,17 +9705,20 @@ function gripZien(V){
     <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))} · budget → verwacht</span><span data-zienkop style="font-weight:800;color:${MB.verschil>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
     ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div>`:''}
     <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div>
-    ${gripOnderDrempel(V)}${teRuimRegel(TR)}</div>`;
+    ${teRuimRegel(TR)}</div>`;
 }
 /* v392: BOVEN, ONDER DE DREMPEL (keuze van de gebruiker). De bridge en de meter tellen elk bedrag mee; de signalen in
    Begrijpen houden de uitschieter-drempel (potjeUitschieter(), dezelfde toets als uitschieters()). Een potje dat boven
-   zijn budget eindigt maar die drempel niet haalt krijgt hier een grijze regel en verder niets: geen signaal, geen
-   patroon, geen tik. */
-function gripOnderDrempel(V){
-  const L=((V&&V.potjes)||[]).filter(x=>Math.round(+x.overR||0)>0 && !potjeUitschieter(x))
+   zijn budget eindigt maar die drempel niet haalt valt in overig en staat daar sinds v393 als kleine grijze noot "+EUR X"
+   (brugNoot()), en verder niets: geen signaal, geen patroon. */
+function gripOnderDrempelLijst(V){
+  return ((V&&V.potjes)||[]).filter(x=>Math.round(+x.overR||0)>0 && !potjeUitschieter(x))
     .sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1));
-  return L.map(x=>`<div class="small" data-onderdrempel="${esc(x.k)}" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs);line-height:1.4">${esc(x.naam)} +${euro0(Math.round(x.overR))} · onder de drempel</div>`).join('');
 }
+/* v393: geen eigen regel meer (de fit-eis van Zien geldt ook in deze stand); een tik op de noot bij overig zegt welk potje
+   het is. */
+function gripOnderDrempelTekst(V){ const L=gripOnderDrempelLijst(V); return L.length?`${L.map(x=>x.naam).join(', ')} · onder de drempel`:''; }
+function gripOnderDrempelTik(){ let V=null; try{ V=maandVooruit(); }catch(_){} const t=gripOnderDrempelTekst(V); if(t) toast(t); }
 /* De lopende afspraken van deze maand (uit dezeMaandKaart(), die tot v386 de kaart Deze maand droeg). */
 /* v390: KIEZEN DRAAGT GEEN AFSPRAKENLIJST MEER (keuze van de gebruiker, na schermen van het toestel). De afvinkregels
    ("Potje Huur EUR 700") en "N afspraken voor nov–dec" stonden er naast de rijen van de patronen; een potje dat te ruim
@@ -19608,11 +19623,19 @@ function brugGrafiek(Br){
     const tik=Br.tik?` data-brugtik role="button" onclick="event.stopPropagation();${Br.tik}('${c.s.soort}','${esc(c.s.k||'')}')"`:'';
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
-        <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>
+        <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
         ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i${c.s.soort==='teruim'?' data-gearceerd':''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px)':kleur(c.s)};border-radius:3px"></i>${lijn}
       </div>
-      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.label)}</div>
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.label)}"`:''}>${esc(c.s.label)}</div>
     </div>`;}).join('')}</div>`;
+}
+/* v393: EEN KLEINE GRIJZE NOOT BIJ EEN STAP (c.s.noot={tekst, tik}), binnen het grafiekvlak zodat de bridge er niet
+   hoger van wordt: boven het bedrag als daar ruimte is, anders onder de balk. Hij draagt een eigen tik met
+   stopPropagation, want de kolom zelf opent zijn eigen sheet. */
+function brugNoot(c, y, PH, yt){
+  const N=c.s.noot, boven=yt-24>=0, onder=y(c.lo)+2;
+  const pos=boven?`bottom:${(PH-yt+13).toFixed(1)}px`:`top:${Math.min(onder, PH-10).toFixed(1)}px`;
+  return `<span data-brugnoot role="button" onclick="event.stopPropagation();${N.tik}" style="position:absolute;left:50%;transform:translateX(-50%);${pos};font-size:9px;white-space:nowrap;color:var(--mut2);cursor:pointer">${esc(N.tekst)}</span>`;
 }
 function brugBlok(m){
   const tegen=window._brugTegen==='vorige'?'vorige':'budget';

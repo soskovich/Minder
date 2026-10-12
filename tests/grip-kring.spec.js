@@ -27,13 +27,16 @@ test.describe('v387 structuur', () => {
   test('het scherm past op 390x844 boven de menubalk', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await grip(page);
-    // v392 (keuze van de gebruiker): de eis geldt zonder de grijze regels "onder de drempel"; met die regels mag Zien
-    // op 390x844 een stukje scrollen. Gemeten op deze stand: 783px met de regel, de rest moet passen.
-    const r = await page.evaluate(() => { const met = document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom;
-      const od = [...document.querySelectorAll('[data-onderdrempel]')]; od.forEach(e => e.style.display = 'none');
-      return { met, n: od.length, knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
-    console.log(`zien: met regel onder de drempel ${Math.round(r.met)}px, zonder ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-    expect(r.n).toBe(1);
+    // v393 (keuze van de gebruiker): de eis geldt MET een potje onder de drempel (Vices +EUR 5 staat als noot bij overig)
+    // en met de regel "Eerlijk budget lager" onder de meters; de labels van de bridge staan op een regel.
+    const r = await page.evaluate(() => { const lab = [...document.querySelectorAll('#gripBrug [data-brugeen]')];
+      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('[data-eerlijkregel]').length,
+        lab: Math.max(...lab.map(e => e.getBoundingClientRect().height)), brug: document.querySelector('#gripBrug').getBoundingClientRect().height,
+        knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
+    console.log(`zien: bridge ${Math.round(r.brug)}px, hoogste label ${Math.round(r.lab)}px, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
+    expect(r.noot).toBe(1);
+    expect(r.eerlijk).toBe(1);
+    expect(r.lab).toBeLessThan(13);   // een regel van 9px
     expect(r.knop).toBeLessThanOrEqual(r.nav);
     expect(r.sw).toBeLessThanOrEqual(390);
   });

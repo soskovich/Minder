@@ -1187,3 +1187,13 @@
 - C: tweede stand in `grip-kiezen-v391` (Uit eten en Vices elk €0,25) waarin afronden op de som −1.052 geeft tegen −1.051 voor de groep; de sabotage "afronding overig" is daarop rood.
 - Fit: Zien eindigt op 390x844 op 783px met de grijze regel en op 764px zonder (menubalk 772px); de extra Vervoer-stap kost 11px. Op keuze van de gebruiker geldt de fit-eis zonder die regels.
 - Spec `drempel-gemengd.spec.js` (11); gemigreerd: grip-kring, grip-kring-deel2, grip-ruimte, grip-kiezen-v391. Sabotages 8 van 8 rood.
+
+## v393 · Zien past met een potje onder de drempel, en de Budget-meter noemt wat het eerlijke budget verlaagt (`minder-v393`)
+- Gevraagd door de gebruiker; draait de fit-keuze van `v392` terug: de fit-eis op Zien (390x844) geldt ook met een potje onder de drempel.
+- De grijze regel `gripOnderDrempel()` is weg. Zo'n potje valt in overig en staat daar als kleine grijze noot "+€X" (`brugNoot()`, `data-brugnoot`) binnen het grafiekvlak (boven het bedrag, anders onder de balk), zodat de bridge niet hoger wordt. Een tik (eigen `stopPropagation`, de sheet overig opent niet) geeft "Vices · onder de drempel".
+- De labels van de bridge op Zien staan op een regel met een ellipsis en de volle naam in `title` (`Br.eenRegel`); de andere bridges zijn ongewijzigd.
+- Onder de meters: "Eerlijk budget lager: <potje> −€X ›" of "Eerlijk budget lager: €X (n potjes) ›" (`gripEerlijkRegel()`), uit `teRuimOpen()`; weg na verlagen of laten staan; de tik opent de te-ruim-sheet.
+- Punt 3 nagegaan: te ruim (ook Vervoer & auto, variabel deel) staat in de eerste maand niet in Kiezen en vanaf de 2e als "herzien" bovenaan. Geen wijziging nodig; vastgelegd in de nieuwe spec.
+- Gemeten op `grip-kring-stand`: bridge 127px (was 138 met afbrekende labels), koopknop eindigt op 770px bij een menubalk op 772px, met noot en meterregel; op de andere tabs 698/550/559px.
+- Gemeld, niet gewijzigd: de melding `teRuimRegel()` op Zien ("2 potjes te ruim · €1.019") opent dezelfde sheet als de nieuwe meterregel.
+- Spec `eerlijk-regel.spec.js` (6); gemigreerd: `drempel-gemengd` A, de fit-tests in `grip-kring` en `grip-kring-deel2`.

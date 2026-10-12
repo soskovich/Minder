@@ -130,10 +130,24 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **ONDER DE DREMPEL IS EEN NOOT IN DE BRIDGE, ZIEN PAST WEER, EN EEN TE RUIM POTJE STAAT ONDER DE BUDGET-METER** (`v393`,
+  gevraagd door de gebruiker; draait de fit-keuze van `v392` terug). DE FIT-EIS OP ZIEN (390x844) GELDT OOK MET EEN POTJE
+  ONDER DE DREMPEL: de grijze regel (`gripOnderDrempel()`) is weg, zo'n potje valt in overig en staat daar als kleine grijze
+  noot "+EUR X" (`brugNoot()`, `data-brugnoot`, binnen het grafiekvlak boven het bedrag of anders onder de balk, dus de bridge
+  wordt er niet hoger van); een tik (eigen `stopPropagation`) geeft de toast "<potje> · onder de drempel"
+  (`gripOnderDrempelLijst()`, `gripOnderDrempelTik()`). De labels van de bridge op Zien staan op een regel met een ellipsis
+  en de naam in `title` (`Br.eenRegel`, `data-brugeen`); de andere bridges (logboek, sheets) breken nog af. Onder de meters
+  staat "Eerlijk budget lager: <potje> −EUR X ›" of "Eerlijk budget lager: EUR X (n potjes) ›" (`gripEerlijkRegel()`,
+  `data-eerlijkregel`), uit `teRuimOpen()`, dus weg na verlagen of laten staan; de tik opent `openTeRuim()`. Te ruim staat in
+  de eerste maand niet in Kiezen en pas vanaf de 2e als "herzien" bovenaan (nagegaan, ongewijzigd sinds `v391`). GEMETEN op
+  `grip-kring-stand`: bridge 127px (138 met afbrekende labels), koopknop 770px tegen een menubalk op 772px, met de noot en de
+  meterregel. GEMELD: de melding `teRuimRegel()` op Zien opent dezelfde sheet en staat er nog (51px); weghalen is een keuze
+  van de gebruiker. Spec `eerlijk-regel.spec.js`; `drempel-gemengd` A en de fit-tests in `grip-kring` en `grip-kring-deel2`
+  gemigreerd.
 - **ONDER DE DREMPEL IS EEN GRIJZE REGEL, EN EEN GEMENGD POTJE TOETST ZIJN VARIABELE DEEL APART** (`v392`, keuzes van de
   gebruiker). A: de uitschieter-drempel (`potjeUitschieter()`, >= EUR 10 en 25%, of >= EUR 50) blijft voor de signalen in
   Begrijpen; de bridge en de meter tellen elk bedrag mee. Een potje dat boven budget eindigt en die drempel niet haalt krijgt
-  op Zien een grijze regel "<potje> +EUR X · onder de drempel" (`gripOnderDrempel()`, `data-onderdrempel`), zonder signaal,
+  op Zien een grijze regel "<potje> +EUR X · onder de drempel" (sinds `v393` een noot in de bridge), zonder signaal,
   patroon of tik. Dat sluit het OPEN punt van `v391`. B: in `teRuimLijst()` heeft het variabele deel van een gemengd potje
   nodig wat het duurste van drie afgeronde maanden of het verwachte eind vraagt (het hoogste), en is het te ruim met
   `RUIMER_DREMPEL`; het voorstel is dan `max(vast budget + variabel voorstel, ruimAfrond(nodig van het hele potje), al uit)`,
@@ -144,8 +158,8 @@ genoemde versietag.)*
   te ruim); Verzekeringen variabel deel (171, drie maanden EUR 0) ook te ruim, maar het potje niet: december vraagt 324
   (DELA), dus voorstel 330 en EUR 5. C: `grip-kiezen-v391` draagt een tweede stand (Uit eten en Vices elk EUR 0,25) waarin
   afronden op de som van de potjes een ander getal geeft dan de groep (-1.052 tegen -1.051); daarop is de sabotage
-  "afronding overig" rood. DE FIT-EIS OP ZIEN (390x844) GELDT ZONDER DE REGELS ONDER DE DREMPEL (keuze van de gebruiker): gemeten 783px met de
-  regel en 764px zonder, menubalk 772px; de extra Vervoer-stap kost 11px (labels breken af), de regel 19px. Spec
+  "afronding overig" rood. De fit-eis gold bij `v392` zonder de regels onder de drempel (783px met, 764 zonder, menubalk 772);
+  sinds `v393` is de regel een noot in de bridge en geldt de eis weer, zie de regel daarboven. Spec
   `drempel-gemengd.spec.js`.
 - **"BOVEN" IS HET VERWACHTE EIND, OP GRIP EN INZICHTEN; GRIP NOEMT ZIJN DELEN** (`v391`, keuzes van de gebruiker). Inzichten:
   een potje met een vorige maand erboven dat naar verwachting weer boven eindigt (`potjeUitschieter()`, dezelfde toets als
@@ -7185,7 +7199,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v392` → `minder-v393`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v393` → `minder-v394`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -7221,7 +7235,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382`, `v383` naar `minder-v383`, `v384` naar `minder-v384`, `v385` naar `minder-v385`, `v386` naar `minder-v386`, `v387` naar `minder-v387`, `v388` naar `minder-v388`, `v389` naar `minder-v389`, `v390` naar `minder-v390` `v391` naar `minder-v391` en `v392` naar `minder-v392`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382`, `v383` naar `minder-v383`, `v384` naar `minder-v384`, `v385` naar `minder-v385`, `v386` naar `minder-v386`, `v387` naar `minder-v387`, `v388` naar `minder-v388`, `v389` naar `minder-v389`, `v390` naar `minder-v390`, `v391` naar `minder-v391`, `v392` naar `minder-v392` en `v393` naar `minder-v393`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

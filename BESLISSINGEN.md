@@ -16,6 +16,14 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v393` · Zien past, ook met een potje onder de drempel.** De gebruiker draaide de fit-keuze van `v392` terug: geen eigen
+  grijze regel, maar een noot "+EUR X" bij overig in de bridge, binnen het grafiekvlak, met een tik die het potje noemt. De
+  labels van de bridge op Zien breken niet meer af (ellipsis), en dat haalde de 11px terug die de extra Vervoer-stap kostte.
+  Gemeten: koopknop 770px tegen de menubalk op 772px, met de noot en de nieuwe meterregel. Valkuil: de noot onder het label
+  zetten kost weer een regel en breekt de eis; daarom staat hij in het grafiekvlak.
+- **`v393` · Wat het eerlijke budget verlaagt staat onder de meter.** "Eerlijk budget lager: <potje> −EUR X ›" (of het totaal
+  met het aantal), uit `teRuimOpen()`, zodat de regel weg is na verlagen of laten staan terwijl het eerlijke budget bij laten
+  staan gelijk blijft. Gemeld: de melding op Zien opent dezelfde sheet; die blijft staan tot de gebruiker kiest.
 - **`v392` · Onder de drempel is een grijze regel, geen signaal.** De uitschieter-drempel (>= EUR 10 en 25%, of >= EUR 50)
   blijft de lat voor de signalen in Begrijpen; de bridge en de meter tellen elk bedrag mee. Een potje dat boven budget eindigt
   en de drempel niet haalt staat op Zien als "<potje> +EUR X · onder de drempel", zonder tik. Valkuil: zonder die regel
