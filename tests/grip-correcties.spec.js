@@ -23,9 +23,12 @@ test.describe('1 · spaardoel en Doelen-meter noemen hun basis', () => {
     expect(await tekst(page, '[data-meterverwachtdoel]')).toBe(`verwacht €${r.verwacht.toLocaleString('nl-NL')} van €${r.opzij.toLocaleString('nl-NL')}`);
     await tab(page, 'terugblik');
     const sp = await tekst(page, `[data-terugmaand="2026-10"] [data-terugrij="spaardoel"] [data-spaarterug]`);
-    expect(sp).toMatch(/^gestort -?€[\d.]+ van €2\.200 \(na €700 eruit\) · loopt nog$/);
-    // geen kaal bedrag naast een ander bedrag: elk getal in de meter en de terugblik draagt zijn label
-    expect(sp).toContain('gestort'); expect(await tekst(page, '[data-meteruitleg]')).toContain('verwacht');
+    // v391: drie delen, gestort nooit negatief, en netto is savedNet
+    expect(sp).toMatch(/^gestort €[\d.]+ · eruit €700 · netto -?€[\d.]+ van €2\.200 · loopt nog$/);
+    expect(sp).toContain(`netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')}`);
+    // onder de meters het verschil tussen nu en verwacht, en geen uitlegregel meer (die staat in de sheet)
+    expect(await tekst(page, '[data-meternuverwacht]')).toBe(`nu netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')} · verwacht eind €${r.verwacht.toLocaleString('nl-NL')}`);
+    expect(await page.locator('[data-meteruitleg]').count()).toBe(0);
   });
   test('de sheet van de meter noemt verwacht en verwijst voor gestort naar de terugblik', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -49,7 +52,7 @@ test.describe('3 · terugblik zonder gemeten maand', () => {
     await page.evaluate(() => { SET.gripOpzij = { '2026-09': { opzij: 1000 } };
       const t = { id: 'stsep', date: '2026-09-20', amount: 1000, acc: 'NL01SPAR0000002222', name: 'Inleg', desc: 'OVERBOEKING VAN MAIN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); gripKiesTab('terugblik'); });
     expect(await tekst(page, '[data-terugscore]')).toBe('September 1 van 1');
-    expect(await tekst(page, '[data-terugmaand="2026-09"] [data-spaarterug]')).toBe('gestort €1.000 van €1.000 · gehaald');
+    expect(await tekst(page, '[data-terugmaand="2026-09"] [data-spaarterug]')).toBe('gestort €1.000 · eruit €0 · netto €1.000 van €1.000 · gehaald');
     expect(await tekst(page, '[data-terugvergelijk]')).toBe('September 1 van 1 · oktober loopt nog');
   });
 });
@@ -68,11 +71,14 @@ test.describe('4 · een tab-✓ alleen na afronding', () => {
     await page.evaluate(() => { SET.gripKeuze['2026-10'].beleggen = { pid: 'beleggen', optie: 'door', titel: 'y', lat: [], bewust: true }; save(); renderMaand(); });
     expect(await ok()).toEqual(['zien', 'begrijpen', 'kiezen']);
   });
-  test('Terugblik openen geeft geen ✓; afsluiten van de maand wel', async ({ page }) => {
+  test('Terugblik openen geeft geen ✓; afsluiten alleen ook niet zonder meting (v391); afgesloten en gemeten wel', async ({ page }) => {
     await grip(page);
     await tab(page, 'terugblik');
     expect(await page.locator('[data-griptab="terugblik"][data-afgerond]').count()).toBe(0);
     await page.evaluate(() => { SET.maandAfsluiting = Object.assign({}, SET.maandAfsluiting, { '2026-09': { op: '2026-10-10', punten: [], afspraken: [], open: [] } }); save(); renderMaand(); });
+    expect(await tekst(page, '[data-terugscore]')).toBe('Nog geen afgesloten maand gemeten');
+    expect(await page.locator('[data-griptab="terugblik"][data-afgerond]').count()).toBe(0);
+    await page.evaluate(() => { SET.gripOpzij = { '2026-09': { opzij: 1000 } }; save(); renderMaand(); });
     expect(await page.locator('[data-griptab="terugblik"][data-afgerond]').count()).toBe(1);
   });
 });
@@ -88,6 +94,7 @@ test.describe('5 · Kiezen opgeschoond', () => {
     expect(await page.locator('#gripInhoud [data-afsprakenlater]').count()).toBe(0);
     expect(await page.locator('#gripInhoud [data-kiesnu]').count()).toBe(0);
     expect(await tekst(page, '[data-kiezen]')).not.toContain('Kies voor');
+    await page.evaluate(() => gripOordeelZet('spaargeld', true)); await tab(page, 'kiezen');
     await page.click('[data-kiesrij="spaargeld"]');
     expect(await page.locator('#gripKeuzeSheet').count()).toBe(1);
     // de afspraken staan in het logboek

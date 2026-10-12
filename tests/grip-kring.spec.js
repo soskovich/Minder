@@ -39,6 +39,8 @@ test.describe('v387 structuur', () => {
     await page.evaluate(() => gripKiesTab('terugblik'));
     expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien']);   // openen is geen afronding
     await page.evaluate(() => { SET.maandAfsluiting = Object.assign({}, SET.maandAfsluiting, { '2026-09': { op: '2026-10-10', punten: [], afspraken: [], open: [] } }); save(); renderMaand(); });
+    expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien']);   // v391: afgesloten zonder meting is geen ✓
+    await page.evaluate(() => { SET.gripOpzij = { '2026-09': { opzij: 1000 } }; save(); renderMaand(); });
     expect(await page.locator('[data-griptab][data-afgerond]').evaluateAll(e => e.map(x => x.dataset.griptab))).toEqual(['zien', 'terugblik']);
     expect(await page.locator('[data-stapopen]').count()).toBe(1);   // v388: Uit eten boven is een stap die openstaat
   });

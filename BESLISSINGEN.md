@@ -15,6 +15,21 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 *(Staande regels, gedestilleerd uit de changelog. Respecteer deze bij nieuwe code; wil je er een omgooien, doe dat bewust en leg het vast. De versietag verwijst naar de volledige onderbouwing in `CHANGELOG.md`.)*
 
 ### Wat telt als wat (rekenregels)
+
+- **`v391` · "Boven" is het verwachte eind, op Grip en Inzichten.** Gemeten bij `v390`: Boodschappen stond op Grip als
+  +€57, 3e maand boven, en op Inzichten als "herstelt", want herstelt keek alleen naar de uitgave tot vandaag. Gekozen door
+  de gebruiker: herhaalt met het verwachte bedrag zodra het potje naar verwachting boven eindigt, herstelt alleen als het dat
+  niet doet. De toets is `potjeUitschieter()` en dus de uitschieter-drempel van `v368`, niet "eind > budget": dat verschil
+  is gemeld als open punt. Structureel gaat voor (gemeten: zonder die volgorde werd Vices op de fixture "herhaalt" in plaats
+  van "past niet"). Valkuil: twee definities van boven op twee schermen, precies wat dit oplost.
+- **`v391` · Gestort is bruto en nooit negatief.** Het spaardoel heette sinds `v390` "gestort" en toonde savedNet, dat
+  negatief kan zijn. Nu drie delen: gestort (wat erop kwam, `spaarStortStand().erin` = savedNet + eruit, uit dezelfde
+  boekingen), eruit, netto. Valkuil: een label dat een richting belooft die het getal niet heeft.
+- **`v391` · Te ruim begroot vanaf de tweede maand in Kiezen.** Te ruim is een meting van een maand, dus de app bewaart per
+  maand bij het openen van Grip welke potjes te ruim waren (`SET.teRuimMaand`). Een maand zonder opening telt niet mee;
+  een terugrekening is niet mogelijk zonder de vooruitblik van die maand. Telt niet in "X van N": het is een instelling.
+- **`v391` · Een keuze pas na een oordeel.** Kiezen toont het patroon wel, maar zonder klopt of niet in Begrijpen gaat de
+  rij naar Begrijpen; `openGripKeuze()` en `gripKeuzeZet()` eisen het oordeel zelf ook (`v319`).
 - **Elk getal op Grip noemt zijn basis, een ✓ is een afronding, en Kiezen is alleen kiezen** (`v390`, correcties na schermen van het toestel).
   - Verwacht (Doelen-meter: Plan opzij min eruit) en gestort (Terugblik: `savedNet()`) staan nooit zonder label naast elkaar.
   - De Terugblik oordeelt over een afgesloten maand; zonder gemeten maand staat er dat, en geen "0 van 0". De lopende maand is een tussenstand.

@@ -79,7 +79,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   });
   test('de sheet: niets voorgekozen, ≈ per optie, bevestigen pas na een keuze en de meetlat', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => openGripKeuze('spaargeld'));
+    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
     expect(await page.locator('[data-gripoptie]').count()).toBe(3);
     expect(await page.locator('[data-keuzebevestig]').isDisabled()).toBe(true);
     expect(await page.locator('[data-keuzebrug], [data-meetlat]').count()).toBe(0);   // niets voorgekozen
@@ -108,14 +108,14 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   });
   test('de meetlat is aan te passen voordat je bevestigt', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => openGripKeuze('spaargeld'));
+    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
     await page.click('[data-gripoptie="grens"]'); await page.click('[data-lataanpas]');
     await page.fill('[data-latmax="1"]', '70'); await page.click('[data-latok]'); await page.click('[data-keuzebevestig]');
     expect(await page.evaluate(() => SET.gripKeuze['2026-10'].spaargeld.lat[1].max)).toBe(70);
   });
   test('een optie die pas volgende maand werkt zegt dat, en telt als schuiven', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => openGripKeuze('spaargeld'));
+    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
     await page.click('[data-gripoptie="sparen"]');
     expect(await tekst(page, '[data-keuzelater]')).toContain('Werkt vanaf november');
     expect(await page.locator('[data-geenlat]').innerText()).toContain('geschoven');
@@ -143,12 +143,12 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     const zelf = await page.evaluate(() => gripVolgordeToepassen([{ id: 'spaargeld' }, { id: 'pot:b' }, { id: 'pot:a' }], { modus: 'zelf', ids: ['pot:a', 'spaargeld', 'pot:b'] }).map(p => p.id));
     expect(zelf).toEqual(['spaargeld', 'pot:a', 'pot:b']);
   });
-  test('moment: vóór de salarisdatum of per week vanaf maandag; een stap die blijft liggen krijgt een neutrale regel', async ({ page }) => {
+  test('moment: bij salaris (datum) of maandag (datum); een stap die blijft liggen krijgt een neutrale regel', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     await tab(page, 'kiezen');
-    expect(await tekst(page, '[data-kiesmoment]')).toMatch(/^vóór \d+ (okt|nov) ›$/);
+    expect(await tekst(page, '[data-kiesmoment]')).toMatch(/^bij salaris \(\d+ (okt|nov)\) ›$/);   // v391: geen vóór
     await page.evaluate(() => { SET.gripMoment = 'week'; save(); renderMaand(); });
-    expect(await tekst(page, '[data-kiesmoment]')).toBe('per week, vanaf maandag 12 okt ›');
+    expect(await tekst(page, '[data-kiesmoment]')).toBe('maandag (12 okt) ›');
     expect(await page.locator('[data-stapligt]').count()).toBe(0);
     await page.evaluate(() => { SET.gripStapSinds['2026-10'].spaargeld = '2026-10-02'; save(); renderMaand(); });
     expect(await tekst(page, '[data-stapligt]')).toBe('Betaalrekening op na ~12 dagen na salaris staat sinds 2 okt open · 8 dagen.');

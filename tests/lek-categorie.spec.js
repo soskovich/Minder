@@ -5,8 +5,10 @@
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
-const regel = (page) => page.evaluate(() => { go('maand'); renderMaand();
-  const r = document.querySelector('#gripLetOp [data-letop="lek"]'); return r ? r.innerText : null; });
+/* v391: EEN SIGNAAL PER REGEL. De categorie staat op een eigen regel (data-letop="lekcat", tik: haar boekingen) en de
+   partij op de regel eronder (data-letop="lek", tik: de sheet met het gesprek). */
+const regel = (page, soort = 'lekcat') => page.evaluate((soort) => { go('maand'); renderMaand();
+  const r = document.querySelector(`#gripLetOp [data-letop="${soort}"]`); return r ? r.innerText : null; }, soort);
 
 test.describe('lek-regel · categorie en bedrag', () => {
   test('de regel noemt de categorie, niet de winkel', async ({ page }) => {
@@ -14,8 +16,11 @@ test.describe('lek-regel · categorie en bedrag', () => {
     const t = await regel(page);
     expect(t, 'er is een lek-regel').toBeTruthy();
     expect(t.split('\n')[0]).toBe('Uit eten & café: €75 zonder potje');
-    expect(t).not.toMatch(/^Restaurant Lona:/);
-    expect(t).toContain('Restaurant Lona');      // de winkel staat in de zin eronder
+    expect(t).not.toContain('Restaurant Lona');   // de winkel heeft zijn eigen regel
+    const w = await regel(page, 'lek');
+    expect(w.split('\n')[0]).toBe('Restaurant Lona: €75');
+    expect(await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop^="lek"]')].map(e => e.getAttribute('onclick'))))
+      .toEqual([`openCategory('uiteten','2026-10')`, "openGripLetOp('lek')"]);
   });
   test('met twee winkels in de categorie is het bedrag de categorie, en de sheet zegt hetzelfde', async ({ page }) => {
     await boot(page, { extraTx: [{ id: 'x1', date: '2026-10-03', amount: -30, name: 'Cafe De Zwaan', desc: 'BEA, BETAALPAS CAFE DE ZWAAN' }] });

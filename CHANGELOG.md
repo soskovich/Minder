@@ -1165,3 +1165,18 @@
   - (8) De patroonnaam telt vanaf de salarisdatum; dat zat al in `v389`.
   - Nieuwe spec `grip-correcties.spec.js` (11 tests). Volle suite 4131 groen, rood alleen decimaalteken. Gemigreerd: grip-kring, grip-dashboard e en n, maand-afsluiting b en d, afspraak-schema c, vrij-uitschieters c (ze lazen de afspraken op Kiezen).
   - Twintig sabotages, alle twintig rood (op 1 en 3 tot en met 7). "Terugblik bij openen" werd pas rood in de tweede vorm, want de eerste bootste het oude gedrag niet na.
+
+## v391 · Boven is het verwachte eind; Grip-correcties ronde 2
+- Inzichten: herhaalt/herstelt op het verwachte eind (`potjeUitschieter()`); herhaalt draagt het verwachte bedrag. Structureel gaat voor.
+- Kiezen: 2+ maanden boven geeft eerst "<potje> herzien", ook binnen het spaargeld-patroon (de route opent dat potje).
+- Terugblik: spaardoel in drie delen "gestort · eruit · netto van"; gestort nooit negatief. ✓ pas bij een afgesloten en gemeten maand.
+- Meters: de uitlegregel is weg (staat in de Doelen-sheet); eronder "nu netto Z · verwacht eind A".
+- Zien: overig opent per groep de potjes, afgerond op de groep.
+- Let op: de categorie zonder potje en de partij zijn twee regels met elk een tik.
+- Kiezen: bedrag met label, "moment: bij salaris (datum)" of "maandag (datum)", "eerst bevestigen ›" zonder oordeel, te ruim begroot vanaf de 2e maand als "<potje> herzien" bovenaan.
+- Blok 19: per potje budget, verwacht eind, duurste maand met posten, drempel ja/nee en waarom.
+- Gemeten: de Budget-meter op de fixture is in v388, v390 en v391 karakter voor karakter gelijk (3325 / 629 / 1711); een verschuiving op het toestel komt uit de gegevens, niet uit de code.
+- Specs `boven-verwacht-eind.spec.js`, `grip-kiezen-v391.spec.js`; gemigreerd: grip-correcties, grip-kring, grip-kring-deel2, lek-categorie, valt-op-signalen.
+- Volle suite 4144 groen, rood alleen decimaalteken (12 okt 2026).
+- Sabotages: 6 van 6 op boven, 10 van 11 op de correcties; "overig niet op de groep afgerond" is inert zolang de afronding per groep samenvalt met die van het totaal (een tweede vorm, per potje afronden, is rood).
+
