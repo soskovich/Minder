@@ -16,6 +16,15 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v392` · Onder de drempel is een grijze regel, geen signaal.** De uitschieter-drempel (>= EUR 10 en 25%, of >= EUR 50)
+  blijft de lat voor de signalen in Begrijpen; de bridge en de meter tellen elk bedrag mee. Een potje dat boven budget eindigt
+  en de drempel niet haalt staat op Zien als "<potje> +EUR X · onder de drempel", zonder tik. Valkuil: zonder die regel
+  telde de bridge een bedrag dat nergens bij naam stond. Prijs, gekozen door de gebruiker: met zo'n regel scrollt Zien op
+  390x844 een stukje (783px tegen een menubalk op 772px); de fit-eis geldt zonder die regels.
+- **`v392` · Een gemengd potje toetst zijn variabele deel apart.** Nodig is het duurste van drie afgeronde maanden of het
+  verwachte eind; te ruim met RUIMER_DREMPEL. Het voorstel komt nooit onder vast budget plus variabel voorstel, en nooit
+  onder de duurste maand van twaalf, zodat kwartaal- en jaarposten het vaste deel beschermen. Gemeten: Vervoer 1.100 naar
+  710; Verzekeringen niet, want DELA in december (voorstel 330, EUR 5).
 - **`v391` · "Boven" is het verwachte eind, op Grip en Inzichten.** Gemeten bij `v390`: Boodschappen stond op Grip als
   +€57, 3e maand boven, en op Inzichten als "herstelt", want herstelt keek alleen naar de uitgave tot vandaag. Gekozen door
   de gebruiker: herhaalt met het verwachte bedrag zodra het potje naar verwachting boven eindigt, herstelt alleen als het dat

@@ -30,9 +30,11 @@ test('a. de sheet heet ruimte, noemt bovenaan de ruimere potjes, en de regels te
 
 /* v387: potRuimer() is opgegaan in teRuimLijst(), de ene definitie van te ruim begroot (keuze van de gebruiker): de
    duurste van de komende twaalf maanden is hooguit de helft van het potje EN het potje is minstens EUR 50 meer dan het
-   voorstel (RUIMER_DREMPEL). Getoetst op de randen, met het vaste deel van een potje als wat nodig is. */
+   voorstel (RUIMER_DREMPEL). Getoetst op de randen, met het vaste deel van een potje als wat nodig is.
+   v392: Sport is gemengd (vast 73, de rest variabel met drie maanden EUR 0), dus onder 146 beslist de deeltoets: het
+   voorstel is 80 (de duurste maand op tien euro), te ruim vanaf 130 en niet bij 129. */
 test('b. de drempel: hooguit de helft van het potje EN minstens EUR 50 boven het voorstel', async ({ page }) => {
-  for (const [bud, k, ruim] of [[80, 'abonnement', true], [79, 'abonnement', false], [150, 'sport', true], [145, 'sport', false]]) {
+  for (const [bud, k, ruim] of [[80, 'abonnement', true], [79, 'abonnement', false], [150, 'sport', true], [130, 'sport', true], [129, 'sport', false]]) {
     await boot(page, { set: { budgets: Object.assign({ huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500 }, { [k]: bud }) } });
     const x = await page.evaluate((k) => teRuimLijst().find((y) => y.k === k), k);
     expect([bud, k, x.ruim]).toEqual([bud, k, ruim]);

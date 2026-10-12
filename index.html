@@ -9382,12 +9382,33 @@ function teRuimLijst(V){
     const voorstel=Math.max(va?ruimAfrond(nodig):nodig, al);
     rij.nodig=nodig; rij.maand=best.ym; rij.reden=best.ym!==m?best.reden:''; rij.voorstel=voorstel; rij.al=al;
     rij.ruim=nodig<=bud*RUIMER_DREMPEL.deel && bud-voorstel>=RUIMER_DREMPEL.euro && !(vs&&vs.geen);
-    rij.teRuim=rij.ruim?bud-voorstel:0;
+    /* v392: EEN GEMENGD POTJE TOETST ZIJN VARIABELE DEEL APART (keuze van de gebruiker). Het variabele deel heeft nodig
+       wat het duurste van de drie afgeronde maanden of het verwachte eind van deze maand vraagt (het hoogste), en is te
+       ruim met dezelfde RUIMER_DREMPEL: hooguit de helft van zijn budget en minstens EUR 50 erboven. Het vaste deel blijft
+       beschermd: het voorstel is nooit lager dan het vaste budget plus het variabele voorstel, en nooit lager dan de
+       duurste maand van de twaalf (nodig), waarin de kwartaal- en jaarposten vallen in de maand waarin ze komen. */
+    if(!rij.ruim && va && vs && !vs.geen){
+      const varNodig=Math.max(varMax, Math.round(va.eindR||0)), alVar=Math.round(Math.max(+va.uit||0,0));
+      const varVoorstel=Math.max(ruimAfrond(varNodig), alVar);
+      const varRuim=varNodig<=va.bud*RUIMER_DREMPEL.deel && va.bud-varVoorstel>=RUIMER_DREMPEL.euro;
+      rij.variabelDeel={bud:va.bud, nodig:varNodig, voorstel:varVoorstel, ruim:varRuim};
+      if(varRuim){ const vp=Math.max(vs.bud+varVoorstel, ruimAfrond(nodig), al);
+        if(bud-vp>=RUIMER_DREMPEL.euro){ rij.ruim=true; rij.deel='variabel'; rij.voorstel=vp; } }
+    }
+    rij.teRuim=rij.ruim?bud-rij.voorstel:0;
     uit.push(rij);
   }
   return uit.sort((a,b)=>b.teRuim-a.teRuim || (a.naam<b.naam?-1:1));
 }
 function teRuim(V){ return teRuimLijst(V).filter(x=>x.ruim); }
+/* De naam waarmee een te ruim potje in een melding staat: bij het variabele deel van een gemengd potje zegt hij welk
+   deel en waarom ("Vervoer · variabel deel te ruim (EUR 497, 3 mnd EUR 0)"). */
+function teRuimMaandenTekst(m){ if(!m||!m.length) return ''; const hi=Math.max(...m);
+  return m.every(v=>v===m[0])?`${m.length} mnd ${euro0(m[0])}`:`${m.length} mnd hoogst ${euro0(hi)}`; }
+function teRuimLabel(x){
+  if(x.deel==='variabel' && x.variabel){ const mt=teRuimMaandenTekst(x.variabel.maanden);
+    return `${x.naam} · variabel deel te ruim (${euro0(x.variabel.bud)}${mt?', '+mt:''})`; }
+  return `${x.naam} te ruim`; }
 /* ===== DE DRIE METERS: EEN BRON PER GETAL ===== */
 /* BUDGET: verwacht eind maand (maandVooruit().projectie, dezelfde uitkomst als de bridge) gedeeld door het EERLIJKE
    budget, het maandbudget min wat te ruim begroot is. Te ruim telt niet als ruimte. */
@@ -9474,7 +9495,7 @@ function renderGripMeter(){
     kop='Budget';
     if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div>`;
     else { body=rij('Maandbudget', euro0(M.budget))
-      + M.TR.map(x=>rij(`${esc(x.naam)} te ruim begroot (${euro0(x.bud)}, ${euro0(x.voorstel)} nodig)`, '−'+euro0(x.teRuim), `data-meterruim="${esc(x.k)}"`)).join('')
+      + M.TR.map(x=>rij(`${esc(x.deel==='variabel'?teRuimLabel(x):x.naam+' te ruim begroot')} (${euro0(x.bud)}, ${euro0(x.voorstel)} nodig)`, '−'+euro0(x.teRuim), `data-meterruim="${esc(x.k)}"`)).join('')
       + rij('<b>Eerlijk budget</b>', euro0(M.eerlijk), 'data-metereerlijk')
       + rij('Verwacht eind maand', euro0(M.verwacht), 'data-meterverwacht')
       + rij(M.verschil>0?'Boven budget':'Onder budget', euro0(Math.abs(M.verschil)));
@@ -9611,7 +9632,7 @@ function teRuimRegel(TR){
   const O=teRuimOpen(TR); if(!O.length) return '';
   const som=O.reduce((a,x)=>a+x.teRuim,0);
   return `<div class="row" data-teruimregel="${O.length}" style="gap:8px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTeRuim()">
-    <span class="small" style="flex:1;min-width:0;line-height:1.4"><b>${O.length===1?`${esc(O[0].naam)} te ruim`:`${O.length} potjes te ruim`} · ${euro0(som)}</b><br><span style="color:var(--mut2);font-size:var(--fs-xs)">instelling, geen gedrag</span></span>
+    <span class="small" style="flex:1;min-width:0;line-height:1.4"><b>${O.length===1?esc(teRuimLabel(O[0])):`${O.length} potjes te ruim`} · ${euro0(som)}</b><br><span style="color:var(--mut2);font-size:var(--fs-xs)">instelling, geen gedrag</span></span>
     <span style="color:var(--teal);font-weight:700">›</span></div>`;
 }
 function openTeRuim(){ window._teRuimKies=null; renderTeRuim(); showSheetBg(); }
@@ -9635,7 +9656,7 @@ function renderTeRuim(){
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn" data-teruimbevestig="${esc(x.k)}" style="width:auto;padding:8px 14px" onclick="teRuimZet('${esc(x.k)}')">Bevestigen</button><button class="btn sec" style="width:auto;padding:8px 14px" onclick="window._teRuimKies=null;renderTeRuim()">Terug</button></div></div>`:'';
     return `<div data-teruimpotje="${esc(x.k)}" style="padding:10px 0;border-bottom:1px solid var(--line)">
       <div class="row" style="gap:8px;align-items:baseline"><b style="flex:1;min-width:0">${esc(x.naam)} ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig</b><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.teRuim)} te ruim</span></div>
-      <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:2px">${!(x.nodig>0)?'geen betaling in je laatste afgeronde maanden en niets verwacht; een potje op nul is geen voorstel':x.reden?`duurste maand: ${esc(x.reden)}`:`duurste maand van de komende twaalf: ${esc(ymFull(x.maand))}`}${L[x.k]?' · deze maand laten staan':''}</div>
+      ${x.deel==='variabel'?`<div class="small" data-teruimdeel="variabel" style="line-height:1.45;margin-top:2px">${esc(teRuimLabel(x))}; het vaste deel (${euro0(x.vast.bud)}) blijft staan</div>`:''}<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:2px">${!(x.nodig>0)?'geen betaling in je laatste afgeronde maanden en niets verwacht; een potje op nul is geen voorstel':x.reden?`duurste maand: ${esc(x.reden)}`:`duurste maand van de komende twaalf: ${esc(ymFull(x.maand))}`}${L[x.k]?' · deze maand laten staan':''}</div>
       ${G?'':`<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap">${x.voorstel>0?`<button class="btn sec" data-teruimkies="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="window._teRuimKies='${esc(x.k)}';renderTeRuim()">Verlagen naar ${euro0(x.voorstel)}</button>`
         :`<button class="btn sec" data-teruimsplits="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="openSplits('${esc(x.k)}')">Splitsen ›</button><button class="btn sec" data-teruimform="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="openPotForm('${esc(x.k)}')">Ander bedrag vanaf een maand ›</button>`}${L[x.k]?'':`<button class="btn sec" data-teruimlaten="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="teRuimLaten('${esc(x.k)}')">Laten staan</button>`}</div>`}
       ${gevolg}</div>`; };
@@ -9672,7 +9693,16 @@ function gripZien(V){
     <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))} · budget → verwacht</span><span data-zienkop style="font-weight:800;color:${MB.verschil>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
     ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div>`:''}
     <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div>
-    ${teRuimRegel(TR)}</div>`;
+    ${gripOnderDrempel(V)}${teRuimRegel(TR)}</div>`;
+}
+/* v392: BOVEN, ONDER DE DREMPEL (keuze van de gebruiker). De bridge en de meter tellen elk bedrag mee; de signalen in
+   Begrijpen houden de uitschieter-drempel (potjeUitschieter(), dezelfde toets als uitschieters()). Een potje dat boven
+   zijn budget eindigt maar die drempel niet haalt krijgt hier een grijze regel en verder niets: geen signaal, geen
+   patroon, geen tik. */
+function gripOnderDrempel(V){
+  const L=((V&&V.potjes)||[]).filter(x=>Math.round(+x.overR||0)>0 && !potjeUitschieter(x))
+    .sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1));
+  return L.map(x=>`<div class="small" data-onderdrempel="${esc(x.k)}" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs);line-height:1.4">${esc(x.naam)} +${euro0(Math.round(x.overR))} · onder de drempel</div>`).join('');
 }
 /* De lopende afspraken van deze maand (uit dezeMaandKaart(), die tot v386 de kaart Deze maand droeg). */
 /* v390: KIEZEN DRAAGT GEEN AFSPRAKENLIJST MEER (keuze van de gebruiker, na schermen van het toestel). De afvinkregels
@@ -10047,7 +10077,7 @@ function gripKiezenHtml(){
       <span class="small" data-kiesbedrag style="font-weight:700;white-space:nowrap">${gripBedragLabel(p)}</span>${bev||k?'<span style="color:var(--teal);font-weight:700">›</span>':'<span class="small" data-eerstbevestigen style="color:var(--teal);font-weight:700;white-space:nowrap">eerst bevestigen ›</span>'}</div>`; };
   const herz=gripTeRuimHerzien().map(x=>`<div class="row" data-kiesherzien="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openTeRuim()">
       <span style="width:22px;height:22px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-xs)">↺</span>
-      <span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)} herzien</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">te ruim begroot · ${x.nr}e maand · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig</span></span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)} herzien</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e maand · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig</span></span>
       <span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.teRuim)} te ruim</span><span style="color:var(--teal);font-weight:700">›</span></div>`).join('');
   let ligt='';
   if(nuId && sinds[nuId]){ const d=Math.round((new Date(vandaagYMD()+'T00:00:00')-new Date(sinds[nuId]+'T00:00:00'))/864e5); const M=gripMomentDatum();
@@ -26419,7 +26449,7 @@ function diagTeRuim(){
   for(const x of R){
     const va=V.potjes.find(p=>p.k===x.k), vs=(V.vastePotjes||[]).find(p=>p.k===x.k);
     const eind=Math.round((va?+va.eindR||0:0)+(vs?+vs.eind||0:0));
-    const waarom=x.ruim?`nodig ${x.nodig} is hooguit ${RUIMER_DREMPEL.deel*100}% van ${x.bud} en ${x.bud-x.voorstel} boven het voorstel ${x.voorstel}`
+    const waarom=x.deel==='variabel'?`het variabele deel: nodig ${x.variabelDeel.nodig} is hooguit ${RUIMER_DREMPEL.deel*100}% van ${x.variabel.bud}; potje naar ${x.voorstel}`:x.ruim?`nodig ${x.nodig} is hooguit ${RUIMER_DREMPEL.deel*100}% van ${x.bud} en ${x.bud-x.voorstel} boven het voorstel ${x.voorstel}`
       :(vs&&vs.geen?'vast potje zonder betaling: nooit te ruim'
       :(x.nodig>x.bud*RUIMER_DREMPEL.deel?`nodig ${x.nodig} is meer dan de helft van ${x.bud}`
       :`nodig ${x.nodig} is wel hooguit de helft, maar potje min voorstel ${x.voorstel} is ${x.bud-x.voorstel}, minder dan ${RUIMER_DREMPEL.euro}`));
@@ -26427,7 +26457,14 @@ function diagTeRuim(){
     const posten=sched.filter(s=>s.cat===x.k && (+s.intervalM||1)>1);
     for(const s of posten){ const mnd=[]; for(let i=1;i<12;i++){ const ym=valtOpYmPlus(V.m,i); const n=teRuimTermijnen(s, ym); if(n) mnd.push(ymFull(ym).slice(0,3)+(n>1?' x'+n:'')); }
       L.push(`      post ${titleCase(cleanMerch(s.name)||s.name||'')} ${Math.round(+s.amount||0)} per ${s.intervalM} mnd: ${mnd.join(', ')||'niet in de komende 11 maanden'}`); }
-    if(va) L.push(`      variabel deel: afgeronde maanden [${va.maanden.join(', ')}], verwacht eind deze maand ${Math.round(+va.eindR||0)}`);
+    /* v392: een gemengd potje staat met zijn vaste en zijn variabele deel als aparte regels, met de toets per deel. */
+    if(va && vs && !vs.geen){
+      L.push(`      vast deel: budget ${vs.bud} | verwacht deze maand ${Math.round(+vs.eind||0)} | beschermd door de posten in hun eigen maand`);
+      const d=x.variabelDeel;
+      L.push(`      variabel deel: budget ${va.bud} | afgeronde maanden [${va.maanden.join(', ')}] | verwacht eind ${Math.round(+va.eindR||0)}`+(d?` | nodig ${d.nodig} | voorstel ${d.voorstel} | ${d.ruim?'JA':'nee'} (${d.nodig>va.bud*RUIMER_DREMPEL.deel?`nodig meer dan de helft van ${va.bud}`:`${va.bud-d.voorstel} boven het voorstel, drempel ${RUIMER_DREMPEL.euro}`})`:''));
+      if(x.deel==='variabel') L.push(`      => ${teRuimLabel(x)}: potje ${x.bud} → ${x.voorstel}`);
+      else if(d&&d.ruim) L.push(`      => variabel deel te ruim, maar het potje als geheel komt niet ${RUIMER_DREMPEL.euro} boven ${Math.max(vs.bud+d.voorstel, ruimAfrond(x.nodig))} (vast deel plus voorstel, of de duurste maand)`);
+    } else if(va) L.push(`      variabel deel: afgeronde maanden [${va.maanden.join(', ')}], verwacht eind deze maand ${Math.round(+va.eindR||0)}`);
   }
   for(const x of R){
     const v=x.vast?`vast ${x.vast.bud}/${x.vast.eind}${x.vast.geen?' geen betaling':''}`:'vast -';

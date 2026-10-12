@@ -1180,3 +1180,10 @@
 - Volle suite 4144 groen, rood alleen decimaalteken (12 okt 2026).
 - Sabotages: 6 van 6 op boven, 10 van 11 op de correcties; "overig niet op de groep afgerond" is inert zolang de afronding per groep samenvalt met die van het totaal (een tweede vorm, per potje afronden, is rood).
 
+## v392 · Onder de drempel, gemengde potjes per deel, afronding overig
+- A: de uitschieter-drempel blijft voor de signalen; Zien draagt per potje dat boven budget eindigt maar onder de drempel blijft een grijze regel "<potje> +€X · onder de drempel" (`gripOnderDrempel()`). Geen signaal, geen patroon, geen tik.
+- B: `teRuimLijst()` toetst het variabele deel van een gemengd potje apart (nodig = max van drie afgeronde maanden en het verwachte eind), met het vaste deel beschermd door de duurste maand van twaalf. Melding via `teRuimLabel()`: "Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0)", in de regel op Zien, de sheet, de meter en Kiezen. Blok 19 zet vast en variabel als aparte regels.
+- Gemeten op `grip-kring-stand`: Vervoer 1.100 → 710 (€390 te ruim, eerlijk budget daalt van €2.696 naar €2.306); Verzekeringen variabel deel te ruim maar het potje niet (DELA in december, voorstel €330); Sport (deze-maand-stand) is vanaf €130 te ruim via de deeltoets.
+- C: tweede stand in `grip-kiezen-v391` (Uit eten en Vices elk €0,25) waarin afronden op de som −1.052 geeft tegen −1.051 voor de groep; de sabotage "afronding overig" is daarop rood.
+- Fit: Zien eindigt op 390x844 op 783px met de grijze regel en op 764px zonder (menubalk 772px); de extra Vervoer-stap kost 11px. Op keuze van de gebruiker geldt de fit-eis zonder die regels.
+- Spec `drempel-gemengd.spec.js` (11); gemigreerd: grip-kring, grip-kring-deel2, grip-ruimte, grip-kiezen-v391. Sabotages 8 van 8 rood.

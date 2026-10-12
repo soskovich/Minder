@@ -36,6 +36,20 @@ test.describe('3 · overig in potjes', () => {
     expect(r.rauw % 1).not.toBe(0);                 // de invoer draagt centen
     expect(r.som).toBe(r.rest);
   });
+  // v392 (C): een tweede stand waarin afronden op de som van de potjes een ANDER getal geeft dan de groep. Zonder die
+  // stand is "de groep rondt af op R[g]" niet te onderscheiden van "op Math.round(som)" (gemeten: met alleen centen in
+  // de rest-potjes vallen die twee samen). Met Uit eten en Vices elk EUR 0,25 erbij: groep -1.051, som -1.051,55.
+  test('tweede stand: de potjes tellen op tot de groep, ook waar afronden op hun som een ander getal geeft', async ({ page }) => {
+    await grip(page);
+    const r = await page.evaluate(() => {
+      for (const k of ['uiteten', 'vices']) { const t = { id: 'q' + k, date: '2026-10-08', amount: -0.25, acc: 'NL01MAIN0000001111', name: 'Kwart ' + k, desc: 'BEA KWART ' + k.toUpperCase(), typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = k; }
+      save(); const V = maandVooruit(); const D = gripOverigDelen(V);
+      const los = gripZienBrug(V).stappen.filter(x => x.soort === 'potje').map(x => x.k);
+      const som = V.potjes.filter(x => !los.includes(x.k)).reduce((a, x) => a + x.overR, 0);
+      return { rest: D.R.rest, somRond: Math.round(som), som: D.P.rest.reduce((a, x) => a + x.waarde, 0) }; });
+    expect(r.somRond).not.toBe(r.rest);             // de invoer draagt het geval: afronden op de som geeft een ander getal
+    expect(r.som).toBe(r.rest);
+  });
   test('een potje in de lijst opent dat potje', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => openGripOverig());
@@ -77,7 +91,7 @@ test.describe('10 · te ruim begroot vanaf de 2e maand in Kiezen', () => {
   test('de eerste maand niet, de tweede maand bovenaan als "Huur herzien", en weg na laten staan', async ({ page }) => {
     await grip(page); await tab(page, 'kiezen');
     expect(await page.locator('[data-kiesherzien]').count()).toBe(0);
-    expect(await page.evaluate(() => SET.teRuimMaand['2026-10'])).toEqual(['huur']);   // Grip bewaart wat deze maand te ruim is
+    expect(await page.evaluate(() => SET.teRuimMaand['2026-10'])).toEqual(['huur', 'vervoer']);   // Grip bewaart wat deze maand te ruim is (v392: ook het variabele deel van Vervoer)
     await page.evaluate(() => { SET.teRuimMaand['2026-09'] = ['huur']; save(); renderMaand(); });
     const r = await page.evaluate(() => { const rows = [...document.querySelectorAll('[data-kiezen] [data-kiesherzien], [data-kiezen] [data-kiesrij]')];
       return { eerste: rows[0].dataset.kiesherzien, tekst: rows[0].innerText.replace(/\s+/g, ' ') }; });
@@ -88,5 +102,11 @@ test.describe('10 · te ruim begroot vanaf de 2e maand in Kiezen', () => {
     expect(await page.locator('#teRuimSheet').count()).toBe(1);
     await page.evaluate(() => { teRuimLaten('huur'); closeSheet(); renderMaand(); });
     expect(await page.locator('[data-kiesherzien]').count()).toBe(0);
+  });
+  test('v392: het variabele deel van een gemengd potje staat als "variabel deel te ruim" in Kiezen', async ({ page }) => {
+    await grip(page);
+    await page.evaluate(() => { SET.teRuimMaand['2026-09'] = ['vervoer']; save(); gripKiesTab('kiezen'); });
+    const t = await tekst(page, '[data-kiesherzien="vervoer"]');
+    expect(t.replace(/\s+/g, ' ')).toContain('variabel deel te ruim'); expect(t).toContain('€390 te ruim');
   });
 });

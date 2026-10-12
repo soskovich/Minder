@@ -91,7 +91,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     expect(await page.locator('[data-latregel]').allInnerTexts()).toEqual(['• geen geld uit je spaargeld na 10 okt', '• Uit eten & café ≤ €55']);
     // bridge vóór (gestippeld) en ná: Uit eten gaat van +67 naar 0
     expect(await page.locator('[data-keuzebrug] [data-voor]').count()).toBeGreaterThan(0);
-    expect(await tekst(page, '[data-keuzeboven]')).toBe('budget €985 onder → €1.052 onder');
+    expect(await tekst(page, '[data-keuzeboven]')).toBe('budget €595 onder → €662 onder')   // v392: het eerlijke budget mist ook het variabele deel van Vervoer (EUR 390);
     expect(await page.evaluate(() => (SET.gripKeuze || {})['2026-10'])).toBeUndefined();
     await page.click('[data-latok]');
     await page.click('[data-keuzebevestig]');
@@ -245,7 +245,8 @@ test('de vier tabs passen op 390×844 met de menubalk', async ({ page }) => {
   await grip(page, { opnames: OPNAMES });
   for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) {
     await tab(page, t);
-    const m = await page.evaluate(() => { const nav = document.querySelector('.nav'); const k = document.getElementById('gripKoopcheck').getBoundingClientRect();
+    // v392 (keuze van de gebruiker): op Zien geldt de eis zonder de grijze regels "onder de drempel".
+    const m = await page.evaluate(() => { document.querySelectorAll('[data-onderdrempel]').forEach(e => e.style.display = 'none'); const nav = document.querySelector('.nav'); const k = document.getElementById('gripKoopcheck').getBoundingClientRect();
       return { onder: k.bottom, nav: nav ? nav.getBoundingClientRect().top : innerHeight, ox: document.documentElement.scrollWidth > innerWidth }; });
     console.log(`${t}: knop eindigt op ${Math.round(m.onder)}px, menubalk op ${Math.round(m.nav)}px`);
     expect(m.ox).toBe(false);
