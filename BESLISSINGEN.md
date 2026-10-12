@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v396` · Wat er uit je spaargeld ging, sluit, en elke opname zegt waar hij heen ging.** De sheet "EUR X terug in
+  <maand>" noemde de keuzes en de opnames los, en het bedrag uit vrij spaargeld stond er niet bij, dus EUR 1.019 eruit en
+  EUR 688 terug waren niet op elkaar af te lezen. De aansluiting leest alle delen uit `spaarStortStand()` (een bron, v386),
+  en wat de keuzes dekken staat daar nu als lijst. Valkuil: de afgeronde rijen tellen per constructie op tot het totaal
+  (`brugAfronden()`), dus een test op die som bewijst niets; de test toetst de onafgeronde delen tegen "eruit" en dat geen
+  rij meer dan een euro van zijn deel afwijkt. De volgorde per opname (eerst vrij spaargeld, dan de keuzes in volgorde,
+  dan wat een storting dekte, dan zonder keuze) is een keuze van deze ronde: de app koppelt een boeking niet aan een bak
+  (v365 punt B), maar het vrije deel gaat in werkelijkheid als eerste van de rekening, en zo leest de stand van het
+  toestel zoals de gebruiker hem beschreef. De opname-keuze heet "uit doelen", zodat twee keer EUR 231 twee namen heeft.
+
 - **`v395` · De bridge op Zien begint bij het eerlijke budget, en zijn stappen tellen op tot de kop.** Na een review op het
   toestel: de te-ruim-kolommen (Huur, Vervoer) zeiden iets wat de meter al zegt, en de kop (verschil met het EERLIJKE
   budget) was niet uit de stappen af te lezen, want die liepen van het BUDGET. Nu is de eerste balk het budget met het te

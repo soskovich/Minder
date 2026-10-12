@@ -1220,3 +1220,14 @@
 - Fit op `grip-kring-stand` (390×844): koopknop eindigt op 693px (was 711), menubalk op 772px. Met zes kolommen 693px op 390 en 708px op 360, met labels zonder afkapping.
 - Spec `zien-eerlijk-brug.spec.js` (12).
 - Gemigreerd: deze-maand-bridge, drempel-gemengd, grip-brug-tik, grip-kiezen-v391, grip-kring, lek-categorie en te-ruim-laten.
+
+## v396 · Plan › "€X terug in <maand>" sluit (`minder-v396`)
+- Bovenaan de sheet staat een aansluiting (`terugAansluiting()`): "Eruit in <maand>" is de som van terug deze maand, terug later (met de maanden), niet terug (verlagen), al teruggestort, nog geen keuze en uit vrij spaargeld ("hoeft niet terug (jouw keuze) ›", naar de opbouw op Home). De delen komen allemaal uit `spaarStortStand()`, die nu de keuzes ook als lijst teruggeeft (`bron`: de opname-keuze, en de keuzes over toegewezen zonder geld na het oude gat G0, samen hooguit wat er uit ging). De onafgeronde delen tellen exact op tot "eruit"; de rijen zijn afgerond met `brugAfronden()`.
+- Elke opname onder "Eruit gehaald" draagt zijn bestemming: "→ vrij spaargeld, niet terug", "→ terug deze maand", "→ terug over 3 mnd (€50/mnd)", "→ niet terug, toewijzing verlaagd", "→ al teruggestort deze maand" of "→ nog geen keuze". Een gesplitste opname toont beide delen met bedrag.
+- Volgorde per opname: op datum. Eerst gaat het vrije spaargeld eraf, want wat niet was toegewezen gaat als eerste van de rekening. Daarna de keuzes in de volgorde waarin je ze maakte, dan wat een storting dekte, en als laatste wat nog geen keuze heeft.
+- De opname-keuze heet in de sheet "€231 uit doelen" en niet meer "€231 eruit gehaald", zodat hij niet hetzelfde klinkt als "uit vrij spaargeld €231".
+- Gemeten op de nagebouwde stand van het toestel (opnames 5 okt €131, 6 okt €100, 9 okt €428, 9 okt €210, 10 okt €150): €1.019 = €688 + €100 + €231.
+  - 131 en 100 kwamen uit vrij spaargeld (aan het begin van de maand stond er €231,20 meer dan toegewezen).
+  - 428 en 210 zijn de €231 uit doelen en de €407 toegewezen zonder geld.
+  - 150 is de keuze over drie maanden.
+- Spec `terug-aansluiting.spec.js` (10). Sabotages 11 van 12 rood. De sabotage "de som-regel toont het totaal" is inert, want de afgeronde rijen tellen per constructie op; de test toetst daarom de onafgeronde delen.
