@@ -9411,14 +9411,16 @@ function teRuimLabel(x){
   return `${x.naam} te ruim`; }
 /* ===== DE DRIE METERS: EEN BRON PER GETAL ===== */
 /* BUDGET: verwacht eind maand (maandVooruit().projectie, dezelfde uitkomst als de bridge) gedeeld door het EERLIJKE
-   budget, het maandbudget min wat te ruim begroot is. Te ruim telt niet als ruimte. */
+   budget, het maandbudget min wat te ruim begroot is. Te ruim telt niet als ruimte.
+   v394: een potje dat je deze maand bewust laat staan (SET.teRuimLaten, teRuimOpen()) telt weer volledig mee: ruim is
+   alleen de som over de potjes die nog open staan. TR blijft de hele lijst, `laten` zijn de potjes die je liet staan. */
 function gripMeterBudget(V){
   if(V===undefined){ try{ V=maandVooruit(); }catch(_){ V=null; } }
   if(!V || V.onbekend || !(V.budget>0)) return {onbekend:true};
-  const TR=teRuim(V), ruim=TR.reduce((a,x)=>a+x.teRuim,0), eerlijk=V.budget-ruim;
+  const TR=teRuim(V), open=teRuimOpen(TR), laten=TR.filter(x=>!open.includes(x)), ruim=open.reduce((a,x)=>a+x.teRuim,0), eerlijk=V.budget-ruim;
   if(!(eerlijk>0)) return {onbekend:true};
   const verschil=V.projectie-eerlijk;
-  return {verwacht:V.projectie, budget:V.budget, ruim, TR, eerlijk, verschil, pct:Math.round(V.projectie/eerlijk*100)};
+  return {verwacht:V.projectie, budget:V.budget, ruim, TR, open, laten, eerlijk, verschil, pct:Math.round(V.projectie/eerlijk*100)};
 }
 /* DOELEN: Plan "deze maand opzij" (planKpiData().opzij, inleg plus terugzetten) min alles wat er deze maand van je
    spaarrekening ging (spaarStortStand().uit: elke afschrijving, ook uit vrij spaargeld, zonder een overboeking tussen
@@ -9483,12 +9485,13 @@ function gripMeters(){
 }
 /* v393: EERLIJK BUDGET LAGER. Onder de Budget-meter een regel zolang een te ruim potje nog open staat (teRuimOpen(), dus
    weg na verlagen of laten staan). Een potje: zijn naam en wat het scheelt; meer potjes: het totaal en het aantal. De tik
-   opent dezelfde sheet als de melding op Zien (openTeRuim()). */
+   opent de te-ruim-sheet (openTeRuim()), bij een potje op dat potje. Sinds v394 de enige regel over te ruim op Zien: de
+   melding teRuimRegel() is weg, en de gearceerde stappen in de bridge openen dezelfde sheet. */
 function gripEerlijkRegel(TR){
   const O=teRuimOpen(TR||[]); if(!O.length) return '';
   const som=O.reduce((a,x)=>a+x.teRuim,0);
   const t=O.length===1?`${esc(O[0].naam)} −${euro0(O[0].teRuim)}`:`${euro0(som)} (${O.length} potjes)`;
-  return `<div class="small" data-eerlijkregel="${O.length}" role="button" onclick="openTeRuim()" style="color:var(--mut);font-size:var(--fs-xs);margin:-2px 2px 4px;line-height:1.35;cursor:pointer">Eerlijk budget lager: ${t} <span style="color:var(--teal);font-weight:700">›</span></div>`;
+  return `<div class="small" data-eerlijkregel="${O.length}" role="button" onclick="openTeRuim(${O.length===1?`'${esc(O[0].k)}'`:''})" style="color:var(--mut);font-size:var(--fs-xs);margin:-2px 2px 4px;line-height:1.35;cursor:pointer">Eerlijk budget lager: ${t} <span style="color:var(--teal);font-weight:700">›</span></div>`;
 }
 /* v391: onder de meters EEN regel met het verschil tussen nu en verwacht: wat er nu netto naar je spaarrekening ging
    (savedNet, dezelfde bron als het spaardoel in de Terugblik) en waar de Doelen-meter op uitkomt (Plan opzij min eruit).
@@ -9504,11 +9507,12 @@ function renderGripMeter(){
     kop='Budget';
     if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div>`;
     else { body=rij('Maandbudget', euro0(M.budget))
-      + M.TR.map(x=>rij(`${esc(x.deel==='variabel'?teRuimLabel(x):x.naam+' te ruim begroot')} (${euro0(x.bud)}, ${euro0(x.voorstel)} nodig)`, '−'+euro0(x.teRuim), `data-meterruim="${esc(x.k)}"`)).join('')
+      + M.open.map(x=>rij(`${esc(x.deel==='variabel'?teRuimLabel(x):x.naam+' te ruim begroot')} (${euro0(x.bud)}, ${euro0(x.voorstel)} nodig)`, '−'+euro0(x.teRuim), `data-meterruim="${esc(x.k)}"`, `closeSheet();openTeRuim('${esc(x.k)}')`)).join('')
+      + M.laten.map(x=>rij(`${esc(x.naam)} laten staan (${euro0(x.teRuim)} te ruim, telt deze maand mee)`, '€0', `data-meterlaten="${esc(x.k)}"`, `closeSheet();openTeRuim('${esc(x.k)}')`)).join('')
       + rij('<b>Eerlijk budget</b>', euro0(M.eerlijk), 'data-metereerlijk')
       + rij('Verwacht eind maand', euro0(M.verwacht), 'data-meterverwacht')
       + rij(M.verschil>0?'Boven budget':'Onder budget', euro0(Math.abs(M.verschil)));
-      schaal=`${euro0(M.verwacht)} gedeeld door ${euro0(M.eerlijk)} is ${M.pct}%. Op 100% kom je precies op je eerlijke budget uit; daarboven geef je meer uit dan je potjes zeggen. Wat te ruim begroot is telt niet als ruimte.`; } }
+      schaal=`${euro0(M.verwacht)} gedeeld door ${euro0(M.eerlijk)} is ${M.pct}%. Op 100% kom je precies op je eerlijke budget uit; daarboven geef je meer uit dan je potjes zeggen. Wat te ruim begroot is telt niet als ruimte, tenzij je het deze maand bewust laat staan.`; } }
   else if(k==='doelen'){ const M=gripMeterDoelen();
     kop='Doelen';
     if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">Plan zet deze maand niets opzij, dus er is niets om tegen af te zetten.</div>`;
@@ -9562,14 +9566,20 @@ function gripTabsHtml(){
 /* ===== ZIEN: DE BRIDGE VAN BUDGET NAAR VERWACHT =====
    Dezelfde stappen als dezeMaandBrug() (uitschieters en zonder potje), met elk te ruim begroot potje als eigen
    GEARCEERDE stap (soort 'teruim', -teRuim) en de rest als "overig". De kop is het verschil met het EERLIJKE budget,
-   het getal van de Budget-meter. Afgerond met brugAfronden(), dus de stappen tellen exact op tot de uitkomst. */
+   het getal van de Budget-meter. Afgerond met brugAfronden(), dus de stappen tellen exact op tot de uitkomst.
+   v394: een potje dat je deze maand laat staan houdt zijn stap (het bedrag gaat nog steeds niet uit), maar GRIJS
+   gearceerd met het label "laten staan" (laten:true; de naam staat in de title). Samengevoegd zijn het twee stappen:
+   te ruim (open) en laten staan. Een tik op een stap opent de te-ruim-sheet op dat potje. */
 function gripZienBrug(V, TR){
   if(!V || V.onbekend || !(V.budget>0)) return null;
   TR=TR||teRuim(V);
+  const Lt=(SET.teRuimLaten||{})[thisYM()]||{};
   const diff=V.projectie-V.budget, boven=uitschieters(V);
   const maak=(n, teLos)=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
     let zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonder', v:zonder});
-    if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim}); else if(TR.length) rauw.push({k:'~tr', v:-TR.reduce((a,x)=>a+x.teRuim,0)});
+    if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim});
+    else { const O=TR.filter(x=>!Lt[x.k]), Ll=TR.filter(x=>Lt[x.k]);
+      if(O.length) rauw.push({k:'~tr', v:-O.reduce((a,x)=>a+x.teRuim,0)}); if(Ll.length) rauw.push({k:'~trl', v:-Ll.reduce((a,x)=>a+x.teRuim,0)}); }
     rauw.push({k:'~overig', v:diff-rauw.reduce((a,x)=>a+x.v,0)});
     const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>R[x.k]||(x.k==='~overig'&&(V.vastePotjes||[]).length)).length;
     return {los, R, kol, teLos, zonder}; };
@@ -9581,8 +9591,11 @@ function gripZienBrug(V, TR){
   const {los, R}=M, stappen=[{soort:'begin', label:'budget', waarde:V.budget}];
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
   if(R['~zonder']) stappen.push({soort:'zonder', label:'z. potje', waarde:R['~zonder']});
-  if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push({soort:'teruim', k:x.k, label:x.naam, waarde:R['~tr:'+x.k]}); }
-  else if(R['~tr']) stappen.push({soort:'teruim', label:'te ruim', waarde:R['~tr']});
+  if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push(Lt[x.k]?{soort:'teruim', k:x.k, label:'laten staan', titel:`${x.naam} · laten staan`, laten:true, waarde:R['~tr:'+x.k]}
+    :{soort:'teruim', k:x.k, label:x.naam, waarde:R['~tr:'+x.k]}); }
+  else { const een=L=>L.length===1?L[0].k:'';
+    if(R['~tr']) stappen.push({soort:'teruim', k:een(TR.filter(x=>!Lt[x.k])), label:'te ruim', waarde:R['~tr']});
+    if(R['~trl']) stappen.push({soort:'teruim', k:een(TR.filter(x=>Lt[x.k])), label:'laten staan', laten:true, waarde:R['~trl']}); }
   /* Overig staat er ook op nul zolang er vaste potjes zijn: zijn sheet is de ingang naar de vaste lasten (v357). */
   if(R['~overig'] || (V.vastePotjes||[]).length || gripOnderDrempelLijst(V).length) stappen.push({soort:'overig', label:'overig', waarde:R['~overig']||0});
   /* v393: een potje boven zijn budget maar onder de drempel valt in overig, en staat daar als kleine grijze noot. */
@@ -9597,7 +9610,7 @@ function gripZienBrug(V, TR){
   return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, eenRegel:true};
 }
 function gripZienTik(soort,k){
-  if(soort==='teruim'){ openTeRuim(); return; }
+  if(soort==='teruim'){ openTeRuim(k||undefined); return; }
   if(soort==='overig'){ openGripOverig(); return; }
   gripBrugTik(soort,k);
 }
@@ -9637,17 +9650,12 @@ function renderGripOverig(){
     <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Wat niet los in de bridge staat.</div>
     ${rij('rest','Andere variabele potjes',"openGripRest()")}${pot('rest')}${rij('vast','Vaste lasten',"openGripVast()")}${pot('vast')}${rij('terug','Te ruim begroot, al apart gearceerd',"openTeRuim()")}${rij('zonder','Zonder potje','')}${gripAllesLink}</div>`;
 }
-/* DE MELDING: een regel "N potjes te ruim · EUR X ›" (keuze van de gebruiker), met per potje een keuze in de sheet. Een
-   potje dat je liet staan blijft gearceerd en buiten je eerlijke budget, maar staat deze maand niet meer in de regel. */
+/* De potjes die je deze maand niet liet staan. Sinds v394 is er geen melding op Zien meer (teRuimRegel() is weg): de
+   regel onder de Budget-meter (gripEerlijkRegel()) is de ingang, plus een tik op een gearceerde stap in de bridge. */
 function teRuimOpen(TR){ const L=(SET.teRuimLaten||{})[thisYM()]||{}; return (TR||teRuim()).filter(x=>!L[x.k]); }
-function teRuimRegel(TR){
-  const O=teRuimOpen(TR); if(!O.length) return '';
-  const som=O.reduce((a,x)=>a+x.teRuim,0);
-  return `<div class="row" data-teruimregel="${O.length}" style="gap:8px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTeRuim()">
-    <span class="small" style="flex:1;min-width:0;line-height:1.4"><b>${O.length===1?esc(teRuimLabel(O[0])):`${O.length} potjes te ruim`} · ${euro0(som)}</b><br><span style="color:var(--mut2);font-size:var(--fs-xs)">instelling, geen gedrag</span></span>
-    <span style="color:var(--teal);font-weight:700">›</span></div>`;
-}
-function openTeRuim(){ window._teRuimKies=null; renderTeRuim(); showSheetBg(); }
+/* v394: openTeRuim(k) opent de sheet OP dat potje: bovenaan en gemarkeerd (data-teruimfocus), zonder iets voor te kiezen
+   (de keuze verlagen of laten staan blijft een tik van jou). Zonder k de lijst zoals hij is. */
+function openTeRuim(k){ window._teRuimKies=null; window._teRuimFocus=k||null; renderTeRuim(); showSheetBg(); }
 /* Het gevolg staat er vooraf: het potje oud en nieuw, het maandbudget oud en nieuw, en dat je uitgaven en je veilig te
    besteden niet veranderen (in het geheugen doorgerekend met potSimuleer(), zonder save()). Pas Bevestigen schrijft. */
 function teRuimGevolg(x){
@@ -9659,14 +9667,14 @@ function teRuimGevolg(x){
 }
 function renderTeRuim(){
   const TR=teRuim(); if(!TR.length){ closeSheet(); return; }
-  const L=(SET.teRuimLaten||{})[thisYM()]||{}, kies=window._teRuimKies;
+  const L=(SET.teRuimLaten||{})[thisYM()]||{}, kies=window._teRuimKies, foc=window._teRuimFocus;
   const rij=x=>{ const G=kies===x.k?teRuimGevolg(x):null;
     const gevolg=G?`<div class="small" data-teruimgevolg="${esc(x.k)}" style="line-height:1.5;margin-top:6px;padding:8px;border-radius:8px;background:var(--card2)">
         Potje ${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.voorstel)} vanaf ${esc(ymFull(thisYM()))}.<br>
         Maandbudget ${euro0(G.tot0)} → ${euro0(G.tot1)}: ${euro0(x.teRuim)} minder ruimte op papier.<br>
         Je uitgaven veranderen niet${G.proj0!=null&&G.proj0===G.proj1?` (verwacht ${euro0(G.proj1)})`:''}${G.safe0!=null&&G.safe0===G.safe1?`, en veilig te besteden blijft ${euro0(G.safe1)}`:G.safe1!=null?`; veilig te besteden ${euro0(G.safe0)} → ${euro0(G.safe1)}`:''}.
         <div class="row" style="gap:8px;margin-top:8px"><button class="btn" data-teruimbevestig="${esc(x.k)}" style="width:auto;padding:8px 14px" onclick="teRuimZet('${esc(x.k)}')">Bevestigen</button><button class="btn sec" style="width:auto;padding:8px 14px" onclick="window._teRuimKies=null;renderTeRuim()">Terug</button></div></div>`:'';
-    return `<div data-teruimpotje="${esc(x.k)}" style="padding:10px 0;border-bottom:1px solid var(--line)">
+    return `<div data-teruimpotje="${esc(x.k)}"${foc===x.k?' data-teruimfocus':''} style="padding:10px ${foc===x.k?'8px':'0'};border-bottom:1px solid var(--line)${foc===x.k?';border-left:3px solid var(--teal);background:var(--card2);border-radius:8px':''}">
       <div class="row" style="gap:8px;align-items:baseline"><b style="flex:1;min-width:0">${esc(x.naam)} ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig</b><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.teRuim)} te ruim</span></div>
       ${x.deel==='variabel'?`<div class="small" data-teruimdeel="variabel" style="line-height:1.45;margin-top:2px">${esc(teRuimLabel(x))}; het vaste deel (${euro0(x.vast.bud)}) blijft staan</div>`:''}<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:2px">${!(x.nodig>0)?'geen betaling in je laatste afgeronde maanden en niets verwacht; een potje op nul is geen voorstel':x.reden?`duurste maand: ${esc(x.reden)}`:`duurste maand van de komende twaalf: ${esc(ymFull(x.maand))}`}${L[x.k]?' · deze maand laten staan':''}</div>
       ${G?'':`<div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap">${x.voorstel>0?`<button class="btn sec" data-teruimkies="${esc(x.k)}" style="width:auto;padding:7px 12px;font-size:13px" onclick="window._teRuimKies='${esc(x.k)}';renderTeRuim()">Verlagen naar ${euro0(x.voorstel)}</button>`
@@ -9675,7 +9683,7 @@ function renderTeRuim(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="teRuimSheet">
     <div style="font-weight:800;font-size:var(--fs-lg)">Te ruim begroot</div>
     <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Een potje dat in zijn duurste maand van de komende twaalf hooguit de helft nodig heeft, en minstens ${euro0(RUIMER_DREMPEL.euro)} meer is. Dat is een instelling en geen gedrag; het telt niet als ruimte.</div>
-    ${TR.map(rij).join('')}</div>`;
+    ${(foc?[...TR.filter(x=>x.k===foc), ...TR.filter(x=>x.k!==foc)]:TR).map(rij).join('')}</div>`;
 }
 /* Bevestigen leest de lijst opnieuw (v319) en verlaagt het potje vanaf deze maand; wat vrijkomt gaat van het
    maandbudget af (de bestemming "verlagen" van v362), en het lagere potje wordt een afspraak (v337). */
@@ -9700,12 +9708,11 @@ function gripZien(V){
       <div class="small" style="margin-top:6px;text-align:right">${GRIP_BUDGETLINK}</div></div>`; }
   const TR=teRuim(V), MB=gripMeterBudget(V), Br=gripZienBrug(V, TR);
   const kop=MB.onbekend?'':(MB.verschil>0?`${euro0(MB.verschil)} boven`:MB.verschil<0?`${euro0(-MB.verschil)} onder`:'op budget');
-  const as=[Br&&Br.basis>0?`as begint bij ${euro0(Br.basis)}`:'', TR.length?'gearceerd = te ruim begroot, telt niet als ruimte':''].filter(Boolean).join(' · ');
+  const as=[Br&&Br.basis>0?`as begint bij ${euro0(Br.basis)}`:'', MB.open&&MB.open.length?'gearceerd = te ruim begroot, telt niet als ruimte':'', MB.laten&&MB.laten.length?'grijs = laten staan, telt mee':''].filter(Boolean).join(' · ');
   return `<div class="card gm-stage" id="gripZien" data-zien="${V.projectie}">
     <div class="row" style="gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(ymFull(V.m))} · budget → verwacht</span><span data-zienkop style="font-weight:800;color:${MB.verschil>0?'var(--red)':'var(--txt)'};white-space:nowrap">${kop}</span></div>
     ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div>`:''}
-    <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div>
-    ${teRuimRegel(TR)}</div>`;
+    <div class="row" style="gap:8px;align-items:baseline;margin-top:4px"><span class="small" data-zienas style="flex:1;min-width:0;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${as}</span>${GRIP_BUDGETLINK}</div></div>`;
 }
 /* v392: BOVEN, ONDER DE DREMPEL (keuze van de gebruiker). De bridge en de meter tellen elk bedrag mee; de signalen in
    Begrijpen houden de uitschieter-drempel (potjeUitschieter(), dezelfde toets als uitschieters()). Een potje dat boven
@@ -19624,9 +19631,9 @@ function brugGrafiek(Br){
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
-        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i${c.s.soort==='teruim'?' data-gearceerd':''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'repeating-linear-gradient(45deg,var(--card2) 0 3px,var(--ref) 3px 5px)':kleur(c.s)};border-radius:3px"></i>${lijn}
+        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i${c.s.soort==='teruim'?(c.s.laten?' data-gearceerd data-laten':' data-gearceerd'):''} style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?`repeating-linear-gradient(45deg,var(--card2) 0 3px,${c.s.laten?'var(--bar)':'var(--ref)'} 3px 5px)`:kleur(c.s)};border-radius:3px"></i>${lijn}
       </div>
-      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.label)}"`:''}>${esc(c.s.label)}</div>
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>
     </div>`;}).join('')}</div>`;
 }
 /* v393: EEN KLEINE GRIJZE NOOT BIJ EEN STAP (c.s.noot={tekst, tik}), binnen het grafiekvlak zodat de bridge er niet
@@ -26495,7 +26502,7 @@ function diagTeRuim(){
     L.push(`  ${x.naam} (${x.k}): ${x.bud} | ${v} | ${w} | nodig ${x.nodig} in ${x.maand}${x.reden?' ('+x.reden+')':''} | voorstel ${x.voorstel} | ${x.ruim?'TE RUIM '+x.teRuim:'niet te ruim'}`);
   }
   const M=gripMeterBudget(V);
-  if(!M.onbekend) L.push(`eerlijk budget: ${M.budget} - ${M.ruim} = ${M.eerlijk}; verwacht ${M.verwacht}; ${M.pct}% (${M.verschil>0?'boven':'onder'} ${Math.abs(M.verschil)})`);
+  if(!M.onbekend) L.push(`eerlijk budget: ${M.budget} - ${M.ruim} = ${M.eerlijk}; verwacht ${M.verwacht}; ${M.pct}% (${M.verschil>0?'boven':'onder'} ${Math.abs(M.verschil)})${M.laten.length?`; laten staan (telt mee): ${M.laten.map(x=>x.naam+' '+x.teRuim).join(', ')}`:''}`);
   const D=gripMeterDoelen(); L.push(D.onbekend?'doelen-meter: Plan zet niets opzij':`doelen-meter: opzij ${D.opzij} - eruit ${D.uit} = ${D.netto} (${D.pct}%)`);
   return L;
 }

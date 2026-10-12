@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v394` · Laten staan is een keuze en telt dus mee.** Tot `v393` bleef een potje dat je liet staan gearceerd en buiten je
+  eerlijke budget; alleen de melding verdween. De gebruiker koos: wie bewust kiest het potje te houden, krijgt het als
+  ruimte terug voor deze maand. Daarom is `ruim` de som over `teRuimOpen()`, en blijft de stap in de bridge staan (de
+  bridge gaat van budget naar verwacht, en dat geld gaat nog steeds niet uit), alleen grijs met "laten staan". De melding op
+  Zien verviel: de meterregel en de bridge zijn samen genoeg ingang. Valkuil: in `openTeRuim(k)` niets voorkiezen; "op dat
+  potje" is bovenaan en gemarkeerd, niet verlagen open. Gemeten: koopknop 770 → 711px.
+
 - **`v393` · Zien past, ook met een potje onder de drempel.** De gebruiker draaide de fit-keuze van `v392` terug: geen eigen
   grijze regel, maar een noot "+EUR X" bij overig in de bridge, binnen het grafiekvlak, met een tik die het potje noemt. De
   labels van de bridge op Zien breken niet meer af (ellipsis), en dat haalde de 11px terug die de extra Vervoer-stap kostte.

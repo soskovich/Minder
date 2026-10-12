@@ -80,10 +80,10 @@ test.describe('B · het variabele deel van een gemengd potje', () => {
     await grip(page);
     expect(await page.evaluate(() => [teRuimMaandenTekst([0, 0, 0]), teRuimMaandenTekst([10, 40, 20])])).toEqual(['3 mnd €0', '3 mnd hoogst €40']);
   });
-  test('de enkele melding op Zien draagt het label van het deel', async ({ page }) => {
+  test('de Budget-meter-sheet draagt het label van het deel (v394: de melding op Zien is weg)', async ({ page }) => {
     await grip(page);
-    const t = await page.evaluate(() => { teRuimLaten('huur'); renderMaand(); return document.querySelector('[data-teruimregel]').innerText; });
-    expect(t).toContain('Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0) · €390');
+    const t = await page.evaluate(() => { teRuimLaten('huur'); closeSheet(); openGripMeter('budget'); return document.querySelector('[data-meterruim="vervoer"]').innerText; });
+    expect(t).toContain('Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0)');
   });
   test('bevestigen zet het hele potje op het voorstel', async ({ page }) => {
     await grip(page);

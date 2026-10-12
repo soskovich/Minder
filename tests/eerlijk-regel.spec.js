@@ -34,11 +34,11 @@ test.describe('punt 2 · eerlijk budget lager', () => {
     await page.evaluate(() => { teRuimZet('vervoer'); });
     expect(await page.locator('[data-eerlijkregel]').count()).toBe(0);
   });
-  test('beide laten staan: geen regel, terwijl het eerlijke budget gelijk blijft', async ({ page }) => {
+  test('beide laten staan: geen regel, en het eerlijke budget is weer het hele budget (v394)', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const e0 = gripMeterBudget().eerlijk; teRuimLaten('huur'); teRuimLaten('vervoer'); closeSheet(); renderMaand();
-      return { e0, e1: gripMeterBudget().eerlijk, n: document.querySelectorAll('[data-eerlijkregel]').length }; });
-    expect(r.n).toBe(0); expect(r.e1).toBe(r.e0);
+      const M = gripMeterBudget(); return { e0, e1: M.eerlijk, b: M.budget, n: document.querySelectorAll('[data-eerlijkregel]').length }; });
+    expect(r.n).toBe(0); expect(r.e0).toBe(r.b - 1019); expect(r.e1).toBe(r.b);
   });
   test('past op 360px op een regel, zonder overloop', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 }); await K.boot(page); await page.evaluate(() => go('maand'));

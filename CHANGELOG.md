@@ -1197,3 +1197,11 @@
 - Gemeten op `grip-kring-stand`: bridge 127px (was 138 met afbrekende labels), koopknop eindigt op 770px bij een menubalk op 772px, met noot en meterregel; op de andere tabs 698/550/559px.
 - Gemeld, niet gewijzigd: de melding `teRuimRegel()` op Zien ("2 potjes te ruim · €1.019") opent dezelfde sheet als de nieuwe meterregel.
 - Spec `eerlijk-regel.spec.js` (6); gemigreerd: `drempel-gemengd` A, de fit-tests in `grip-kring` en `grip-kring-deel2`.
+
+## v394 · Een regel over te ruim op Zien, en laten staan telt weer mee (`minder-v394`)
+- De melding "N potjes te ruim · €X ›" op Zien (`teRuimRegel()`) is weg; de regel onder de Budget-meter is de enige regel.
+- Een tik op een gearceerde stap in de bridge opent de te-ruim-sheet op dat potje (`openTeRuim(k)`: bovenaan, gemarkeerd, niets voorgekozen); de meterregel met een potje en de rijen in de Budget-meter-sheet doen hetzelfde.
+- Laten staan: het potje telt deze maand weer volledig mee in het eerlijke budget (meter, kop van Zien, keuze-bridge). In de bridge blijft de stap, grijs gearceerd met het label "laten staan"; samengevoegd zijn "te ruim" en "laten staan" twee stappen. De meterregel telt het niet; de meter-sheet noemt het als "laten staan (telt deze maand mee)". Volgende maand toetst de app opnieuw; Kiezen houdt "herzien".
+- Blok 19 noemt de potjes die je liet staan.
+- Gemeten op `grip-kring-stand` (390×844): koopknop eindigt op 711px (was 770), menubalk op 772px.
+- Spec `te-ruim-laten.spec.js`; gemigreerd: `grip-kring` (fit-test, gevolg, laten staan), `drempel-gemengd` (label in de meter-sheet), `eerlijk-regel` (beide laten staan: eerlijk is het hele budget).

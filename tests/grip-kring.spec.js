@@ -29,13 +29,15 @@ test.describe('v387 structuur', () => {
     await grip(page);
     // v393 (keuze van de gebruiker): de eis geldt MET een potje onder de drempel (Vices +EUR 5 staat als noot bij overig)
     // en met de regel "Eerlijk budget lager" onder de meters; de labels van de bridge staan op een regel.
+    // v394: de melding "N potjes te ruim" is weg; de regel onder de meter is de enige ingang.
     const r = await page.evaluate(() => { const lab = [...document.querySelectorAll('#gripBrug [data-brugeen]')];
-      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('[data-eerlijkregel]').length,
+      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('[data-eerlijkregel]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
         lab: Math.max(...lab.map(e => e.getBoundingClientRect().height)), brug: document.querySelector('#gripBrug').getBoundingClientRect().height,
         knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
     console.log(`zien: bridge ${Math.round(r.brug)}px, hoogste label ${Math.round(r.lab)}px, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
     expect(r.noot).toBe(1);
     expect(r.eerlijk).toBe(1);
+    expect(r.melding).toBe(0);
     expect(r.lab).toBeLessThan(13);   // een regel van 9px
     expect(r.knop).toBeLessThanOrEqual(r.nav);
     expect(r.sw).toBeLessThanOrEqual(390);
@@ -134,8 +136,8 @@ test.describe('v387 te ruim begroot', () => {
   });
   test('het gevolg staat er voor bevestigen, en kiezen schrijft niets', async ({ page }) => {
     await grip(page);
-    expect(await page.locator('[data-teruimregel]').innerText()).toContain('2 potjes te ruim · €1.019');
-    await page.click('[data-teruimregel]');
+    expect(await page.locator('[data-teruimregel]').count()).toBe(0);   // v394: geen melding meer op Zien
+    await page.click('[data-eerlijkregel]');
     const voor = await page.evaluate(() => JSON.stringify(SET));
     await page.click('[data-teruimkies="huur"]');
     const g = await page.locator('[data-teruimgevolg="huur"]').innerText();
@@ -144,15 +146,16 @@ test.describe('v387 te ruim begroot', () => {
     await page.click('[data-teruimbevestig="huur"]');
     const na = await page.evaluate(() => ({ b: SET.budgets.huur, log: SET.teRuimLog, ruim: teRuim().map(x => x.k) }));
     expect(na.b).toBe(71); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 71 })); expect(na.ruim).toEqual(['vervoer']);
-    expect(await page.locator('[data-teruimregel]').innerText()).toContain('Vervoer & auto · variabel deel te ruim');   // Huur is weg
+    expect((await page.locator('[data-eerlijkregel]').innerText()).replace(/\s+/g, ' ')).toContain('Vervoer & auto −€390');   // Huur is weg
   });
-  test('laten staan haalt de melding weg voor deze maand, en het blijft gearceerd en buiten het eerlijke budget', async ({ page }) => {
+  test('laten staan (v394): telt weer mee in het eerlijke budget, en de stap wordt grijs "laten staan"', async ({ page }) => {
     await grip(page);
-    await page.click('[data-teruimregel]'); await page.click('[data-teruimlaten="huur"]');
+    await page.click('[data-eerlijkregel]'); await page.click('[data-teruimlaten="huur"]');
     await page.evaluate(() => closeSheet());
-    expect(await page.locator('[data-teruimregel]').innerText()).not.toContain('Huur');   // alleen Vervoer staat er nog
+    expect(await page.locator('[data-eerlijkregel]').innerText()).not.toContain('Huur');   // alleen Vervoer staat er nog
     expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);
-    expect(await page.evaluate(() => gripMeterBudget().ruim)).toBe(1019);
+    expect(await page.locator('#gripBrug [data-laten]').count()).toBe(1);
+    expect(await page.evaluate(() => gripMeterBudget().ruim)).toBe(390);
     expect(await page.evaluate(() => SET.budgets.huur)).toBe(700);
   });
   test('een vast potje zonder betaling is nooit te ruim', async ({ page }) => {
