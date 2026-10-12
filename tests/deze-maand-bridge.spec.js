@@ -60,21 +60,19 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
       { soort: 'eind', k: null, waarde: 2672, aard: null },
     ]);
   });
-  /* v395: de bridge van Zien begint bij het BUDGET (de balk) en loopt vanaf het EERLIJKE budget (budget min het te
-     ruime deel, gearceerd bovenop die balk), dus begin plus de stappen is het eerlijke budget plus de stappen. */
-  test('de afgeronde stappen tellen exact op van het eerlijke budget tot de uitkomst, dezelfde als in de sheet', async ({ page }) => {
+  /* v398: de bridge van Zien loopt van het maandbudget naar verwacht; een te ruim potje is een eigen grijze stap
+     ("niet gebruikt"), dus begin plus de stappen is de uitkomst. */
+  test('de afgeronde stappen tellen exact op van het maandbudget tot de uitkomst, dezelfde als in de sheet', async ({ page }) => {
     await boot(page); await grip(page);
     const r = await page.evaluate(() => {
       const kol = [...document.querySelectorAll('#gripZien [data-brugstap]')].map((e) => [e.dataset.brugstap, +e.dataset.brugwaarde]);
-      const M = gripMeterBudget();
       openGripVooruit();
-      return { kol, eerlijk: Math.round(M.eerlijk), sheet: +document.getElementById('gripVooruit').dataset.projectie,
+      return { kol, sheet: +document.getElementById('gripVooruit').dataset.projectie,
         kaart: +document.querySelector('#gripZien').dataset.zien };   // v387: de bridge van Zien
     });
     const begin = r.kol[0][1], eind = r.kol[r.kol.length - 1][1];
-    const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], r.eerlijk);
+    const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], begin);
     expect(begin).toBe(3375);
-    expect(r.eerlijk).toBeLessThan(3375);
     expect(som).toBe(eind);
     expect(eind).toBe(2672);
     expect(r.kaart).toBe(eind);
@@ -94,15 +92,15 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     expect(som).toBe(r.proj);
     expect(r.st[r.st.length - 1]).toBe(r.proj);
   });
-  /* v387: de kop van Zien is het verschil met het EERLIJKE budget (zonder wat te ruim is), het getal van de Budget-meter.
-     Op deze stand zijn Sport, Verzekeringen en Abonnementen te ruim: de kaart zei hier "EUR 703 onder", Zien zegt erboven. */
-  test('de kop van Zien is de uitkomst tegen het eerlijke budget (v387)', async ({ page }) => {
+  /* v398: de kop van Zien is het verschil met het MAANDBUDGET (het eerlijke budget van v387-v395 is uit beeld), het getal
+     van de Budget-meter: 2672 tegen 3375 is EUR 703 onder, zoals de kaart van v349 zei. */
+  test('de kop van Zien is de uitkomst tegen het maandbudget (v398)', async ({ page }) => {
     await boot(page); await grip(page);
     const M = await page.evaluate(() => gripMeterBudget());
     expect(M.verwacht).toBe(2672);
-    expect(M.eerlijk).toBe(3375 - M.ruim);
-    expect(M.verschil).toBeGreaterThan(0);
-    expect(await page.locator('#gripZien [data-zienkop]').innerText()).toBe(`€${M.verschil.toLocaleString('nl-NL')} boven eerlijk budget`);   // v395
+    expect(M.budget).toBe(3375);
+    expect(M.verschil).toBe(-703);
+    expect(await page.locator('#gripZien [data-zienkop]').innerText()).toBe('€703 onder budget');
   });
 ;
 });
@@ -178,11 +176,11 @@ test.describe('c. de as', () => {
   test('de as begint bij de ondergrens, zonder bedrag erbij (v352)', async ({ page }) => {
     await boot(page, smal()); await grip(page);
     expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).basis)).toBe(2000);
-    // v352: het bedrag staat niet bij de as; v387: de bridge van Zien noemt hem eronder ("as begint bij")
+    // v352: het bedrag staat niet bij de as; v398: ook niet meer eronder (v387 zei "as begint bij")
     const b = await page.locator('#gripZien [data-asbasis]').getAttribute('data-asbasis');
     expect(await page.evaluate(() => gripZienBrug(maandVooruit()).basis)).toBe(+b);
     expect(await page.locator('#gripZien [data-asbasis]').innerText()).toBe('');
-    expect(await page.locator('#gripZien [data-zienas]').innerText()).toContain(`as begint bij €${(+b).toLocaleString('nl-NL')}`);
+    expect(await page.locator('#gripZien [data-zienas]').innerText()).not.toContain('as begint bij');
   });
   test('bij grote stappen begint de as bij nul en staat er geen ondergrens', async ({ page }) => {
     await boot(page, { set: smal().set, extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });

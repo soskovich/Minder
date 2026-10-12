@@ -16,6 +16,34 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v398` · Grip meet aan je eigen maandbudget; een te ruim potje heet "niet gebruikt" en wordt niet afgetrokken.** Tot
+  `v397` rekende de Budget-meter verwacht gedeeld door het "eerlijke budget" (maandbudget min wat te ruim begroot is,
+  `v387`), en de bridge op Zien liep sinds `v395` vanaf dat eerlijke budget met de te ruime delen gearceerd op de
+  budgetbalk. De gebruiker koos: meten aan het budget dat je zelf instelde. Op het toestel is oktober EUR 2.815 tegen EUR
+  3.375, dus 83% en EUR 560 onder budget. Een te ruim potje is een feit en geen aftrek: een grijze stap "niet gebruikt" in
+  de bridge en een feitregel onder de meter ("waarvan EUR 629 Huur niet gebruikt ›"). De te-ruim-toets zelf
+  (`RUIMER_DREMPEL`, gemengde potjes, `v392`) blijft, voor de sheet en voor "herzien" in Kiezen vanaf de 2e maand. Dit
+  draait `v387` (de meter) en `v395` (de arcering en het haakje) terug. Valkuil: de som-eis. Budget plus de stappen is
+  verwacht en is de kop, en dat geldt alleen als de te ruime stap uit DEZELFDE afronding komt als de andere stappen
+  (`brugAfronden()` op round(verwacht) min round(budget)); een losse afronding per te ruim potje laat de som een euro
+  afwijken. Nagegaan: de Terugblik, herhaalt/herstelt en de patronen rekenden niet met het eerlijke budget; alleen de
+  keuze-sheet in Kiezen las de meter, en die leest nu het maandbudget.
+- **`v398` · Bijstellen houdt het maandbudget gelijk, en wat vrijkomt krijgt een verplichte bestemming.** Verlagen naar het
+  voorstel of naar een eigen bedrag (tussen nodig en het huidige budget) zet het verschil naar Plan, een reservering,
+  beleggen, een ander potje of een nieuw potje; zonder bestemming gaat de knop niet aan, en de schrijver eist het zelf ook.
+  Plan, reservering en beleggen zijn OVERBOEKINGEN: ze blijven als eigen regel in je maandbudget staan
+  (`SET.overboek`, `overboekRegels()`, als vaste regel in `maandSplitsing()`), dus het budget blijft gelijk en verwacht
+  stijgt precies met het bedrag. Naar een potje verandert verwacht niet. PLAN VERDEELT ZELF: de bestemming verhoogt je
+  spaarinleg (`savingAmount`), en Plan zet dat over de doelen zoals elke inleg. BELEGGEN WAARSCHUWT en blokkeert niet als
+  de voorwaarden niet gehaald zijn (oker, met welke voorwaarde). Valkuil: een overboeking naar een reservering of beleggen
+  wordt niet gemeten tegen een boeking; het is een regel in je budget en een claim in veilig te besteden
+  (`safeToSpend().fixedStillToGo`). En er is nog geen route om zo'n regel weer weg te halen; dat is een open punt.
+- **`v398` · Een signaal toont zijn bewijs.** "Komt vaker terug" staat er alleen als dezelfde opgeschoonde naam
+  (`cleanMerch()`, hoofdletterongevoelig, exact) in minstens 2 van de laatste 4 maanden met boekingen een afschrijving
+  heeft, de lopende maand meegeteld (`terugkeerBewijs()`, `TERUG_MIN_MAANDEN`, `TERUG_VENSTER`), en het bewijs staat in de
+  regel ("Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)"). Gemeten valkuil: een lek van soort 'missing-pot' vuurt
+  ook bij een vaste categorie (`isFixedCat()`) zonder enige herhaling, en dan zei de zin toch "komt vaker terug". Die
+  claim is weg; zo'n regel zegt nu "hoort bij een vaste categorie". Het bewijs telt maanden, niet betalingen.
 - **`v397` · Keuze A vervalt: een opname uit vrij spaargeld wordt ook teruggezet.** Tot `v396` telde een opname uit
   geld dat niet was toegewezen als vrij te besteden (keuze A van `v386`), en dan stond er in oktober EUR 231 eruit dat
   nergens terugkwam: het spaarsaldo daalde zonder dat Plan, Home of de Doelen-meter dat als iets te herstellen las. De

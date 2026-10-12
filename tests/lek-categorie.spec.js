@@ -9,7 +9,8 @@ const { boot } = require('./deze-maand-stand');
    partij op de regel eronder (data-letop="lek", tik: de sheet met het gesprek).
    v395: EEN SIGNAAL PER GELDSTROOM. Restaurant Lona komt vaker terug (kind 'missing-pot') en valt in Uit eten, dus het
    zijn dezelfde boekingen en is het een regel: "<categorie> EUR X zonder potje" met "<partij> komt vaker terug" eronder,
-   en een tik (de sheet met potje maken of de categorie wijzigen). */
+   en een tik (de sheet met potje maken of de categorie wijzigen).
+   v398: het bewijs staat in de regel zelf ("Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)"), zie grip-eigen-budget. */
 const regel = (page, soort = 'lek') => page.evaluate((soort) => { go('maand'); renderMaand();
   const r = document.querySelector(`#gripLetOp [data-letop="${soort}"]`); return r ? r.innerText : null; }, soort);
 
@@ -20,7 +21,7 @@ test.describe('lek-regel · categorie en bedrag', () => {
     expect(t, 'er is een lek-regel').toBeTruthy();
     expect(await page.evaluate(() => lekSignaal(thisYM(), budgetFlaggedCats(thisYM())).kind)).toBe('missing-pot');   // invoermeting
     expect(t.split('\n')[0]).toBe('Uit eten & café €75 zonder potje');
-    expect(t.split('\n')[1]).toBe('Restaurant Lona komt vaker terug');
+    expect(t.split('\n')[1]).toBe('Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');   // v398: het bewijs staat in de regel
     expect(await regel(page, 'lekcat')).toBeNull();   // geen tweede regel over dezelfde boekingen
     expect(await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop^="lek"]')].map(e => e.getAttribute('onclick'))))
       .toEqual(["openGripLetOp('lek')"]);

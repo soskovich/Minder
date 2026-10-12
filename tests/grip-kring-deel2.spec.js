@@ -91,7 +91,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     expect(await page.locator('[data-latregel]').allInnerTexts()).toEqual(['• geen geld uit je spaargeld na 10 okt', '• Uit eten & café ≤ €55']);
     // bridge vóór (gestippeld) en ná: Uit eten gaat van +67 naar 0
     expect(await page.locator('[data-keuzebrug] [data-voor]').count()).toBeGreaterThan(0);
-    expect(await tekst(page, '[data-keuzeboven]')).toBe('budget €595 onder → €662 onder')   // v392: het eerlijke budget mist ook het variabele deel van Vervoer (EUR 390);
+    expect(await tekst(page, '[data-keuzeboven]')).toBe('budget €1.614 onder → €1.681 onder');   // v398: tegen het maandbudget (3325 - 1711), niet meer het eerlijke budget
     expect(await page.evaluate(() => (SET.gripKeuze || {})['2026-10'])).toBeUndefined();
     await page.click('[data-latok]');
     await page.click('[data-keuzebevestig]');
@@ -131,8 +131,8 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   });
   test('een uitgevoerde melding uit Zien staat in Kiezen met wat hij deed', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { teRuimZet('huur'); gripKiesTab('kiezen'); });
-    expect(await tekst(page, '[data-uitgevoerd="huur"]')).toBe('Melding uit Zien: Huur verlaagd naar €71 · budget eerlijk: €629 minder ruimte op papier, uitgaven gelijk');
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); gripKiesTab('kiezen'); });
+    expect(await tekst(page, '[data-uitgevoerd="huur"]')).toBe('Melding uit Zien: Huur verlaagd naar €71 · €629 naar Plan · sparen');   // v398: met de bestemming
   });
   test('volgorde: van de app of zelf, en spaargeld blijft eerst', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -234,7 +234,7 @@ test.describe('v388 terugblik', () => {
   });
   test('de instelling uit Zien staat in de terugblik en telt niet mee', async ({ page }) => {
     await grip(page);
-    await page.evaluate(() => { teRuimZet('huur'); gripKiesTab('terugblik'); });
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); gripKiesTab('terugblik'); });
     expect(await page.locator('[data-terugrij="instelling"]').innerText()).toContain('Huur → €71');
     const T = await page.evaluate(() => gripTerugblik('2026-10'));
     expect(T.n).toBe(0);   // het spaardoel van de lopende maand loopt nog

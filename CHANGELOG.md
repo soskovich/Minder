@@ -1245,3 +1245,34 @@
 - Specs: `terug-aansluiting.spec.js` (16, waarvan drie schermen met een opzij). Gemigreerd: nog-te-sparen-een-bron, spaarinleg-netto, grip-kring, grip-correcties, inzichten-dashboard, home-som.
 - Volle suite: 4202 groen, rood alleen decimaalteken (na de migratie van inzichten-dashboard en home-som, die keuze A pinden).
 - Sabotages: 7 van 7 rood. Een achtste vond dode code (`gestort` met `+vrijTerug`, per constructie gelijk); die is weggehaald.
+
+## v398 · Grip meet aan je eigen maandbudget; te ruim bijstellen met een bestemming (`minder-v398`)
+Gevraagd door de gebruiker, mockup "Grip eigen budget" v3. Draait de eerlijke-budget-vorm van v387 tot en met v395 terug.
+- **A · Meten aan het eigen budget.**
+  - Budget-meter = verwacht gedeeld door het ingestelde maandbudget (`gripMeterBudget()`).
+  - "Eerlijk budget lager" is weg. In de plaats staat de feitregel "waarvan €629 Huur niet gebruikt ›" (bij meer potjes "waarvan €X niet gebruikt in n potjes ›"), met "· zelf gekozen" na een eigen keuze. Een tik opent de te-ruim-sheet.
+  - De bridge op Zien loopt van budget naar verwacht. Een te ruim potje is een grijze stap "niet gebruikt", zonder arcering, stippellijn, haakje of as-tekst.
+  - De kop zegt "€X onder budget" of "€X boven budget". Budget plus de stappen is verwacht, en dat is de kop.
+  - "Eerlijk" staat in geen UI-tekst meer. De te-ruim-toets en "herzien" in Kiezen blijven.
+  - Nagegaan: de Terugblik, herhaalt/herstelt en de patronen rekenden niet met het eerlijke budget. Alleen de keuze-sheet in Kiezen las de meter; die leest nu het maandbudget.
+- **B · De te-ruim-sheet.**
+  - Kop "<potje> · ruimer dan nodig", drie feiten en de afgelopen 3 maanden.
+  - Drie opties zonder voorselectie. De knop staat uit tot er gekozen is, en zegt dan de handeling ("Huur op €400 zetten").
+  - Optie b vraagt een bedrag tussen nodig en het huidige budget; als b open is, klappen a en c in.
+  - Bij a en b is een bestemming verplicht: Plan · sparen, Reservering, Beleggen (oker waarschuwing als de voorwaarden niet gehaald zijn), de potjes die boven eindigen, een ander potje, of een nieuw potje.
+  - Het gevolg staat er live bij. Plan, reservering en beleggen zijn overboekingen: ze blijven als regel in het maandbudget staan (`SET.overboek`), dus het budget blijft gelijk en verwacht stijgt met het bedrag. Naar een potje blijft verwacht gelijk.
+  - Plan krijgt het bedrag in de spaarinleg en verdeelt zelf.
+- **C · Let op.** "Komt vaker terug" staat er alleen met bewijs: dezelfde opgeschoonde naam in minstens 2 van de laatste 4 maanden met boekingen (`terugkeerBewijs()`). Het bewijs staat in de regel: "Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)".
+  - Gemeten: een lek van een vaste categorie zonder enige herhaling zei tot nu "komt vaker terug". Dat is weg.
+- **Gemeten op `grip-kring-stand`** (budget €3.325, verwacht €1.711):
+  - meter 51%, €1.614 onder;
+  - Huur €700 → €400 met €300 naar Plan: verwacht €2.011 en meter 60%; de Huur-stap −329, en de oker regel "Nog €329 ruimer dan nodig";
+  - veilig te besteden blijft gelijk;
+  - Zien: zes kolommen, koopknop boven de menubalk;
+  - de sheet (b open, Plan gekozen) past op 390×844.
+- **Specs.**
+  - Nieuw: `grip-eigen-budget.spec.js` (29).
+  - Weg: `zien-eerlijk-brug`, `eerlijk-regel` en `te-ruim-laten`.
+  - Gemigreerd: deze-maand-bridge, drempel-gemengd, grip-correcties, grip-kring, grip-kring-deel2, lek-categorie en maandgelezen-en-buffer.
+  - Sabotages: 17 van 17 rood. "Een regel zonder bewijs" werd pas rood nadat de spec eiste dat de vaste-categorie-stand twee regels geeft.
+- **Open.** Een overboekregel is nog niet weg te halen of aan te passen. Reservering en beleggen worden niet tegen een boeking gemeten.

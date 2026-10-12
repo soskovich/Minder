@@ -65,7 +65,7 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
     expect(drie).toBe(een);
     /* v340: de oordeelzin en de kaarten met die koppen zijn vervallen; Grip draagt nu tegels, "Deze
        maand" en de link naar het logboek, dus de vergelijking hierboven loopt over een gevuld scherm. */
-    expect(een).toMatch(/eerlijk budget/i);   // v387: Zien (v395: de kop zegt "boven/onder eerlijk budget")
+    expect(een).toMatch(/(boven|onder) budget/i);   // v387: Zien (v398: de kop zegt "boven/onder budget")
     expect(een).toContain('Terugblik');
   });
 

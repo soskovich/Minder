@@ -31,7 +31,7 @@ test.describe('v387 structuur', () => {
     // en met de regel "Eerlijk budget lager" onder de meters; de labels van de bridge staan op een regel.
     // v394: de melding "N potjes te ruim" is weg; de regel onder de meter is de enige ingang.
     const r = await page.evaluate(() => { const lab = [...document.querySelectorAll('#gripBrug [data-brugeen]')];
-      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('[data-eerlijkregel]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
+      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('#gripMeters ~ [data-nietgebruikt]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
         lab: Math.max(...lab.map(e => e.getBoundingClientRect().height)), brug: document.querySelector('#gripBrug').getBoundingClientRect().height,
         knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
     console.log(`zien: bridge ${Math.round(r.brug)}px, hoogste label ${Math.round(r.lab)}px, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
@@ -86,16 +86,16 @@ test.describe('v387 meters', () => {
     expect(r.niet.netto).toBeLessThan(r.voor.netto);
     expect(r.terug).toEqual(r.voor);
   });
-  test('Budget: verwacht gedeeld door het eerlijke budget, zonder wat te ruim is', async ({ page }) => {
+  test('Budget: verwacht gedeeld door het maandbudget (v398); te ruim staat erbij als niet gebruikt en trekt niet af', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(); return { M: gripMeterBudget(V), V: { b: V.budget, p: V.projectie } }; });
     // v392: Huur 629 plus het variabele deel van Vervoer 390 (1.100 naar 710)
     expect(r.M.ruim).toBe(1019);
-    expect(r.M.eerlijk).toBe(r.V.b - 1019);
-    expect(r.M.pct).toBe(Math.round(r.V.p / (r.V.b - 1019) * 100));
-    expect(r.M.verschil).toBe(r.V.p - (r.V.b - 1019));
+    expect(r.M.pct).toBe(Math.round(r.V.p / r.V.b * 100));
+    expect(r.M.verschil).toBe(Math.round(r.V.p) - Math.round(r.V.b));
     await page.click('[data-meter="budget"]');
-    expect(await page.locator('[data-metereerlijk]').innerText()).toContain(`€${(r.V.b - 1019).toLocaleString('nl-NL')}`);
+    expect(await page.locator('[data-meterbudget]').innerText()).toContain(`€${Math.round(r.V.b).toLocaleString('nl-NL')}`);
+    expect(await page.locator('[data-meterruim]').evaluateAll(e => e.map(x => x.dataset.meterruim))).toEqual(['huur', 'vervoer']);
   });
   test('Beleggen: de noemer is wat te beoordelen is, met de onbekende erbij en waarom', async ({ page }) => {
     await grip(page);
@@ -126,43 +126,37 @@ test.describe('v387 te ruim begroot', () => {
       teRuimTermijnen({ intervalM: 3, nextDate: new Date(2026, 11, 27) }, '2027-03'), teRuimTermijnen({ intervalM: 3, nextDate: new Date(2026, 11, 27) }, '2027-02')]);
     expect(n).toEqual([2, 1, 1, 0]);
   });
-  /* v395: te ruim is geen stap meer maar een gearceerd stuk bovenop de eerste balk (het budget); de bridge loopt vanaf
-     het eerlijke budget. */
-  test('te ruim is geen ruimte: gearceerd bovenop de budgetbalk, geen uitschieter en geen patroon', async ({ page }) => {
+  /* v398: te ruim is een eigen grijze stap in de bridge ("niet gebruikt"), geen uitschieter en geen patroon; de bridge loopt
+     van het maandbudget naar verwacht. */
+  test('te ruim is geen ruimte: een grijze stap "niet gebruikt", geen uitschieter en geen patroon', async ({ page }) => {
     await grip(page);
-    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(0);
-    const ar = page.locator('#gripBrug [data-brugstap="begin"] [data-gearceerd]');
-    expect(await ar.evaluateAll(e => e.map(x => x.dataset.teruimk))).toEqual(['huur', 'vervoer']);   // v392: Huur en het variabele deel van Vervoer
+    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);   // v392: Huur en het variabele deel van Vervoer
     const r = await page.evaluate(() => { const V = maandVooruit(); const Br = gripZienBrug(V);
-      return { som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, Br.stappen[0].start), start: Br.stappen[0].start, bud: Br.stappen[0].waarde, eind: V.projectie, uit: uitschieters(V).map(x => x.k), pat: (insPatronen() || []).map(p => p.k) }; });
-    expect(r.bud - r.start).toBe(1019);
+      return { som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, Br.stappen[0].waarde), tr: Br.stappen.filter(s => s.soort === 'teruim').reduce((a, s) => a + s.waarde, 0), eind: Math.round(V.projectie), uit: uitschieters(V).map(x => x.k), pat: (insPatronen() || []).map(p => p.k) }; });
+    expect(r.tr).toBe(-1019);
     expect(r.som).toBe(r.eind);
     expect(r.uit).not.toContain('huur'); expect(r.pat).not.toContain('huur');
-    expect(await page.locator('[data-zienas]').innerText()).toContain('gearceerd = te ruim, telt niet');
+    expect(await page.locator('#gripBrug [data-gearceerd]').count()).toBe(0);
   });
-  test('het gevolg staat er voor bevestigen, en kiezen schrijft niets', async ({ page }) => {
+  test('het gevolg staat er voor bevestigen, en kiezen schrijft niets (v398: met een bestemming)', async ({ page }) => {
     await grip(page);
     expect(await page.locator('[data-teruimregel]').count()).toBe(0);   // v394: geen melding meer op Zien
-    await page.click('[data-eerlijkregel]');
+    await page.evaluate(() => openTeRuim('huur'));
     const voor = await page.evaluate(() => JSON.stringify(SET));
-    await page.click('[data-teruimkies="huur"]');
+    await page.click('[data-teruimoptie="a"]'); await page.click('[data-teruimbestem="plan"]');
     const g = await page.locator('[data-teruimgevolg="huur"]').innerText();
-    expect(g).toContain('Potje Huur €700 → €71'); expect(g).toContain('€629 minder ruimte op papier'); expect(g).toContain('Je uitgaven veranderen niet');
+    expect(g).toContain('Huur €700 → €71'); expect(g).toContain('Maandbudget €3.325 blijft');
     expect(await page.evaluate(() => JSON.stringify(SET))).toBe(voor);
-    await page.click('[data-teruimbevestig="huur"]');
+    await page.click('[data-teruimbevestig]');
     const na = await page.evaluate(() => ({ b: SET.budgets.huur, log: SET.teRuimLog, ruim: teRuim().map(x => x.k) }));
-    expect(na.b).toBe(71); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 71 })); expect(na.ruim).toEqual(['vervoer']);
-    expect((await page.locator('[data-eerlijkregel]').innerText()).replace(/\s+/g, ' ')).toContain('Vervoer & auto −€390');   // Huur is weg
+    expect(na.b).toBe(71); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 71, bestemSoort: 'plan' })); expect(na.ruim).toEqual(['vervoer']);
+    expect(await page.locator('#gripMeters ~ [data-nietgebruikt]').innerText()).toBe('waarvan €390 Vervoer & auto niet gebruikt ›');   // Huur is weg
   });
-  test('laten staan (v394): telt weer mee in het eerlijke budget, en is niet meer gearceerd (v395)', async ({ page }) => {
+  test('laten staan: het potje blijft, de stap blijft "niet gebruikt" en de regel zegt "zelf gekozen" (v398)', async ({ page }) => {
     await grip(page);
-    await page.click('[data-eerlijkregel]'); await page.click('[data-teruimlaten="huur"]');
-    await page.evaluate(() => closeSheet());
-    expect(await page.locator('[data-eerlijkregel]').innerText()).not.toContain('Huur');   // alleen Vervoer staat er nog
-    expect(await page.locator('#gripBrug [data-gearceerd]').evaluateAll(e => e.map(x => x.dataset.teruimk))).toEqual(['vervoer']);
-    expect(await page.locator('#gripBrug [data-laten]').count()).toBe(0);
-    expect(await page.evaluate(() => gripMeterBudget().ruim)).toBe(390);
-    expect(await page.evaluate(() => SET.budgets.huur)).toBe(700);
+    await page.evaluate(() => openTeRuim('huur')); await page.click('[data-teruimoptie="c"]'); await page.click('[data-teruimbevestig]');
+    expect(await page.evaluate(() => ({ b: SET.budgets.huur, zelf: teRuimZelf('huur'), ruim: gripMeterBudget().ruim }))).toEqual({ b: 700, zelf: true, ruim: 1019 });
+    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);
   });
   test('een vast potje zonder betaling is nooit te ruim', async ({ page }) => {
     await grip(page);
@@ -177,5 +171,5 @@ test('blok 19 schrijft per potje uit waarom het te ruim is, en leest alleen', as
   expect(r.blok).toBe(true); expect(r.zelfde).toBe(true);
   expect(r.t).toContain('Huur (huur): 700 | vast 700/71 | variabel - | nodig 71 in 2026-10 | voorstel 71 | TE RUIM 629');
   expect(r.t).toMatch(/Verzekeringen \(verzekering\): 335 .* nodig 324 in 2026-12 \(Dela Natura- en levensv in december\) .* niet te ruim/);
-  expect(r.t).toContain('eerlijk budget:');
+  expect(r.t).toContain('budget-meter (v398, aan het maandbudget)');
 });

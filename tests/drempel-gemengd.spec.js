@@ -43,7 +43,7 @@ test.describe('A · onder de drempel', () => {
   test('de bridge telt het bedrag wel mee: begin plus de stappen is de uitkomst', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V);
-      return { som: B.stappen.slice(1, -1).reduce((a, x) => a + x.waarde, B.stappen[0].start), eind: V.projectie, budget: V.budget, verwacht: gripMeterBudget(V).verwacht }; });   // v395: vanaf het eerlijke budget
+      return { som: B.stappen.slice(1, -1).reduce((a, x) => a + x.waarde, B.stappen[0].waarde), eind: Math.round(V.projectie), budget: V.budget, verwacht: gripMeterBudget(V).verwacht }; });   // v398: vanaf het maandbudget
     expect(r.som).toBe(r.eind); expect(r.verwacht).toBe(r.eind);
   });
   test('zonder potje onder de drempel geen noot', async ({ page }) => {
@@ -70,7 +70,7 @@ test.describe('B · het variabele deel van een gemengd potje', () => {
   test('de melding per deel: "Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0)"', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const x = teRuim().find(y => y.k === 'vervoer');
-      openTeRuim(); const deel = document.querySelector('[data-teruimpotje="vervoer"] [data-teruimdeel]');
+      openTeRuim('vervoer'); const deel = document.querySelector('#teRuimSheet[data-teruimpotje="vervoer"] [data-teruimdeel]');
       return { label: teRuimLabel(x), deel: deel ? deel.innerText : null, huur: teRuimLabel(teRuim().find(y => y.k === 'huur')) }; });
     expect(r.label).toBe('Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0)');
     expect(r.deel).toContain('variabel deel te ruim (€497, 3 mnd €0)'); expect(r.deel).toContain('vaste deel (€603) blijft staan');
@@ -85,9 +85,9 @@ test.describe('B · het variabele deel van een gemengd potje', () => {
     const t = await page.evaluate(() => { teRuimLaten('huur'); closeSheet(); openGripMeter('budget'); return document.querySelector('[data-meterruim="vervoer"]').innerText; });
     expect(t).toContain('Vervoer & auto · variabel deel te ruim (€497, 3 mnd €0)');
   });
-  test('bevestigen zet het hele potje op het voorstel', async ({ page }) => {
+  test('verlagen naar het voorstel zet het hele potje op het voorstel (v398: met een bestemming)', async ({ page }) => {
     await grip(page);
-    const b = await page.evaluate(() => { teRuimZet('vervoer'); return SET.budgets.vervoer; });
+    const b = await page.evaluate(() => { openTeRuim('vervoer'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); return SET.budgets.vervoer; });
     expect(b).toBe(710);
   });
   test('blok 19: vast en variabel als aparte regels bij een gemengd potje', async ({ page }) => {

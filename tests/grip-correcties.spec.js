@@ -86,7 +86,7 @@ test.describe('4 · een tab-✓ alleen na afronding', () => {
 test.describe('5 · Kiezen opgeschoond', () => {
   test('geen afvinkregels, geen "N afspraken voor", geen losse "Kies voor"-link; de rij is de knop', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { teRuimZet('huur'); const nov = nextYM(thisYM());
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); const nov = nextYM(thisYM());
       afspraakMaak({ soort: 'potje', cat: 'uiteten', bedrag: 120, van: nov, tot: nov, wat: 'Potje Uit eten €120 vanaf november' });
       afspraakMaak({ soort: 'potje', cat: 'boodschappen', bedrag: 400, van: thisYM(), tot: thisYM(), wat: 'Potje Boodschappen €400 in oktober' });
       save(); gripKiesTab('kiezen'); });
