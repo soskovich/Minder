@@ -11064,9 +11064,10 @@ const tzDeelVan=T=>Math.round((+(T.r.delen||[])[T.i]||0)*100)/100;
 function terugzetDeel(ym){ const A=terugzetActief(ym); if(!A.length) return null; return Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0)); }
 /* Voor safeToSpend: de extra inleg van deze maand, en het deel van de opname dat met een keuze is afgehandeld. */
 function terugzetSpaar(ym){
-  const A=terugzetActief(ym); if(!A.length) return {extra:0, afgehandeld:0};
+  const A=terugzetActief(ym); let vr=0; try{ vr=terugVrijDeel(ym).deze; }catch(_){}
+  if(!A.length) return {extra:Math.round(vr), afgehandeld:0, vrij:Math.round(vr)};
   const O=A.find(T=>!T.gat);
-  return {extra:Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0)), afgehandeld:(O&&O.i===0)?Math.round(+O.r.bedrag||0):0};
+  return {extra:Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0)+vr), afgehandeld:(O&&O.i===0)?Math.round(+O.r.bedrag||0):0, vrij:Math.round(vr)};
 }
 /* v386: WAT ER DEZE MAAND AL GESTORT IS, EN WAT EEN OPNAME ZONDER KEUZE NOG VRAAGT. Een bron, met drie lezers
    (safeToSpend, de opbouw op Home en blok 3). De opnames zijn de afschrijvingen op je spaarrekeningen, zonder een
@@ -11115,7 +11116,14 @@ function spaarStortStand(ym){
      als eruit tellen zijn precies de rest. Dus erop = savedNet + eruit, uit dezelfde boekingen en zonder tweede telling. */
   const erin=Math.max(Math.round(n+uit),0);
   { let cap=gedekt; for(const b of bron){ b.bedrag=Math.min(b.bedrag, cap); cap-=b.bedrag; } }
-  return {erin, gestort:Math.round(Math.max(netto,0)), aanvullen:Math.round(aanvullen), vrijOpname:Math.round(vrijOpname), uit:Math.round(uit), uitExact:Math.round(uit*100)/100, uitTx, gedekt:Math.round(gedekt), G0:Math.round(G0*100)/100,
+  /* v397: EEN OPNAME UIT VRIJ SPAARGELD WORDT OOK TERUGGEZET (keuze A van v386 vervalt, gevraagd door de gebruiker). Standaard
+     alles deze maand, terug naar vrij spaargeld en niet naar een doel; per maand te wijzigen (SET.terugzetVrij[ym]: 'alles',
+     'drie' of 'niet', terugzetVrijZet()). Alleen bij 'niet' blijft het vrij te besteden (vrijOpname). Het teruggezette deel
+     staat als eigen bron (soort 'vrij') naast de keuzes en telt in de extra inleg van deze maand (terugVrijDeel()). */
+  let vrijTerug=0; const vk=terugzetVrijKeuze(ym);
+  if(vrijOpname>0.004 && vk!=='niet'){ vrijTerug=vrijOpname; vrijOpname=0;
+    bron.push({soort:'vrij', r:{M:ym, keuze:vk, delen:terugzetDelen(Math.round(vrijTerug*100)/100, vk), bron:[]}, bedrag:vrijTerug}); }
+  return {erin, gestort:Math.round(Math.max(netto,0)), aanvullen:Math.round(aanvullen), vrijOpname:Math.round(vrijOpname), vrijTerug:Math.round(vrijTerug), vrijTerugExact:vrijTerug, uit:Math.round(uit), uitExact:Math.round(uit*100)/100, uitTx, gedekt:Math.round(gedekt), G0:Math.round(G0*100)/100,
     bron:bron.filter(b=>b.bedrag>0), gedektExact:gedekt, aanvullenExact:aanvullen, vrijExact:vrijOpname};
 }
 /* v371: WAT DE LOPENDE KEUZES NOG DEKKEN. Een keuze dekt alleen zijn eigen bedrag, en alleen zolang het geld er nog
@@ -11123,6 +11131,41 @@ function spaarStortStand(ym){
    deze maand netto op je spaarrekening kwam, met de opname zelf eruit (die ging eraf en is geen storting). DE STORTING
    TELT EERST ALS TERUGZETTEN, ook als het je gewone inleg was: dat is de strenge kant, want dan staat een verschil
    eerder op het scherm dan later (v168). Zonder keuze is dit nul, en dan is elk verschil zichtbaar. */
+/* v397: de keuze voor het deel uit vrij spaargeld, per maand; zonder keuze is het 'alles' (de standaard). */
+function terugzetVrijRecs(){ return SET.terugzetVrij&&typeof SET.terugzetVrij==='object'?SET.terugzetVrij:{}; }
+function terugzetVrijKeuze(ym){ const r=terugzetVrijRecs()[ym]; return (r&&['alles','drie','niet'].includes(r.keuze))?r.keuze:'alles'; }
+/* Wat er deze maand uit vrij spaargeld terug gaat: het deel van deze maand, en bij spreiden de delen van een opname in een
+   van de twee maanden ervoor. De bedragen komen uit spaarStortStand() van die maand zelf (een bron). */
+function terugVrijDeel(ym){
+  ym=ym||thisYM(); const items=[]; let deze=0;
+  for(let i=0;i<3;i++){ const M=valtOpYmPlus(ym,-i); if(i>0 && terugzetVrijKeuze(M)!=='drie') continue;
+    /* een maand die voorbij is leest de delen die bij de keuze zijn vastgelegd: zijn stand van toen is achteraf niet
+       opnieuw te rekenen (het saldo en de toewijzingen zijn verder gegaan) */
+    let b=null; if(i>0){ const r=terugzetVrijRecs()[M]; if(r && Array.isArray(r.delen)) b={bedrag:+r.bedrag||0, r:{keuze:'drie', delen:r.delen}}; }
+    else { let S=null; try{ S=spaarStortStand(M); }catch(_){} b=S&&S.bron.find(x=>x.soort==='vrij'); }
+    if(!b) continue;
+    const d=+(b.r.delen||[])[i]||0; if(!(d>0)) continue; deze+=d; items.push({M, i, keuze:b.r.keuze, delen:b.r.delen, bedrag:b.bedrag, deel:d}); }
+  return {deze:Math.round(deze*100)/100, items};
+}
+function terugzetVrijZet(k){ if(!['alles','drie','niet'].includes(k)) return; const ym=thisYM();
+  const rec={keuze:k, op:vandaagYMD()};
+  if(k==='drie'){ let v=0; try{ const S=spaarStortStand(ym); v=Math.round((S.vrijTerugExact||0)+(S.vrijOpname||0)); }catch(_){} rec.bedrag=v; rec.delen=terugzetDelen(v,'drie'); }
+  SET.terugzetVrij=Object.assign({}, terugzetVrijRecs(), {[ym]:rec}); save(); render();
+  try{ if(document.getElementById('terugOpbouw')||document.getElementById('terugVrijSheet')) openTerugOpbouw(); }catch(_){} }
+function openTerugVrij(){
+  const ym=thisYM(); let S=null; try{ S=spaarStortStand(ym); }catch(_){}
+  const v=S?(S.vrijTerugExact||0)+(S.vrijOpname||0):0, k=terugzetVrijKeuze(ym), D3=terugzetDelen(Math.round(v), 'drie');
+  const mn=MFULL[+ym.slice(5,7)-1];
+  const pick=(kk,t,sub)=>`<div data-vrijkeuze="${kk}" data-gekozen="${k===kk?1:0}" role="button" onclick="terugzetVrijZet('${kk}')" style="border:1.5px solid ${k===kk?'var(--teal)':'var(--ln2)'};border-radius:10px;padding:8px 10px;margin-top:6px;cursor:pointer"><span class="small" style="font-weight:700">${t}</span>${k===kk?' <span class="small muted">· gekozen</span>':''}<div class="small muted" style="line-height:1.4">${sub}</div></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="terugVrijSheet" data-vrijbedrag="${Math.round(v)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${euro0(v)} uit vrij spaargeld</div>
+    <div class="small muted" style="margin:2px 0 6px">Dit geld stond op je spaarrekening zonder bestemming. Terugzetten zet het terug naar vrij spaargeld, niet naar een doel.</div>
+    ${pick('alles','Alles deze maand',`+${euro0(v)} opzij in ${esc(mn)}`)}
+    ${pick('drie','Over 3 maanden',`${D3.map(euro0).join(' + ')}, vanaf ${esc(mn)}`)}
+    ${pick('niet','Niet terug',`telt als vrij te besteden; in de sheet "hoeft niet terug (jouw keuze)"`)}
+    <div class="small" style="margin-top:12px"><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openTerugOpbouw()">‹ terug</span></div></div>`;
+  showSheetBg();
+}
 function terugzetDekt(ym){
   ym=ym||thisYM(); const A=terugzetActief(ym); if(!A.length) return 0;
   let nog=0, deze=0;
@@ -12883,12 +12926,15 @@ function planKpiData(P,cap,TL,SE){
   for(const p of P){ const x=SE.per[p.id]; if(!x) continue; inleg+=x.inleg; terug+=x.tb;
     if(p.type==='aflossen'||p.nfOnbekend) continue; geld+=x.geld; doel+=x.doel; }
   geld=Math.round(geld*100)/100;
+  /* v397: wat er uit vrij spaargeld terug gaat staat niet bij een doel maar telt wel in "deze maand opzij" (een bron met
+     Home: terugzetSpaar().extra, en de Doelen-meter op Grip). */
+  let vrijT=0; try{ vrijT=terugVrijDeel(thisYM()).deze; }catch(_){} terug+=vrijT;
   const pct=doel>0?Math.min(Math.round(geld/doel*100),100):0;
   const loopt=P.filter(p=>p.type!=='aflossen'&&p.status!=='bereikt'&&p.status!=='gepauzeerd'&&!p.nfOnbekend);
   let laatste=null, onbekend=false;
   for(const p of loopt){ const v=(TL.per[p.id]||{}).vol; if(v==null){ onbekend=true; continue; } if(laatste==null||v>laatste) laatste=v; }
   const laat=P.filter(p=>(TL.per[p.id]||{}).warn);   // v381: een voorlopige datum waarschuwt niet (planTijdlijnData())
-  return {geld, doel, pct, opzij:Math.round(inleg+terug), terug:Math.round(terug), inleg:Math.round(inleg),
+  return {geld, doel, pct, opzij:Math.round(inleg+terug), terug:Math.round(terug), terugVrij:Math.round(vrijT), inleg:Math.round(inleg),
     allesVol:(cap>0&&!onbekend&&laatste!=null)?laatste:null, allesVolOnbekend:onbekend||!(cap>0), laat, loopt:loopt.length, nogTeGaan:SE.nogTeGaan};
 }
 function planKpi(P,cap,TL,SE){
@@ -13041,9 +13087,12 @@ function terugAansluiting(ym){
     if(k==='niet'){ niet+=b.bedrag; B.push({bedrag:b.bedrag, lab:'niet terug, toewijzing verlaagd', k:'niet'}); continue; }
     const d0=Math.min(b.bedrag, D[0]||b.bedrag), rest=b.bedrag-d0; deze+=d0; later+=rest;
     if(rest>0) D.slice(1).forEach((x,i)=>{ if(x>0) laterM.add(valtOpYmPlus(b.r.M,i+1)); });
-    const per=D.length>1?D[0]:0;
-    B.push({bedrag:b.bedrag, k, lab:k==='drie'?`terug over ${D.length} mnd (${euro0(per)}/mnd)`:'terug deze maand', op:b.soort==='op'}); }
-  const vrij=S.vrijExact, open=S.aanvullenExact, gestort=Math.max(S.uitExact-S.gedektExact-open-vrij, 0);
+    const per=D.length>1?D[0]:0, naar=b.soort==='vrij'?' naar vrij spaargeld':'';
+    B.push({bedrag:b.bedrag, k:b.soort==='vrij'?'vrij'+k:k, lab:k==='drie'?`terug${naar} over ${D.length} mnd (${euro0(per)}/mnd)`:`terug${naar} deze maand`, op:b.soort==='op', vrij:b.soort==='vrij'}); }
+  /* v397: het teruggezette deel uit vrij spaargeld neemt een opname als eerste (het vrije geld ging als eerste van de
+     rekening); daarna de keuzes in volgorde. */
+  B.sort((a,b)=>(b.vrij?1:0)-(a.vrij?1:0));
+  const vrij=S.vrijExact, open=S.aanvullenExact, gestort=Math.max(S.uitExact-S.gedektExact-(S.vrijTerugExact||0)-open-vrij, 0);
   const tot=Math.round(S.uitExact);
   const R0=brugAfronden([{k:'deze',v:deze},{k:'later',v:later},{k:'niet',v:niet},{k:'gestort',v:gestort},{k:'open',v:open},{k:'vrij',v:vrij}].filter(x=>x.v>0.004), tot);
   const R=Object.assign({deze:0, later:0, niet:0, gestort:0, open:0, vrij:0}, R0);
@@ -13067,11 +13116,15 @@ function openTerugOpbouw(){
   const ym=thisYM(), A=terugzetActief(ym), mn=MFULL[+ym.slice(5,7)-1];
   let P=[]; try{ P=allocatePlan(); }catch(_){}
   const TND=terugzetNaarDoel(P), naam=id=>{ const x=P.find(y=>y.id===id); return x?(x.type==='noodfonds'?'Noodfonds':x.naam):'een doel dat uit het plan ging'; };
-  const tot=Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0));
+  let VD={deze:0, items:[]}; try{ VD=terugVrijDeel(ym); }catch(_){}
+  const tot=Math.round(A.reduce((a,T)=>a+tzDeelVan(T),0)+VD.deze);
   const rij=(k,l,b,attr)=>`<div class="row small" ${attr} style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${b}</b></div>`;
   /* v395: de opname-keuze heet "uit doelen" (het deel van een opname dat uit je toegewezen geld kwam), zodat hij niet
      hetzelfde heet als het bedrag "uit vrij spaargeld" in de aansluiting. */
-  const keuzes=A.map(T=>rij('k',`${T.gat?`${euroC(+T.r.bedrag||0)} toegewezen zonder geld`:`${euro0(+T.r.bedrag||0)} uit doelen`}${T.M!==ym?` (${esc(MFULL[+T.M.slice(5,7)-1])})`:''} · ${esc((TERUGZET_LAB[T.r.keuze]||T.r.keuze).toLowerCase())}`, euroC(tzDeelVan(T)), `data-opbouwrij="${tzDeelVan(T)}"`)).join('');
+  const keuzes=A.map(T=>rij('k',`${T.gat?`${euroC(+T.r.bedrag||0)} toegewezen zonder geld`:`${euro0(+T.r.bedrag||0)} uit doelen`}${T.M!==ym?` (${esc(MFULL[+T.M.slice(5,7)-1])})`:''} · ${esc((TERUGZET_LAB[T.r.keuze]||T.r.keuze).toLowerCase())}`, euroC(tzDeelVan(T)), `data-opbouwrij="${tzDeelVan(T)}"`)).join('')
+    /* v397: het deel uit vrij spaargeld, met zijn eigen keuze (standaard alles deze maand) */
+    +VD.items.map(x=>`<div class="row small" data-opbouwrij="${x.deel}" data-opbouwvrij role="button" onclick="openTerugVrij()" style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer"><span style="flex:1;min-width:0">${euroC(x.bedrag)} uit vrij spaargeld${x.M!==ym?` (${esc(MFULL[+x.M.slice(5,7)-1])})`:''} · terug naar vrij spaargeld · ${esc((TERUGZET_LAB[x.keuze]||x.keuze).toLowerCase())} <span style="color:var(--teal);font-weight:700">wijzig ›</span></span><b style="white-space:nowrap">${euroC(x.deel)}</b></div>`).join('')
+    +(()=>{ try{ const S=spaarStortStand(ym); if(terugzetVrijKeuze(ym)==='niet' && S.vrijOpname>0) return `<div class="row small" data-opbouwvrij="niet" role="button" onclick="openTerugVrij()" style="gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer"><span style="flex:1;min-width:0">${euro0(S.vrijOpname)} uit vrij spaargeld · niet terug <span style="color:var(--teal);font-weight:700">wijzig ›</span></span><b>${euro0(0)}</b></div>`; }catch(_){} return ''; })();
   let AS=null; try{ AS=terugAansluiting(ym); }catch(_){}
   const ar=(k,l,attr)=>AS&&(AS.R[k]||k==='deze')?`<div class="row small" data-aansluit="${k}" data-aansluitwaarde="${AS.R[k]||0}"${attr||''} style="gap:8px;padding:4px 0 4px 12px"><span style="flex:1;min-width:0;color:var(--mut)">${l}</span><span style="white-space:nowrap">${euro0(AS.R[k]||0)}</span></div>`:'';
   const aansl=AS?`<div data-aansluiting="${AS.tot}" style="margin:4px 0 10px;padding:8px 10px;border-radius:10px;background:var(--card2)">
@@ -13082,7 +13135,8 @@ function openTerugOpbouw(){
       <div class="row small" style="gap:8px;border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span style="flex:1;min-width:0">=</span><b data-aansluitsom style="white-space:nowrap">${euro0(Object.values(AS.R).reduce((a,x)=>a+x,0))}</b></div></div>`:'';
   const boek=AS?AS.perTx.map(({t, parts})=>`<div data-opbouwboeking data-opname="${-t.amount}" style="padding:6px 0;border-bottom:1px solid var(--line)"><div class="row small" style="gap:8px"><span style="flex:1;min-width:0">${esc(dagKort(t.date))} · ${esc(txNaam(t))}</span><b style="white-space:nowrap">${euroC(-t.amount)}</b></div>
       <div class="small" style="color:var(--mut2);line-height:1.4">${parts.map(x=>`<span data-bestemming="${x.k}" data-bestemmingbedrag="${Math.round(x.bedrag*100)/100}">→ ${esc(x.lab)}${parts.length>1?` ${euroC(x.bedrag)}`:''}</span>`).join(' · ')}</div></div>`).join(''):'';
-  const heen=Object.keys(TND.per).map(id=>rij('h',`naar ${esc(naam(id))}`, euro0(TND.per[id]), `data-opbouwnaar="${id}"`)).join('');
+  const heen=Object.keys(TND.per).map(id=>rij('h',`naar ${esc(naam(id))}`, euro0(TND.per[id]), `data-opbouwnaar="${id}"`)).join('')
+    +(VD.deze>0?rij('h','naar vrij spaargeld', euro0(VD.deze), 'data-opbouwnaar="vrij"'):'');
   $('#sheet').innerHTML=`<div class="grab"></div><div id="terugOpbouw" data-terugtotaal="${tot}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${euro0(tot)} terug in ${esc(mn)}</div>
     <div class="small muted" style="margin:2px 0 8px">Wat je deze maand terugzet, per keuze.</div>

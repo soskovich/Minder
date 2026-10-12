@@ -33,7 +33,14 @@ test.describe('de stand van het toestel', () => {
     const r = await page.evaluate(() => ({ net: savedNet(thisYM()), V: spaarVrij(), ss: spaarStortStand() }));
     expect(r.net).toBe(-1019); expect(r.V.toegewezen).toBe(3638); expect(r.ss.uit).toBe(1019); expect(r.ss.gedekt).toBe(788); expect(r.ss.G0).toBe(0);
   });
-  test('nog te sparen is EUR 2.888, de 231 uit vrij spaargeld vult niets aan', async ({ page }) => {
+  /* v397: de 231 uit vrij spaargeld gaat standaard terug (keuze A vervalt): nog te sparen 2.200 + 919 = 3.119. */
+  test('nog te sparen is EUR 3.119, de 231 uit vrij spaargeld gaat standaard terug', async ({ page }) => {
+    const s = await stand(page);
+    expect(s).toMatchObject({ nog: 3119, gestort: 0, aanvullen: 0, vrij: 0, extra: 919, tgt: 2200 });
+    expect(s.nog).toBe(s.opzij);
+  });
+  test('met "niet terug" is het EUR 2.888 en telt de 231 als vrij te besteden (de vorm van v386)', async ({ page }) => {
+    await page.evaluate(() => terugzetVrijZet('niet'));
     const s = await stand(page);
     expect(s).toMatchObject({ nog: 2888, gestort: 0, aanvullen: 0, vrij: 231, extra: 688, tgt: 2200 });
     expect(s.nog).toBe(s.opzij);
@@ -46,7 +53,9 @@ test.describe('(a) een opname uit vrij spaargeld', () => {
     const r = await page.evaluate(() => ({ net: savedNet(thisYM()), V: spaarVrij(), z: spaarOver().zonder }));
     expect(r.net).toBe(-200); expect(r.V.savedExact - r.net - r.V.toegewezen).toBe(500); expect(r.z).toBe(0);
   });
-  test('telt niet als aan te vullen, en de opbouw zegt het', async ({ page }) => {
+  test('gaat standaard terug; met "niet terug" telt hij niet als aan te vullen, en de opbouw zegt het', async ({ page }) => {
+    expect(await stand(page)).toMatchObject({ nog: 2400, aanvullen: 0, vrij: 0, gestort: 0, extra: 200 });   // v397
+    await page.evaluate(() => terugzetVrijZet('niet'));
     const s = await stand(page);
     expect(s).toMatchObject({ nog: 2200, aanvullen: 0, vrij: 200, gestort: 0 });
     await page.evaluate(() => openSafeToSpend());

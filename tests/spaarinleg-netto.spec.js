@@ -285,10 +285,15 @@ test.describe('f - layout', () => {
    spaargeld: die vult niets aan, telt als vrij te besteden en staat als eigen regel in de opbouw. Heen en weer binnen
    dezelfde maand gaat eerst uit je eigen storting, dus dat blijft invariant. */
 test.describe('g - een opname uit vrij spaargeld', () => {
-  test('vult niets aan, en safe stijgt met precies dat bedrag', async ({ page }) => {
+  /* v397: keuze A vervalt. Standaard gaat de opname terug (nog te sparen + 1.500, safe gelijk); alleen met "niet terug"
+     vult hij niets aan en stijgt safe met precies dat bedrag. */
+  test('gaat standaard terug, en met "niet terug" stijgt safe met precies dat bedrag', async ({ page }) => {
     await boot(page, seed([], { vrij: true, bal: { [ACC]: 4200, [SPA]: 9000 } }));
     const niets = await cijfers(page);
     await boot(page, seed([uitSpaar(1500)], { vrij: true, bal: { [ACC]: 5700, [SPA]: 7500 } }));
+    const d = await cijfers(page);
+    expect(d.nog).toBe(4500); expect(d.safe).toBe(niets.safe);
+    await page.evaluate(() => terugzetVrijZet('niet'));
     const c = await cijfers(page);
     expect(c.nog).toBe(3000); expect(c.safe).toBe(niets.safe + 1500);
     expect(await page.evaluate(() => safeToSpend().vrijOpname)).toBe(1500);

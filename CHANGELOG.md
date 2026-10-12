@@ -1231,3 +1231,17 @@
   - 428 en 210 zijn de €231 uit doelen en de €407 toegewezen zonder geld.
   - 150 is de keuze over drie maanden.
 - Spec `terug-aansluiting.spec.js` (10). Sabotages 11 van 12 rood. De sabotage "de som-regel toont het totaal" is inert, want de afgeronde rijen tellen per constructie op; de test toetst daarom de onafgeronde delen.
+
+## v397 · Een opname uit vrij spaargeld wordt ook teruggezet; keuze A vervalt (`minder-v397`)
+- Gevraagd door de gebruiker. Standaard gaat ook wat uit vrij spaargeld kwam terug, "alles deze maand", naar vrij spaargeld en niet naar een doel. In de sheet "€X terug in <maand>" staat het als eigen regel: "€231 uit vrij spaargeld · terug naar vrij spaargeld · alles deze maand · wijzig ›" (`openTerugVrij()`: alles, over 3 maanden, niet terug).
+- Bron: `spaarStortStand()` zet het teruggezette deel als bron 'vrij'. `terugVrijDeel()` geeft het deel van deze maand, en bij spreiden uit de delen die bij de keuze zijn vastgelegd. Lezers: `terugzetSpaar().extra` (Home), `planKpiData()` ("Deze maand opzij") en de Doelen-meter op Grip. `terugzetDeel()`, `terugzetNaarDoel()` en de projectie lezen het niet: het gaat niet naar een doel.
+- "Waar het heen gaat" noemt "naar vrij spaargeld". De aansluiting sluit met "terug naar vrij spaargeld deze maand" per opname; "hoeft niet terug (jouw keuze)" staat er alleen bij de keuze "niet terug".
+- Gemeten op de nagebouwde stand van het toestel:
+  - terug €919 (231 uit doelen + 407 + 50 + 231 vrij);
+  - opzij €3.119 op Home, Plan en de Doelen-meter (€2.100 van €3.119);
+  - aansluiting €1.019 = €919 + €100;
+  - Noodfonds €688, vrij spaargeld €231.
+- Met "niet terug" geeft de stand de vorm van v386: €2.888, en €231 telt als vrij te besteden.
+- Specs: `terug-aansluiting.spec.js` (16, waarvan drie schermen met een opzij). Gemigreerd: nog-te-sparen-een-bron, spaarinleg-netto, grip-kring, grip-correcties, inzichten-dashboard, home-som.
+- Volle suite: 4202 groen, rood alleen decimaalteken (na de migratie van inzichten-dashboard en home-som, die keuze A pinden).
+- Sabotages: 7 van 7 rood. Een achtste vond dode code (`gestort` met `+vrijTerug`, per constructie gelijk); die is weggehaald.

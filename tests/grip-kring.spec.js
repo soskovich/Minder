@@ -58,14 +58,16 @@ test.describe('v387 structuur', () => {
 });
 
 test.describe('v387 meters', () => {
-  test('Doelen: Plan opzij min de onttrekkingen; een onttrekking erbij laat hem dalen', async ({ page }) => {
+  /* v397: een opname uit vrij spaargeld wordt standaard teruggezet, dus hij verhoogt "opzij" net zoveel als "eruit": de
+     meter blijft op hetzelfde netto staan en zijn percentage daalt. */
+  test('Doelen: Plan opzij min de onttrekkingen; een onttrekking erbij laat het percentage dalen', async ({ page }) => {
     await grip(page);
     const a = await page.evaluate(() => ({ M: gripMeterDoelen(), opzij: planKpiData().opzij, uit: spaarStortStand().uit }));
     expect(a.uit).toBe(500);
     expect(a.M.netto).toBe(a.opzij - 500); expect(a.M.pct).toBe(Math.round((a.opzij - 500) / a.opzij * 100));
     expect(await page.locator('[data-meter="doelen"]').innerText()).toContain(`€${(a.opzij - 500).toLocaleString('nl-NL')} van €${a.opzij.toLocaleString('nl-NL')}`);
     const b = await page.evaluate((sav) => { const t = { id: 'x1', date: '2026-10-10', amount: -150, acc: sav, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); return gripMeterDoelen(); }, G.SPAAR);
-    expect(b.netto).toBe(a.M.netto - 150); expect(b.pct).toBeLessThan(a.M.pct);
+    expect(b.opzij).toBe(a.opzij + 150); expect(b.netto).toBe(a.M.netto); expect(b.pct).toBeLessThan(a.M.pct);
   });
   test('Doelen: een overboeking tussen twee spaarrekeningen telt niet', async ({ page }) => {
     await grip(page);
@@ -75,12 +77,14 @@ test.describe('v387 meters', () => {
       save(); return { voor, na: gripMeterDoelen().netto }; }, G.SPAAR);
     expect(r.na).toBe(r.voor);
   });
-  test('Doelen: terugzetten laat hem stijgen', async ({ page }) => {
+  /* v397: terugzetten is de standaard; "niet terug" voor het deel uit vrij spaargeld laat de meter dalen. */
+  test('Doelen: niet terugzetten laat hem dalen, terugzetten is de standaard', async ({ page }) => {
     await grip(page);
-    const r = await page.evaluate(() => { const voor = gripMeterDoelen(); let ok = false; try { terugzetKies('alles'); ok = true; } catch (_) {} return { voor, na: gripMeterDoelen(), ok }; });
-    expect(r.ok).toBe(true);
-    expect(r.na.opzij).toBeGreaterThan(r.voor.opzij);
-    expect(r.na.netto).toBeGreaterThan(r.voor.netto);
+    const r = await page.evaluate(() => { const voor = gripMeterDoelen(); const vrij = spaarStortStand().vrijTerug; terugzetVrijZet('niet'); const niet = gripMeterDoelen(); terugzetVrijZet('alles'); return { voor, niet, vrij, terug: gripMeterDoelen() }; });
+    expect(r.vrij).toBeGreaterThan(0);   // invoermeting: er ging iets uit vrij spaargeld
+    expect(r.niet.opzij).toBe(r.voor.opzij - r.vrij);
+    expect(r.niet.netto).toBeLessThan(r.voor.netto);
+    expect(r.terug).toEqual(r.voor);
   });
   test('Budget: verwacht gedeeld door het eerlijke budget, zonder wat te ruim is', async ({ page }) => {
     await grip(page);

@@ -24,7 +24,7 @@ test.describe('1 · spaardoel en Doelen-meter noemen hun basis', () => {
     await tab(page, 'terugblik');
     const sp = await tekst(page, `[data-terugmaand="2026-10"] [data-terugrij="spaardoel"] [data-spaarterug]`);
     // v391: drie delen, gestort nooit negatief, en netto is savedNet
-    expect(sp).toMatch(/^gestort €[\d.]+ · eruit €700 · netto -?€[\d.]+ van €2\.200 · loopt nog$/);
+    expect(sp).toMatch(/^gestort €[\d.]+ · eruit €700 · netto -?€[\d.]+ van €2\.900 · loopt nog$/);   // v397: de EUR 700 uit vrij spaargeld gaat terug en telt in opzij
     expect(sp).toContain(`netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')}`);
     // onder de meters het verschil tussen nu en verwacht, en geen uitlegregel meer (die staat in de sheet)
     expect(await tekst(page, '[data-meternuverwacht]')).toBe(`nu netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')} · verwacht eind €${r.verwacht.toLocaleString('nl-NL')}`);

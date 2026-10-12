@@ -35,15 +35,15 @@ test.describe('de stand van het toestel', () => {
   test.beforeEach(async ({ page }) => { await toestel(page); await open(page); });
   test('invoermeting: EUR 1.019 eruit, EUR 788 met een keuze, EUR 231 uit vrij spaargeld', async ({ page }) => {
     const s = await page.evaluate(() => { const S = spaarStortStand(); return { uit: S.uit, gedekt: S.gedekt, vrij: S.vrijOpname, aan: S.aanvullen, G0: S.G0, bron: S.bron.map(b => [b.soort, b.bedrag]) }; });
-    expect(s).toEqual({ uit: 1019, gedekt: 788, vrij: 231, aan: 0, G0: 0, bron: [['op', 231], ['gat', 407], ['gat', 150]] });
+    expect(s).toEqual({ uit: 1019, gedekt: 788, vrij: 0, aan: 0, G0: 0, bron: [['op', 231], ['gat', 407], ['gat', 150], ['vrij', 231]] });   // v397: vrij gaat standaard terug
   });
-  test('1 · de aansluiting: 1.019 = 688 + 100 + 231, en de som is "eruit"', async ({ page }) => {
+  test('1 · de aansluiting (v397): 1.019 = 919 + 100, en "hoeft niet terug" staat er niet', async ({ page }) => {
     const r = await lees(page);
     expect(r.tot).toBe(1019);
-    expect(r.rij).toEqual({ deze: 688, later: 100, vrij: 231 });
+    expect(r.rij).toEqual({ deze: 919, later: 100 });
     expect(r.som).toBe('€1.019');
     expect(r.tekst).toContain('terug later (nov–dec)');
-    expect(r.tekst).toContain('uit vrij spaargeld · hoeft niet terug (jouw keuze) ›');
+    expect(r.tekst).not.toContain('hoeft niet terug');
     // de kop van de sheet ("terug in oktober") is terug deze maand
     expect(await page.evaluate(() => +document.getElementById('terugOpbouw').dataset.terugtotaal)).toBe(r.rij.deze);
   });
@@ -51,18 +51,40 @@ test.describe('de stand van het toestel', () => {
     const r = await lees(page);
     expect(r.opn.map(x => x.b)).toEqual([131, 100, 428, 210, 150]);
     expect(r.opn.map(x => x.d)).toEqual([
-      [['vrij', 131]], [['vrij', 100]], [['alles', 428]], [['alles', 210]], [['drie', 150]]]);
-    expect(r.opn[0].t).toContain('→ vrij spaargeld, niet terug');
+      [['vrijalles', 131]], [['vrijalles', 100]], [['alles', 428]], [['alles', 210]], [['drie', 150]]]);
+    expect(r.opn[0].t).toContain('→ terug naar vrij spaargeld deze maand');
     expect(r.opn[2].t).toContain('→ terug deze maand');
     expect(r.opn[4].t).toContain('→ terug over 3 mnd (€50/mnd)');
     // de som per bestemming is de aansluiting
     const per = {}; for (const o of r.opn) for (const [k, b] of o.d) per[k] = (per[k] || 0) + b;
-    expect(per.vrij).toBe(r.rij.vrij); expect(per.alles + 50).toBe(r.rij.deze); expect(per.drie - 50).toBe(r.rij.later);
+    expect(per.vrijalles + per.alles + 50).toBe(r.rij.deze); expect(per.drie - 50).toBe(r.rij.later);
   });
   test('4 · "uit doelen EUR 231" en "uit vrij spaargeld EUR 231": twee namen voor twee bedragen', async ({ page }) => {
     const r = await lees(page);
     expect(r.sheet).toContain('€231 uit doelen · alles deze maand');
     expect(r.sheet).not.toMatch(/€231 eruit gehaald/);
+  });
+  test('v397: de sheet noemt het deel uit vrij spaargeld als eigen regel, en waar het heen gaat', async ({ page }) => {
+    const r = await page.evaluate(() => ({ tot: +document.getElementById('terugOpbouw').dataset.terugtotaal,
+      rijen: [...document.querySelectorAll('[data-opbouwrij]')].reduce((a, e) => a + (+e.dataset.opbouwrij), 0),
+      vrij: document.querySelector('[data-opbouwvrij]').innerText.replace(/\s+/g, ' '),
+      heen: [...document.querySelectorAll('[data-opbouwnaar]')].map(e => [e.dataset.opbouwnaar, e.innerText.replace(/\s+/g, ' ')]) }));
+    expect(r.tot).toBe(919); expect(r.rijen).toBe(919);
+    expect(r.vrij).toContain('€231 uit vrij spaargeld · terug naar vrij spaargeld · alles deze maand');
+    expect(r.heen).toEqual([['noodfonds', 'naar Noodfonds €688'], ['vrij', 'naar vrij spaargeld €231']]);
+  });
+  test('v397: per maand te wijzigen; "niet terug" geeft de regel "hoeft niet terug", over 3 maanden spreidt', async ({ page }) => {
+    await page.evaluate(() => { openTerugVrij(); });
+    expect(await page.locator('[data-vrijkeuze="alles"]').getAttribute('data-gekozen')).toBe('1');
+    await page.click('[data-vrijkeuze="niet"]');
+    let r = await lees(page);
+    expect(r.rij).toEqual({ deze: 688, later: 100, vrij: 231 });
+    expect(r.tekst).toContain('uit vrij spaargeld · hoeft niet terug (jouw keuze) ›');
+    expect(r.opn[0].t).toContain('→ vrij spaargeld, niet terug');
+    await page.evaluate(() => terugzetVrijZet('drie'));
+    await open(page); r = await lees(page);
+    expect(r.rij).toEqual({ deze: 765, later: 254 });   // 231 over drie: 77 nu, 154 later
+    expect(r.opn[0].t).toContain('→ terug naar vrij spaargeld over 3 mnd (€77/mnd)');
   });
   test('openen schrijft niets', async ({ page }) => {
     const a = await page.evaluate(() => localStorage.getItem('minder_set'));
@@ -121,4 +143,40 @@ test.describe('de som sluit ook in andere standen', () => {
     expect(r.tot).toBe(1019);
     expect(r.rij.gestort).toBe(99);   // invoermeting: de storting dekte een deel
   });
+});
+
+/* v397: EEN BRON VOOR OPZIJ. Home "nog te sparen" (plus al gestort), Plan "Deze maand opzij" en de Grip Doelen-meter
+   (opzij min eruit) lezen hetzelfde bedrag, op de stand van het toestel en na een wijziging van de keuze. */
+test.describe('v397 · drie schermen, een opzij', () => {
+  const drie = page => page.evaluate(() => { const S = safeToSpend(), K = planKpiData(), M = gripMeterDoelen();
+    go('vooruit'); const plan = +document.querySelector('[data-kpiopzij]').dataset.kpiopzij;
+    go('maand'); const meter = document.querySelector('[data-meter="doelen"]').innerText.replace(/\s+/g, ' ');
+    return { home: S.saveReserved + S.gestort, kpi: K.opzij, plan, meterOpzij: M.opzij, meterNetto: M.netto, uit: M.uit, meter }; });
+  test('oktober: opzij EUR 3.119 op alle drie, de meter EUR 2.100 van EUR 3.119', async ({ page }) => {
+    await toestel(page);
+    const r = await drie(page);
+    expect(r).toMatchObject({ home: 3119, kpi: 3119, plan: 3119, meterOpzij: 3119, meterNetto: 2100, uit: 1019 });
+    expect(r.meter).toContain('€2.100 van €3.119');
+  });
+  for (const k of ['niet', 'drie']) test(`na "${k}" voor vrij spaargeld tonen ze nog steeds hetzelfde bedrag`, async ({ page }) => {
+    await toestel(page);
+    await page.evaluate(k => terugzetVrijZet(k), k);
+    const r = await drie(page);
+    expect(r.home).toBe(r.kpi); expect(r.plan).toBe(r.kpi); expect(r.meterOpzij).toBe(r.kpi);
+    expect(r.meterNetto).toBe(r.kpi - r.uit);
+    expect(r.kpi).toBe(k === 'niet' ? 2888 : 2965);
+  });
+});
+
+test('v397: over 3 maanden spreiden zet in november het tweede deel terug, uit de delen die bij de keuze zijn vastgelegd', async ({ page }) => {
+  await toestel(page);
+  const r = await page.evaluate(() => { terugzetVrijZet('drie'); const rec = SET.terugzetVrij['2026-10']; return { rec, nov: terugVrijDeel('2026-11'), dec: terugVrijDeel('2026-12'), jan: terugVrijDeel('2027-01') }; });
+  expect(r.rec).toMatchObject({ keuze: 'drie', bedrag: 231, delen: [77, 77, 77] });
+  expect([r.nov.deze, r.dec.deze, r.jan.deze]).toEqual([77, 77, 0]);
+  // een latere opname in oktober verandert oktober zelf, maar niet wat er bij de keuze voor november is vastgelegd
+  const n = await page.evaluate((sav) => { TX.push({ id: 'laat', date: '2026-10-10', amount: -30, acc: sav, name: 'Spaarpot', desc: 'VAN SPAREN LAAT', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }); categorize(TX[TX.length - 1]);
+    SET.manualBal[Object.keys(SET.manualBal).find(k => k.includes('SAVE'))] += 30; save();
+    return { okt: spaarStortStand('2026-10').bron.find(b => b.soort === 'vrij').bedrag, nov: terugVrijDeel('2026-11').deze }; }, O.SAV);
+  expect(n.okt).toBeGreaterThan(231);   // invoermeting: oktober rekent nu met meer vrij spaargeld
+  expect(n.nov).toBe(77);
 });
