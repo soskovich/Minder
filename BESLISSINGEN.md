@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v403` · Een persoonlijke overboeking zonder potje is geen uitgave, op Grip en op Inzichten.** Een definitie
+  (`buitenUitgave()`), gelezen door `totals().spendNorm`, de maandkaart, het trap-tempo, de weektegel, de vaste lasten en
+  Grip. Waarom: bij `v402` telde Grip hem niet en Inzichten wel ("zonder potje · buiten budget"), dus twee schermen gaven
+  een ander uitgaventotaal voor dezelfde maand. Niet stil: een grijze regel onder de maandkaart met de boekingen en per
+  boeking "categorie geven". Het geld is wel weg en blijft in je saldo en veilig te besteden. De valkuil: een geenNorm-vlag
+  zou hetzelfde lijken te doen, maar die verbergt de categorie in de budgeteditor en zet hem in de regels "buiten je
+  potjes"; daarom een eigen predicaat. `catSpendMap()` en de coach zijn niet aangeraakt.
 - **`v402` · "Zonder potje" is geboekt plus verwacht, en verwacht alleen wat er vaker is.** Per categorie zonder potje:
   geboekt (deze maand, buiten de herkende vaste lasten) telt altijd; verwacht (het gemiddelde na deze dag in de laatste 3
   afgeronde maanden) nooit onder nul en alleen bij uitgaven in minstens 2 van die 3 maanden. Persoonlijke overboeking telt

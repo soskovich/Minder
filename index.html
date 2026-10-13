@@ -2032,6 +2032,15 @@ function isUitReservering(t){ return uitReserveringBedrag(t)>0; }
    aan het volle bedrag (zie uitReserveringBedrag()). Daarmee blijft catSpendMap() karakter voor
    karakter dezelfde som als hiervoor. */
 function uitgaveNorm(t){ return (-t.amount)-uitReserveringBedrag(t); }
+/* v403: EEN PERSOONLIJKE OVERBOEKING ZONDER POTJE IS GEEN UITGAVE, OP GRIP EN OP INZICHTEN (gevraagd door de gebruiker).
+   Dit is de ENE definitie (per categorie): een categorie uit ZONDER_UIT die een uitgave is, geen potje heeft en niet op
+   vast staat. Geef je zo'n categorie een potje, of een boeking een andere categorie, dan telt hij gewoon mee. Lezers:
+   totals() (spendNorm en het bedrag `persoonlijk`, dus elke som die spendNorm leest), insInNorm() (de maandkaart, de
+   weektegel en het trap-tempo op Inzichten), maandSplitsing() (vast op Grip en Inzichten), zonderPotjeStand() (blok 19)
+   en de lek-regel in Let op. Het geld is wel weg: spend, het saldo en veilig te besteden houden hem. */
+const ZONDER_UIT=['persoonlijk'];
+function buitenUitgave(c, B){ B=B||SET.budgets||{};
+  return ZONDER_UIT.includes(c) && !!(CATS[c] && CATS[c].type==='expense' && !CATS[c].geenNorm) && !((+B[c]||0)>0) && !potHeelVast(c); }
 function uitReserveringSom(txns){ let s=0; for(const t of (txns||[])) s+=uitReserveringBedrag(t); return s; }
 function zetUitReservering(id, bedrag, heropen){
   const t=TX.find(x=>x.id===id); if(!t) return;
@@ -2071,12 +2080,12 @@ function maandInkomen(m){
 }
 function totals(m){
   const list=txOfMonth(m);
-  let spend=0, internal=0, buitenNorm=0, uitRes=0;
+  let spend=0, internal=0, buitenNorm=0, uitRes=0, persoonlijk=0; const persTx=[];
   const byCat={}, uitResCat={};
   for(const t of list){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
-    if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
+    if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; else if(buitenUitgave(c)){ persoonlijk+=uitgaveNorm(t); persTx.push(t); } }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
     /* v269: de derde term in dezelfde aftrekking, naast buitenNorm. uitResCat draagt hem per
        categorie zodat de regel op Inzichten per constructie optelt tot uitReservering, precies
@@ -2094,7 +2103,9 @@ function totals(m){
      Geen tweede bron: dezelfde lijst, één filter, en buitenNorm maakt het weggefilterde zichtbaar. */
   /* v269: en zonder wat je uit een reservering betaalde. Die twee verzamelingen zijn disjunct,
      want uitReserveringBedrag() geeft nul op een geenNorm-categorie. */
-  const spendNorm=spend-buitenNorm-uitRes;
+  /* v403: en zonder een persoonlijke overboeking zonder potje (buitenUitgave), in de vorm van uitgaveNorm() zodat hij
+     disjunct is met uitRes. */
+  const spendNorm=spend-buitenNorm-uitRes-persoonlijk;
   let inc, basis;
   if(SET.autoIncome){
     if(income>0){ inc=income; basis='gedetecteerd'; }
@@ -2130,7 +2141,7 @@ function totals(m){
   const incAlles = _gedetecteerd0 ? MI.alles : inc;
   /* detectedIncome houdt zijn eigen betekenis, alles wat er aan inkomen binnenkwam, want het label
      in Instellingen zegt "Gedetecteerd deze maand". Wat de app ERMEE doet staat in income. */
-  return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,uitReservering:Math.round(uitRes),uitResCat,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
+  return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,persoonlijk,persTx,uitReservering:Math.round(uitRes),uitResCat,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
 }
 // basis-inkomen = conservatieve norm over je RECENTE maanden: mediaan van de ONDERSTE helft.
 // Recent venster → een salarisverhoging telt mee en oudere/lagere maanden wegen niet meer mee.
@@ -8191,7 +8202,7 @@ function gripLetOpItems(RO, SIG, BV){
   const zvK=new Set(ZV.map(x=>x.k));
   const zvExtra={};
   try{ const m=thisYM(), Lk0=lekSignaal(m, budgetFlaggedCats(m));
-    const Lk=Lk0 && !ZONDER_UIT.includes(Lk0.cat) ? Lk0 : null;   // v402: een persoonlijke overboeking is geen uitgave zonder potje, ook niet in Let op
+    const Lk=Lk0 && !buitenUitgave(Lk0.cat) ? Lk0 : null;   // v402: een persoonlijke overboeking is geen uitgave zonder potje, ook niet in Let op
     if(Lk && zvK.has(Lk.cat)){
     /* Een terugkerende partij in die categorie zijn dezelfde boekingen: EEN regel, met de partij en het bewijs eronder en
        de tik naar de sheet van het lek (potje maken, categorie wijzigen, het gesprek), zodat die ingang blijft (v359). */
@@ -8465,7 +8476,7 @@ function overboekActieTekst(A){ return `Verhoog je automatische overboeking naar
    verwachting. ZONDER_UIT telt niet mee, niet geboekt en niet verwacht: een persoonlijke overboeking is geen uitgave zonder
    potje (keuze van de gebruiker). Vier lezers: maandVooruit() (de uitkomst), de bridge op Zien (dicht geboekt, licht
    verwacht), Let op (een regel per categorie die er vaker is) en blok 19 (per categorie de reden). */
-const ZONDER_MIN_MAANDEN=2, ZONDER_UIT=['persoonlijk'];
+const ZONDER_MIN_MAANDEN=2;   // ZONDER_UIT en buitenUitgave() staan bij uitgaveNorm() (v403)
 function zonderPotjeCat(k){ const B=SET.budgets||{};
   return !!(CATS[k] && CATS[k].type==='expense' && !geenNorm(k) && !((+B[k]||0)>0) && !potHeelVast(k)); }
 /* De uitgaven per categorie (piekInScope, netto) in de afgeronde maanden voor m, in de snede van maandVooruit(). */
@@ -8484,7 +8495,7 @@ function zonderPotjeStand(m, restCat, pm){
   const rijen=[]; let geboekt=0, verwacht=0, uitgesloten=0;
   for(const k of ks){ if(!zonderPotjeCat(k)) continue;
     const g=+geb[k]||0, n=pm.filter(o=>(+o[k]||0)>0).length, ruw=restCat?(+restCat[k]||0):0;
-    const uit=ZONDER_UIT.includes(k);
+    const uit=buitenUitgave(k);
     let v=0, reden;
     if(uit){ reden='telt niet mee: een persoonlijke overboeking is geen uitgave zonder potje'; uitgesloten+=g; }
     else if(n<ZONDER_MIN_MAANDEN) reden=`uitgaven in ${n} van ${pm.length} mnd: geen verwachting (minstens ${ZONDER_MIN_MAANDEN} nodig)`;
@@ -8506,11 +8517,14 @@ function maandSplitsing(m, L){
   m=m||thisYM();
   if(!L){ try{ L=monthLiquidity(); }catch(_){ L={fixDue:0, fixDueItems:[]}; } }
   const B=SET.budgets||{}, S=catSpendMap(m)||{}, heelVast=c=>potHeelVast(c);
-  const inNorm=c=>!!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c));
+  const inNorm=c=>!!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c)) && !buitenUitgave(c);   // v403
   /* De incasso's die nog komen, per categorie. Een post uit de terugval in een potje dat het schema niet als
      terugkerend ziet telt in dat potje (inPotje, v327) en dus niet in fixDue; is dat potje vast, dan telt hij hier. */
-  const open={}, openNamen={}; let vastExtra=0;
+  const open={}, openNamen={}; let vastExtra=0, uitOpen=0;
   for(const s of (L.fixDueItems||[])){ if(s.excl || !s.cat) continue; const a=+s.amount||0;
+    /* v403: een persoonlijke overboeking die nog komt staat in fixDue (het geld gaat wel weg, voor je saldo), maar is
+       geen vaste last: uitOpen is wat maandVooruit() daarom van fixDue aftrekt. */
+    if(buitenUitgave(s.cat)){ if(!s.inPotje) uitOpen+=a; continue; }
     if(s.inPotje){ if(!heelVast(s.cat)) continue; vastExtra+=a; }
     open[s.cat]=(open[s.cat]||0)+a; (openNamen[s.cat]=openNamen[s.cat]||[]).push({naam:s.name, bedrag:Math.round(a)}); }
   /* Het vaste deel dat al betaald is, per categorie: de herkende incasso's van deze maand (de aanvulling op
@@ -8536,7 +8550,7 @@ function maandSplitsing(m, L){
     const u=heelVast(k)?(+S[k]||0):Math.max(+fBet[k]||0,0), o=+open[k]||0, e=u+o;
     if(Math.round(e)<=0) continue;
     vastePotjes.push({k, naam:CATS[k].name, bud:0, potje:0, uit:Math.round(u), vast:Math.round(o), eind:Math.round(e), overR:e, terug:true, geen:false, zonderPotje:true, namen:openNamen[k]||[]}); }
-  return {m, vastePotjes, potBasis, vastExtra, geenExtra, open, fBet};
+  return {m, vastePotjes, potBasis, vastExtra, geenExtra, uitOpen, open, fBet};
 }
 function maandVooruit(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
@@ -8562,12 +8576,14 @@ function maandVooruit(){
   /* v383: de splitsing in vast en potjes staat in maandSplitsing(), de ENE definitie van vast met drie lezers:
      deze vooruitblik (Grip), vasteLastenStand() en insMaandStand() (Inzichten). */
   const SP=maandSplitsing(m, L), vastePotjes=SP.vastePotjes, vastExtra=SP.vastExtra, geenExtra=SP.geenExtra;
-  const uit=Math.round(T.spendNorm||0), vast=Math.round((+L.fixDue||0)+vastExtra+geenExtra);
+  const uit=Math.round(T.spendNorm||0), vast=Math.round((+L.fixDue||0)+vastExtra+geenExtra-(SP.uitOpen||0));
   /* v402: wat er nog verwacht wordt is per potje niet onder nul (zoals het potje zelf al rekent) en zonder potje alleen
      voor een categorie die er vaker is (zonderPotjeStand); een persoonlijke overboeking zonder potje telt niet mee. */
   const Z=zonderPotjeStand(m, restCat, perMaand), B0=SET.budgets||{};
   let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0) restTot+=Math.max(+restCat[c]||0,0); }
-  const rest=Math.round(Math.max(restTot,0)), uitZ=Math.round((T.spendNorm||0)-Z.uitgesloten);
+  /* v403: spendNorm draagt de persoonlijke overboeking zonder potje al niet (buitenUitgave), dus er gaat niets meer af:
+     Z.uitgesloten is wat blok 19 noemt. */
+  const rest=Math.round(Math.max(restTot,0)), uitZ=uit;
   /* v399: de inleg in Plan telt mee in het maandbudget en gaat verwacht volledig uit (planInlegRegels): netto op budget. */
   const inleg=planInlegRegels(m).tot;
   const projectie=uitZ+vast+rest+inleg, budget=Math.round((T.budget||0)+inleg);
@@ -20503,7 +20519,7 @@ function openInsFilter(){
    v355), variabel de rest; samen zijn ze per constructie spendNorm (de uitgaven met een norm), en dat
    staat als assertie vast. Dezelfde snede als maandVooruit(): daar valt een herkende incasso buiten
    piekInScope() en een heel vast potje buiten het gemiddelde. */
-function insInNorm(t){ const c=catOf(t), meta=CATS[c]; return !!(meta && meta.type==='expense' && !meta.geenNorm); }
+function insInNorm(t, B){ const c=catOf(t), meta=CATS[c]; return !!(meta && meta.type==='expense' && !meta.geenNorm) && !buitenUitgave(c, B); }   // v403: geen persoonlijke overboeking zonder potje
 function insVastTx(t){ return isFixed(t) || potHeelVast(catOf(t)); }
 function insSoortUit(m, soort){
   if(soort!=='var' && soort!=='vast') return totals(m).spendNorm;
@@ -20738,7 +20754,7 @@ function insPatronenKaart(pats){
    (insInNorm), dus de drie delen van "uitgegeven" tellen op tot het getal in de kop. De weektegel leest dezelfde
    snede: de week telt de potjes die je wekelijks noemde en wat er zonder potje uitging. */
 function insTxSoort(t, B){
-  if(!insInNorm(t)) return null;
+  if(!insInNorm(t, B)) return null;
   if(insVastTx(t)) return 'vast';
   return (+((B||SET.budgets||{})[catOf(t)])||0)>0 ? 'potje' : 'zonder';
 }
@@ -20775,7 +20791,7 @@ function insMaandStand(){
   const zonder=Math.max(Math.round(vb+pu+zp)-vast-potjes,0);
   /* Het trap-tempo: een vaste last die nog komt telt op zijn dag, ook een terugvalpost in een vast potje; een vast potje
      zonder betaling heeft geen dag en telt op de laatste dag. */
-  const items=((L&&L.fixDueItems)||[]).filter(s=>!s.excl && (!s.inPotje || potHeelVast(s.cat)));
+  const items=((L&&L.fixDueItems)||[]).filter(s=>!s.excl && (!s.inPotje || potHeelVast(s.cat)) && !buitenUitgave(s.cat));   // v403
   const achter=[]; for(const s of items){ const d=insFixDag(s, m); if(d>0 && d<=E.elapsed) achter.push({naam:s.name, bedrag:+s.amount||0, dag:d}); }
   if(E.elapsed>=E.dim) for(const x of VPl) if(x.geen) achter.push({naam:x.naam, bedrag:x.bud, dag:E.dim});
   const achterSom=achter.reduce((a,x)=>a+x.bedrag,0);
@@ -20784,7 +20800,7 @@ function insMaandStand(){
   const vastTempo=Math.round(vastTot+achterSom), potTempo=Math.round(potDeel*E.elapsed/E.dim);
   return {m, B, uit, vast, potjes, zonder, nogVast, nogPot, boven:uit+nogVast+nogPot-B,
     tempo:vastTempo+potTempo, vastTempo, potTempo, potDeel, vastSom, el:E.elapsed, dim:E.dim, zTx, vastTx, achter, onbekend:false,
-    vastePotjes:VPl, potRijen, potBud,
+    vastePotjes:VPl, potRijen, potBud, pers:Math.round(T0.persoonlijk||0), persTx:T0.persTx||[],
     limiet:!(T0.potTotal>0)};   // v173: zonder potjes is het budget de inkomen-limiet, en dan heet het zo
 }
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
@@ -20846,7 +20862,7 @@ function insMaandKaart(P, soort){
     <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${bud>0?20:4}px">${segs}${streep}</div>
     <div class="ins-leg2"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>
       ${insLegPaar(delen.filter(d=>d.v!==0), nog.filter(d=>d.v!==0))}
-</div></div>`;
+</div>${insPersRegel(S)}</div>`;
 }
 function insSoortDelen(S, soort){
   if(soort==='vast') return [{k:'vast', v:S.vast}];
@@ -20869,6 +20885,24 @@ function insLegPaar(links, rechts){
   const alleen=links.length===1;
   for(let i=0;i<n;i++) h+=(links[i]?insLegRij(links[i].k, links[i].v, alleen):'<div></div>')+(rechts[i]?insLegRij(rechts[i].k, rechts[i].v):'<div></div>');
   return h;
+}
+/* v403: NIET STIL. Wat er als persoonlijke overboeking zonder potje buiten de kaart valt (buitenUitgave) staat eronder
+   als een grijze regel, alleen als er deze maand iets is. De tik opent de boekingen, met per boeking "categorie geven"
+   (de bestaande categoriekeuze, openSheet): een boeking met een andere categorie telt gewoon mee. */
+function insPersRegel(S){
+  if(!(S.pers>0)) return '';
+  return `<div class="small" data-inspers="${S.pers}" role="button" onclick="openInsPersoonlijk()" style="color:var(--mut2);margin-top:8px;cursor:pointer">${euro0(S.pers)} persoonlijke overboekingen · niet in je budget ›</div>`;
+}
+function openInsPersoonlijk(){
+  const S=insMaandStand();
+  const L=S.persTx.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  window._werklijst={persoonlijk:true};
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="insPersSheet" data-inswaarde="${S.pers}">${insSheetKop('Persoonlijke overboekingen · '+esc(ymFull(S.m)), 'tellen niet als uitgave en staan niet in je budget', euro0(S.pers))}
+    <div class="small muted" style="margin:0 2px 10px;line-height:1.5">Het geld is wel van je rekening af, dus het telt in je saldo. Hoort een boeking toch bij een uitgave, geef hem dan een categorie: dan telt hij gewoon mee.</div>
+    ${L.map(t=>`<div class="tx" data-persrij="${uitgaveNorm(t)}" style="cursor:default">
+      <div class="info"><div class="nm">${esc(txNaam(t))}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}</div></div>
+      <div style="text-align:right"><div class="amt neg">${euro(t.amount)}</div><div class="small" data-perscat role="button" onclick="window._werklijst={persoonlijk:true};openSheet('${esc(t.id)}')" style="color:var(--teal);font-weight:700;cursor:pointer">categorie geven ›</div></div></div>`).join('')||'<div class="small muted">Deze maand geen persoonlijke overboekingen.</div>'}</div>`;
+  showSheetBg();
 }
 /* "zonder potje ›": de boekingen die op geen potje vallen, die per constructie optellen tot het getal op de kaart. */
 function openInsZonder(){
@@ -21797,7 +21831,7 @@ function setCat(id,k){
   const t=TX.find(x=>x.id===id); if(!t) return;
   /* v338: vanuit de werklijst is elke keuze een eigen keuze, ook Overig, en daarna keer je terug naar de lijst. */
   const wl=window._werklijst||null;
-  const terug=()=>{ if(wl){ if(k==='overig'){ OVR[id]='overig'; save(); render(); } if(wl.archief) openPotArchiefWerk(); else openAfsluitOverig(wl); } };
+  const terug=()=>{ if(wl){ if(wl.persoonlijk){ if(insMaandStand().pers>0) openInsPersoonlijk(); return; } if(k==='overig'){ OVR[id]='overig'; save(); render(); } if(wl.archief) openPotArchiefWerk(); else openAfsluitOverig(wl); } };
   if(k!=='uitgeleend' && k!=='geleend' && unmarkLoan(id)) save();   // terug naar uitgave: post opruimen
   const mk=document.getElementById('mkrule');
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
