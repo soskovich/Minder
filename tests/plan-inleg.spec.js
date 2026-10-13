@@ -26,6 +26,16 @@ const boek = (page, acc, d, a) => page.evaluate(({ acc, d, a }) => { const t = {
   categorize(t); TX.push(t); OVR[t.id] = 'intern'; save(); }, { acc, d, a });
 
 test.describe('1 · een inleg in Plan, geen regel in het budget', () => {
+  test('Zien: de inleg is geen stap in de bridge, ook niet bij "zonder potje"', async ({ page }) => {
+    await grip(page);
+    const st = () => page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V); return { z: Math.round(V.zonder), stappen: B.stappen.filter(s => !['begin', 'eind', 'teruim'].includes(s.soort)).map(s => [s.soort, s.k || '', s.waarde]) }; });
+    const v = await st();
+    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
+    const n = await st();
+    expect(n.z).toBe(v.z);
+    expect(n.stappen).toEqual(v.stappen);   // alleen de te ruime stap van Huur verandert
+    expect(await page.evaluate(() => maandVooruit().inleg)).toBe(300);
+  });
   test('Reservering: budget gelijk, verwacht +300, niet in de vaste lasten en niet op Inzichten', async ({ page }) => {
     await grip(page);
     const v = await stand(page);

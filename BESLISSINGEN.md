@@ -32,7 +32,9 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   (savedNet tegen Plan opzij), dus geen tweede rij. In veilig te besteden is alleen wat er deze maand NOG van een inleg naar
   reservering of beleggen moet een claim (`inlegNogDezeMaand()`); tot `v398` telde het hele bedrag, ook na de overboeking.
   Valkuil: zonder reserveringsrekening is de meting onbekend en geen nul. En de basis is een meting van een maand: wie in de
-  maand ervoor toevallig niets overmaakte, krijgt een lage basis.
+  maand ervoor toevallig niets overmaakte, krijgt een lage basis. En (`v400`, gevonden op een screenshot): de inleg zit in
+  de projectie, dus wat de bridge "zonder potje" noemt (`V.zonder`) moet hem expliciet uitsluiten; anders sluit de som en
+  liegt het label.
 - **`v399` · Een bestemming die groter is dan nodig wordt gesplitst.** Kies je een potje dat boven eindigt en is het vrije
   bedrag groter dan zijn verwachte overschrijding, dan stelt de sheet voor: de overschrijding naar dat potje en de rest naar
   een tweede bestemming die je zelf kiest ("€67 naar Uit eten · €233 naar …", `teRuimDelen()`). Geen voorselectie, beide

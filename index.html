@@ -8537,7 +8537,7 @@ function maandVooruit(){
   const variabel={budget:Math.round(potjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(potjes.reduce((a,x)=>a+x.eindR,0))};
   const vaste={budget:Math.round(vastePotjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(vastePotjes.reduce((a,x)=>a+x.eind,0))};
   const effect=handelingen.reduce((a,h)=>a+h.effect,0);
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:projectie-variabel.eind-vaste.eind, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:projectie-variabel.eind-vaste.eind-inleg, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -8917,7 +8917,7 @@ function renderGripVooruit(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVooruit" data-projectie="${V.projectie}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} vooruit</div>
     <div class="small" data-bandregel style="color:var(--mut2);line-height:1.5;margin-top:4px">Rond ${euro0(V.projectie)}; de rest van de maand lag in ${esc(banden)} tussen <span data-bandtekst>${euro0(V.band.min)} en ${euro0(V.band.max)}</span>.</div>
-    <div class="small" data-opbouw style="line-height:1.5;margin-top:4px">Variabel ${euro0(V.variabel.eind)} · vaste lasten ${euro0(V.vaste.eind)}${V.zonder?` · zonder potje ${euro0(V.zonder)}`:''}${V.budget>0?` · ${gripVerschil(V.projectie,V.budget)}`:''}</div>
+    <div class="small" data-opbouw style="line-height:1.5;margin-top:4px">Variabel ${euro0(V.variabel.eind)} · vaste lasten ${euro0(V.vaste.eind)}${V.zonder?` · zonder potje ${euro0(V.zonder)}`:''}${V.inleg?` · inleg in Plan ${euro0(V.inleg)}`:''}${V.budget>0?` · ${gripVerschil(V.projectie,V.budget)}`:''}</div>
     ${hand||sch?`<div class="hlabel" style="margin:14px 0 0">Wat je deze maand kunt doen</div>${hand}${sch}
       ${V.metGrenzen!=null?`<div class="small" data-metgrenzentot style="padding-top:9px;border-top:1px solid var(--line);font-weight:600">Met ${V.handelingen.length===1?'deze grens':(V.handelingen.length===2?'beide grenzen':'alle '+V.handelingen.length+' grenzen')} rond ${euro0(V.metGrenzen)}${V.budget>0?` · ${gripVerschil(V.metGrenzen,V.budget)}`:''}</div>`:''}
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:6px">Niets wordt vanzelf ingesteld. Een grens die je kiest wordt een afspraak.</div>`

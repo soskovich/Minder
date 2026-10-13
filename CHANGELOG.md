@@ -1291,3 +1291,8 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **4 · Let op.** "hoort bij een vaste categorie en heeft nog geen potje" is "<categorie> €X zonder potje", een regel, de partij eronder.
 - **Suite.** 4220 groen; rood alleen `decimaalteken` (bekend) en de bekende flake in `diag-entry-merge`.
 - **Specs.** Nieuw: `plan-inleg.spec.js` (18). Gemigreerd: `grip-eigen-budget` (de Plan-tekst, `SET.planInleg`, de regel zonder bijzin; pot:uiteten is naar de splitsing verhuisd). Sabotages: 17 van 17 rood; "een potje-bestemming maakt een actie" werd pas rood nadat de sabotage een soort koos die de regel ook toont (de eerste vorm was per constructie inert).
+
+## v400 · Reparatie: de inleg in Plan stond in Zien als "zonder potje" (`minder-v400`)
+- Gevonden op de screenshot van v399: na Huur naar Plan en Vervoer naar Reservering stond in de bridge "z. potje +€623", precies de inleg. `maandVooruit().zonder` was projectie min variabel min vast, en de inleg zat sinds v399 in de projectie. Nu `zonder` zonder de inleg, met `V.inleg` apart; de opbouwregel in de sheet noemt "inleg in Plan €X". De som-eis bleef kloppen (de rest-stap viel daarmee juist te laag uit), dus geen bestaande test zag het.
+- Suite: 4222 groen, alleen `decimaalteken` rood.
+- Nieuwe test in `plan-inleg.spec.js`: na een inleg zijn de stappen van Zien gelijk aan ervoor, op de te ruime stap van het verlaagde potje na. Rood op v399, groen op v400.
