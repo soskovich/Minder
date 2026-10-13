@@ -26,6 +26,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   onder: een stap die boven en onder optelt verbergt precies wat een uitschieter is (GEMELD: Boodschappen +53 zat in overig,
   omdat er tot v406 hooguit drie los stonden en de kleinste bij te weinig kolommen terugviel). Valkuil: afronding mag het
   teken van een overig-stap niet omdraaien; dat euro schuift naar de andere kant.
+  "Maanden boven je grens" (overstreak) vuurde op `totals().spendNorm` tegen het hele maandbudget, twee afgeronde maanden op
+  rij, zonder potje. Hij is niet weg maar vervalt bij de BRON (`scoreNotifs()`) zodra een potje-regel het verklaart, zodat
+  Let op, `maandStructureel()` en de coach hetzelfde zeggen; zijn tekst is neutraal. Valkuil: alleen in Let op filteren liet
+  de coach en de maandsheet het oude signaal houden. Een potje boven zijn grens deze maand is een actie (groep a), en
+  eenmalig en boven tellen niet in de terugval "te weinig ingesteld": ze zeggen niets over wat er is ingesteld.
 - **`v405` · Een definitie van uitgave voor alle schermen en de coach.** `isUitgave()` is de enige plek die zegt wat een
   uitgave is: een uitgavencategorie (een eigen overboeking is intern) en geen persoonlijke overboeking zonder potje, tegen
   de potjes van de maand van de boeking. Coach, lek-detectie, Inzichten en Grip lezen hem, en geven per categorie en per

@@ -69,7 +69,10 @@ async function boot(page, o) {
   await page.evaluate(() => go('maand'));
 }
 // overstreak vuurt bij twee maanden op rij boven budget
-const STRUCT = { set: { budgets: { boodschappen: 500, huur: 1500 } } };
+/* v406: overstreak staat er alleen nog als geen potje het verklaart (potBovenLijst() leeg). Daarom
+   heeft boodschappen hier GEEN potje: de 900 per maand gaat boven het maandbudget van 1500 uit zonder
+   dat een potje boven zijn eigen budget eindigt. Met boodschappen op 500 zou de potje-regel het dragen. */
+const STRUCT = { set: { budgets: { huur: 1500 } } };
 
 const ing = (page, key) => page.evaluate((k) => {
   const m = curMonth || thisYM();
@@ -145,6 +148,7 @@ test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
 test.describe('b - een structureel signaal krijgt een andere vraag', () => {
   test('het opent op zijn eigen sleutel en vraagt om een afspraak', async ({ page }) => {
     await boot(page, STRUCT);
+    expect(await page.evaluate(() => potBovenLijst().length)).toBe(0);   // invoermeting: geen potje verklaart het
     const r = await ing(page, 'overstreak');
     expect(r.status).toBe('tekort');
     expect(r.opent).toBe('overstreak');
