@@ -107,7 +107,11 @@ test('h: Let op noemt een persoonlijke overboeking niet als uitgave zonder potje
   await boot(page);
   const r = await page.evaluate(() => { const Lk = lekSignaal(thisYM(), budgetFlaggedCats(thisYM()));
     return { lek: Lk && Lk.cat, namen: gripLetOpItems([], [], []).map(x => x.naam + ' ' + (x.sub || '')) }; });
-  expect(r.lek).toBe('persoonlijk');   // invoermeting: zonder de uitsluiting zou de lek-regel erover gaan
+  /* v405: de lek-detectie leest zelf de ene definitie van uitgave (isUitgave), dus hij noemt de persoonlijke overboeking niet
+     meer; de invoermeting is dat die overboeking de grootste uitgave zonder potje zou zijn als hij meetelde. */
+  expect(r.lek).not.toBe('persoonlijk');
+  const groot = await page.evaluate(() => { const o = {}; for (const t of txOfMonth(thisYM())) { const c = catOf(t); if (CATS[c].type === 'expense' && !((+SET.budgets[c] || 0) > 0) && !isFixed(t)) o[c] = (o[c] || 0) - t.amount; } return Object.keys(o).sort((a, b) => o[b] - o[a])[0]; });
+  expect(groot).toBe('persoonlijk');
   expect(r.namen.join('|')).not.toContain('Persoonlijke overboeking');
   expect(r.namen.join('|')).not.toContain('Tikkie');
 });

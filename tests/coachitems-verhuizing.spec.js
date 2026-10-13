@@ -233,7 +233,7 @@ test.describe('f · deel A sloopt nog niets', () => {
     const hefSrc = kaalBron(r.src);
     r.venster = /slice\(-6\)/.test(hefSrc);
     r.afgerond = /filter\(x=>x<nowYM\)/.test(hefSrc.replace(/\s/g, ''));
-    r.variabel = /isExpenseTx\(t\)&&!isFixed\(t\)/.test(hefSrc.replace(/\s/g, ''));
+    r.variabel = /isUitgave\(t\)&&!isFixed\(t\)/.test(hefSrc.replace(/\s/g, ''));   // v405: de ene definitie van uitgave
     test.skip(!r.H, 'deze fixture heeft geen variabele historie');
     expect(r.venster).toBe(true);                  // zes maanden
     expect(r.afgerond).toBe(true);                 // en alleen afgeronde
