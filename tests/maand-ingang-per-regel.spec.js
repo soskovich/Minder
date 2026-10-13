@@ -169,6 +169,32 @@ test.describe('b - een structureel signaal krijgt een andere vraag', () => {
     const r = await ing(page, 'overstreak');
     expect(r.tekst).not.toMatch(/€/);
   });
+
+  /* v406, de andere kant: dezelfde uitgaven, maar boodschappen heeft een potje van 500 en eindigt daar elke maand
+     boven (900). Dan verklaart een potje de overschrijding: potBovenLijst() draagt boodschappen, overstreak staat
+     nergens (niet in scoreNotifs, niet in maandStructureel, niet in Let op) en de potje-regel staat er wel.
+     Invoermeting: het maandtotaal (2400) ligt hier net zo boven het maandbudget (2000) als in STRUCT, dus zonder de
+     onderdrukking zou overstreak vuren. */
+  const STRUCT_POT = { set: { budgets: { boodschappen: 500, huur: 1500 } } };
+  test('met een potje dat de overschrijding verklaart staat overstreak er niet, en de potje-regel wel', async ({ page }) => {
+    await boot(page, STRUCT_POT);
+    const r = await page.evaluate(() => {
+      const m = valtOpYmPlus(thisYM(), -1), t = totals(m);
+      return {
+        boven: potBovenLijst().map((x) => x.k),
+        spend: Math.round(t.spendNorm), budget: Math.round(t.budget),
+        notif: scoreNotifs().some((n) => n.key === 'overstreak'),
+        struct: maandStructureel().some((x) => x.key === 'overstreak'),
+        letop: gripLetOpItems([], [], []).map((x) => x.soort + ':' + x.naam),
+      };
+    });
+    expect(r.spend).toBeGreaterThan(r.budget);              // invoermeting: boven het maandbudget
+    expect(r.boven).toEqual(['boodschappen']);              // invoermeting: een potje verklaart het
+    expect(r.notif).toBe(false);
+    expect(r.struct).toBe(false);
+    expect(r.letop.join('|')).not.toContain('Maanden boven je grens');
+    expect(r.letop.some((x) => x.startsWith('boven:') && x.includes('Boodschappen'))).toBe(true);
+  });
 });
 
 test.describe('c - geen ingang waar er niets te beslissen valt', () => {
