@@ -271,7 +271,8 @@ test.describe('e - geen bedrag waar er geen bedrag is', () => {
 
   test('een structureel signaal draagt rechts niets, en de oorzaak komt uit l1', async ({ page }) => {
     await boot(page, { boodschappen: 1500, w: 360,
-      set: { budgets: { huur: 900, boodschappen: 200 }, limit: 20, reserveringen: [], goals: [] } });
+      /* v406: boodschappen zonder potje, zodat geen potje-regel (potBovenLijst) het structurele signaal vervangt */
+      set: { budgets: { huur: 900 }, limit: 20, reserveringen: [], goals: [] } });
     const invoer = await page.evaluate(() => { const s = maandStructureel();
       return s.map((r) => ({ key: r.key, status: r.status, naam: r.naam, oorzaak: r.oorzaak,
         l1: r.sig.l1, l2: r.sig.l2, gat: maandTekort(r) })); });

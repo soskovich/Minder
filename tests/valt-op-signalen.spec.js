@@ -544,8 +544,8 @@ test.describe('de lek-regel op Inzichten', () => {
     const rij = page.locator('#gripLetOp [data-letop="lek"]');
     await expect(rij).toHaveCount(1);
     await expect(rij).toContainText('Zalando');
-    // v391: de categorie zonder potje staat op een eigen regel erboven
-    await expect(page.locator('#gripLetOp [data-letop="lekcat"]')).toContainText('zonder potje');
+    // v391: de categorie zonder potje staat op een eigen regel; v406: een categorie die er niet vaker is heet eenmalig
+    await expect(page.locator('#gripLetOp [data-letop="eenmalig"]')).toContainText('zonder potje');
     // de regel zelf start het gesprek niet: hij opent de sheet, en pas daar staat de route (spiegel, gevolg, keuze)
     expect(await ingang(page, 'maand')).toBe(0);
     await rij.click();

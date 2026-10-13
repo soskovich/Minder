@@ -325,10 +325,12 @@ test('t. een tekort gaat voor een let op, en daarbinnen houdt Let op de bestaand
      geen; wat de test vasthoudt is de sortering en niet hoe vaak dit voorkomt. */
   const L = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'overstreak', naam: 'Maanden boven je grens', status: 'tekort' }],
     [{ id: 'a', naam: 'A', over: 90 }, { id: 'b', naam: 'B', over: 40 }], []).map((x) => x.soort + ':' + (x.key || '')));
-  expect(L).toEqual(['str:overstreak', 'sig:a', 'sig:b']);
+  /* v406: eerst wat je kunt doen (een potje boven zijn grens draagt een handeling, groep a, grootste bedrag eerst), dan
+     de rest op status en de bestaande rang */
+  expect(L).toEqual(['sig:a', 'sig:b', 'str:overstreak']);
   const L2 = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'rente-x', naam: 'Rente', status: 'let op' }],
     [{ id: 'a', naam: 'A', over: 90 }], []).map((x) => x.soort));
-  expect(L2).toEqual(['str', 'sig']);
+  expect(L2).toEqual(['sig', 'str']);
   // het geval dat de sortering onderscheidt: een let op dat in de lijst VOOR een tekort komt
   const L3 = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'rente-x', naam: 'Rente', status: 'let op' },
     { structureel: true, key: 'overstreak', naam: 'Maanden boven je grens', status: 'tekort' }], [], []).map((x) => x.key));

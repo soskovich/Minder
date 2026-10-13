@@ -4885,9 +4885,12 @@ function scoreNotifs(opts){
          drie hier blijven, en STRUCT_STATUS.info houdt zijn lezer: 'rente' hierboven. */
       // 3) streak boven grens
       let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
-      if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'), kort:'Maanden boven je grens',
-        l1:'Je geeft al maanden te veel uit',
-        l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:`openMonthSpend('${curMonth||''}')`});
+      /* v406: een potje dat in 2 van de 3 maanden boven zijn budget eindigde heeft een eigen regel met bewijs
+         (potBovenLijst), en die vervangt deze. Hij staat er alleen nog als geen potje het verklaart. */
+      let pbl=[]; try{ pbl=potBovenLijst(); }catch(_){}
+      if(streakA>=2 && !pbl.length) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'), kort:'Maanden boven je grens',
+        l1:`${streakA} maanden op rij boven je maandbudget`,   // v406: neutraal, met het aantal
+        l2:`Welke uitgaven dat droegen staat in de maand.`, act:`openMonthSpend('${curMonth||''}')`});
     }
   } }catch(_){}
   // positieve noot: altijd minstens iets goeds tonen als het er is (balans, niet alleen als fallback)
@@ -8217,9 +8220,11 @@ function gripLetOpItems(RO, SIG, BV){
   try{ if(maandAcceptLus()) L.push(terug('accept','Wat je hebt geaccepteerd','de maand is er')); }catch(_){}
   try{ if(maandAfspraakLus()) L.push(terug('afspraaklus','Je afspraak van vorige maand','terugblik')); }catch(_){}
   try{ if(freshStartReflection()) L.push(terug('voornemen','Je voornemen van vorige maand','terugblik')); }catch(_){}
-  for(const r of (RO||[])) if(r && r.structureel && r.key!=='overstreak'){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}   // v406: overstreak is vervangen door potBovenLijst()
+  let PBL=[]; try{ PBL=potBovenLijst(); }catch(_){}
+  for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
-  for(const s of (SIG||[])) L.push({soort:'sig', key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
+  /* v406: een potje boven zijn grens deze maand draagt een handeling (bijstellen, grens) en zijn bedrag: groep a */
+  for(const s of (SIG||[])) L.push({soort:'sig', groep:'a', bedrag:Math.round(+s.over||0), key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
   /* v366: de wissel van de buffer voor beleggen, op de plek van beleggen in de rang, en zonder amber: een wissel is
      geen probleem (v78/v93), hij staat er omdat hij volgende maand je uitkomst verschuift. */
   try{ const W=beleggenWissel(); if(W) L.push({soort:'belegwissel', naam:`Buffer voor beleggen: ${W.vlg} ${W.vlg===1?'maand':'maanden'} vanaf ${afMnd(W.ym)}`, sub:`nu ${W.nu}, volgt je ondergrens`, dot:'neutraal', act:'openBeleggenVoorwaarden()'}); }catch(_){}
@@ -8245,7 +8250,7 @@ function gripLetOpItems(RO, SIG, BV){
      lek-regel zegt dan niets meer over die categorie. */
   let EM=[]; try{ EM=zonderPotjeStand(thisYM()).rijen.filter(x=>x.telt && x.n<ZONDER_MIN_MAANDEN && Math.round(x.geboekt)>=25); }catch(_){}
   const emK=new Set(EM.map(x=>x.k));
-  const zvExtra={};
+  const zvExtra={}; let lekApart=false;
   try{ const m=thisYM(), Lk0=lekSignaal(m, budgetFlaggedCats(m));
     const Lk=Lk0 && !buitenUitgave(Lk0.cat) ? Lk0 : null;
     const em=Lk && emK.has(Lk.cat);   // v406: een eenmalige categorie heeft haar eigen regel; alleen een losse partij erin houdt de zijne   // v402: een persoonlijke overboeking is geen uitgave zonder potje, ook niet in Let op
@@ -8254,7 +8259,7 @@ function gripLetOpItems(RO, SIG, BV){
        de tik naar de sheet van het lek (potje maken, categorie wijzigen, het gesprek), zodat die ingang blijft (v359). */
     if(Lk.kind==='missing-pot') zvExtra[Lk.cat]={sub:Lk.kpiLabel!==Lk.catNaam?` · ${Lk.kpiLabel}${Lk.bewijs?' · '+Lk.bewijs.tekst:''}`:'', act:"openGripLetOp('lek')"};
     else if(Lk.kpiLabel!==Lk.catNaam) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal}`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }
-  else if(em){ if(Lk.kpiLabel!==Lk.catNaam && Lk.kind!=='missing-pot') L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal}`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }
+  else if(em){ if(Lk.kpiLabel!==Lk.catNaam && Lk.kind!=='missing-pot') lekApart=true, L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal}`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }
   else if(Lk){
     const twee=Lk.kpiLabel!==Lk.catNaam;
     /* v398: het bewijs staat in de regel zelf ("Lausa Eriksson via Tikkie · 3× in 4 mnd (jul, aug, okt)"); haalt de partij
@@ -8273,8 +8278,12 @@ function gripLetOpItems(RO, SIG, BV){
     const E=zvExtra[x.k], vs=Math.round(x.gemiddeld||0), PK=zonderPiek(x), bw=zonderBewijsTekst(x);
     const sub=PK?`reservering in Plan ${euro0(PK.perMaand)}/mnd of potje maken · ${bw}`:('potje maken'+(E?E.sub:(vs>0?` · voorstel ${euro0(vs)} per maand · ${bw}`:'')));
     L.push({soort:'zonderpot', groep:'a', bedrag:PK?PK.perMaand:vs, key:x.k, voorstel:vs, piek:!!PK, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub, dot:'let op', act:PK?`openZonderKeuze('${esc(x.k)}')`:(E?E.act:`openPotForm('${esc(x.k)}',${vs})`)}); }
-  for(const x of EM) L.push({soort:'eenmalig', groep:'b', bedrag:x.geboekt, key:x.k, naam:`${x.naam} ${euro0(x.geboekt)} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'eenmalig · categorie klopt? ›', dot:'let op', geenPijl:true, act:`openCategory('${esc(x.k)}','${esc(thisYM())}')`});
-  try{ for(const x of potBovenLijst()) L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${x.bedragen.map(euro0).join(' · ')} · budget ${euro0(x.bud)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); }catch(_){}
+  /* v406: gaat de lek-regel over dezelfde categorie, dan opent de tik zijn sheet (categorie wijzigen, potje maken en het
+     gesprek, v359), zodat de ingang naar de coach blijft; staat de partij als eigen regel, of gaat het lek over iets
+     anders, dan de boekingen van de categorie. */
+  let lekCat=null; try{ const Lk1=lekSignaal(thisYM(), budgetFlaggedCats(thisYM())); lekCat=Lk1&&!lekApart?Lk1.cat:null; }catch(_){}
+  for(const x of EM) L.push({soort:'eenmalig', groep:'b', bedrag:x.geboekt, key:x.k, naam:`${x.naam} ${euro0(x.geboekt)} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'eenmalig · categorie klopt? ›', dot:'let op', geenPijl:true, act:lekCat===x.k?"openGripLetOp('lek')":`openCategory('${esc(x.k)}','${esc(thisYM())}')`});
+  try{ for(const x of PBL) L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${x.bedragen.map(euro0).join(' · ')} · budget ${euro0(x.bud)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -10410,7 +10419,7 @@ function renderMaand(){
   if(tab==='zien'){
     /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
        ander signaal dan een potje boven zijn grens of de lek-regel. */
-    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot');   // v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
+    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot'&&x.soort!=='eenmalig'&&x.soort!=='boven');   // v406: eenmalig en boven ook niet; v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
     let eam=''; try{ eigenAutoMeldingCheck(); eam=eigenAutoMeldingRegel(); }catch(_){}
     inhoud=eam+gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');

@@ -61,7 +61,10 @@ test.describe('a · de terugval op Maand vuurt alleen bij werkelijke leegte', ()
        zijn vraag. Bindt daarom aan de sleutel en niet aan de zin, want de zin kan hernoemd worden
        zonder dat er iets stuk is. */
     expect(r.str).toContain('overstreak');
-    expect(t).toMatch(/Maanden boven je grens/);
+    /* v406: Let op toont eerst wat je kunt doen (potje maken, potje herzien) en daarna de rest, hooguit twee zichtbaar;
+       het signaal staat dan onder "nog n". Wat vastligt is dat het in de lijst van Let op staat. */
+    const namen = await page.evaluate(() => gripLetOpItems(maandStructureel(), [], []).map((x) => x.naam));
+    expect(namen).toContain('Maanden boven je grens');
   });
 
   test('noch regels noch signalen: dan zegt het scherm dat wel', async ({ page }) => {

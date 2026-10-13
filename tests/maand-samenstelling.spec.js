@@ -83,8 +83,10 @@ test.describe('a · beide kaarten putten uit dezelfde lijst', () => {
         go('maand'); await new Promise((x) => setTimeout(x, 120));
         const R = maandRegels(), STR = maandStructureel(), RO = R.concat(STR);
         const tekst = $('#s-maand').innerText;
+        /* v406: Let op toont hooguit twee regels, de rest staat onder "nog n" (openGripLetOpLijst); ook daar is hij gezien */
+        const lijst = gripLetOpItems(maandMetAfspraak(maandMetAccept(R).concat(STR)), [], []).map((x) => x.naam).join('\n');
         return RO.filter((x) => x.status === 'tekort' || x.status === 'let op')
-          .map((x) => ({ naam: x.naam, gezien: tekst.includes(x.naam) }));
+          .map((x) => ({ naam: x.naam, gezien: tekst.includes(x.naam) || lijst.includes(x.naam) }));
       });
       for (const x of r) expect(x.gezien, x.naam).toBe(true);
     }

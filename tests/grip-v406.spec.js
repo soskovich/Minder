@@ -14,8 +14,18 @@ test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => 
   });
   test('"Maanden boven je grens" staat niet meer in Let op', async ({ page }) => {
     await S.boot(page);
-    const L = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'overstreak', naam: 'Maanden boven je grens', status: 'let op' }], [], []).map(x => x.naam));
-    expect(L).not.toContain('Maanden boven je grens');
+    /* v406: scoreNotifs() zet overstreak niet meer neer zodra een potje-regel (potBovenLijst) het verklaart; een bron, dus de
+       structurele rijen, Let op en de coach zien hetzelfde. Invoermeting: zonder potje-regel vuurt hij op deze stand wel. */
+    const r = await page.evaluate(() => { for (const k of Object.keys(SET.budgets)) SET.budgets[k] = 1; SET.budgetHist = {}; save();   // elke maand boven het maandbudget
+      const met = scoreNotifs({ negeerSnooze: true }).some(n => n.key === 'overstreak'), pb = potBovenLijst().length;
+      const echt = window.potBovenLijst; window.potBovenLijst = () => []; const zonder = scoreNotifs({ negeerSnooze: true }).find(n => n.key === 'overstreak');
+      window.potBovenLijst = echt; return { met, pb, zonder: zonder ? zonder.l1 + ' ' + zonder.l2 : null,
+        letop: gripLetOpItems(maandStructureel(), [], []).map(x => x.naam) }; });
+    expect(r.pb).toBeGreaterThan(0);
+    expect(r.met).toBe(false);
+    expect(r.letop).not.toContain('Maanden boven je grens');
+    expect(r.zonder).toMatch(/^\d+ maanden op rij boven je maandbudget/);
+    expect(r.zonder).not.toMatch(/te veel/);
   });
   test('2 van 3 telt, 1 van 3 niet (het budget van die maand, maandPotjes)', async ({ page }) => {
     await S.boot(page);
@@ -65,7 +75,10 @@ test.describe('A2/A3 · volgorde en eenmalig', () => {
   test('Zorg & apotheek €159 eenmalig: de regel blijft, met "eenmalig · categorie klopt? ›" en zonder losse pijl', async ({ page }) => {
     await S.boot(page);
     const z = (await letop(page)).find(x => x.soort === 'eenmalig');
-    expect(z).toEqual({ soort: 'eenmalig', naam: 'Zorg & apotheek €159 zonder potje · 0 van 3 mnd', sub: 'eenmalig · categorie klopt? ›', act: "openCategory('zorg','2026-10')", groep: 'b', bedrag: 159, pijl: false });
+    expect(z).toEqual({ soort: 'eenmalig', naam: 'Zorg & apotheek €159 zonder potje · 0 van 3 mnd', sub: 'eenmalig · categorie klopt? ›', act: "openGripLetOp('lek')", groep: 'b', bedrag: 159, pijl: false });
+    /* het lek gaat hier over dezelfde categorie en heeft geen eigen partij-regel: de tik opent zijn sheet (categorie wijzigen,
+       potje maken, het gesprek), zodat de ingang naar de coach blijft (v359) */
+    expect(await page.evaluate(() => (lekSignaal(thisYM(), budgetFlaggedCats(thisYM())) || {}).cat)).toBe('zorg');
     const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); renderMaand(); const L = document.querySelector('#gripLetOp');
       if (L.querySelector('[data-letopnog]')) openGripLetOpLijst(); const rij = [...document.querySelectorAll('[data-letop="eenmalig"]')][0]; return rij ? rij.innerText : ''; });
     expect(r.split('›').length - 1).toBe(1);   // alleen de › in "categorie klopt? ›", geen losse pijl

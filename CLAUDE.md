@@ -132,7 +132,9 @@ ene staat en op het andere niet.
 genoemde versietag.)*
 - **LET OP: EERST WAT JE KUNT DOEN, ALTIJD MET BEWIJS EN NEUTRAAL; PIEKEN NAAR EEN RESERVERING; DE BRUG MENGT NOOIT BOVEN EN
   ONDER** (`v406`, bevindingen op het toestel). LET OP: "Maanden boven je grens" (overstreak, `totals().spendNorm` tegen het
-  hele maandbudget in afgeronde maanden op rij) staat er niet meer; in de plaats een regel per potje dat in minstens
+  hele maandbudget in afgeronde maanden op rij) vuurt alleen nog als geen potje-regel het verklaart (`scoreNotifs()` leest
+  `potBovenLijst()`, een bron voor Let op, de structurele rijen en de coach), met de neutrale tekst "n maanden op rij boven je
+  maandbudget"; in de plaats een regel per potje dat in minstens
   `BOVEN_MIN_MAANDEN` (2) van de laatste 3 afgeronde maanden boven het budget van DIE maand eindigde (`potBovenLijst()`):
   "<potje> · n van 3 mnd boven budget" met "EUR 171 · EUR 94 · EUR 96 · budget EUR 20", tik `openPotHerzien(k)` (voorstel =
   gemiddelde op vijf naar boven, zelf een bedrag, laten staan via `SET.potHerzienLaten[ym]`; omhoog vraagt de bron: een te

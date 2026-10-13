@@ -19,7 +19,7 @@ const lees = (page) => page.evaluate(() => { const V = maandVooruit(); const Br 
     stappen: Br.stappen.map((s) => ({ soort: s.soort, label: s.label, k: s.k || null, w: s.waarde })) }; });
 /* v387: de kaart Deze maand is weg; de bridge staat op Zien, en de vaste lasten zijn daar een deel van "overig". */
 const naarGrip = async (page) => { await page.evaluate(() => go('maand')); await page.waitForSelector('#gripZien'); };
-const vastOpen = async (page) => { await page.locator('#gripBrug [data-brugstap="overig"]').click(); await page.locator('[data-overigdeel="vast"]').click(); };
+const vastOpen = async (page) => { await page.locator('#gripBrug [data-brugstap="overig"]').first().click();   /* v406: overig staat er als boven en onder; beide openen dezelfde delen */ await page.locator('[data-overigdeel="vast"]').click(); };
 const HUURVAST = { set: { potAard: { huur: 'vast' } } };
 const huurTx = [
   { id: 'h7', date: '2026-07-12', amount: -300, name: 'Kamerverhuur', desc: 'OVERBOEKING HUUR KAMER' },
