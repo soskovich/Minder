@@ -1,7 +1,9 @@
 /* v338b: OVERBOEKINGEN TUSSEN JE EIGEN REKENINGEN, HERKEND AAN DE NAMEN UIT JE BANKKOPPELING.
    De namen komen uit SET.psd2Accounts (label zonder de laatste vier cijfers). Per naam een lijst van de
    boekingen die zouden omzetten; pas jouw bevestiging laat ze als overboeking tellen. Niets stil.
-   De klok staat op 4 oktober 2026, dus september is de maand van de afsluiting. */
+   De klok staat op 4 oktober 2026, dus september is de maand van de afsluiting.
+   v401: de HELE omschrijving "From <A> to <B>" wordt sindsdien automatisch herkend (eigen-overboeking-auto.spec.js), dus
+   deze spec draagt de vorm die de bevestiging van v339 nog nodig heeft: "Overboeking van <A> naar <B>". */
 const { test, expect } = require('@playwright/test');
 const { boot, MAIN } = require('./bezit-koppeling.fixture');
 
@@ -16,18 +18,18 @@ async function stand(page, o) {
   await boot(page, { dag: '2026-10-04', set: Object.assign({ budgetMonth: '2026-10', psd2Accounts: PA }, o.set || {}) });
   await page.evaluate(([ovrMin50, MAIN]) => {
     const mk = (id, acc, date, amount, name, src) => ({ id, date, amount, acc, name, desc: name, typ: '', ref: '', src: src || 'psd2', accName: '', refNums: [] });
-    TX.push(mk('l1', 'psd2_leef', '2026-09-22', 50, 'From Reservering to Leefgeld'));
-    TX.push(mk('l2', 'psd2_res', '2026-09-22', -50, 'From Reservering to Leefgeld'));
-    TX.push(mk('l3', 'psd2_res', '2026-08-10', 80, 'From Leefgeld to Reservering'));
-    TX.push(mk('l4', 'psd2_leef', '2026-08-10', -80, 'From Leefgeld to Reservering'));
+    TX.push(mk('l1', 'psd2_leef', '2026-09-22', 50, 'Overboeking van Reservering naar Leefgeld'));
+    TX.push(mk('l2', 'psd2_res', '2026-09-22', -50, 'Overboeking van Reservering naar Leefgeld'));
+    TX.push(mk('l3', 'psd2_res', '2026-08-10', 80, 'Overboeking van Leefgeld naar Reservering'));
+    TX.push(mk('l4', 'psd2_leef', '2026-08-10', -80, 'Overboeking van Leefgeld naar Reservering'));
     TX.push(mk('l5', MAIN, '2026-09-12', -200, 'To Reservering', 'csv'));
     TX.push(mk('l6', 'psd2_leef', '2026-09-14', -15, 'Leefgeld Bakkerij'));
     TX.push(mk('l7', 'psd2_leef', '2026-09-16', -60, 'From Main to Leefgeld'));   // al intern via de vaste lijst
-    TX.push(mk('l8', 'psd2_res', '2026-09-15', -30, 'From Reservering to Leefgeld'));
+    TX.push(mk('l8', 'psd2_res', '2026-09-15', -30, 'Overboeking van Reservering naar Leefgeld'));
     TX.forEach(categorize); applyOwnAccounts(); buildAccMeta();
     const id = (n, d, a) => TX.find((t) => t.name === n && t.date === d && t.amount === a).id;
-    OVR[id('From Reservering to Leefgeld', '2026-09-15', -30)] = 'overig';   // "Overig klopt"
-    if (ovrMin50) OVR[id('From Reservering to Leefgeld', '2026-09-22', -50)] = 'overig';
+    OVR[id('Overboeking van Reservering naar Leefgeld', '2026-09-15', -30)] = 'overig';   // "Overig klopt"
+    if (ovrMin50) OVR[id('Overboeking van Reservering naar Leefgeld', '2026-09-22', -50)] = 'overig';
     TX.forEach(categorize); applyOwnAccounts(); save();
   }, [!!o.ovrMin50, MAIN]);
 }
@@ -44,18 +46,18 @@ test('a. de namen komen uit je bankkoppeling, zonder de terugval "Rekening"', as
 test('b. de kandidaten per naam: alleen "van/naar <naam>" of precies de naam, en niet wat al intern is', async ({ page }) => {
   await stand(page);
   // invoer: de +50 erft nu Overig van zijn eigen tegenkant, dat is de melding
-  expect(await cat(page, 'From Reservering to Leefgeld', '2026-09-22', 50)).toBe('overig');
+  expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-22', 50)).toBe('overig');
   expect(await cat(page, 'From Main to Leefgeld', '2026-09-16', -60)).toBe('intern');
   const G = await groepen(page);
   const leef = G.find((g) => g.key === 'leefgeld'), res = G.find((g) => g.key === 'reservering');
   expect(leef.status).toBe('open');
-  expect(leef.rijen).toEqual(['From Leefgeld to Reservering|2026-08-10|-80', 'From Leefgeld to Reservering|2026-08-10|80', 'From Reservering to Leefgeld|2026-09-22|-50', 'From Reservering to Leefgeld|2026-09-22|50']);
+  expect(leef.rijen).toEqual(['Overboeking van Leefgeld naar Reservering|2026-08-10|-80', 'Overboeking van Leefgeld naar Reservering|2026-08-10|80', 'Overboeking van Reservering naar Leefgeld|2026-09-22|-50', 'Overboeking van Reservering naar Leefgeld|2026-09-22|50']);
   expect(leef.eigen).toBe(1);   // de -30 met "Overig klopt"
   expect(res.rijen).toContain('To Reservering|2026-09-12|-200');
   // geen naam die toevallig in een winkelnaam staat
   expect(G.flatMap((g) => g.rijen).some((r) => r.startsWith('Leefgeld Bakkerij'))).toBe(false);
   // de +80 in augustus erft net als de +50 de categorie van zijn eigen tegenkant
-  expect(await cat(page, 'From Leefgeld to Reservering', '2026-08-10', 80)).toBe('overig');
+  expect(await cat(page, 'Overboeking van Leefgeld naar Reservering', '2026-08-10', 80)).toBe('overig');
 });
 
 test('c. niets stil: openen en voorrekenen schrijft niets en laat elke categorie staan', async ({ page }) => {
@@ -72,10 +74,10 @@ test('d. bevestigen zet de boekingen met die naam om, en laat een eigen keuze en
   await stand(page);
   await page.evaluate(() => openEigenNamen());
   await page.click('[data-eigengroep="leefgeld"] [data-eigenja]');
-  expect(await cat(page, 'From Reservering to Leefgeld', '2026-09-22', 50)).toBe('intern');
-  expect(await cat(page, 'From Reservering to Leefgeld', '2026-09-22', -50)).toBe('intern');
-  expect(await cat(page, 'From Leefgeld to Reservering', '2026-08-10', -80)).toBe('intern');
-  expect(await cat(page, 'From Reservering to Leefgeld', '2026-09-15', -30)).toBe('overig');
+  expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-22', 50)).toBe('intern');
+  expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-22', -50)).toBe('intern');
+  expect(await cat(page, 'Overboeking van Leefgeld naar Reservering', '2026-08-10', -80)).toBe('intern');
+  expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-15', -30)).toBe('overig');
   expect(await cat(page, 'Leefgeld Bakkerij', '2026-09-14', -15)).not.toBe('intern');
   expect(await cat(page, 'To Reservering', '2026-09-12', -200)).not.toBe('intern');   // andere naam, nog open
   const st = await page.evaluate(() => ({ b: Object.keys(SET.eigenNamen || {}), saved: JSON.parse(localStorage.getItem('minder_set')).eigenNamen }));
@@ -134,11 +136,11 @@ test('h. "niet mijn rekening" zet niets om en haalt de naam uit de open lijst', 
 test('i. een bevestigde overboeking met een eigen keuze voedt de terugbetalingskoppeling niet', async ({ page }) => {
   await stand(page, { ovrMin50: true });
   // geconstrueerd geval: een bijschrijving met dezelfde eerste twintig tekens die de naam NIET draagt
-  await page.evaluate(() => { TX.push({ id: 'l9', date: '2026-09-23', amount: 25, acc: 'psd2_leef', name: 'From Reservering to Leef', desc: 'From Reservering to Leef', typ: '', ref: '', src: 'psd2', accName: '', refNums: [] }); TX.forEach(categorize); applyOwnAccounts(); save(); });
-  expect(await cat(page, 'From Reservering to Leef', '2026-09-23', 25)).toBe('overig');   // erft nu van een -50/-30 op Overig
+  await page.evaluate(() => { TX.push({ id: 'l9', date: '2026-09-23', amount: 25, acc: 'psd2_leef', name: 'Overboeking van Reservering naar Leef', desc: 'Overboeking van Reservering naar Leef', typ: '', ref: '', src: 'psd2', accName: '', refNums: [] }); TX.forEach(categorize); applyOwnAccounts(); save(); });
+  expect(await cat(page, 'Overboeking van Reservering naar Leef', '2026-09-23', 25)).toBe('overig');   // erft nu van een -50/-30 op Overig
   await page.evaluate(() => eigenNaamZet('leefgeld', 'ja'));
-  expect(await cat(page, 'From Reservering to Leefgeld', '2026-09-22', -50)).toBe('overig');   // eigen keuze wint
-  expect(await cat(page, 'From Reservering to Leef', '2026-09-23', 25)).toBe('intern');
+  expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-22', -50)).toBe('overig');   // eigen keuze wint
+  expect(await cat(page, 'Overboeking van Reservering naar Leef', '2026-09-23', 25)).toBe('intern');
 });
 
 test('j. de werklijst van de afsluiting wijst naar de kandidaten', async ({ page }) => {

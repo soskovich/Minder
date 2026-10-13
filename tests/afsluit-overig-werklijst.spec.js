@@ -183,7 +183,9 @@ test('j. bevinding 4: de bijschrijving erft Overig van zijn eigen tegenkant', as
     TX.push(mk('rl2', 'psd2_reservering', -50)); TX.forEach(categorize); applyOwnAccounts();
     return { alleen, bij: catOf(TX.find((t) => t.acc === 'psd2_leefgeld')), af: catOf(TX.find((t) => t.acc === 'psd2_reservering')) };
   });
-  expect(r).toEqual({ alleen: 'intern', bij: 'overig', af: 'overig' });
+  /* v401: "From <A> to <B>" als hele omschrijving is sindsdien een eigen overboeking, aan beide kanten; de bevinding is
+     daarmee opgelost en de bijschrijving erft niets meer. */
+  expect(r).toEqual({ alleen: 'intern', bij: 'intern', af: 'intern' });
 });
 
 /* Gemeten op 360 en 390px: de naam krijgt de breedte (de eerste vorm gaf de knop width:100% van .btn, en

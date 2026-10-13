@@ -676,6 +676,10 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 .sheet-voet{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));z-index:3;background:var(--surface);box-shadow:-16px 0 0 var(--surface),16px 0 0 var(--surface);padding-bottom:calc(20px + env(safe-area-inset-bottom));margin-bottom:calc(-20px - env(safe-area-inset-bottom))}   /* v361: de handelingen blijven onderaan een lange sheet; marge en padding heffen elkaar op, dus de hoogte verandert niet, en de schaduw trekt de achtergrond tot de rand zonder breedte te nemen */
 .sheet-voet::before{content:'';position:absolute;left:0;right:0;top:-10px;height:10px;background:var(--surface);box-shadow:-16px 0 0 var(--surface),16px 0 0 var(--surface);pointer-events:none}
 #sheet.lang .sheet-voet::before{border-top:1px solid var(--line)}
+/* v401: een lange sheet ZONDER vaste voet zegt met een fade onderaan dat er meer onder staat, tot je onderaan bent
+   (#sheet.meer, gezet door sheetLangMeet()). Een sheet met een voet heeft daarvoor al het randje erboven. De fade
+   neemt geen hoogte: de negatieve marge heft zijn hoogte op. */
+#sheet.meer:not(:has(.sheet-voet))::after{content:'';display:block;position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));height:36px;margin-top:-36px;background:linear-gradient(to bottom,transparent,var(--surface));pointer-events:none;z-index:2}
 .voet-reden{color:var(--mut);line-height:1.4;margin-bottom:6px}
 .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;background:var(--surface);border-radius:20px 20px 0 0;border:1px solid var(--line);padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto;animation:up .25s ease}
 @keyframes up{from{transform:translate(-50%,100%)}to{transform:translate(-50%,0)}}
@@ -1038,14 +1042,21 @@ function applyOwnAccounts(){
   // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
   const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
   const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
+  /* v401: ook de IBAN van een GEKOPPELDE rekening zonder boekingen is een eigen rekening (OWN komt uit TX). */
+  const gekoppeld=new Set(Object.values((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).map(p=>ibanNum(p&&p.iban)).filter(Boolean));
+  EIGEN_AUTO=new Map();
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
-    let intern = (t.refNums||[]).some(n=>OWN.includes(n));               // MT940/PSD2: eigen IBAN als tegenpartij
+    let intern = (t.refNums||[]).some(n=>OWN.includes(n) || gekoppeld.has(n));   // MT940/PSD2: eigen IBAN als tegenpartij
     if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
     if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
     if(!intern && eigenOverboeking(t)) intern=true;   // v338b: een rekeningnaam uit je bankkoppeling die JIJ bevestigde
+    /* v401: "From <A> to <B>" als HELE omschrijving is een overboeking tussen je eigen rekeningen (de N26-vorm), ook
+       zonder tegenboeking en zonder gekoppelde tegenrekening. Niet stil: de namen staan in "Dit is mijn rekening" met
+       "klopt niet" (SET.eigenAutoNee), en een eigen keuze (OVR) is hierboven al overgeslagen. */
+    if(!intern){ const N=eigenAutoTelt(t); if(N){ intern=true; EIGEN_AUTO.set(t.id, {namen:N, rc}); } }
     t.autoCat = intern ? 'intern' : rc;
     /* v341: een kosten-regel van een bezitting maakt van een afschrijving op Sparen & beleggen Bankkosten.
        Een eigen keuze (OVR) wint, want die is hierboven al overgeslagen. */
@@ -1067,7 +1078,7 @@ function applyOwnAccounts(){
        telt ook als de tegenkant een eigen keuze draagt (OVR), en dat is het geval dat hier telt: die
        loopt niet langs de intern-regel hierboven. Aan de kant van de terugbetaling is geen toets nodig:
        een bevestigde overboeking is daar al 'intern' en een eigen keuze komt per constructie niet in cands. */
-    for(const d of TX){ if(d.amount<0 && !eigenOverboeking(d)){ const c=catOf(d); if(CATS[c]&&CATS[c].type==='expense'){ const k=norm(d.name); if(k.length>=3) (debits[k]||(debits[k]=[])).push(d); } } }
+    for(const d of TX){ if(d.amount<0 && !eigenOverboeking(d) && !eigenAutoTelt(d)){ const c=catOf(d); if(CATS[c]&&CATS[c].type==='expense'){ const k=norm(d.name); if(k.length>=3) (debits[k]||(debits[k]=[])).push(d); } } }
     for(const t of cands){
       const arr=debits[norm(t.name)]; if(!arr) continue;
       let best=null;
@@ -10060,7 +10071,8 @@ function renderMaand(){
     /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
        ander signaal dan een potje boven zijn grens of de lek-regel. */
     const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat');
-    inhoud=gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
+    let eam=''; try{ eigenAutoMeldingCheck(); eam=eigenAutoMeldingRegel(); }catch(_){}
+    inhoud=eam+gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');
     /* v395: "Waarom? Bekijk wat erachter zit" is weg (gevraagd door de gebruiker): de tab Begrijpen is de ingang. */
   } else if(tab==='begrijpen'){
@@ -22530,6 +22542,63 @@ function vorautWeg(t){
    bron. NIETS WORDT STIL OMGEZET (MECHANISM_SPEC.defaultEffect): de app legt per rekeningnaam de boekingen
    voor die hij zou omzetten, en pas jouw bevestiging (SET.eigenNamen) laat applyOwnAccounts() ze als
    overboeking lezen. Een boeking met een eigen keuze (OVR) blijft die keuze houden. */
+/* ===== v401: OVERBOEKINGEN TUSSEN JE EIGEN REKENINGEN, AUTOMATISCH HERKEND (keuze van de gebruiker, optie 1) =====
+   Alleen de HELE omschrijving "From <A> to <B>" (de N26-vorm voor een overboeking tussen Spaces en rekeningen) en de
+   IBAN van een gekoppelde rekening. Een losse naam ("Leefgeld") houdt de bevestiging van v339. Een boeking die zo
+   herkend is telt nergens als uitgave: niet in je potjes, niet in "zonder potje" en niet in de Budget-meter, want die
+   lezen allemaal catOf(). "Klopt niet" voor een naam (SET.eigenAutoNee) draait de herkenning voor elke omschrijving met
+   die naam terug; een eigen keuze (OVR) wint altijd. EIGEN_AUTO draagt per herkende boeking de namen en de categorie
+   die hij zonder deze regel had, en wordt bij elke applyOwnAccounts() opnieuw opgebouwd (geen opslag op de boeking). */
+let EIGEN_AUTO=new Map();
+const EIGEN_AUTO_RE=/^\s*from\s+(.+?)\s+to\s+(.+?)\s*$/i;
+function eigenAutoNamen(t){
+  const m=String((t&&t.name)||'').match(EIGEN_AUTO_RE); if(!m) return null;
+  const a=eigenNaamSleutel(m[1]), b=eigenNaamSleutel(m[2]);
+  return (a.length>=2 && b.length>=2) ? [a,b] : null;
+}
+function eigenAutoTelt(t){
+  const N=eigenAutoNamen(t); if(!N) return null;
+  const Nee=(typeof SET!=='undefined'&&SET.eigenAutoNee)||{};
+  return N.some(k=>Nee[k]) ? null : N;
+}
+/* Per naam: de boekingen die op die naam herkend zijn (en wat ze eerder waren), en de namen waarvan je zei dat het
+   niet klopt, met de boekingen die daardoor weer gewoon tellen. */
+function eigenAutoGroepen(){
+  const G=new Map(), Nee=SET.eigenAutoNee||{};
+  const voeg=(k,naam)=>{ if(!G.has(k)) G.set(k,{key:k, naam, status:Nee[k]?'nee':'auto', op:Nee[k]?Nee[k].op:null, rijen:[], uitgave:0}); return G.get(k); };
+  for(const t of TX){ if(OVR[t.id]) continue; const m=String(t.name||'').match(EIGEN_AUTO_RE); if(!m) continue;
+    const N=eigenAutoNamen(t); if(!N) continue;
+    const telt=EIGEN_AUTO.get(t.id);
+    [[N[0],m[1].trim()],[N[1],m[2].trim()]].forEach(([k,naam])=>{ const g=voeg(k,naam);
+      if(telt || Nee[k]){ g.rijen.push(t); const rc=telt?telt.rc:catOf(t); if(CATS[rc]&&CATS[rc].type==='expense') g.uitgave+=-t.amount; } }); }
+  return [...G.values()].filter(g=>g.rijen.length).sort((a,b)=>(a.status<b.status?-1:a.status>b.status?1:0) || b.rijen.length-a.rijen.length);
+}
+/* De melding: hoeveel boekingen de regel herkende die zonder hem iets anders waren, en wat daarvan als uitgave telde. */
+function eigenAutoStand(){
+  let n=0, bedrag=0;
+  for(const [id,x] of EIGEN_AUTO){ if(x.rc==='intern') continue; n++; const t=TX.find(z=>z.id===id);
+    if(t && CATS[x.rc] && CATS[x.rc].type==='expense') bedrag+=-t.amount; }
+  return {n, bedrag:Math.round(bedrag)};
+}
+/* EENMALIG, BIJ DE EERSTE HERKENNING: daarna staat SET.eigenAutoMelding er en komt hij nooit terug. */
+function eigenAutoMeldingCheck(){
+  if(SET.eigenAutoMelding) return false;
+  const S=eigenAutoStand(); if(!(S.n>0)) return false;
+  SET.eigenAutoMelding={n:S.n, bedrag:S.bedrag, op:vandaagYMD(), open:true}; save(); return true;
+}
+function eigenAutoMeldingRegel(){
+  const M=SET.eigenAutoMelding; if(!M||!M.open) return '';
+  const tekst=`${M.n} ${M.n===1?'overboeking':'overboekingen'} tussen je eigen rekeningen herkend · telden eerder als uitgave (${euro0(Math.max(M.bedrag,0))})`;
+  return `<div class="row small" data-eigenautomelding role="button" style="gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="eigenAutoMeldingOpen()"><span style="flex:1;min-width:0;font-weight:600">${tekst}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">›</span></div>`;
+}
+function eigenAutoMeldingOpen(){ if(SET.eigenAutoMelding) SET.eigenAutoMelding.open=false; save(); render(); openEigenNamen(); }
+function eigenAutoZet(k, keuze){
+  SET.eigenAutoNee=SET.eigenAutoNee||{};
+  if(keuze==='nee'){ if(SET.eigenAutoNee[k]) return; SET.eigenAutoNee[k]={op:vandaagYMD()}; }
+  else delete SET.eigenAutoNee[k];
+  if(!Object.keys(SET.eigenAutoNee).length) delete SET.eigenAutoNee;
+  TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); save(); render(); openEigenNamen();
+}
 function eigenNaamSleutel(n){ return String(n||'').toLowerCase().replace(/\s+/g,' ').trim(); }
 function eigenNamenUitKoppeling(){
   const uit=new Map();
@@ -22598,11 +22667,13 @@ function eigenNaamEffectRegel(E, M){
 }
 function eigenNaamRegel(){
   let G=[]; try{ G=eigenNaamKandidaten(); }catch(_){ return ''; }
+  let A=[]; try{ A=eigenAutoGroepen(); }catch(_){}
   const open=G.filter(g=>g.status==='open'), n=new Set(open.flatMap(g=>g.rijen.map(t=>t.id))).size;
-  if(!open.length && !G.length) return '';
+  if(!open.length && !G.length && !A.length) return '';
   const tekst = open.length
     ? (n===1?'1 boeking lijkt een overboeking tussen je eigen rekeningen':n+' boekingen lijken overboekingen tussen je eigen rekeningen')
-    : (G.length===1?'1 rekeningnaam heb je zelf beoordeeld':G.length+' rekeningnamen heb je zelf beoordeeld');
+    : G.length ? (G.length===1?'1 rekeningnaam heb je zelf beoordeeld':G.length+' rekeningnamen heb je zelf beoordeeld')
+    : (A.length===1?'1 rekeningnaam automatisch herkend':A.length+' rekeningnamen automatisch herkend');
   return `<div class="small" data-eigenregel style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openEigenNamen()">${tekst} \u203a</div>`;
 }
 const EIGEN_TOON=8;
@@ -22631,10 +22702,26 @@ function openEigenNamen(){
       ${g.status==='open'?toon.map(rij).join('')+(meer>0?`<div class="small muted" style="padding-top:4px">en ${meer} eerdere</div>`:''):''}
       ${eig}${eff}${knop}</div>`;
   };
+  /* v401: de namen uit "From <A> to <B>", automatisch herkend, met "klopt niet" per naam. */
+  let A=[]; try{ A=eigenAutoGroepen(); }catch(_){}
+  const autoKaart=g=>{
+    const n=g.rijen.length;
+    const kop = g.status==='auto'
+      ? `${n} ${n===1?'boeking telt':'boekingen tellen'} als overboeking${g.uitgave>0.5?`; zonder deze herkenning telde ${euro0(g.uitgave)} als uitgave`:''}.`
+      : `Op ${esc(afDag(g.op))} zei je dat dit niet klopt: ${n} ${n===1?'boeking telt':'boekingen tellen'} weer gewoon.`;
+    const knop = g.status==='auto'
+      ? `<button class="btn sec" style="width:auto;margin-top:8px;padding:7px 12px;font-size:var(--fs-xs)" data-eigenautonee onclick="eigenAutoZet('${esc(g.key)}','nee')">Klopt niet</button>`
+      : `<button class="btn sec" style="width:auto;margin-top:8px;padding:7px 12px;font-size:var(--fs-xs)" data-eigenautoterug onclick="eigenAutoZet('${esc(g.key)}','terug')">Terugdraaien</button>`;
+    return `<div data-eigenauto="${esc(g.key)}" data-eigenautostatus="${g.status}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div style="font-weight:700">${esc(g.naam)}<span class="small muted" style="font-weight:400"> · ${g.status==='auto'?'automatisch herkend':'niet herkend (jouw keuze)'}</span></div>
+      <div class="small muted" style="margin:2px 0 4px">${kop}</div>${knop}</div>`;
+  };
+  const autoBlok = A.length ? `<div data-eigenautoblok style="margin-top:8px"><div class="small" style="font-weight:700;margin-bottom:2px">Automatisch herkend</div>
+    <div class="small muted" style="margin-bottom:4px">Omschrijvingen als "From Instant Savings to Leefgeld" zijn overboekingen tussen je eigen rekeningen. Klopt een naam niet, dan tellen die boekingen weer als uitgave of inkomen.</div>${A.map(autoKaart).join('')}</div>` : '';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="eigenNamen">
     <div style="font-weight:800;font-size:var(--fs-lg)">Overboekingen tussen je eigen rekeningen</div>
     <div class="small muted" style="margin:2px 0 6px">Deze namen komen uit je bankkoppeling. Zeg per naam of het je eigen rekening is; pas dan tellen die boekingen als overboeking, en niet als uitgave of inkomen.</div>
-    ${totaal}${G.length?G.map(kaart).join(''):'<div class="small muted">Er is niets om te beoordelen.</div>'}</div>`;
+    ${totaal}${G.length?G.map(kaart).join(''):(A.length?'':'<div class="small muted">Er is niets om te beoordelen.</div>')}${autoBlok}</div>`;
   showSheetBg();
 }
 function eigenNaamZet(k, keuze){
@@ -26950,6 +27037,30 @@ function diagTeRuim(){
   const M=gripMeterBudget(V);
   if(!M.onbekend) L.push(`budget-meter (v398, aan het maandbudget): verwacht ${M.verwacht} / budget ${M.budget} = ${M.pct}% (${M.verschil>0?'boven':'onder'} ${Math.abs(M.verschil)}); niet gebruikt ${Math.round(M.ruim)}${M.zelf.length?`; zelf gekozen: ${M.zelf.map(x=>x.naam).join(', ')}`:''}`);
   const D=gripMeterDoelen(); L.push(D.onbekend?'doelen-meter: Plan zet niets opzij':`doelen-meter: opzij ${D.opzij} - eruit ${D.uit} = ${D.netto} (${D.pct}%)`);
+  for(const r of diagZonderPotje(V)) L.push(r);
+  return L;
+}
+/* v401: DE BOEKINGEN ACHTER "ZONDER POTJE" VAN DEZE MAAND, om het getal op het toestel na te lopen. V.zonder is de
+   uitkomst min de variabele potjes, de vaste lasten en de inleg (maandVooruit); wat daarin zit is (1) wat er deze maand
+   al uitging in een categorie zonder potje, buiten de herkende vaste lasten (die staan bij de vaste lasten), en (2) wat
+   je in zo'n categorie in je laatste afgeronde maanden gemiddeld na deze dag nog uitgaf. Alleen lezen (v244). */
+function diagZonderPotje(V){
+  const L=['', 'ZONDER POTJE deze maand (v401): datum | partij | bedrag | categorie | eigen keuze'];
+  const m=V.m, B=SET.budgets||{};
+  const zonder=c=>CATS[c] && CATS[c].type==='expense' && !geenNorm(c) && !((+B[c]||0)>0) && !potHeelVast(c);
+  let som=0; const rijen=[];
+  for(const t of txOfMonth(m)){ const c=catOf(t); if(!zonder(c) || !piekInScope(t)) continue;
+    const v=uitgaveNorm(t); som+=v; rijen.push(t); }
+  rijen.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  for(const t of rijen){ const c=catOf(t);
+    L.push(`  ${t.date} | ${titleCase(cleanMerch(t.name)||t.name||'?')} | ${Math.round(uitgaveNorm(t)*100)/100} | ${(CATS[c]||{}).name||c} | ${OVR[t.id]?'ja ('+((CATS[OVR[t.id]]||{}).name||OVR[t.id])+')':'nee'}`); }
+  if(!rijen.length) L.push('  geen boekingen');
+  L.push(`  al uitgegeven zonder potje: ${Math.round(som)}`);
+  let verw=0; for(const c in (V.restCat||{})){ if(!zonder(c)) continue; const r=+V.restCat[c]||0; if(Math.round(r)===0) continue; verw+=r;
+    L.push(`  verwacht nog in ${(CATS[c]||{}).name||c}: ${Math.round(r)} (gemiddeld na dag ${V.el} in je laatste ${VOORUIT_MAANDEN} afgeronde maanden)`); }
+  L.push(`  samen ${Math.round(som+verw)} · V.zonder ${Math.round(V.zonder)}${Math.round(som+verw)!==Math.round(V.zonder)?' (het verschil zit in de afronding of in een vaste last zonder potje die bij de vaste lasten telt)':''}`);
+  let n=0; for(const [id,x] of EIGEN_AUTO){ const t=TX.find(z=>z.id===id); if(t && String(t.date).slice(0,7)===m && CATS[x.rc] && CATS[x.rc].type==='expense') n++; }
+  L.push(`  deze maand als eigen overboeking herkend en dus NIET hierin (v401): ${n}`);
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -27235,9 +27346,12 @@ function voetKandidaat(s){
 function sheetLangMeet(){
   const s=document.getElementById('sheet'); if(!s) return;
   if(!s.querySelector('.sheet-voet')){ const r=voetKandidaat(s); if(r) r.classList.add('sheet-voet'); }
-  s.classList.toggle('lang', s.scrollHeight>s.clientHeight+1);
+  const lang=s.scrollHeight>s.clientHeight+1;
+  s.classList.toggle('lang', lang);
+  s.classList.toggle('meer', lang && s.scrollTop+s.clientHeight<s.scrollHeight-4);
 }
-try{ new MutationObserver(()=>sheetLangMeet()).observe(document.getElementById('sheet'), {childList:true, subtree:true}); window.addEventListener('resize', sheetLangMeet); }catch(_){}
+try{ new MutationObserver(()=>sheetLangMeet()).observe(document.getElementById('sheet'), {childList:true, subtree:true}); window.addEventListener('resize', sheetLangMeet);
+  document.getElementById('sheet').addEventListener('scroll', sheetLangMeet, {passive:true}); }catch(_){}
 /* v197: _txFilterSheet stond hier niet bij, en werd nergens anders op false gezet. Zijn drie lezers
    doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
    dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de
@@ -28531,7 +28645,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)

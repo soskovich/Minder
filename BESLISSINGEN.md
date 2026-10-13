@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v401` · Een overboeking tussen je eigen rekeningen telt nooit als uitgave.** Niet in je potjes, niet in "zonder potje"
+  en niet in de Budget-meter, ook als de tegenrekening niet gekoppeld is of de tegenboeking ontbreekt. Herkend aan de IBAN
+  van een (ook gekoppelde, nog boekingloze) eigen rekening en aan de HELE omschrijving "From <A> to <B>" (de N26-vorm),
+  zonder vaste lijst namen. Waarom automatisch en niet per bevestiging zoals `v339`: die vorm is een overboeking, en op het
+  toestel stonden zulke boekingen in "zonder potje" zolang niemand de naam had bevestigd. Niet stil (keuze van de
+  gebruiker, optie 1): de namen staan in "Dit is mijn rekening" als "automatisch herkend" met "klopt niet" per naam
+  (`SET.eigenAutoNee`), en bij de eerste herkenning staat er eenmalig "n overboekingen tussen je eigen rekeningen herkend ·
+  telden eerder als uitgave (€X) ›" op Zien. Een eigen keuze (OVR) wint. De valkuil: een losse naam ("Leefgeld", "Naar
+  Leefgeld") is geen overboeking per definitie; die blijft bij de bevestiging van `v339`. En "From Dusk to Dawn" als
+  winkelnaam zou ook herkend worden: daarvoor is "klopt niet" er.
 - **`v399` · Reservering, Beleggen en Plan · sparen als bestemming zijn een inleg in Plan, geen regel in het budget.**
   Wat je van een te ruim potje haalt en naar een van die drie zet, staat als maandelijkse inleg in Plan
   (`SET.planInleg`, `planInlegRegels()`, het blok "Inleg uit je potjes" op Plan, aan te passen en weg te halen in een
