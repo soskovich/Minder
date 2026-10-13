@@ -27,7 +27,7 @@ test.describe('1 · spaardoel en Doelen-meter noemen hun basis', () => {
     expect(sp).toMatch(/^gestort €[\d.]+ · eruit €700 · netto -?€[\d.]+ van €2\.900 · loopt nog$/);   // v397: de EUR 700 uit vrij spaargeld gaat terug en telt in opzij
     expect(sp).toContain(`netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')}`);
     // onder de meters het verschil tussen nu en verwacht, en geen uitlegregel meer (die staat in de sheet)
-    expect(await tekst(page, '[data-meternuverwacht]')).toBe(`nu netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')} · verwacht eind €${r.verwacht.toLocaleString('nl-NL')}`);
+    expect(await tekst(page, '[data-meternuverwacht]')).toBe(`Doelen: nu netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')} · verwacht eind €${r.verwacht.toLocaleString('nl-NL')}`);
     expect(await page.locator('[data-meteruitleg]').count()).toBe(0);
   });
   test('de sheet van de meter noemt verwacht en verwijst voor gestort naar de terugblik', async ({ page }) => {

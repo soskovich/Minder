@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v406` · Let op met bewijs, eerst wat je kunt doen; pieken naar Plan; de brug mengt nooit boven en onder.** Een
+  signaal in Let op draagt altijd zijn bewijs (de bedragen van de maanden, het budget) en spreekt neutraal: geen "te veel",
+  geen oordeel. "Maanden boven je grens" sprak over je hele maandbudget in een toon die oordeelde en bood geen stap; een
+  regel per potje dat in 2 van 3 maanden boven eindigde zegt welk potje en opent het herzien. Eerst staan de signalen met een
+  actie, dan die met alleen bewijs, binnen een groep het grootste bedrag eerst. Een categorie met pieken (een maand meer dan
+  60%, of maar 2 van 3 maanden) past beter in een reservering in Plan (jaarbedrag ÷ 12) dan in een potje dat in de piekmaand
+  overloopt; dat staat als eerste optie, zonder voorselectie. De brug zet elke uitschieter los en splitst overig in boven en
+  onder: een stap die boven en onder optelt verbergt precies wat een uitschieter is (GEMELD: Boodschappen +53 zat in overig,
+  omdat er tot v406 hooguit drie los stonden en de kleinste bij te weinig kolommen terugviel). Valkuil: afronding mag het
+  teken van een overig-stap niet omdraaien; dat euro schuift naar de andere kant.
 - **`v405` · Een definitie van uitgave voor alle schermen en de coach.** `isUitgave()` is de enige plek die zegt wat een
   uitgave is: een uitgavencategorie (een eigen overboeking is intern) en geen persoonlijke overboeking zonder potje, tegen
   de potjes van de maand van de boeking. Coach, lek-detectie, Inzichten en Grip lezen hem, en geven per categorie en per
