@@ -178,14 +178,15 @@ test.describe('B · de te-ruim-sheet', () => {
     await page.click('[data-teruimbestem="plan"]');
     const g = await page.evaluate(() => Object.fromEntries(['potje', 'bestem', 'budget', 'verwacht', 'meter', 'nogruim'].map(k => [k, (document.querySelector(`[data-gevolg${k}]`) || {}).innerText || null])));
     expect(g.potje).toBe('Huur €700 → €400');
-    expect(g.bestem).toBe('Plan · sparen +€300/mnd · volgens Plan');
+    expect(g.bestem).toBe('Plan · sparen +€300/mnd · inleg in Plan');   // v399: een inleg in Plan
     expect(g.budget).toBe('Maandbudget €3.325 blijft');
     expect(g.verwacht).toBe('Verwacht oktober €1.711 → €2.011');
     expect(g.meter).toBe(`Budget-meter 51% → ${Math.round(2011 / 3325 * 100)}% · €1.314 onder`);
     expect(g.nogruim).toBe('Nog €329 ruimer dan nodig (€71). Je keuze blijft staan; volgende maand toetst Minder opnieuw.');
     expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €400 zetten', reden: '' });
   });
-  for (const [b, stijgt] of [['plan', true], ['res', true], ['beleg', true], ['pot:uiteten', false]]) test(`verwacht ${stijgt ? 'stijgt' : 'blijft gelijk'} bij ${b}, in het gevolg en na bevestigen`, async ({ page }) => {
+  /* v399: pot:uiteten (boven met €67, en €300 vrij) wordt een splitsing; die staat in plan-inleg.spec.js. */
+  for (const [b, stijgt] of [['plan', true], ['res', true], ['beleg', true]]) test(`verwacht ${stijgt ? 'stijgt' : 'blijft gelijk'} bij ${b}, in het gevolg en na bevestigen`, async ({ page }) => {
     await grip(page);
     const uit0 = await page.evaluate(() => SET.budgets.uiteten);
     await huurSheet(page, 'b', 400);
@@ -201,17 +202,17 @@ test.describe('B · de te-ruim-sheet', () => {
     expect(r.proj).toBe(stijgt ? 2011 : 1711);
     expect(r.som).toBe(r.proj);
     expect(r.stap).toBe(-329);   // Huur 400 met 71 nodig: 329 niet gebruikt
-    expect(r.uit).toBe(b === 'pot:uiteten' ? uit0 + 300 : uit0);
-    if (b === 'pot:uiteten') expect(r.uitSoort).toBe('teruim');   // Uit eten heeft nu meer dan nodig: geen uitschieter meer, wel niet gebruikt
+    expect(r.uit).toBe(uit0);
   });
   test('Plan: de inleg gaat met het bedrag omhoog en Plan verdeelt zelf; veilig te besteden blijft gelijk', async ({ page }) => {
     await grip(page);
     const voor = await page.evaluate(() => ({ inleg: Math.round(monthlySavingTarget()), safe: safeToSpend().safe }));
     await huurSheet(page, 'b', 400); await page.click('[data-teruimbestem="plan"]'); await page.click('[data-teruimbevestig]');
-    const na = await page.evaluate(() => ({ inleg: Math.round(monthlySavingTarget()), safe: safeToSpend().safe, ob: (SET.overboek || []).map(x => [x.soort, x.bedrag]) }));
+    const na = await page.evaluate(() => ({ inleg: Math.round(monthlySavingTarget()), safe: safeToSpend().safe, ob: Object.entries(SET.planInleg || {}).map(([k, x]) => [k, x.bedrag]), oud: SET.overboek }));
     expect(na.inleg).toBe(voor.inleg + 300);
     expect(na.safe).toBe(voor.safe);
-    expect(na.ob).toEqual([['plan', 300]]);
+    expect(na.ob).toEqual([['plan', 300]]);   // v399: een inleg in Plan, geen regel in het budget
+    expect(na.oud).toBeUndefined();
   });
   test('Beleggen: een oker waarschuwing met de voorwaarde die ontbreekt, maar bevestigen kan', async ({ page }) => {
     await grip(page);
@@ -290,7 +291,12 @@ test.describe('C · signalen met bewijs', () => {
     expect(L.lek.hyp).not.toContain('komt vaker terug');
     const r = await letop(page);
     expect(r.tekst).not.toContain('komt vaker terug');
-    expect(r.soorten.filter(s => s.startsWith('lek')).sort()).toEqual(['lek', 'lekcat']);   // zonder bewijs geen samengevoegde regel
+    /* v399: een vaste categorie zonder bewijs is EEN regel "<categorie> EUR X zonder potje", zonder bijzin */
+    expect(r.soorten.filter(s => s.startsWith('lek'))).toEqual(['lek']);
+    const cat = await page.evaluate(() => CATS[catOf(TX.find(x => x.name === 'Apotheek Centrum'))].name);
+    expect(r.tekst).toContain(`${cat} €150 zonder potje\nApotheek Centrum`);
+    expect(r.tekst).not.toContain('hoort bij een vaste categorie');
+    expect(L.lek.hyp).toBe(`${cat} €150 zonder potje.`);
     await page.evaluate(() => openGripLetOp('lek'));
     expect(await page.locator('#sheet').innerText()).not.toContain('komt vaker terug');
   });

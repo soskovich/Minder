@@ -1276,3 +1276,18 @@ Gevraagd door de gebruiker, mockup "Grip eigen budget" v3. Draait de eerlijke-bu
   - Gemigreerd: deze-maand-bridge, drempel-gemengd, grip-correcties, grip-kring, grip-kring-deel2, lek-categorie en maandgelezen-en-buffer.
   - Sabotages: 17 van 17 rood. "Een regel zonder bewijs" werd pas rood nadat de spec eiste dat de vaste-categorie-stand twee regels geeft.
 - **Open.** Een overboekregel is nog niet weg te halen of aan te passen. Reservering en beleggen worden niet tegen een boeking gemeten.
+
+## v399 · Inleg in Plan, splitsing en de actieregel voor je overboeking (`minder-v399`)
+Gevraagd door de gebruiker als vervolg op v398.
+- **1 · Reservering, Beleggen en Plan · sparen zijn een inleg in Plan.**
+  - Geen vaste regel in het budget meer (`SET.overboek` is weg). Een maandelijkse inleg per soort (`SET.planInleg`), zichtbaar in Plan als "Reservering €X/mnd" en zo verder, aan te passen en weg te halen met het gevolg vooraf.
+  - Het maandbudget op Grip blijft gelijk (keuze van de gebruiker): het potje gaat omlaag, de inleg telt erin, en verwacht stijgt met de inleg. Niet in de vaste lasten en niet op Inzichten.
+  - Plan · sparen gaat mee (keuze van de gebruiker) en verhoogt daarnaast de spaarinleg.
+  - Migratie: de v398-regels worden bij het laden een inleg per soort; de som blijft gelijk.
+  - Meting: Reservering tegen de instroom op de reserveringsrekening, Beleggen tegen de beleggingsinleg (Peaks), doel = basis (de maand ervoor) + inleg. Terugblik ✓ vanaf 100%, ½ vanaf 80%, anders ✗. Plan · sparen zit in het spaardoel.
+  - Veilig te besteden claimt alleen wat er deze maand nog moet, en niet meer het hele bedrag na de overboeking.
+- **2 · Splitsing.** Een potje dat boven eindigt krijgt zijn overschrijding ("€67 naar Uit eten · €233 naar …"); de rest gaat naar een tweede bestemming die je zelf kiest. Bevestigen pas als de som het vrije bedrag is. Gemeten op `grip-kring-stand`: Uit eten +67, Plan +233, verwacht €1.944, en geen nieuwe "niet gebruikt"-stap (tot v398 werd Uit eten zelf te ruim).
+- **3 · Actieregel.** Na Plan, Reservering of Beleggen staat in Kiezen "Verhoog je automatische overboeking naar <rekening> naar €<totaal>", tot er een overboeking met minstens dat bedrag is gezien. Terugblik meet hem.
+- **4 · Let op.** "hoort bij een vaste categorie en heeft nog geen potje" is "<categorie> €X zonder potje", een regel, de partij eronder.
+- **Suite.** 4220 groen; rood alleen `decimaalteken` (bekend) en de bekende flake in `diag-entry-merge`.
+- **Specs.** Nieuw: `plan-inleg.spec.js` (18). Gemigreerd: `grip-eigen-budget` (de Plan-tekst, `SET.planInleg`, de regel zonder bijzin; pot:uiteten is naar de splitsing verhuisd). Sabotages: 17 van 17 rood; "een potje-bestemming maakt een actie" werd pas rood nadat de sabotage een soort koos die de regel ook toont (de eerste vorm was per constructie inert).

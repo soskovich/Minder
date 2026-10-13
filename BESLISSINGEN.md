@@ -16,6 +16,40 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v399` · Reservering, Beleggen en Plan · sparen als bestemming zijn een inleg in Plan, geen regel in het budget.**
+  Wat je van een te ruim potje haalt en naar een van die drie zet, staat als maandelijkse inleg in Plan
+  (`SET.planInleg`, `planInlegRegels()`, het blok "Inleg uit je potjes" op Plan, aan te passen en weg te halen in een
+  sheet met het gevolg vooraf). Dat draait de vaste regel van `v398` (`SET.overboek` in `maandSplitsing()`) terug; die
+  regels worden bij het laden een inleg per soort (`planInlegMigreer()`, de som blijft gelijk). HET MAANDBUDGET BLIJFT
+  GELIJK (keuze van de gebruiker): het potje gaat omlaag, de inleg telt mee in het maandbudget op Grip en verwacht stijgt
+  met de inleg, dus netto staat hij op budget en is hij nooit een stap in de bridge. Hij staat niet in de vaste lasten en
+  niet op Inzichten: een inleg is geen uitgave (Inzichten zakt dus met het verlaagde potje). Plan · sparen verhoogt
+  daarnaast je spaarinleg (Plan verdeelt zelf), en aanpassen of weghalen zet die mee terug. DE METING: elke inleg tegen de
+  echte overboeking naar zijn rekening (`inlegUitkomst()`): Reservering de instroom op je reserveringsrekening
+  (`resThisMonth()`), Beleggen je beleggingsinleg (`beleggingsInleg()`, waar Peaks in zit); het doel van een maand is de
+  basis (wat er in de maand voor de eerste inleg al heen ging, bewaard bij het vastleggen) plus de inleg. Terugblik: ✓ vanaf
+  100%, ½ vanaf `GRIP_SPAAR_HALF` (80%), anders ✗, en de lopende maand loopt nog. Plan · sparen zit in het spaardoel
+  (savedNet tegen Plan opzij), dus geen tweede rij. In veilig te besteden is alleen wat er deze maand NOG van een inleg naar
+  reservering of beleggen moet een claim (`inlegNogDezeMaand()`); tot `v398` telde het hele bedrag, ook na de overboeking.
+  Valkuil: zonder reserveringsrekening is de meting onbekend en geen nul. En de basis is een meting van een maand: wie in de
+  maand ervoor toevallig niets overmaakte, krijgt een lage basis.
+- **`v399` · Een bestemming die groter is dan nodig wordt gesplitst.** Kies je een potje dat boven eindigt en is het vrije
+  bedrag groter dan zijn verwachte overschrijding, dan stelt de sheet voor: de overschrijding naar dat potje en de rest naar
+  een tweede bestemming die je zelf kiest ("€67 naar Uit eten · €233 naar …", `teRuimDelen()`). Geen voorselectie, beide
+  bedragen aan te passen, en bevestigen kan pas als de som het vrije bedrag is en de rest een bestemming heeft; de schrijver
+  eist het zelf ook. Gemeten aanleiding: tot `v398` ging het hele bedrag naar Uit eten, en dan werd dat potje zelf te ruim,
+  met een nieuwe grijze stap "niet gebruikt" in de bridge. Valkuil: de tweede bestemming splitst niet opnieuw; die neemt de
+  rest zoals hij is.
+- **`v399` · Een overboeking die je bij je bank moet aanpassen, is een actieregel tot Minder hem ziet.** Na een bestemming
+  Plan, Reservering of Beleggen staat in Kiezen "Verhoog je automatische overboeking naar <rekening> naar €<nieuw totaal>"
+  (`SET.overboekActie`). Het totaal is je spaarinleg (Plan) of de basis plus de inleg (Reservering, Beleggen). De regel
+  verdwijnt zodra er na de bevestiging een overboeking naar die rekening met minstens dat bedrag in je boekingen staat
+  (`overboekActieGezien()`, afgeleid en niet opgeslagen), en de Terugblik meet hem: ✓ in de maand waarin hij gezien is, ✗ in
+  een afgesloten maand zonder. Valkuil: het is een losse boeking met het hele bedrag; wie in twee delen overmaakt, wordt niet
+  herkend.
+- **`v399` · Een categorie zonder potje heet "<categorie> €X zonder potje", zonder bijzin.** De zin "hoort bij een vaste
+  categorie en heeft nog geen potje" is weg; een lek van soort 'missing-pot' zonder bewijs is EEN regel in Let op met de
+  partij eronder. "Komt vaker terug" blijft alleen met bewijs (`v398`).
 - **`v398` · Grip meet aan je eigen maandbudget; een te ruim potje heet "niet gebruikt" en wordt niet afgetrokken.** Tot
   `v397` rekende de Budget-meter verwacht gedeeld door het "eerlijke budget" (maandbudget min wat te ruim begroot is,
   `v387`), en de bridge op Zien liep sinds `v395` vanaf dat eerlijke budget met de te ruime delen gearceerd op de
