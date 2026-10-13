@@ -125,7 +125,7 @@ test.describe('E8 · blok 19 toont de boekingen achter "zonder potje"', () => {
     expect(L).toMatch(/2026-10-05 \| Kiosk Centraal \| 42 \| [^|]+ \| nee/);
     expect(L).not.toContain('Reservering');
     expect(L).toMatch(/als eigen overboeking herkend en dus NIET hierin \(v401\): 1/);
-    const r = await page.evaluate(() => { const V = maandVooruit(); const l = diagZonderPotje(V).find(x => x.includes('samen ')); return { l, z: Math.round(V.zonder) }; });
+    const r = await page.evaluate(() => { const V = maandVooruit(); const l = diagZonderPotje(V).find(x => x.includes('V.zonder '))   /* v402: de aansluiting staat op een eigen regel */; return { l, z: Math.round(V.zonder) }; });
     expect(r.l).toContain('V.zonder ' + r.z);
     const blok = await page.evaluate(() => diagTeRuim().join('\n'));
     expect(blok).toContain('ZONDER POTJE deze maand');

@@ -74,10 +74,12 @@ test.describe('b. een tik op de stap', () => {
     expect(await page.evaluate(() => !!document.getElementById('gripVast'))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
-  test('zonder potje opent de volle lijst', async ({ page }) => {
+  /* v402: de stap opent de sheet die geboekt en verwacht per categorie noemt (openZonderPotje), met "Alle potjes" eronder. */
+  test('zonder potje opent geboekt en verwacht, met de volle lijst eronder', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     await tik(page, '#gripBrug [data-brugstap="zonder"]');
-    expect(await page.evaluate(() => !!document.getElementById('gripVooruit'))).toBe(true);
+    expect(await page.evaluate(() => !!document.getElementById('zonderPotjeSheet'))).toBe(true);
+    expect(await page.evaluate(() => !!document.querySelector('#zonderPotjeSheet [data-allepotjes]'))).toBe(true);
   });
 });
 

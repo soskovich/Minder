@@ -16,6 +16,14 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v402` · "Zonder potje" is geboekt plus verwacht, en verwacht alleen wat er vaker is.** Per categorie zonder potje:
+  geboekt (deze maand, buiten de herkende vaste lasten) telt altijd; verwacht (het gemiddelde na deze dag in de laatste 3
+  afgeronde maanden) nooit onder nul en alleen bij uitgaven in minstens 2 van die 3 maanden. Persoonlijke overboeking telt
+  in geen van beide (keuze van de gebruiker). Waarom: op het toestel stond in "z. potje" een verwachting voor een losse
+  aankoop van een maand terug, en een terugboeking kon de verwachting negatief maken en zo een uitgave wegpoetsen. Een bron
+  (`zonderPotjeStand()`) voor de uitkomst, de gesplitste stap op Zien, Let op en blok 19. De valkuil: Inzichten telt
+  uitgegeven nog op `spendNorm` en daar staat een persoonlijke overboeking zonder potje nog in "zonder potje"; dat is gemeld
+  en wacht op een keuze.
 - **`v401` · Een overboeking tussen je eigen rekeningen telt nooit als uitgave.** Niet in je potjes, niet in "zonder potje"
   en niet in de Budget-meter, ook als de tegenrekening niet gekoppeld is of de tegenboeking ontbreekt. Herkend aan de IBAN
   van een (ook gekoppelde, nog boekingloze) eigen rekening en aan de HELE omschrijving "From <A> to <B>" (de N26-vorm),

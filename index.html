@@ -8184,7 +8184,18 @@ function gripLetOpItems(RO, SIG, BV){
      (kind 'missing-pot') binnen de categorie zonder potje, dan zijn het dezelfde boekingen en is het EEN regel:
      "<categorie> EUR X zonder potje · <partij> komt vaker terug ›", met een actie (de sheet: potje maken of de categorie
      wijzigen). Dat draait de splitsing van v391 terug voor dit geval; een losse aankoop (impulse) houdt twee regels. */
-  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk){
+  /* v402: EEN CATEGORIE ZONDER POTJE DIE ER VAKER IS (uitgaven in minstens ZONDER_MIN_MAANDEN van de laatste afgeronde
+     maanden) krijgt een eigen regel met "potje maken". De lek-regel zegt dan niets meer over die categorie zelf (een
+     signaal per regel, v391); een losse partij erin houdt zijn eigen regel. */
+  let ZV=[]; try{ ZV=zonderPotjeVaker(thisYM()); }catch(_){}
+  const zvK=new Set(ZV.map(x=>x.k));
+  const zvExtra={};
+  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk && zvK.has(Lk.cat)){
+    /* Een terugkerende partij in die categorie zijn dezelfde boekingen: EEN regel, met de partij en het bewijs eronder en
+       de tik naar de sheet van het lek (potje maken, categorie wijzigen, het gesprek), zodat die ingang blijft (v359). */
+    if(Lk.kind==='missing-pot') zvExtra[Lk.cat]={sub:Lk.kpiLabel!==Lk.catNaam?` · ${Lk.kpiLabel}${Lk.bewijs?' · '+Lk.bewijs.tekst:''}`:'', act:"openGripLetOp('lek')"};
+    else if(Lk.kpiLabel!==Lk.catNaam) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal}`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }
+  else if(Lk){
     const twee=Lk.kpiLabel!==Lk.catNaam;
     /* v398: het bewijs staat in de regel zelf ("Lausa Eriksson via Tikkie · 3× in 4 mnd (jul, aug, okt)"); haalt de partij
        de regel niet (terugkeerBewijs()), dan is het geen terugkerende partij en blijven het twee regels. */
@@ -8194,6 +8205,7 @@ function gripLetOpItems(RO, SIG, BV){
     else if(Lk.kind==='missing-pot'){ L.push({soort:'lek', key:Lk.cat, naam:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:twee?Lk.kpiLabel:'de boekingen', dot:'let op', act:"openGripLetOp('lek')", een:true}); }
     else { if(twee) L.push({soort:'lekcat', key:Lk.cat, naam:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:'geen potje voor deze categorie · de boekingen', dot:'let op', act:`openCategory('${esc(Lk.cat)}','${esc(m)}')`});
     L.push({soort:'lek', key:Lk.cat, naam:twee?`${Lk.kpiLabel}: ${Lk.kpiVal}`:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); } } }catch(_){}
+  for(const x of ZV){ const E=zvExtra[x.k]; L.push({soort:'zonderpot', key:x.k, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'potje maken'+(E?E.sub:''), dot:'let op', act:E?E.act:`openPotForm('${esc(x.k)}')`}); }
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -8443,6 +8455,51 @@ function overboekActieGezien(soort){
 function overboekActiesOpen(){ const A=SET.overboekActie||{};
   return Object.keys(PLANINLEG_NAAM).filter(k=>A[k] && !overboekActieGezien(k)).map(k=>Object.assign({soort:k}, A[k])); }
 function overboekActieTekst(A){ return `Verhoog je automatische overboeking naar ${A.rekening} naar ${euro0(A.totaal)}`; }
+/* ===== v402: "ZONDER POTJE" ZUIVER (gevraagd door de gebruiker) =====
+   EEN BRON voor wat er zonder potje uitgaat, per categorie: wat er deze maand al GEBOEKT is (piekInScope, buiten de
+   herkende vaste lasten, die bij de vaste lasten staan) en wat er nog VERWACHT wordt. De verwachting is het gemiddelde na
+   deze dag in je laatste VOORUIT_MAANDEN afgeronde maanden (restCat van maandVooruit), NOOIT ONDER NUL, en ALLEEN als de
+   categorie in minstens ZONDER_MIN_MAANDEN van die maanden uitgaven had: een losse aankoop van een maand geleden is geen
+   verwachting. ZONDER_UIT telt niet mee, niet geboekt en niet verwacht: een persoonlijke overboeking is geen uitgave zonder
+   potje (keuze van de gebruiker). Vier lezers: maandVooruit() (de uitkomst), de bridge op Zien (dicht geboekt, licht
+   verwacht), Let op (een regel per categorie die er vaker is) en blok 19 (per categorie de reden). */
+const ZONDER_MIN_MAANDEN=2, ZONDER_UIT=['persoonlijk'];
+function zonderPotjeCat(k){ const B=SET.budgets||{};
+  return !!(CATS[k] && CATS[k].type==='expense' && !geenNorm(k) && !((+B[k]||0)>0) && !potHeelVast(k)); }
+/* De uitgaven per categorie (piekInScope, netto) in de afgeronde maanden voor m, in de snede van maandVooruit(). */
+function zonderPotjeMaanden(m){
+  const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
+  const pm=P.map(p=>{ const o={}; for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const c=catOf(t); if(potHeelVast(c)) continue; o[c]=(o[c]||0)+uitgaveNorm(t); } return o; });
+  return {P, pm};
+}
+function zonderPotjeStand(m, restCat, pm){
+  m=m||thisYM();
+  if(!pm) pm=zonderPotjeMaanden(m).pm;
+  const geb={}, tx={};
+  for(const t of txOfMonth(m)){ if(!piekInScope(t)) continue; const c=catOf(t); if(!zonderPotjeCat(c)) continue;
+    geb[c]=(geb[c]||0)+uitgaveNorm(t); (tx[c]=tx[c]||[]).push(t); }
+  const ks=new Set([...Object.keys(geb), ...Object.keys(restCat||{})]); pm.forEach(o=>Object.keys(o).forEach(k=>ks.add(k)));
+  const rijen=[]; let geboekt=0, verwacht=0, uitgesloten=0;
+  for(const k of ks){ if(!zonderPotjeCat(k)) continue;
+    const g=+geb[k]||0, n=pm.filter(o=>(+o[k]||0)>0).length, ruw=restCat?(+restCat[k]||0):0;
+    const uit=ZONDER_UIT.includes(k);
+    let v=0, reden;
+    if(uit){ reden='telt niet mee: een persoonlijke overboeking is geen uitgave zonder potje'; uitgesloten+=g; }
+    else if(n<ZONDER_MIN_MAANDEN) reden=`uitgaven in ${n} van ${pm.length} mnd: geen verwachting (minstens ${ZONDER_MIN_MAANDEN} nodig)`;
+    else if(!restCat) reden=`uitgaven in ${n} van ${pm.length} mnd`;
+    else if(ruw<0) reden=`uitgaven in ${n} van ${pm.length} mnd: verwachting ${Math.round(ruw)} onder nul, op EUR 0 gezet`;
+    else { v=ruw; reden=`uitgaven in ${n} van ${pm.length} mnd: verwacht ${Math.round(ruw)}`; }
+    if(!uit){ geboekt+=g; verwacht+=v; }
+    if(!(Math.round(g*100)) && !(Math.round(ruw*100)) && !n) continue;
+    rijen.push({k, naam:CATS[k].name, geboekt:g, n, maanden:pm.length, verwachtRuw:ruw, verwacht:v, telt:!uit, uit, reden, tx:tx[k]||[]}); }
+  rijen.sort((a,b)=>(b.geboekt+b.verwacht)-(a.geboekt+a.verwacht) || (a.naam<b.naam?-1:1));
+  return {m, rijen, geboekt, verwacht, uitgesloten};
+}
+/* Let op: een categorie zonder potje met uitgaven in minstens ZONDER_MIN_MAANDEN van de laatste afgeronde maanden. */
+function zonderPotjeVaker(m){
+  m=m||thisYM(); let Z; try{ Z=zonderPotjeStand(m); }catch(_){ return []; }
+  return Z.rijen.filter(x=>x.telt && x.n>=ZONDER_MIN_MAANDEN).sort((a,b)=>b.n-a.n || (a.naam<b.naam?-1:1));
+}
 function maandSplitsing(m, L){
   m=m||thisYM();
   if(!L){ try{ L=monthLiquidity(); }catch(_){ L={fixDue:0, fixDueItems:[]}; } }
@@ -8504,12 +8561,15 @@ function maandVooruit(){
      deze vooruitblik (Grip), vasteLastenStand() en insMaandStand() (Inzichten). */
   const SP=maandSplitsing(m, L), vastePotjes=SP.vastePotjes, vastExtra=SP.vastExtra, geenExtra=SP.geenExtra;
   const uit=Math.round(T.spendNorm||0), vast=Math.round((+L.fixDue||0)+vastExtra+geenExtra);
-  let restTot=0; for(const c in restCat) restTot+=restCat[c];
-  const rest=Math.round(Math.max(restTot,0));
+  /* v402: wat er nog verwacht wordt is per potje niet onder nul (zoals het potje zelf al rekent) en zonder potje alleen
+     voor een categorie die er vaker is (zonderPotjeStand); een persoonlijke overboeking zonder potje telt niet mee. */
+  const Z=zonderPotjeStand(m, restCat, perMaand), B0=SET.budgets||{};
+  let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0) restTot+=Math.max(+restCat[c]||0,0); }
+  const rest=Math.round(Math.max(restTot,0)), uitZ=Math.round((T.spendNorm||0)-Z.uitgesloten);
   /* v399: de inleg in Plan telt mee in het maandbudget en gaat verwacht volledig uit (planInlegRegels): netto op budget. */
   const inleg=planInlegRegels(m).tot;
-  const projectie=uit+vast+rest+inleg, budget=Math.round((T.budget||0)+inleg);
-  const band={min:uit+vast+Math.round(Math.min(...totP)), max:uit+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
+  const projectie=uitZ+vast+rest+inleg, budget=Math.round((T.budget||0)+inleg);
+  const band={min:uitZ+vast+Math.round(Math.min(...totP)), max:uitZ+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Het variabele deel van elk potje
      uit maandSplitsing(); een potje dat helemaal vast is staat daar niet in. */
   const potjes=[];
@@ -8548,7 +8608,7 @@ function maandVooruit(){
   const variabel={budget:Math.round(potjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(potjes.reduce((a,x)=>a+x.eindR,0))};
   const vaste={budget:Math.round(vastePotjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(vastePotjes.reduce((a,x)=>a+x.eind,0))};
   const effect=handelingen.reduce((a,h)=>a+h.effect,0);
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:projectie-variabel.eind-vaste.eind-inleg, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:projectie-variabel.eind-vaste.eind-inleg, zonderStand:Z, zonderLos:projectie-variabel.eind-vaste.eind-inleg-Z.geboekt-Z.verwacht, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -9756,18 +9816,22 @@ function gripZienBrug(V, TR){
   TR=TR||teRuim(V);
   const Bud=Math.round(V.budget), P=Math.round(V.projectie), diff=P-Bud, boven=uitschieters(V);
   const maak=(n, teLos)=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
-    const zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonder', v:zonder});
+    /* v402: zonder potje in twee delen, geboekt (dicht) en nog verwacht (licht), uit zonderPotjeStand(). Wat er verder in
+       V.zonder zit (een vaste last zonder categorie, afronding) valt in overig. */
+    const ZS=V.zonderStand; if(ZS){ if(Math.round(ZS.geboekt)||Math.round(ZS.verwacht)){ rauw.push({k:'~zonderG', v:ZS.geboekt}); rauw.push({k:'~zonderV', v:ZS.verwacht}); } }
+    else { const zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonderG', v:zonder}); }
     if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim});
     else if(TR.length) rauw.push({k:'~tr', v:-TR.reduce((a,x)=>a+x.teRuim,0)});
     rauw.push({k:'~overig', v:(V.projectie-V.budget)-rauw.reduce((a,x)=>a+x.v,0)});
-    const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>R[x.k]||x.k==='~overig').length;
+    const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>x.k!=='~zonderV' && (R[x.k]||x.k==='~overig'||(x.k==='~zonderG'&&R['~zonderV']))).length;
     return {los, R, kol, teLos}; };
   let M=maak(Math.min(DEZEMAAND_LOS, boven.length), true);
   if(M.kol>DEZEMAAND_KOL) M=maak(M.los.length, false);
   while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1, false);
   const {los, R}=M, stappen=[{soort:'begin', label:'budget', waarde:Bud}];
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
-  if(R['~zonder']) stappen.push({soort:'zonder', label:'z. potje', waarde:R['~zonder']});
+  { const zg=R['~zonderG']||0, zv=R['~zonderV']||0;
+    if(zg||zv) stappen.push({soort:'zonder', label:'z. potje', waarde:zg+zv, deel:zg, geboekt:zg, verwacht:zv, titel:`zonder potje · ${euro0(zg)} geboekt · ${euro0(zv)} verwacht`}); }
   if(M.teLos){ for(const x of TR) if(R['~tr:'+x.k]) stappen.push({soort:'teruim', k:x.k, label:x.naam, label2:'niet gebruikt', titel:`${x.naam} · niet gebruikt`, waarde:R['~tr:'+x.k], breed:1.4}); }
   else if(R['~tr']) stappen.push({soort:'teruim', k:TR.length===1?TR[0].k:'', label:`${TR.length} potjes`, label2:'niet gebruikt', titel:`${opsomming(TR.map(x=>x.naam))} · niet gebruikt`, waarde:R['~tr'], breed:1.4});
   /* Overig staat er altijd: zijn sheet is de ingang naar de vaste lasten (v357) en naar de potjes die niet los staan.
@@ -9788,6 +9852,7 @@ function gripZienBrug(V, TR){
 }
 function gripZienTik(soort,k){
   if(soort==='teruim'){ openTeRuim(k||undefined); return; }
+  if(soort==='zonder'){ openZonderPotje(); return; }
   if(soort==='overig'){ openGripOverig(); return; }
   gripBrugTik(soort,k);
 }
@@ -9806,7 +9871,7 @@ function gripOverigSamen(V, losKs, tot, O){
   const trKant=g=>O.filter(x=>kant(x.k)===g).reduce((a,x)=>a+Math.round(x.teRuim),0);
   const restT=V.variabel.eind-V.variabel.budget-V.potjes.filter(x=>losKs.includes(x.k)).reduce((a,x)=>a+x.overR,0)+trKant('rest');
   const vastT=V.vaste.eind-V.vaste.budget+trKant('vast');
-  const zonder=Math.min(+V.zonder||0,0);
+  const zonder=V.zonderStand?(+V.zonderLos||0):Math.min(+V.zonder||0,0);   // v402: wat er in V.zonder buiten geboekt en verwacht zit
   const R=brugAfronden([{k:'rest',v:restT},{k:'vast',v:vastT},{k:'zonder',v:zonder}], tot);
   /* v391: OVERIG IN POTJES. Per groep de potjes met hun verwachte verschil, afgerond met brugAfronden() op het bedrag
      van de groep; wat in een groep niet bij een potje hoort heet "overige". */
@@ -9828,6 +9893,30 @@ function gripOverigDelen(V){
   return gripOverigSamen(V, Br.stappen.filter(x=>x.soort==='potje').map(x=>x.k), st?st.waarde:0, teRuim(V));
 }
 function openGripOverig(){ renderGripOverig(); showSheetBg(); }
+/* v402: DE SHEET ACHTER "Z. POTJE": geboekt en verwacht zoals de stap ze draagt, en per categorie wat erin zit, afgerond
+   met brugAfronden() op die twee getallen zodat de regels optellen tot de stap. Een categorie die niet meetelt (een
+   persoonlijke overboeking) staat eronder met de reden. */
+function openZonderPotje(){ renderZonderPotje(); showSheetBg(); }
+function zonderPotjeDelen(V){
+  const Br=gripZienBrug(V); if(!Br) return null;
+  const st=Br.stappen.find(x=>x.soort==='zonder'); const g=st?st.geboekt:0, v=st?st.verwacht:0, Z=V.zonderStand;
+  const tel=Z.rijen.filter(x=>x.telt);
+  const A=brugAfronden(tel.map(x=>({k:x.k, v:x.geboekt})), g), B=brugAfronden(tel.map(x=>({k:x.k, v:x.verwacht})), v);
+  const rijen=tel.map(x=>Object.assign({}, x, {g:A[x.k]||0, v:B[x.k]||0})).filter(x=>x.g||x.v);
+  return {geboekt:g, verwacht:v, rijen, uit:Z.rijen.filter(x=>x.uit && Math.round(x.geboekt))};
+}
+function renderZonderPotje(){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const D=V&&!V.onbekend&&V.zonderStand?zonderPotjeDelen(V):null; if(!D){ closeSheet(); return; }
+  const m=V.m;
+  const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const uit=D.uit.map(x=>`<div class="row" data-zonderuit="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><div style="flex:1;min-width:0"><div class="small" style="color:var(--mut)">${esc(x.naam)} ${euro0(Math.round(x.geboekt))}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(x.reden)}</div></div></div>`).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="zonderPotjeSheet" data-zonder="${D.geboekt+D.verwacht}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Zonder potje · ${euro0(D.geboekt+D.verwacht)}</div>
+    <div class="small" style="margin:4px 0 6px"><span data-zondergeboekt="${D.geboekt}">${euro0(D.geboekt)} geboekt</span> · <span data-zonderverwacht="${D.verwacht}">${euro0(D.verwacht)} verwacht</span></div>
+    <div class="small muted" style="line-height:1.5;margin-bottom:4px">Geboekt is wat er deze maand al uitging in een categorie zonder potje. Verwacht is wat je daar in je laatste ${VOORUIT_MAANDEN} afgeronde maanden na deze dag gemiddeld nog uitgaf, alleen voor een categorie met uitgaven in minstens ${ZONDER_MIN_MAANDEN} van die maanden.</div>
+    ${D.rijen.map(rij).join('')||'<div class="small muted">Geen categorie zonder potje met uitgaven.</div>'}${uit}${gripAllesLink}</div>`;
+}
 function renderGripOverig(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const D=V&&!V.onbekend?gripOverigDelen(V):null; if(!D){ closeSheet(); return; }
@@ -9838,7 +9927,7 @@ function renderGripOverig(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripOverig" data-overig="${D.tot}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Overig · ${brugTeken(D.tot)}</div>
     <div class="small muted" style="line-height:1.5;margin:4px 0 6px">Wat niet los in de bridge staat.</div>
-    ${rij('rest','Andere variabele potjes',"openGripRest()")}${pot('rest')}${rij('vast','Vaste lasten',"openGripVast()")}${pot('vast')}${rij('zonder','Zonder potje','')}${gripAllesLink}</div>`;
+    ${rij('rest','Andere variabele potjes',"openGripRest()")}${pot('rest')}${rij('vast','Vaste lasten',"openGripVast()")}${pot('vast')}${rij('zonder','Vaste lasten zonder categorie en afronding','')}${gripAllesLink}</div>`;
 }
 /* ===== v398: DE TE-RUIM-SHEET: HET MAANDBUDGET BLIJFT GELIJK, HET VERSCHIL KRIJGT EEN BESTEMMING =====
    (gevraagd door de gebruiker, mockup "Grip eigen budget" v3.) Per potje: de kop "<potje> · ruimer dan nodig", drie feiten
@@ -20084,10 +20173,18 @@ function brugGrafiek(Br){
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:${+c.s.breed||1} 1 0;min-width:${Br.tik?'40px':'0'}${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
-        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}<i style="position:absolute;${lr};top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'var(--bar)':kleur(c.s)};border-radius:3px"${c.s.soort==='teruim'?' data-brugniet':''}></i>${lijn}
+        ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}${c.s.deel!=null?brugDelen(c, y, lr, kleur(c.s)):`<i style="position:absolute;${lr};top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'var(--bar)':kleur(c.s)};border-radius:3px"${c.s.soort==='teruim'?' data-brugniet':''}></i>`}${lijn}
       </div>
       <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>${c.s.label2?`<div data-brugeen2 style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(c.s.titel||c.s.label2)}">${esc(c.s.label2)}</div>`:''}
     </div>`;}).join('')}</div>`;
+}
+/* v402: EEN STAP IN TWEE DELEN (c.s.deel): het eerste deel dicht (geboekt), de rest licht (nog verwacht), in dezelfde
+   kleur. Ze liggen aan elkaar vanaf waar de stap begint. */
+function brugDelen(c, y, lr, kl){
+  const van=c.na-c.s.waarde, mid=van+(+c.s.deel||0);
+  const seg=(a,b,attr,extra)=>{ if(Math.abs(b-a)<1e-9) return ''; const t=y(Math.max(a,b)), hh=Math.max(y(Math.min(a,b))-t,2);
+    return `<i ${attr} style="position:absolute;${lr};top:${t.toFixed(1)}px;height:${hh.toFixed(1)}px;background:${kl};border-radius:3px${extra}"></i>`; };
+  return seg(van, mid, 'data-brugdicht', '')+seg(mid, c.na, 'data-bruglicht', ';opacity:.4');
 }
 /* v393: EEN KLEINE GRIJZE NOOT BIJ EEN STAP (c.s.noot={tekst, tik}), binnen het grafiekvlak zodat de bridge er niet
    hoger van wordt: boven het bedrag als daar ruimte is, anders onder de balk. Hij draagt een eigen tik met
@@ -27045,21 +27142,21 @@ function diagTeRuim(){
    al uitging in een categorie zonder potje, buiten de herkende vaste lasten (die staan bij de vaste lasten), en (2) wat
    je in zo'n categorie in je laatste afgeronde maanden gemiddeld na deze dag nog uitgaf. Alleen lezen (v244). */
 function diagZonderPotje(V){
-  const L=['', 'ZONDER POTJE deze maand (v401): datum | partij | bedrag | categorie | eigen keuze'];
-  const m=V.m, B=SET.budgets||{};
-  const zonder=c=>CATS[c] && CATS[c].type==='expense' && !geenNorm(c) && !((+B[c]||0)>0) && !potHeelVast(c);
-  let som=0; const rijen=[];
-  for(const t of txOfMonth(m)){ const c=catOf(t); if(!zonder(c) || !piekInScope(t)) continue;
-    const v=uitgaveNorm(t); som+=v; rijen.push(t); }
-  rijen.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  for(const t of rijen){ const c=catOf(t);
-    L.push(`  ${t.date} | ${titleCase(cleanMerch(t.name)||t.name||'?')} | ${Math.round(uitgaveNorm(t)*100)/100} | ${(CATS[c]||{}).name||c} | ${OVR[t.id]?'ja ('+((CATS[OVR[t.id]]||{}).name||OVR[t.id])+')':'nee'}`); }
+  const L=['', 'ZONDER POTJE deze maand (v401/v402): datum | partij | bedrag | categorie | eigen keuze'];
+  const Z=V.zonderStand||zonderPotjeStand(V.m, V.restCat);
+  const rijen=[]; for(const x of Z.rijen) for(const t of x.tx) rijen.push({t, x});
+  rijen.sort((a,b)=>a.t.date<b.t.date?-1:a.t.date>b.t.date?1:0);
+  for(const {t,x} of rijen) L.push(`  ${t.date} | ${titleCase(cleanMerch(t.name)||t.name||'?')} | ${Math.round(uitgaveNorm(t)*100)/100} | ${x.naam} | ${OVR[t.id]?'ja ('+((CATS[OVR[t.id]]||{}).name||OVR[t.id])+')':'nee'}${x.uit?' | telt niet mee':''}`);
   if(!rijen.length) L.push('  geen boekingen');
-  L.push(`  al uitgegeven zonder potje: ${Math.round(som)}`);
-  let verw=0; for(const c in (V.restCat||{})){ if(!zonder(c)) continue; const r=+V.restCat[c]||0; if(Math.round(r)===0) continue; verw+=r;
-    L.push(`  verwacht nog in ${(CATS[c]||{}).name||c}: ${Math.round(r)} (gemiddeld na dag ${V.el} in je laatste ${VOORUIT_MAANDEN} afgeronde maanden)`); }
-  L.push(`  samen ${Math.round(som+verw)} · V.zonder ${Math.round(V.zonder)}${Math.round(som+verw)!==Math.round(V.zonder)?' (het verschil zit in de afronding of in een vaste last zonder potje die bij de vaste lasten telt)':''}`);
-  let n=0; for(const [id,x] of EIGEN_AUTO){ const t=TX.find(z=>z.id===id); if(t && String(t.date).slice(0,7)===m && CATS[x.rc] && CATS[x.rc].type==='expense') n++; }
+  L.push(`  geboekt zonder potje (telt mee): ${Math.round(Z.geboekt*100)/100}${Z.uitgesloten?` · niet meegeteld (persoonlijke overboeking): ${Math.round(Z.uitgesloten*100)/100}`:''}`);
+  L.push(`  PER CATEGORIE (v402): geboekt | verwacht | maanden met uitgaven | waarom wel of niet`);
+  for(const x of Z.rijen) L.push(`  ${x.naam}: geboekt ${Math.round(x.geboekt)} | verwacht ${Math.round(x.verwacht)} | ${x.n} van ${x.maanden} | ${x.reden}`);
+  if(!Z.rijen.length) L.push('  geen categorie zonder potje');
+  L.push(`  verwacht zonder potje: ${Math.round(Z.verwacht)} (gemiddeld na dag ${V.el} in je laatste ${VOORUIT_MAANDEN} afgeronde maanden, nooit onder nul, minstens ${ZONDER_MIN_MAANDEN} maanden met uitgaven)`);
+  let st=null; try{ const Br=gripZienBrug(V); st=Br&&Br.stappen.find(s=>s.soort==='zonder'); }catch(_){}
+  L.push(`  stap z. potje op Zien: ${st?`${st.waarde} = ${st.geboekt} geboekt + ${st.verwacht} verwacht`:'geen'}`);
+  L.push(`  V.zonder ${Math.round(V.zonder)} = geboekt ${Math.round(Z.geboekt)} + verwacht ${Math.round(Z.verwacht)} + rest ${Math.round(V.zonderLos||0)} (een vaste last zonder categorie en afronding, staat in overig)`);
+  let n=0; for(const [id,x] of EIGEN_AUTO){ const t=TX.find(z=>z.id===id); if(t && String(t.date).slice(0,7)===V.m && CATS[x.rc] && CATS[x.rc].type==='expense') n++; }
   L.push(`  deze maand als eigen overboeking herkend en dus NIET hierin (v401): ${n}`);
   return L;
 }

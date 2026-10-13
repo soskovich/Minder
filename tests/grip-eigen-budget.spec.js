@@ -272,8 +272,11 @@ test.describe('C · signalen met bewijs', () => {
     const B = await page.evaluate(() => terugkeerBewijs('Restaurant Lona'));
     expect(B).toEqual(expect.objectContaining({ n: 4, venster: 4, ok: true, maanden: ['2026-07', '2026-08', '2026-09', '2026-10'] }));
     const r = await letop(page);
-    expect(r.soorten.filter(s => s.startsWith('lek'))).toEqual(['lek']);
-    expect(r.tekst).toContain('Uit eten & café €75 zonder potje\nRestaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');
+    /* v402: Uit eten heeft in 3 van 3 afgeronde maanden uitgaven, dus de regel is die van een categorie die er vaker is,
+       met de partij en het bewijs eronder; een lek-regel over dezelfde boekingen staat er niet naast. */
+    expect(r.soorten.filter(s => s.startsWith('lek'))).toEqual([]);
+    expect(r.soorten).toContain('zonderpot');
+    expect(r.tekst).toContain('Uit eten & café zonder potje · 3 van 3 mnd\npotje maken · Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');
   });
   test('een partij in een maand: geen "komt vaker terug", en categorie en partij zijn twee regels', async ({ page }) => {
     await DM.boot(page);

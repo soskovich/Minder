@@ -15,15 +15,18 @@ const regel = (page, soort = 'lek') => page.evaluate((soort) => { go('maand'); r
   const r = document.querySelector(`#gripLetOp [data-letop="${soort}"]`); return r ? r.innerText : null; }, soort);
 
 test.describe('lek-regel · categorie en bedrag', () => {
+  /* v402: Uit eten heeft in 3 van 3 afgeronde maanden uitgaven zonder potje, dus de regel is die van een categorie die er
+     vaker is ("<categorie> zonder potje · n van 3 mnd"), met de partij en het bewijs eronder en de tik naar de lek-sheet. */
   test('de regel noemt de categorie, niet de winkel', async ({ page }) => {
     await boot(page);
-    const t = await regel(page);
-    expect(t, 'er is een lek-regel').toBeTruthy();
+    const t = await regel(page, 'zonderpot');
+    expect(t, 'er is een regel voor de categorie').toBeTruthy();
     expect(await page.evaluate(() => lekSignaal(thisYM(), budgetFlaggedCats(thisYM())).kind)).toBe('missing-pot');   // invoermeting
-    expect(t.split('\n')[0]).toBe('Uit eten & café €75 zonder potje');
-    expect(t.split('\n')[1]).toBe('Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');   // v398: het bewijs staat in de regel
+    expect(t.split('\n')[0]).toBe('Uit eten & café zonder potje · 3 van 3 mnd');
+    expect(t.split('\n')[1]).toBe('potje maken · Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');   // v398: het bewijs staat in de regel
     expect(await regel(page, 'lekcat')).toBeNull();   // geen tweede regel over dezelfde boekingen
-    expect(await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop^="lek"]')].map(e => e.getAttribute('onclick'))))
+    expect(await regel(page, 'lek')).toBeNull();
+    expect(await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop="zonderpot"]')].map(e => e.getAttribute('onclick'))))
       .toEqual(["openGripLetOp('lek')"]);
   });
   test('met twee winkels in de categorie is het bedrag de categorie, en de sheet zegt hetzelfde', async ({ page }) => {
@@ -31,9 +34,9 @@ test.describe('lek-regel · categorie en bedrag', () => {
     const r = await page.evaluate(() => ({ cat: catOf(TX.find((t) => /ZWAAN/.test(t.desc))), som: Math.round(catSpendMap(thisYM()).uiteten) }));
     expect(r.cat, 'de fixture zet de tweede winkel in Uit eten').toBe('uiteten');
     expect(r.som).toBe(105);
-    const t = await regel(page);
-    expect(t.split('\n')[0]).toBe('Uit eten & café €105 zonder potje');
-    await page.evaluate(() => document.querySelector('#gripLetOp [data-letop="lek"]').click());
+    const t = await regel(page, 'zonderpot');
+    expect(t.split('\n')[0]).toBe('Uit eten & café zonder potje · 3 van 3 mnd');   // v402: het bedrag staat in de sheet
+    await page.evaluate(() => document.querySelector('#gripLetOp [data-letop="zonderpot"]').click());
     const sh = page.locator('#gripLetOpSheet[data-soort="lek"]');
     await expect(sh).toContainText('Uit eten & café · €105 zonder potje');
     await expect(sh.locator('[data-lekwinkel]')).toHaveText('waarvan Restaurant Lona €75');
