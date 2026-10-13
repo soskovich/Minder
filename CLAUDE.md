@@ -139,7 +139,8 @@ genoemde versietag.)*
   dicht `[data-brugdicht]`) en licht `[data-bruglicht]` (`brugDelen()`); de tik opent `openZonderPotje()`
   (`[data-zondergeboekt]`, `[data-zonderverwacht]`, per categorie `[data-zondercat]`). Let op: `zonderPotjeVaker()` geeft
   "<categorie> zonder potje · n van 3 mnd" met "potje maken" (`soort:'zonderpot'`); gaat de lek-regel over dezelfde
-  categorie, dan is het een regel met de partij eronder en de tik naar de lek-sheet. Blok 19 noemt per categorie de reden.
+  categorie, dan is het een regel met de partij eronder en de tik naar de lek-sheet; de lek-regel gaat nooit over `ZONDER_UIT`, en de
+  terugval "te weinig ingesteld" telt `zonderpot` niet mee (net als het lek). Blok 19 noemt per categorie de reden.
   Inzichten (`insMaandStand()`) telt een persoonlijke overboeking zonder potje nog als "zonder potje": gemeld, niet
   veranderd. Spec `zonder-potje-zuiver.spec.js`; `lek-categorie`, `grip-eigen-budget` C, `grip-vast-in-brug` b en
   `eigen-overboeking-auto` E8 gemigreerd.

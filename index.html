@@ -8190,7 +8190,9 @@ function gripLetOpItems(RO, SIG, BV){
   let ZV=[]; try{ ZV=zonderPotjeVaker(thisYM()); }catch(_){}
   const zvK=new Set(ZV.map(x=>x.k));
   const zvExtra={};
-  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk && zvK.has(Lk.cat)){
+  try{ const m=thisYM(), Lk0=lekSignaal(m, budgetFlaggedCats(m));
+    const Lk=Lk0 && !ZONDER_UIT.includes(Lk0.cat) ? Lk0 : null;   // v402: een persoonlijke overboeking is geen uitgave zonder potje, ook niet in Let op
+    if(Lk && zvK.has(Lk.cat)){
     /* Een terugkerende partij in die categorie zijn dezelfde boekingen: EEN regel, met de partij en het bewijs eronder en
        de tik naar de sheet van het lek (potje maken, categorie wijzigen, het gesprek), zodat die ingang blijft (v359). */
     if(Lk.kind==='missing-pot') zvExtra[Lk.cat]={sub:Lk.kpiLabel!==Lk.catNaam?` · ${Lk.kpiLabel}${Lk.bewijs?' · '+Lk.bewijs.tekst:''}`:'', act:"openGripLetOp('lek')"};
@@ -10159,7 +10161,7 @@ function renderMaand(){
   if(tab==='zien'){
     /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
        ander signaal dan een potje boven zijn grens of de lek-regel. */
-    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat');
+    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot');   // v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
     let eam=''; try{ eigenAutoMeldingCheck(); eam=eigenAutoMeldingRegel(); }catch(_){}
     inhoud=eam+gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');

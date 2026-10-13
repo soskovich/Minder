@@ -101,3 +101,12 @@ test('g: Let op draagt een regel per categorie die er vaker is, met potje maken'
   const z = L.find(x => x.naam.startsWith('Zorg'));
   expect(z.sub).toBe('potje maken'); expect(z.act).toBe("openPotForm('zorg')");
 });
+
+test('h: Let op noemt een persoonlijke overboeking niet als uitgave zonder potje', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(() => { const Lk = lekSignaal(thisYM(), budgetFlaggedCats(thisYM()));
+    return { lek: Lk && Lk.cat, namen: gripLetOpItems([], [], []).map(x => x.naam + ' ' + (x.sub || '')) }; });
+  expect(r.lek).toBe('persoonlijk');   // invoermeting: zonder de uitsluiting zou de lek-regel erover gaan
+  expect(r.namen.join('|')).not.toContain('Persoonlijke overboeking');
+  expect(r.namen.join('|')).not.toContain('Tikkie');
+});
