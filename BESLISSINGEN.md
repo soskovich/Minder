@@ -16,6 +16,7 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v407` · overstreak zegt "Boven je maandbudget in de laatste n afgeronde maanden", niet "op rij".** "Op rij" leest als een streak (geen gamification). Valkuil: een fixture die het signaal per ongeluk onderdrukt laat een latente `test.skip()` vuren en leest dan als groen; zo bleef deze tekst een ronde onopgemerkt.
 - **`v406` · Let op met bewijs, eerst wat je kunt doen; pieken naar Plan; de brug mengt nooit boven en onder.** Een
   signaal in Let op draagt altijd zijn bewijs (de bedragen van de maanden, het budget) en spreekt neutraal: geen "te veel",
   geen oordeel. "Maanden boven je grens" sprak over je hele maandbudget in een toon die oordeelde en bood geen stap; een

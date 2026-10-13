@@ -117,7 +117,7 @@ test.describe('d · regel 4: twee maanden op rij boven budget', () => {
     await boot(page, fixture());
     const n = await sig(page, 'overstreak');
     expect(n).toBeTruthy();
-    expect(n.l1).toBe('2 maanden op rij boven je maandbudget');   // v406: neutraal, met het aantal
+    expect(n.l1).toBe('Boven je maandbudget in de laatste 2 afgeronde maanden');   // v407: neutraal, zonder 'op rij'
     expect(n.l2).toMatch(/^Welke uitgaven dat droegen/);
     expect(n.l1 + n.l2).not.toMatch(/te veel/);
     expect(n.t).toBe('warn');
@@ -140,7 +140,7 @@ test.describe('e · de vier verhuizingen samen', () => {
         boek(tx, M1, '06', 4000, 'Bonus', 'EXTRA UITKERING');
       }));
       const paren = [['savrules', 'Je spaarstortingen tellen als uitgave'], ['meevaller', 'Zonder meevaller spaar je te weinig'],
-        ['overstreak', 'maanden op rij boven je maandbudget'],
+        ['overstreak', 'afgeronde maanden'],
         ['hefboom', 'is je grootste knop']];
       let gevuurd = 0;
       for (const [key, zin] of paren) {

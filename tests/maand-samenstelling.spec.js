@@ -33,7 +33,10 @@ function seed(o = {}) {
   });
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: { [MAIN]: 1500, [SAV]: o.spaarSaldo != null ? o.spaarSaldo : 20000 },
-    savingsEnds: ['4323'], budgets: { huur: 900, boodschappen: 600, uiteten: 300 },
+    savingsEnds: ['4323'],
+    /* v406: overstreak staat er alleen nog als geen potje hem verklaart (potBovenLijst() leeg). De overstreak-variant geeft
+       boodschappen en uiteten dus geen potje; zonder die variant houdt de fixture zijn potjes en blijft hij binnen budget. */
+    budgets: o.overstreak ? { huur: 900 } : { huur: 900, boodschappen: 600, uiteten: 300 },
     nfDoelVast: 4000, nfToegewezen: 4000, nfToegewezenMigrated: 1,
     spaarRente: 1,
   }, o.set || {});
@@ -153,7 +156,7 @@ test.describe('c · de ingang en het oordeel wijzen naar dezelfde regel', () => 
   test('coMaandRegel kent ook de structurele sleutels', async ({ page }) => {
     await boot(page, seed({ overstreak: true }));
     const S = await str(page);
-    test.skip(!S.length, 'deze fixture levert geen structureel signaal');
+    expect(S.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     for (const x of S) {
       const r = await page.evaluate((k) => coMaandRegel(k), x.key);
       expect(r, x.key).toBeTruthy();
@@ -173,8 +176,13 @@ test.describe('d · niets moedigt aan of scoort', () => {
   test('de kaarten constateren', async ({ page }) => {
     for (const opt of [{ rente: true }, { overstreak: true }, { rente: true, overstreak: true }]) {
       await boot(page, seed(opt));
+      /* v406: een structurele regel kan achter "nog N ›" staan, dus de lijst van Let op telt mee (v407: de tekst van
+         overstreak zei daar "op rij", en zonder die lijst bleef dat onzichtbaar voor deze test). */
       const t = await page.evaluate(async () => { go('maand');
-        await new Promise((x) => setTimeout(x, 120)); return $('#s-maand').innerText; });
+        await new Promise((x) => setTimeout(x, 120)); let s = $('#s-maand').innerText;
+        if ((window._gripLetOpL || []).length > GRIP_LETOP_MAX) { openGripLetOpLijst(); s += '\n' + $('#gripLetOpLijst').innerText; closeSheet(); }
+        return s; });
+      if (opt.overstreak) expect(t).toContain('Maanden boven je grens');   // invoermeting: het signaal staat in wat de test leest
       expect(t).not.toMatch(/goed bezig|knap|gefeliciteerd|op rij|streak|(?<!open )punten/i);   // v337: 'Afsluiten met open punten' is de knop die de gebruiker vroeg, geen score
       expect(t).not.toMatch(/[!—]/);
     }

@@ -32,7 +32,7 @@ function seed(o = {}) {
   const bal = { [MAIN]: 4000 };
   if (o.spaar) bal[SAV] = 9000;
   const set = Object.assign({ bufferNorm: 3, mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
-    manualBal: bal, budgets: { huur: 1000, boodschappen: 500 } }, o.set || {});
+    manualBal: bal, budgets: { huur: 1000 } }, o.set || {});   /* v406: overstreak staat er alleen nog als geen potje hem verklaart (potBovenLijst() leeg), dus deze fixture geeft boodschappen geen potje. */
   if (o.spaar) set.savingsEnds = ['4323'];
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify(o.spaar ? [MAIN, SAV] : [MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
@@ -93,7 +93,7 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
   test('een structureel signaal verdwijnt alleen als je het wegzet', async ({ page }) => {
     await boot(page);
     const str = await page.evaluate(() => maandStructureel().map((r) => r.key));
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     await openMaand(page);
     expect(await page.evaluate(() => maandStructureel().map((r) => r.key))).toEqual(str);
     await page.evaluate((k) => { SET.notifMuted = { [String(k).split('-')[0]]: true }; save(); }, str[0]);

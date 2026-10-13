@@ -28,7 +28,8 @@ function seed(o = {}) {
   const set = Object.assign({
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
     manualBal: { [MAIN]: 1500, [SPAAR]: 400 },
-    budgets: { boodschappen: 500, huur: 900 },
+    /* v406: overstreak staat er alleen nog als geen potje hem verklaart (potBovenLijst() leeg), dus deze fixture geeft boodschappen geen potje. */
+    budgets: { huur: 900 },
     savingMode: 'amount', savingAmount: 300, savingsAcc: { [SPAAR]: true },
   }, o.set || {});
   return {
@@ -78,7 +79,7 @@ test.describe('b · elk signaal op precies één plek', () => {
   test('structureel staat op het maandscherm en niet in de lijst', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     const l = await lijst(page);
     for (const r of str) expect(l.some((n) => n.key === r.key)).toBe(false);
   });
@@ -102,7 +103,7 @@ test.describe('c · structureel op het maandscherm', () => {
   test('het krijgt de status uit de drempelconstante en telt mee voor het oordeel', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     /* v196: elk structureel signaal krijgt zijn status uit STRUCT_STATUS (v175), niet uit de
        terugval. bad en warn zijn een blokkade en gaan naar 'tekort', info is een observatie en gaat
        naar 'let op'. MAAND_DREMPEL.structureelStatus is alleen de terugval bij een onbekende t. */
@@ -113,8 +114,11 @@ test.describe('c · structureel op het maandscherm', () => {
     for (let i = 0; i < str.length; i++) expect(str[i].status).toBe(verwacht[i]);
     /* v340: de oordeelzin is vervallen. Wat blijft: het signaal staat op Grip onder "Let op", met de
        stip in de kleur van zijn status, dus een blokkade leest als rood en een observatie als amber. */
+    /* v406: in Let op gaat eerst wat je kunt doen (groep a, b); een structurele regel kan dus achter "nog N ›" staan.
+       De regels komen daarom uit de hele lijst (window._gripLetOpL), gerenderd met dezelfde gripLetOpRij(). */
     const rijen = await page.evaluate(() => { go('maand');
-      return [...document.querySelectorAll('#gripLetOp [data-letop="str"]')].map((x) => ({ t: x.innerText, h: x.innerHTML })); });
+      return (window._gripLetOpL || []).filter((x) => x.soort === 'str').map((x) => {
+        const d = document.createElement('div'); d.innerHTML = gripLetOpRij(x); return { t: x.naam + ' ' + (x.sub || ''), h: d.innerHTML }; }); });
     expect(rijen.length).toBe(str.length);
     for (let i = 0; i < str.length; i++) {
       const naam = await page.evaluate((k) => maandStructureel().find((r) => r.key === k).naam, str[i].key);
@@ -127,13 +131,14 @@ test.describe('c · structureel op het maandscherm', () => {
   test('het loopt mee als gewone regel, niet als tweede blok', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     await page.evaluate(() => { delete SET.maandGelezen; renderMaand(); });
     /* v340: 'Vraagt een beslissing' is vervallen. Een structureel signaal is een gewone regel onder
        "Let op", tussen de andere signalen, en krijgt geen eigen kaart of kop. */
     const kaarten = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card .hlabel')].map((e) => e.textContent));
     expect(kaarten.filter((k) => /^let op$/i.test(k.trim())).length).toBe(1);
-    expect(await page.locator('#gripLetOp [data-letop="str"]').count()).toBe(str.length);
+    // v406: de structurele regels staan in de lijst van Let op, zichtbaar of achter "nog N ›"
+    expect(await page.evaluate(() => (window._gripLetOpL || []).filter((x) => x.soort === 'str').length)).toBe(str.length);
     expect(kaarten.some((k) => /signaal|patroon|melding/i.test(k))).toBe(false);
   });
 
@@ -157,7 +162,7 @@ test.describe('d · ritme in plaats van snooze', () => {
   test('een lopende snooze verbergt een structureel signaal niet op het maandscherm', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     const grp = str[0].key.split('-')[0];
     await page.evaluate((g) => { SET.notifSnooze = { [g]: Date.now() + 7 * 86400000 }; save(); }, grp);
     const na = await structureel(page);
@@ -169,7 +174,7 @@ test.describe('d · ritme in plaats van snooze', () => {
   test('Niet meer tonen blijft wel gelden, ook op het maandscherm', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     const grp = str[0].key.split('-')[0];
     await page.evaluate((g) => { SET.notifMuted = { [g]: true }; save(); }, grp);
     expect((await structureel(page)).some((r) => r.key === str[0].key)).toBe(false);
@@ -182,7 +187,7 @@ test.describe('d · ritme in plaats van snooze', () => {
   test('het lezen van het maandscherm verandert niets aan wat er staat', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
-    test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    expect(str.length).toBeGreaterThan(0);   // v406: invoermeting in plaats van een skip die als groen leest
     await page.evaluate(() => { SET.maandGelezen = new Date().toISOString().slice(0, 10); save(); });
     expect(await structureel(page)).toEqual(str);
     expect(await page.evaluate(() => maandStructureel.toString())).not.toContain('SET.maandGelezen');

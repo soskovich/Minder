@@ -24,7 +24,7 @@ test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => 
     expect(r.pb).toBeGreaterThan(0);
     expect(r.met).toBe(false);
     expect(r.letop).not.toContain('Maanden boven je grens');
-    expect(r.zonder).toMatch(/^\d+ maanden op rij boven je maandbudget/);
+    expect(r.zonder).toMatch(/^Boven je maandbudget in de laatste \d+ afgeronde maanden/);   // v407: zonder 'op rij'
     expect(r.zonder).not.toMatch(/te veel/);
   });
   test('2 van 3 telt, 1 van 3 niet (het budget van die maand, maandPotjes)', async ({ page }) => {

@@ -4889,7 +4889,7 @@ function scoreNotifs(opts){
          (potBovenLijst), en die vervangt deze. Hij staat er alleen nog als geen potje het verklaart. */
       let pbl=[]; try{ pbl=potBovenLijst(); }catch(_){}
       if(streakA>=2 && !pbl.length) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'), kort:'Maanden boven je grens',
-        l1:`${streakA} maanden op rij boven je maandbudget`,   // v406: neutraal, met het aantal
+        l1:`Boven je maandbudget in de laatste ${streakA} afgeronde maanden`,   // v407: neutraal en zonder 'op rij' (geen streak), met het aantal
         l2:`Welke uitgaven dat droegen staat in de maand.`, act:`openMonthSpend('${curMonth||''}')`});
     }
   } }catch(_){}
