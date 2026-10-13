@@ -8218,7 +8218,10 @@ function gripLetOpItems(RO, SIG, BV){
     else if(Lk.kind==='missing-pot'){ L.push({soort:'lek', key:Lk.cat, naam:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:twee?Lk.kpiLabel:'de boekingen', dot:'let op', act:"openGripLetOp('lek')", een:true}); }
     else { if(twee) L.push({soort:'lekcat', key:Lk.cat, naam:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:'geen potje voor deze categorie · de boekingen', dot:'let op', act:`openCategory('${esc(Lk.cat)}','${esc(m)}')`});
     L.push({soort:'lek', key:Lk.cat, naam:twee?`${Lk.kpiLabel}: ${Lk.kpiVal}`:`${Lk.catNaam} ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); } } }catch(_){}
-  for(const x of ZV){ const E=zvExtra[x.k]; L.push({soort:'zonderpot', key:x.k, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'potje maken'+(E?E.sub:''), dot:'let op', act:E?E.act:`openPotForm('${esc(x.k)}')`}); }
+  /* v404: het voorstel is het gemiddelde per maand van de laatste afgeronde maanden (zonderPotjeStand), en het staat in de
+     regel en in het formulier; opslaan blijft jouw handeling (potFormZet). */
+  for(const x of ZV){ const E=zvExtra[x.k], vs=Math.round(x.gemiddeld||0);
+    L.push({soort:'zonderpot', key:x.k, voorstel:vs, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'potje maken'+(E?E.sub:(vs>0?` · voorstel ${euro0(vs)} per maand`:'')), dot:'let op', act:E?E.act:`openPotForm('${esc(x.k)}',${vs})`}); }
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -8269,7 +8272,7 @@ function gripLekKaart(){
     ${sub?`<div class="small muted" style="margin-top:2px" data-lekwinkel>${esc(sub)}</div>`:''}
     <div class="small" style="line-height:1.5;margin-top:8px">${esc(Lk.hyp)}</div>
     <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>
-    <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-lekpotje style="width:auto;padding:9px 14px" onclick="openPotForm('${esc(Lk.cat)}')">Potje maken</button><button class="btn sec" data-lekcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${esc(Lk.cat)}','${esc(m)}')">Categorie wijzigen ›</button></div>
+    <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-lekpotje style="width:auto;padding:9px 14px" onclick="openPotForm('${esc(Lk.cat)}',1)">Potje maken</button><button class="btn sec" data-lekcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${esc(Lk.cat)}','${esc(m)}')">Categorie wijzigen ›</button></div>
     <div class="small" data-lekcoach style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek ›</div></div>`;
 }
 /* De sheet zoekt zijn inhoud opnieuw op (v319/v320) en sluit als het signaal weg is. */
@@ -8504,14 +8507,34 @@ function zonderPotjeStand(m, restCat, pm){
     else { v=ruw; reden=`uitgaven in ${n} van ${pm.length} mnd: verwacht ${Math.round(ruw)}`; }
     if(!uit){ geboekt+=g; verwacht+=v; }
     if(!(Math.round(g*100)) && !(Math.round(ruw*100)) && !n) continue;
-    rijen.push({k, naam:CATS[k].name, geboekt:g, n, maanden:pm.length, verwachtRuw:ruw, verwacht:v, telt:!uit, uit, reden, tx:tx[k]||[]}); }
+    const bedragen=pm.map(o=>+o[k]||0);   // v404: per afgeronde maand, de meest recente eerst; het gemiddelde is het voorstel voor een potje
+    rijen.push({k, naam:CATS[k].name, geboekt:g, n, maanden:pm.length, bedragen, gemiddeld:pm.length?bedragen.reduce((a,x)=>a+x,0)/pm.length:0, verwachtRuw:ruw, verwacht:v, telt:!uit, uit, reden, tx:tx[k]||[]}); }
   rijen.sort((a,b)=>(b.geboekt+b.verwacht)-(a.geboekt+a.verwacht) || (a.naam<b.naam?-1:1));
   return {m, rijen, geboekt, verwacht, uitgesloten};
+}
+/* v404: het voorstel voor een potje in een categorie zonder potje: het gemiddelde per maand van de laatste afgeronde maanden. */
+function zonderPotjeVoorstel(k, m){
+  m=m||thisYM(); let Z; try{ Z=zonderPotjeStand(m); }catch(_){ return null; }
+  const x=Z.rijen.find(r=>r.k===k); if(!x || !(x.gemiddeld>0)) return null;
+  const ms=x.bedragen.map((_,i)=>valtOpYmPlus(m,-(i+1))).reverse();
+  return {bedrag:Math.round(x.gemiddeld), exact:x.gemiddeld, bedragen:x.bedragen.slice().reverse(), maanden:ms};
 }
 /* Let op: een categorie zonder potje met uitgaven in minstens ZONDER_MIN_MAANDEN van de laatste afgeronde maanden. */
 function zonderPotjeVaker(m){
   m=m||thisYM(); let Z; try{ Z=zonderPotjeStand(m); }catch(_){ return []; }
   return Z.rijen.filter(x=>x.telt && x.n>=ZONDER_MIN_MAANDEN).sort((a,b)=>b.n-a.n || (a.naam<b.naam?-1:1));
+}
+/* v404: EEN VASTE LAST DIE IN "NOG TE BETALEN" TELT EN BIJ GEEN VASTE LAST OF POTJE HOORT: geen categorie, een categorie
+   die geen uitgave is, of een categorie zonder norm. Tot v404 zat hij stil in de rest van V.zonder en daarmee in overig;
+   nu staat hij bij naam in de stap zonder potje, in zijn sheet en in blok 19. */
+function zonderLosPosten(L, m){
+  m=m||thisYM(); const o=[];
+  for(const s of ((L&&L.fixDueItems)||[])){ if(s.excl || s.inPotje) continue; const c=s.cat||null;
+    if(c && buitenUitgave(c)) continue;
+    if(c && CATS[c] && CATS[c].type==='expense' && !geenNorm(c)) continue;
+    const datum=s.nextDate?ymdVan(new Date(s.nextDate)):(s.day?`${m}-${String(s.day).padStart(2,'0')}`:null);
+    o.push({key:s.key, naam:s.name||s.key||'?', cat:c, bedrag:+s.amount||0, datum}); }
+  return o;
 }
 function maandSplitsing(m, L){
   m=m||thisYM();
@@ -8537,11 +8560,11 @@ function maandSplitsing(m, L){
     if(heelVast(k)){ if(!isUit) continue;
       const u=+S[k]||0, o=+open[k]||0, e=u+o, geen=Math.round(e)<=0, eind=geen?bud:e;
       if(geen) geenExtra+=bud;
-      vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(bud), potje:Math.round(bud), uit:Math.round(u), vast:Math.round(o), eind:Math.round(eind), overR:eind-bud, terug:true, geen, keuze:true, namen:openNamen[k]||[]});
+      vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(bud), potje:Math.round(bud), uit:Math.round(u), vast:Math.round(o), eind:Math.round(eind), eindR:eind, overR:eind-bud, terug:true, geen, keuze:true, namen:openNamen[k]||[]});
       continue; }
     const fU=Math.max(+fBet[k]||0,0), fO=isUit?(+open[k]||0):0, fE=fU+fO;
     const vBud=Math.max(bud-fE,0), fBud=bud-vBud;
-    if(fE>0) vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(fBud), potje:Math.round(bud), uit:Math.round(fU), vast:Math.round(fO), eind:Math.round(fE), overR:fE-fBud, terug:true, geen:false, gemengd:vBud>0, namen:openNamen[k]||[]});
+    if(fE>0) vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(fBud), potje:Math.round(bud), uit:Math.round(fU), vast:Math.round(fO), eind:Math.round(fE), eindR:fE, overR:fE-fBud, terug:true, geen:false, gemengd:vBud>0, namen:openNamen[k]||[]});
     if(isUit) potBasis.push({k, naam:CATS[k].name, bud, vBud, fE, u:(+S[k]||0)-fU}); }
   /* (C) een herkende vaste last zonder potje: vast, met EUR 0 in je budget (keuze van de gebruiker). */
   const zp=new Set([...Object.keys(fBet), ...Object.keys(open)]);
@@ -8549,7 +8572,7 @@ function maandSplitsing(m, L){
   for(const k of zp){ if((+B[k]||0)>0 || !inNorm(k)) continue;
     const u=heelVast(k)?(+S[k]||0):Math.max(+fBet[k]||0,0), o=+open[k]||0, e=u+o;
     if(Math.round(e)<=0) continue;
-    vastePotjes.push({k, naam:CATS[k].name, bud:0, potje:0, uit:Math.round(u), vast:Math.round(o), eind:Math.round(e), overR:e, terug:true, geen:false, zonderPotje:true, namen:openNamen[k]||[]}); }
+    vastePotjes.push({k, naam:CATS[k].name, bud:0, potje:0, uit:Math.round(u), vast:Math.round(o), eind:Math.round(e), eindR:e, overR:e, terug:true, geen:false, zonderPotje:true, namen:openNamen[k]||[]}); }
   return {m, vastePotjes, potBasis, vastExtra, geenExtra, uitOpen, open, fBet};
 }
 function maandVooruit(){
@@ -8590,10 +8613,10 @@ function maandVooruit(){
   const band={min:uitZ+vast+Math.round(Math.min(...totP)), max:uitZ+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Het variabele deel van elk potje
      uit maandSplitsing(); een potje dat helemaal vast is staat daar niet in. */
-  const potjes=[];
+  const potjes=[]; let potKlein=0;   // v404: een potje zonder variabel deel met een uitgave onder de euro telt mee in variabel, zonder eigen regel
   for(const b of SP.potBasis){ const k=b.k, u=b.u, vBud=b.vBud, fE=b.fE, r=Math.max(+restCat[k]||0,0);
     const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
-    if(!(vBud>0) && Math.round(u+r)===0) continue;
+    if(!(vBud>0) && Math.round(u+r)===0){ potKlein+=u+r; continue; }
     potjes.push({k, naam:b.naam, bud:Math.round(vBud), potje:Math.round(b.bud), vastDeel:Math.round(fE), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
       overR:u+r-vBud, patroon:Math.round(patroon), maanden:perMaand.map(pm=>Math.round(+pm[k]||0))}); }
   /* v349: WAAROM EEN POTJE BOVEN ZIJN BEDRAG UITKOMT, en dat zijn twee verschillende dingen. "Past niet in
@@ -8623,10 +8646,18 @@ function maandVooruit(){
   /* De drie delen van de uitkomst: wat de variabele potjes samen mogen en wat er verwacht uitgaat, hetzelfde
      voor de vaste potjes, en wat er zonder potje uitgaat (het verschil, zodat de drie per constructie optellen
      tot de projectie). */
-  const variabel={budget:Math.round(potjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(potjes.reduce((a,x)=>a+x.eindR,0))};
+  const variabel={budget:Math.round(potjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(potjes.reduce((a,x)=>a+x.eindR,0)+potKlein)};
   const vaste={budget:Math.round(vastePotjes.reduce((a,x)=>a+x.bud,0)), eind:Math.round(vastePotjes.reduce((a,x)=>a+x.eind,0))};
   const effect=handelingen.reduce((a,h)=>a+h.effect,0);
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:projectie-variabel.eind-vaste.eind-inleg, zonderStand:Z, zonderLos:projectie-variabel.eind-vaste.eind-inleg-Z.geboekt-Z.verwacht, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  /* v404: ZONDER POTJE WORDT EEN KEER AFGEROND, OP HET EIND. Tot v404 was V.zonder het verschil van al afgeronde delen
+     (projectie min variabel min vast min inleg) en de stap op Zien een afronding van geboekt plus verwacht; GEMELD stond er
+     277 in blok 19 en 276 op Zien. Nu is zonderExact de som van de onafgeronde delen, en V.zonder is die som afgerond: de
+     stap op Zien leest precies dat getal. Wat er buiten geboekt en verwacht in zit staat bij naam (zonderLosPosten). */
+  const varEindR=potjes.reduce((a,x)=>a+x.eindR,0)+potKlein, vasteEindR=vastePotjes.reduce((a,x)=>a+(+x.eindR||0),0);
+  const fixDueExact=(L.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje).reduce((a,x)=>a+(+x.amount||0),0);   // L.fixDue is afgerond
+  const zonderExact=(+T.spendNorm||0)+fixDueExact+vastExtra+geenExtra-(SP.uitOpen||0)+Math.max(restTot,0)-varEindR-vasteEindR;
+  const losP=zonderLosPosten(L, m), zonderLos=zonderExact-Z.geboekt-Z.verwacht;
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:Math.round(zonderExact), zonderExact, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losP.reduce((a,x)=>a+x.bedrag,0), inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -9834,14 +9865,17 @@ function gripZienBrug(V, TR){
   TR=TR||teRuim(V);
   const Bud=Math.round(V.budget), P=Math.round(V.projectie), diff=P-Bud, boven=uitschieters(V);
   const maak=(n, teLos)=>{ const los=boven.slice(0,n), rauw=los.map(x=>({k:x.k, v:x.overR}));
-    /* v402: zonder potje in twee delen, geboekt (dicht) en nog verwacht (licht), uit zonderPotjeStand(). Wat er verder in
-       V.zonder zit (een vaste last zonder categorie, afronding) valt in overig. */
-    const ZS=V.zonderStand; if(ZS){ if(Math.round(ZS.geboekt)||Math.round(ZS.verwacht)){ rauw.push({k:'~zonderG', v:ZS.geboekt}); rauw.push({k:'~zonderV', v:ZS.verwacht}); } }
-    else { const zonder=Math.max(+V.zonder||0,0); if(zonder) rauw.push({k:'~zonderG', v:zonder}); }
+    /* v402: zonder potje in twee delen, geboekt (dicht) en nog verwacht (licht), uit zonderPotjeStand().
+       v404: DE STAP IS V.ZONDER ZELF, een keer afgerond in maandVooruit(); brugAfronden() verdeelt alleen de andere
+       stappen over wat er dan overblijft. Wat er buiten geboekt en verwacht in zit (een vaste last zonder categorie,
+       zonderLosPosten) zit in het lichte deel en staat bij naam in de sheet, en niet meer in overig. */
+    const ZS=V.zonderStand, zTot=ZS?Math.round(+V.zonder||0):Math.max(Math.round(+V.zonder||0),0), zG=ZS?Math.round(ZS.geboekt):zTot;
+    const zE=ZS?(+V.zonderExact||0):zTot;
     if(teLos) for(const x of TR) rauw.push({k:'~tr:'+x.k, v:-x.teRuim});
     else if(TR.length) rauw.push({k:'~tr', v:-TR.reduce((a,x)=>a+x.teRuim,0)});
-    rauw.push({k:'~overig', v:(V.projectie-V.budget)-rauw.reduce((a,x)=>a+x.v,0)});
-    const R=brugAfronden(rauw, diff), kol=2+rauw.filter(x=>x.k!=='~zonderV' && (R[x.k]||x.k==='~overig'||(x.k==='~zonderG'&&R['~zonderV']))).length;
+    rauw.push({k:'~overig', v:(V.projectie-V.budget)-zE-rauw.reduce((a,x)=>a+x.v,0)});
+    const R=brugAfronden(rauw, diff-zTot); R['~zonderG']=zG; R['~zonderV']=zTot-zG;
+    const kol=2+rauw.filter(x=>R[x.k]||x.k==='~overig').length+((zTot||zG)?1:0);
     return {los, R, kol, teLos}; };
   let M=maak(Math.min(DEZEMAAND_LOS, boven.length), true);
   if(M.kol>DEZEMAAND_KOL) M=maak(M.los.length, false);
@@ -9889,8 +9923,8 @@ function gripOverigSamen(V, losKs, tot, O){
   const trKant=g=>O.filter(x=>kant(x.k)===g).reduce((a,x)=>a+Math.round(x.teRuim),0);
   const restT=V.variabel.eind-V.variabel.budget-V.potjes.filter(x=>losKs.includes(x.k)).reduce((a,x)=>a+x.overR,0)+trKant('rest');
   const vastT=V.vaste.eind-V.vaste.budget+trKant('vast');
-  const zonder=V.zonderStand?(+V.zonderLos||0):Math.min(+V.zonder||0,0);   // v402: wat er in V.zonder buiten geboekt en verwacht zit
-  const R=brugAfronden([{k:'rest',v:restT},{k:'vast',v:vastT},{k:'zonder',v:zonder}], tot);
+  const zonder=V.zonderStand?0:Math.min(+V.zonder||0,0);   // v404: wat buiten geboekt en verwacht zit staat sinds v404 in de stap zonder potje
+  const R=brugAfronden([{k:'rest',v:restT},{k:'vast',v:vastT}, ...(zonder?[{k:'zonder',v:zonder}]:[])], tot);   // v404: geen lege groep die een afrondingseuro krijgt
   /* v391: OVERIG IN POTJES. Per groep de potjes met hun verwachte verschil, afgerond met brugAfronden() op het bedrag
      van de groep; wat in een groep niet bij een potje hoort heet "overige". */
   const P={rest:[], vast:[]};
@@ -9915,25 +9949,34 @@ function openGripOverig(){ renderGripOverig(); showSheetBg(); }
    met brugAfronden() op die twee getallen zodat de regels optellen tot de stap. Een categorie die niet meetelt (een
    persoonlijke overboeking) staat eronder met de reden. */
 function openZonderPotje(){ renderZonderPotje(); showSheetBg(); }
+/* v404: de laatste boeking achter een verwachte vaste last, om hem een categorie te geven (dezelfde boekingssheet). */
+function zonderLosBoeking(key){ if(!key) return null; let best=null;
+  for(const t of TX){ if(t.pending || !(t.amount<0) || recurKey(t)!==key) continue; if(!best || t.date>best.date) best=t; }
+  return best; }
 function zonderPotjeDelen(V){
   const Br=gripZienBrug(V); if(!Br) return null;
   const st=Br.stappen.find(x=>x.soort==='zonder'); const g=st?st.geboekt:0, v=st?st.verwacht:0, Z=V.zonderStand;
-  const tel=Z.rijen.filter(x=>x.telt);
-  const A=brugAfronden(tel.map(x=>({k:x.k, v:x.geboekt})), g), B=brugAfronden(tel.map(x=>({k:x.k, v:x.verwacht})), v);
+  const tel=Z.rijen.filter(x=>x.telt), los=(V.zonderLosPosten||[]).map((x,i)=>Object.assign({}, x, {k:'~los'+i}));
+  const A=brugAfronden(tel.map(x=>({k:x.k, v:x.geboekt})), g), B=brugAfronden([...tel.map(x=>({k:x.k, v:x.verwacht})), ...los.map(x=>({k:x.k, v:x.bedrag}))], v);
   const rijen=tel.map(x=>Object.assign({}, x, {g:A[x.k]||0, v:B[x.k]||0})).filter(x=>x.g||x.v);
-  return {geboekt:g, verwacht:v, rijen, uit:Z.rijen.filter(x=>x.uit && Math.round(x.geboekt))};
+  /* v404: een vaste last zonder categorie (zonderLosPosten) staat hier als eigen regel, met de ingang om hem een categorie te geven */
+  const losRijen=los.map(x=>Object.assign({}, x, {g:0, v:B[x.k]||0})).filter(x=>x.v);
+  return {geboekt:g, verwacht:v, rijen, los:losRijen, uit:Z.rijen.filter(x=>x.uit && Math.round(x.geboekt))};
 }
 function renderZonderPotje(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const D=V&&!V.onbekend&&V.zonderStand?zonderPotjeDelen(V):null; if(!D){ closeSheet(); return; }
   const m=V.m;
   const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const losRij=x=>{ const t=zonderLosBoeking(x.key), cat=x.cat&&CATS[x.cat]?CATS[x.cat]:null;
+    const wat=cat?`vaste last in ${esc(cat.name)}, ${cat.type==='expense'?'een categorie zonder norm':'geen uitgavencategorie'}`:'vaste last zonder categorie';
+    return `<div class="row" data-zonderlos="${esc(x.key)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)${t?';cursor:pointer':''}"${t?` onclick="closeSheet();openSheet('${esc(t.id)}')"`:''}><div style="flex:1;min-width:0"><div class="small">${esc(titleCase(cleanMerch(x.naam)||x.naam))}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${wat}${x.datum?` · verwacht ${dagKort(x.datum)}`:''}${t?' · categorie geven':''}</div></div><span class="small" style="font-weight:700;white-space:nowrap" data-zonderlosv="${x.v}">${euro0(x.v)}</span>${t?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`; };
   const uit=D.uit.map(x=>`<div class="row" data-zonderuit="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><div style="flex:1;min-width:0"><div class="small" style="color:var(--mut)">${esc(x.naam)} ${euro0(Math.round(x.geboekt))}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(x.reden)}</div></div></div>`).join('');
   $('#sheet').innerHTML=`<div class="grab"></div><div id="zonderPotjeSheet" data-zonder="${D.geboekt+D.verwacht}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Zonder potje · ${euro0(D.geboekt+D.verwacht)}</div>
     <div class="small" style="margin:4px 0 6px"><span data-zondergeboekt="${D.geboekt}">${euro0(D.geboekt)} geboekt</span> · <span data-zonderverwacht="${D.verwacht}">${euro0(D.verwacht)} verwacht</span></div>
     <div class="small muted" style="line-height:1.5;margin-bottom:4px">Geboekt is wat er deze maand al uitging in een categorie zonder potje. Verwacht is wat je daar in je laatste ${VOORUIT_MAANDEN} afgeronde maanden na deze dag gemiddeld nog uitgaf, alleen voor een categorie met uitgaven in minstens ${ZONDER_MIN_MAANDEN} van die maanden.</div>
-    ${D.rijen.map(rij).join('')||'<div class="small muted">Geen categorie zonder potje met uitgaven.</div>'}${uit}${gripAllesLink}</div>`;
+    ${D.rijen.map(rij).join('')||(D.los.length?'':'<div class="small muted">Geen categorie zonder potje met uitgaven.</div>')}${D.los.map(losRij).join('')}${uit}${gripAllesLink}</div>`;
 }
 function renderGripOverig(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -17402,8 +17445,11 @@ function potVerhoogGevolg(P){
   let inc=0; try{ inc=Math.round(SET.autoIncome?baseIncome():(+SET.income||0)); }catch(_){}
   return {nu, safe0:a.s, safe1:nu?b.s:a.s, cap0:a.cap, cap1:b.cap, inc};
 }
-function openPotForm(k){
+function openPotForm(k, voorstel){
   window._potForm = k ? {cat:k, vast:true} : {cat:null};
+  /* v404: een voorstel uit Let op (een categorie zonder potje die er vaker is): het gemiddelde per maand van de laatste
+     afgeronde maanden, ingevuld en met zijn herkomst erbij. Het formulier vraagt verder alles zoals altijd. */
+  if(k && voorstel>0){ const vp=zonderPotjeVoorstel(k); if(vp){ window._potForm.bedrag=vp.bedrag; window._potForm.voorstel=vp; } }
   renderPotForm(); showSheetBg();
 }
 function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{}; d[f]=v;
@@ -17536,6 +17582,7 @@ function renderPotForm(){
     <label class="fld">Bedrag per maand (€)</label>
     ${vast?'':`<div class="chips" style="margin-bottom:6px"><span class="chip ${d.open?'on':''}" data-potopen onclick="potFormZetVeld('open',${!d.open})">Bedrag nog niet vastgesteld</span></div>`}
     ${d.open&&!vast?potFormResHTML(d, ms):`<input type="text" inputmode="decimal" id="potFormBedrag" value="${esc(d.bedrag==null?'':String(d.bedrag))}" placeholder="0" oninput="potFormZetVeld('bedrag',this.value,false)" style="width:100%">
+    ${d.voorstel?`<div class="small muted" data-potvoorstel="${d.voorstel.bedrag}" style="margin-top:4px;line-height:1.5">Voorstel: gemiddeld ${euro0(d.voorstel.bedrag)} per maand in ${opsomming(d.voorstel.maanden.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(Math.round(d.voorstel.bedragen[i]))}`))}.</div>`:''}
     <label class="fld">Vanaf</label>
     <select id="potFormVanaf" onchange="potFormZetVeld('vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
     ${P.wekNodig?`<label class="fld">Telt mee in je weekbedrag?</label><div class="chips" data-potformwek>${[['ja','wekelijks'],['nee','niet']].map(([v,l])=>`<span class="chip ${d.wek===v?'on':''}" data-potwek="${v}" onclick="potFormZetVeld('wek','${v}')">${l}</span>`).join('')}</div>`:''}
@@ -27191,7 +27238,13 @@ function diagZonderPotje(V){
   L.push(`  verwacht zonder potje: ${Math.round(Z.verwacht)} (gemiddeld na dag ${V.el} in je laatste ${VOORUIT_MAANDEN} afgeronde maanden, nooit onder nul, minstens ${ZONDER_MIN_MAANDEN} maanden met uitgaven)`);
   let st=null; try{ const Br=gripZienBrug(V); st=Br&&Br.stappen.find(s=>s.soort==='zonder'); }catch(_){}
   L.push(`  stap z. potje op Zien: ${st?`${st.waarde} = ${st.geboekt} geboekt + ${st.verwacht} verwacht`:'geen'}`);
-  L.push(`  V.zonder ${Math.round(V.zonder)} = geboekt ${Math.round(Z.geboekt)} + verwacht ${Math.round(Z.verwacht)} + rest ${Math.round(V.zonderLos||0)} (een vaste last zonder categorie en afronding, staat in overig)`);
+  const c2=x=>Math.round((+x||0)*100)/100;
+  /* v404: een afronding, op het eind: V.zonder is de onafgeronde som afgerond, en de stap op Zien leest hetzelfde getal. */
+  L.push(`  V.zonder ${V.zonder} = afgerond(${c2(V.zonderExact)}) = geboekt ${c2(Z.geboekt)} + verwacht ${c2(Z.verwacht)} + rest ${c2(V.zonderLos)}${st?` · stap op Zien ${st.waarde}: ${st.waarde===V.zonder?'gelijk':'VERSCHILT'}`:''}`);
+  const LP=V.zonderLosPosten||[];
+  if(LP.length){ L.push(`  REST BIJ NAAM (v404, staat in de stap zonder potje en in zijn sheet): datum | partij | bedrag | categorie`);
+    for(const x of LP) L.push(`  ${x.datum||'?'} | ${titleCase(cleanMerch(x.naam)||x.naam)} | ${c2(x.bedrag)} | ${x.cat?((CATS[x.cat]||{}).name||x.cat)+((CATS[x.cat]||{}).type==='expense'?' (zonder norm)':' (geen uitgave)'):'geen categorie'} | verwachte vaste last`); }
+  L.push(`  rest zonder naam: ${c2(V.zonderRest)}${Math.abs(+V.zonderRest||0)<0.005?' (niets)':' (centen uit afronding per boeking, of een vaste last die onder nul eindigt)'}`);
   let n=0; for(const [id,x] of EIGEN_AUTO){ const t=TX.find(z=>z.id===id); if(t && String(t.date).slice(0,7)===V.m && CATS[x.rc] && CATS[x.rc].type==='expense') n++; }
   L.push(`  deze maand als eigen overboeking herkend en dus NIET hierin (v401): ${n}`);
   return L;

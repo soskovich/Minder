@@ -99,7 +99,8 @@ test('g: Let op draagt een regel per categorie die er vaker is, met potje maken'
   expect(namen.join('|')).not.toContain('Vakantie');
   expect(namen.join('|')).not.toContain('Persoonlijke');
   const z = L.find(x => x.naam.startsWith('Zorg'));
-  expect(z.sub).toBe('potje maken'); expect(z.act).toBe("openPotForm('zorg')");
+  expect(z.sub).toMatch(/^potje maken · voorstel €\d+ per maand$/);   // v404: met het gemiddelde als voorstel (potje-voorstel.spec.js)
+  expect(z.act).toMatch(/^openPotForm\('zorg',\d+\)$/);
 });
 
 test('h: Let op noemt een persoonlijke overboeking niet als uitgave zonder potje', async ({ page }) => {

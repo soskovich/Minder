@@ -16,6 +16,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v404` · Zonder potje wordt een keer afgerond, op het eind, en de rest staat bij naam.** Twee afrondingen van
+  hetzelfde getal (het verschil van afgeronde delen in blok 19 en een eigen afronding op Zien) gaven 277 tegen 276. Nu is
+  `V.zonder` de onafgeronde som afgerond en leest de stap dat getal. Valkuil: `L.fixDue` is al afgerond, dus de som
+  rekent per post; en `brugAfronden()` geeft een lege groep een afrondingseuro, dus een groep met nul gaat er niet in. Een
+  vaste last zonder categorie of norm hoort niet stil in overig: hij staat in de stap, de sheet en blok 19. Het voorstel
+  in Let op is het gemiddelde van de laatste drie afgeronde maanden; het formulier vult het in, opslaan blijft een keuze.
 - **`v403` · Een persoonlijke overboeking zonder potje is geen uitgave, op Grip en op Inzichten.** Een definitie
   (`buitenUitgave()`), gelezen door `totals().spendNorm`, de maandkaart, het trap-tempo, de weektegel, de vaste lasten en
   Grip. Waarom: bij `v402` telde Grip hem niet en Inzichten wel ("zonder potje · buiten budget"), dus twee schermen gaven
