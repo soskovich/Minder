@@ -21,7 +21,9 @@ async function boot(page) {
   }, { MAIN: K.MAIN });
 }
 const stand = page => page.evaluate(() => { const V = maandVooruit(); const Z = V.zonderStand;
-  const Br = gripZienBrug(V); const st = Br.stappen.find(s => s.soort === 'zonder');
+  const Br = gripZienBrug(V); let st = Br.stappen.find(s => s.soort === 'zonder');
+  /* v408: bij ruimtegebrek zit zonder potje in "n boven"; dan draagt die stap geboekt en verwacht */
+  if (!st) { const ob = Br.stappen.find(s => s.soort === 'overig' && s.k === 'boven' && s.zonderIn); if (ob) st = { waarde: ob.zonderIn, geboekt: ob.zonderInG, verwacht: ob.zonderIn - ob.zonderInG, deel: ob.zonderInG, in: ob.label }; }
   let run = Br.stappen[0].waarde; for (const s of Br.stappen.slice(1, -1)) run += s.waarde;
   return { som: run, eind: Br.stappen[Br.stappen.length - 1].waarde, P: Math.round(V.projectie), st, Z: { geboekt: Z.geboekt, verwacht: Z.verwacht, uitgesloten: Z.uitgesloten,
     rijen: Z.rijen.map(x => ({ k: x.k, geboekt: x.geboekt, verwacht: x.verwacht, ruw: x.verwachtRuw, n: x.n, telt: x.telt, reden: x.reden })) } }; });
@@ -37,7 +39,8 @@ test('b: de brug-som blijft budget plus stappen is verwacht, en z. potje is gebo
   expect(S.som).toBe(S.eind); expect(S.eind).toBe(S.P);
   expect(S.st).toBeTruthy(); expect(S.st.waarde).toBe(S.st.geboekt + S.st.verwacht); expect(S.st.deel).toBe(S.st.geboekt);
   expect(S.st.verwacht).toBeGreaterThan(0);
-  await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
+  /* v408: met ruimte (Vervoer niet meer te ruim) staat zonder potje als eigen stap, in twee kleuren */
+  await page.evaluate(() => { SET.budgets.vervoer = teRuim(maandVooruit()).find(x => x.k === 'vervoer').voorstel; save(); window._gripTab = 'zien'; go('maand'); });
   await expect(page.locator('[data-brugstap="zonder"] [data-brugdicht]')).toHaveCount(1);
   await expect(page.locator('[data-brugstap="zonder"] [data-bruglicht]')).toHaveCount(1);
 });
@@ -52,7 +55,9 @@ test('c: het geboekte deel is de som van de boekingen in blok 19', async ({ page
   expect(Math.abs(S.Z.geboekt - som)).toBeLessThan(0.01);
   // de tik op de stap zegt dezelfde twee getallen
   await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
-  await page.locator('[data-brugstap="zonder"]').click();
+  /* v408: bij ruimtegebrek zit zonder potje in "n boven"; de tik daarop opent dezelfde sheet via zijn regel */
+  if (await page.locator('[data-brugstap="zonder"]').count()) await page.locator('[data-brugstap="zonder"]').click();
+  else { await page.locator('#gripBrug [data-brugstap="overig"][data-brugk="boven"]').click(); await page.locator('[data-overigzonder]').click(); }
   await expect(page.locator('#zonderPotjeSheet [data-zondergeboekt]')).toHaveAttribute('data-zondergeboekt', String(S.st.geboekt));
   await expect(page.locator('#zonderPotjeSheet [data-zonderverwacht]')).toHaveAttribute('data-zonderverwacht', String(S.st.verwacht));
   await expect(page.locator('#zonderPotjeSheet')).toContainText(`€${S.st.geboekt} geboekt`);

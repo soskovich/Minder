@@ -250,8 +250,9 @@ test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die ope
   await page.evaluate(() => { closeSheet(); go('maand'); });
   /* v388: het potje is een signaal van het patroon "Uit eten & café boven je potje" in Begrijpen, en staat daarom niet
      meer onder Let op (verplaatsen is geen kopiëren); een tik op het signaal opent dezelfde kaart. */
-  const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => e.dataset.letop));
-  expect(L).toEqual([]);
+  /* v408: wel een VERWIJZING naar dat patroon ("Uit eten & café · zit in patroon n ›"), zonder eigen handeling */
+  const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => [e.dataset.letop, e.getAttribute('onclick')]));
+  expect(L).toEqual([['patroon', "gripNaarBegrijpen('pot:uiteten')"]]);
   expect(await page.evaluate(() => gripPatronen().map((p) => p.id))).toContain('pot:uiteten');
   await page.evaluate(() => openGripLetOp('sig', valtOpSignals(thisYM())[0].id));
   const t = await page.evaluate(() => document.getElementById('gripLetOpSheet').innerText);

@@ -16,6 +16,25 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v408` · een signaal per potje, zonder tegenspraak.** Een potje dat vooruitkijkend te ruim is krijgt niet tegelijk
+  terugkijkend "boven budget"; met een breuk (laatste maand of verwacht eind onder de helft van het gemiddelde ervoor) is het
+  een regel "veranderd · was X, nu Y" naar de te-ruim-sheet, zonder breuk zegt Zien het. Laten staan geldt deze maand voor alle
+  signalen van dat potje, ook die in een andere vorm (Kiezen, de feitregel, overstreak). Valkuil: twee signalen die elk op zich
+  kloppen (vooruit en terug) spreken elkaar op een scherm tegen; de beslissing hoort bij het potje, niet bij het signaal.
+- **`v408` · maanden altijd met naam, oud naar nieuw.** Een functie (`maandReeksTekst()`) die zelf sorteert, voor Let op en de
+  sheets. Valkuil: een lijst die "de meest recente eerst" draagt (zonderPotjeStand) en een lezer die hem zonder namen afdrukt.
+- **`v408` · boven budget met de uitschieter-drempel.** Minstens EUR 10 en 25%, of minstens EUR 50, uit `uitschieterAfw()`, de
+  toets van de signalen in Begrijpen. Valkuil: een euro boven (Online shopping 99 tegen 95) maakte een maand "boven".
+- **`v408` · Let op verwijst naar een patroon in plaats van het te dupliceren.** Een potje in een patroon is in Let op een regel
+  "zit in patroon n ›" zonder eigen herzien; Let op is voor wat je los regelt. Valkuil: de filter van v388 haalde alleen het
+  signaal van deze maand weg, en de regel van v406 (n van 3 boven) stond er dan alsnog naast het patroon.
+- **`v408` · stijgende trend: potje met de laatste maand.** Elke maand meer dan de vorige en de laatste minstens twee keer de
+  eerste (vanaf een maand boven nul; vanaf nul is het een piek): eerst een potje van de laatste maand, dan een reservering in
+  Plan (12 mnd gedeeld door 12). Valkuil: het gemiddelde van een stijgende reeks loopt achter.
+- **`v408` · de brug: "n boven" en "n onder", nooit twee keer "overig".** Kolomprioriteit budget, verwacht, te ruim, dan de
+  grootste uitschieters; zonder potje gaat als eerste in "n boven" als dat de brug laat passen, anders gaan eerst de te ruime
+  potjes samen. Valkuil: zonder potje vouwen terwijl het samenvoegen van te ruim al genoeg was, en een tik-sheet die de
+  ingangen naar de vaste lasten en de andere potjes kwijtraakt.
 - **`v407` · overstreak zegt "Boven je maandbudget in de laatste n afgeronde maanden", niet "op rij".** "Op rij" leest als een streak (geen gamification). Valkuil: een fixture die het signaal per ongeluk onderdrukt laat een latente `test.skip()` vuren en leest dan als groen; zo bleef deze tekst een ronde onopgemerkt.
 - **`v406` · Let op met bewijs, eerst wat je kunt doen; pieken naar Plan; de brug mengt nooit boven en onder.** Een
   signaal in Let op draagt altijd zijn bewijs (de bedragen van de maanden, het budget) en spreekt neutraal: geen "te veel",

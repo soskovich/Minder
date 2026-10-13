@@ -26,7 +26,9 @@ async function boot(page, { opties = {} } = {}) {
     save(); render();
   }, { MAIN: K.MAIN, KIND, opties });
 }
-const stand = page => page.evaluate(() => { const V = maandVooruit(); const Br = gripZienBrug(V); const st = Br.stappen.find(s => s.soort === 'zonder');
+/* v408: bij ruimtegebrek zit zonder potje in "n boven" (zonderIn, zonderInG); dan is dat het getal op Zien. */
+const stand = page => page.evaluate(() => { const V = maandVooruit(); const Br = gripZienBrug(V); let st = Br.stappen.find(s => s.soort === 'zonder');
+  if (!st) { const ob = Br.stappen.find(s => s.soort === 'overig' && s.k === 'boven' && s.zonderIn); if (ob) st = { waarde: ob.zonderIn, geboekt: ob.zonderInG, verwacht: ob.zonderIn - ob.zonderInG, in: ob.label }; }
   let run = Br.stappen[0].waarde; for (const s of Br.stappen.slice(1, -1)) run += s.waarde;
   return { zonder: V.zonder, exact: V.zonderExact, oud: V.projectie - V.variabel.eind - V.vaste.eind - V.inleg, st, som: run, P: Math.round(V.projectie),
     geboekt: V.zonderStand.geboekt, verwacht: V.zonderStand.verwacht, los: V.zonderLos, posten: V.zonderLosPosten, rest: V.zonderRest }; });

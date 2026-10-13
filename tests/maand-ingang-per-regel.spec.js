@@ -176,6 +176,12 @@ test.describe('b - een structureel signaal krijgt een andere vraag', () => {
      Invoermeting: het maandtotaal (2400) ligt hier net zo boven het maandbudget (2000) als in STRUCT, dus zonder de
      onderdrukking zou overstreak vuren. */
   const STRUCT_POT = { set: { budgets: { boodschappen: 500, huur: 1500 } } };
+  test('v408: laat je het verklarende potje staan, dan komt overstreak niet terug in een andere vorm', async ({ page }) => {
+    await boot(page, STRUCT_POT);
+    const r = await page.evaluate(() => { const ym = thisYM(); SET.potHerzienLaten = { [ym]: { boodschappen: { op: vandaagYMD() } } }; save();
+      return { laten: potLaten('boodschappen'), notif: scoreNotifs().some((n) => n.key === 'overstreak'), letop: gripLetOpItems([], [], []).some((x) => x.key === 'boodschappen') }; });
+    expect(r.laten).toBe(true); expect(r.notif).toBe(false); expect(r.letop).toBe(false);
+  });
   test('met een potje dat de overschrijding verklaart staat overstreak er niet, en de potje-regel wel', async ({ page }) => {
     await boot(page, STRUCT_POT);
     const r = await page.evaluate(() => {
@@ -193,7 +199,8 @@ test.describe('b - een structureel signaal krijgt een andere vraag', () => {
     expect(r.notif).toBe(false);
     expect(r.struct).toBe(false);
     expect(r.letop.join('|')).not.toContain('Maanden boven je grens');
-    expect(r.letop.some((x) => x.startsWith('boven:') && x.includes('Boodschappen'))).toBe(true);
+    /* v408: de potje-regel staat er als eigen regel, of als verwijzing naar het patroon waarin boodschappen al staat */
+    expect(r.letop.some((x) => /^(boven|patroon):/.test(x) && x.includes('Boodschappen'))).toBe(true);
   });
 });
 

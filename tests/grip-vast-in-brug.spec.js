@@ -77,7 +77,9 @@ test.describe('b. een tik op de stap', () => {
   /* v402: de stap opent de sheet die geboekt en verwacht per categorie noemt (openZonderPotje), met "Alle potjes" eronder. */
   test('zonder potje opent geboekt en verwacht, met de volle lijst eronder', async ({ page }) => {
     await Zes.boot(page); await grip(page);
-    await tik(page, '#gripBrug [data-brugstap="zonder"]');
+    /* v408: bij ruimtegebrek zit zonder potje in "n boven"; de tik daarop toont hem, met dezelfde ingang naar zijn sheet */
+    if (await page.locator('#gripBrug [data-brugstap="zonder"]').count()) await tik(page, '#gripBrug [data-brugstap="zonder"]');
+    else { await tik(page, '#gripBrug [data-brugstap="overig"][data-brugk="boven"]'); await page.click('[data-overigzonder]'); }
     expect(await page.evaluate(() => !!document.getElementById('zonderPotjeSheet'))).toBe(true);
     expect(await page.evaluate(() => !!document.querySelector('#zonderPotjeSheet [data-allepotjes]'))).toBe(true);
   });

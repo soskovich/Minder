@@ -8,8 +8,12 @@ const extra = (page, rij) => page.evaluate(({ MAIN, rij }) => { for (const [d, a
 test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => {
   test('Vices: n van 3 mnd boven budget, met de bedragen en het budget, neutraal', async ({ page }) => {
     await S.boot(page); const L = await letop(page);
-    const v = L.find(x => x.soort === 'boven' && x.naam.startsWith('Vices'));
-    expect(v).toEqual(expect.objectContaining({ naam: 'Vices · 3 van 3 mnd boven budget', sub: '€171 · €94 · €96 · budget €20', act: "openPotHerzien('vices')", groep: 'a' }));
+    /* v408: Vices zit als signaal in een patroon in Begrijpen, dus Let op draagt een verwijzing en geen eigen herzien. De
+       regel zelf (n van 3, de maanden met naam, het budget) staat in grip-v408.spec.js op een potje zonder patroon. */
+    const x = await page.evaluate(() => { const b = potBovenLijst().find(y => y.k === 'vices'); return { n: b.n, t: maandReeksTekst(b.ms, b.bedragen), bud: b.bud }; });
+    expect(x).toEqual({ n: 3, t: 'jul €171 · aug €94 · sep €96', bud: 20 });
+    const v = L.filter(y => y.naam.startsWith('Vices'));
+    expect(v.length).toBe(1); expect(v[0].soort).toBe('patroon'); expect(v[0].act).toMatch(/^gripNaarBegrijpen\('pot:vices'\)$/);
     expect(L.map(x => x.naam + ' ' + x.sub).join('|')).not.toMatch(/te veel/);
   });
   test('"Maanden boven je grens" staat niet meer in Let op', async ({ page }) => {
@@ -58,14 +62,18 @@ test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => 
     const r = await page.evaluate(() => { openPotHerzien('vices'); potHerzienKies('b'); window._ph.bedrag = 10; renderPotHerzien();
       const v = { waarheen: !!document.querySelector('[data-phwaarheen]'), uit: document.querySelector('[data-phbevestig]').disabled };
       potHerzienKies('c'); v.knop = document.querySelector('[data-phbevestig]').innerText; potHerzienBevestig();
-      v.rij = gripLetOpItems([], [], []).some(x => x.soort === 'boven' && x.key === 'vices'); return v; });
+      v.rij = gripLetOpItems([], [], []).some(x => x.key === 'vices'); return v; });   // v408: laten staan geldt voor elk signaal van Vices
     expect(r).toEqual({ waarheen: true, uit: true, knop: 'Vices laten staan', rij: false });
   });
 });
 
 test.describe('A2/A3 · volgorde en eenmalig', () => {
   test('eerst actie met bewijs, dan alleen bewijs, binnen een groep het grootste bedrag eerst', async ({ page }) => {
-    await S.boot(page); const L = await letop(page);
+    await S.boot(page);
+    /* v408: Vices staat als verwijzing naar zijn patroon (geen groep a meer), dus Overig gaat in juli en augustus boven zijn
+       budget, zodat er weer twee regels met een actie zijn om te ordenen */
+    await extra(page, [['2026-07-25', -220, 'Hema Winkel', 'overig'], ['2026-08-25', -220, 'Hema Winkel', 'overig']]);
+    const L = await letop(page);
     const g = L.filter(x => x.groep).map(x => x.groep);
     expect(g).toEqual([...g].sort());   // alle a voor alle b
     expect(L.findIndex(x => !x.groep)).toBeGreaterThan(L.map(x => !!x.groep).lastIndexOf(true));   // de rest erna
@@ -155,7 +163,7 @@ test.describe('C · de brug op Zien', () => {
     const r = await page.evaluate(() => ({ af: [...document.querySelectorAll('#gripBrug [data-brugeen], #gripBrug [data-brugeen2]')].filter(e => e.scrollWidth > e.clientWidth + 1 || getComputedStyle(e).textOverflow === 'ellipsis').map(e => e.innerText),
       labels: [...document.querySelectorAll('#gripBrug [data-brugeen]')].map(e => e.innerText.replace(/­|\n/g, '')), licht: (document.querySelector('[data-zienlicht]') || {}).innerText }));
     expect(r.af).toEqual([]);
-    expect(r.labels).toEqual(['budget', 'Vices', 'Boodschappen', 'z. potje', '2 potjes', 'overig', 'verwacht']);
+    expect(r.labels).toEqual(['budget', 'Vices', 'Boodschappen', 'z. potje', '2 potjes', expect.stringMatching(/^\d+ onder$/), 'verwacht']);   // v408: "n onder", nooit "overig"
     expect(B.tweekleur).toBe(true); expect(r.licht).toBe('licht = nog verwacht');
   });
   test('een te ruim potje alleen: zijn naam en "niet gebruikt"', async ({ page }) => {

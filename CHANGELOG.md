@@ -1355,3 +1355,15 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **maand-ingang-per-regel**: een tweede case met een potje dat de overschrijding verklaart: overstreak staat er dan niet (scoreNotifs, maandStructureel, Let op) en de potje-regel wel.
 - **Sabotages**: overstreak ook bij een verklarend potje (rood), overstreak altijd onderdrukt (rood, 10; tot deze ronde zouden die tests overslaan), structurele regel uit Let op (rood, 5), tekst terug naar "op rij" (rood, na de uitbreiding van test d).
 - `sw.js` naar `minder-v407`.
+
+## v408 · een signaal per potje, maandnamen, drempel, patroon-verwijzing, trend, brug-labels
+- **A1** Een te ruim potje krijgt geen "n van 3 mnd boven budget"; met een breuk (`potBreuk()`, BREUK_DEEL 50%) een regel "veranderd · was X/mnd, nu Y" met de maanden, tik naar de te-ruim-sheet. Nagebouwde stand: Huur jul €760 · aug €760 · sep €137 (budget €700).
+- **A2** `potLaten()`: laten staan (herzien, te ruim, Zo laten) geldt deze maand voor alle signalen van dat potje (Let op, feitregel, Kiezen, overstreak).
+- **B3** `maandReeksTekst()`: maanden met naam, oud naar nieuw, in Let op en de sheets.
+- **C4** `potMaanden()` telt een maand als boven met `uitschieterAfw()`; Online shopping (jul €99 tegen €95) telt niet.
+- **D5** Een potje in een patroon is in Let op "<potje> · zit in patroon n ›" (`gripNaarBegrijpen`), zonder herzien; telt niet in de terugvalpoort.
+- **E6** `zonderTrend()`: stijgende reeks (vanaf een maand boven nul) geeft eerst potje €laatste maand, dan reservering in Plan; `openZonderKeuze()` zet het potje eerst.
+- **F7/F8** Brug: "n boven" / "n onder" in plaats van "overig"; kolomprioriteit met zonder potje als eerste in "n boven" (alleen als dat past); `openGripOverig(kant)` toont de potjes van die kant met de groepsingangen; `data-brugk` op een stap.
+- **Blok 19** `diagEenSignaal()`: per potje de maanden met naam (uitgaven/budget, * = boven), te ruim, breuk en wat Let op toont.
+- **Specs** nieuw `grip-v408.spec.js` en fixture `grip-v408-stand.js`; gemigreerd: grip-v406, grip-dashboard o, grip-eigen-budget, grip-vast-in-brug, maand-ingang-per-regel, zien-blok19-gelijk, zonder-potje-zuiver.
+- `sw.js` naar `minder-v408`.

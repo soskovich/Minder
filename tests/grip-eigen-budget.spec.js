@@ -80,9 +80,11 @@ test.describe('A · meten aan het eigen maandbudget', () => {
   test('overig zegt hoeveel potjes onder en boven eindigen, en draagt de noot onder de drempel', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate(() => { const D = gripOverigDelen(maandVooruit()); return { onder: D.onder, boven: D.boven }; });
-    /* v406: het label is kort ("overig"); het detail staat in de titel en in de sheet */
-    const titels = await page.evaluate(() => [...document.querySelectorAll('#gripBrug [data-brugstap="overig"] [data-brugeen]')].map(e => e.title));
-    for (const t of titels) expect(t).toContain(`${r.onder} onder · ${r.boven} boven`);
+    /* v408: geen twee keer "overig": de labels zijn "n boven" en "n onder", met n het aantal potjes van die kant */
+    const lab = await page.evaluate(() => [...document.querySelectorAll('#gripBrug [data-brugstap="overig"] [data-brugeen]')].map(e => e.innerText.replace(/\s+/g, ' ')));
+    const B = await page.evaluate(() => gripZienBrug(maandVooruit()).stappen.filter(s => s.soort === 'overig').map(s => [s.k, s.label, s.zonderIn || 0]));
+    for (const [k, l, z] of B) expect(l).toBe(k === 'boven' ? `${r.boven + (z ? 1 : 0)} boven` : `${r.onder} onder`);
+    expect(lab.join('|')).not.toContain('overig');
     expect(await page.locator('#gripBrug [data-brugstap="overig"] [data-brugeen2]').count()).toBe(0);
     expect(await page.locator('#gripBrug [data-brugnoot]').innerText()).toBe('+€5');
   });
