@@ -9921,6 +9921,10 @@ function gripTabsHtml(){
    "overig boven", wat onder eindigt in "overig onder" (grijs). GEMELD op het toestel stond Boodschappen +53 in overig:
    tot v406 stonden er hooguit DEZEMAAND_LOS (3) uitschieters los, en bij te veel kolommen viel de kleinste uitschieter
    terug in een overig dat boven en onder door elkaar optelde. */
+/* Een guard: een afrondingseuro die het teken van overig boven of onder omdraait schuift naar de andere kant. Op standen
+   die de app maakt komt dat vrijwel niet voor (het overblijfsel na de optelling gaat al naar de kant van zijn teken), dus
+   hij staat als eigen functie en wordt rechtstreeks getoetst (meetles p). */
+function brugTekenVast(R){ if(R['~ovB']<0){ R['~ovO']=(R['~ovO']||0)+R['~ovB']; R['~ovB']=0; } if(R['~ovO']>0){ R['~ovB']=(R['~ovB']||0)+R['~ovO']; R['~ovO']=0; } return R; }
 function brugKort(k, naam){ return BRUG_KORT[k] || String(naam||k).split(/\s*&\s*/)[0]; }
 const BRUG_KORT={uiteten:'Uit eten', boodschappen:'Bood­schappen', verzekering:'Verzeke­ringen', abonnement:'Abonne­menten', bankkosten:'Bank­kosten', belasting:'Belasting', vakantie:'Vakantie', goededoel:'Goede doelen', persoonlijk:'Persoonlijk', studie:'Studie­schuld', shopping:'Shopping', zorg:'Zorg'};
 function gripZienBrug(V, TR){
@@ -9946,7 +9950,7 @@ function gripZienBrug(V, TR){
     rauw.push({k:'~ovB', v:ovB}); rauw.push({k:'~ovO', v:ovO});
     const R=brugAfronden(rauw, diff-zTot); R['~zonderG']=zG; R['~zonderV']=zTot-zG;
     /* nooit boven en onder in een stap: een afrondingseuro die het teken omdraait schuift naar de andere kant */
-    if(R['~ovB']<0){ R['~ovO']+=R['~ovB']; R['~ovB']=0; } if(R['~ovO']>0){ R['~ovB']+=R['~ovO']; R['~ovO']=0; }
+    brugTekenVast(R);
     const kol=2+rauw.filter(x=>R[x.k]).length+((zTot||zG)?1:0);
     return {los, R, kol, teLos}; };
   let M=maak(boven.length, true);

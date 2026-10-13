@@ -168,3 +168,58 @@ test('D · de regel onder de meters begint met "Doelen:", en de feitregel van Bu
     return { tekst: n.innerText, volgorde: f ? !!(f.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) : null }; });
   expect(r.tekst).toMatch(/^Doelen: nu netto /); expect(r.volgorde).toBe(true);
 });
+
+/* Vijf gevallen die de eerste sabotage-ronde niet droeg (meetles a): twee gelijke maanden (de piek op 2 van 3, niet op 60%),
+   vier uitschieters los, een afrondingseuro bij een bijna lege overig-stap, een lange categorienaam los, en een te ruim
+   potje alleen in de samengevoegde vorm. */
+test('B5b · 2 van 3 maanden met gelijke bedragen is ook een piek', async ({ page }) => {
+  await S.boot(page);
+  await extra(page, [['2026-08-09', -100, 'Stichting Twee', 'goededoel'], ['2026-09-09', -100, 'Stichting Twee', 'goededoel']]);
+  const r = await page.evaluate(() => { const x = zonderPotjeStand(thisYM()).rijen.find(y => y.k === 'goededoel'); return { n: x.n, max: Math.max(...x.bedragen) / x.bedragen.reduce((a, v) => a + v, 0) }; });
+  expect(r.n).toBe(2); expect(r.max).toBeLessThanOrEqual(0.6);   // invoermeting: alleen de 2-van-3-regel kan hier vuren
+  const g = (await letop(page)).find(x => x.soort === 'zonderpot' && x.naam.startsWith('Goede'));
+  expect(g.act).toBe("openZonderKeuze('goededoel')");
+});
+/* Een brug zonder stap zonder potje en zonder te ruim, zodat vier uitschieters in zeven kolommen passen. */
+const brugZonder = (page, TRn) => page.evaluate(TRn => { const V0 = maandVooruit(), Z = V0.zonderStand;
+  const V = Object.assign({}, V0, { zonder: 0, zonderExact: 0, projectie: V0.projectie - V0.zonderExact, zonderStand: Object.assign({}, Z, { geboekt: 0, verwacht: 0 }) });
+  const TR = teRuim(V0).slice(0, TRn); const Br = gripZienBrug(V, TR);
+  return { U: uitschieters(V).map(x => x.k), st: Br.stappen.map(s => ({ soort: s.soort, k: s.k || '', label: s.label, label2: s.label2 || '', w: s.waarde })), P: Math.round(V.projectie) }; }, TRn);
+test('C6b · vier uitschieters staan alle vier los als ze passen, met korte namen', async ({ page }) => {
+  await S.boot(page); await page.evaluate(() => { SET.budgets.uiteten = 55; save(); });
+  await extra(page, [['2026-10-08', -320, 'Hema Winkel', 'overig']]);
+  const B = await brugZonder(page, 0);
+  expect(B.U.length).toBe(4); expect(B.st.length).toBeLessThanOrEqual(7);   // invoermeting
+  expect(B.st.filter(s => s.soort === 'potje').map(s => s.k)).toEqual(B.U);
+  expect(B.st.find(s => s.k === 'uiteten').label).toBe('Uit eten');   // korte vaste naam, niet "Uit eten & café"
+  expect(B.st.slice(0, -1).reduce((a, s) => a + s.w, 0)).toBe(B.P);
+});
+test('C6c · een afrondingseuro draait het teken van een overig-stap nooit om', async ({ page }) => {
+  await S.boot(page);
+  let gezien = 0;
+  /* een raster: een potje net boven (c), en een uitkomst die een fractie lager of hoger ligt dan de som (d), zodat de
+     afronding soms een euro moet weghalen en die bij het kleine positieve deel kan landen */
+  const r = await page.evaluate(() => { const V0 = maandVooruit(), TR = teRuim(V0), uit = [];
+    for (const c of [0.01, 0.05, 0.2, 0.45]) for (const d of [-0.9, -0.7, -0.49, -0.3, -0.1, 0.1, 0.3, 0.49]) {
+      const V = Object.assign({}, V0, { projectie: V0.projectie + c + d, potjes: V0.potjes.map(x => Object.assign({}, x, { overR: x.overR > 0 && !potjeUitschieter(x) ? 0 : x.overR })).concat([{ k: 'x_test', naam: 'Test', bud: 10, overR: c, eindR: 10 + c, eind: 10, uit: 10 }]),
+        vastePotjes: (V0.vastePotjes || []).map(x => Object.assign({}, x, { eindR: Math.min(+x.eindR || +x.eind || 0, +x.bud || 0), eind: Math.min(+x.eind || 0, +x.bud || 0) })) });
+      const Br = gripZienBrug(V, TR); uit.push(...Br.stappen.filter(s => s.soort === 'overig').map(s => [s.k, s.waarde]));
+      const som = Br.stappen.slice(0, -1).reduce((a, s) => a + s.waarde, 0); if (som !== Br.stappen[Br.stappen.length - 1].waarde) uit.push(['som', 1]); }
+    return uit; });
+  for (const [k, w] of r) { if (k === 'boven') expect(w).toBeGreaterThanOrEqual(0); else if (k === 'onder') expect(w).toBeLessThanOrEqual(0); else expect(k).toBe('geen som-fout'); }
+  gezien = r.length;
+  expect(gezien).toBeGreaterThan(0);
+});
+test('C7b · een te ruim potje alleen houdt zijn naam, ook als de te ruime potjes samengaan', async ({ page }) => {
+  await S.boot(page); await page.evaluate(() => { SET.budgets.uiteten = 55; save(); });
+  const r = await page.evaluate(() => { const V = maandVooruit(), TR = teRuim(V).slice(0, 1), Br = gripZienBrug(V, TR);
+    return { k: TR[0].k, st: Br.stappen.filter(s => s.soort === 'teruim').map(s => [s.label, s.label2, s.k]) }; });
+  expect(r.st).toEqual([[r.k === 'huur' ? 'Huur' : 'Vervoer', 'niet gebruikt', r.k]]);
+});
+test('C6d · de guard: een afrondingseuro die het teken omdraait schuift naar de andere kant', async ({ page }) => {
+  await S.boot(page);
+  const r = await page.evaluate(() => [brugTekenVast({ '~ovB': -1, '~ovO': -40 }), brugTekenVast({ '~ovB': 12, '~ovO': 1 }), brugTekenVast({ '~ovB': 3, '~ovO': -2 })]);
+  expect(r).toEqual([{ '~ovB': 0, '~ovO': -41 }, { '~ovB': 13, '~ovO': 0 }, { '~ovB': 3, '~ovO': -2 }]);
+  const src = await page.evaluate(() => gripZienBrug.toString());
+  expect(src).toContain('brugTekenVast(R)');
+});
