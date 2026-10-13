@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v409` · een 4-wekelijkse post is 13 termijnen per jaar.** Vooruit rekent hij met 28 dagen, niet met de gemeten afstand.
+  Valkuil: Shurgard had een mediaan van 29 dagen (weekenden), en dan kwam de maand met twee termijnen pas na jaren: te ruim
+  rekende Huur met EUR 71 in plaats van EUR 142.
+- **`v409` · nooit twee budgetten door elkaar.** De drie maanden tegen hun bewaarde budget als ze alle drie een hebben, anders
+  alle drie tegen het huidige met "(huidig budget)". Valkuil: Huur juli en augustus tegen EUR 420 en september tegen EUR 750.
+- **`v409` · een bekende periodieke post in zijn maand is geen "boven budget".** Een kwartaal- of jaarpost, of de tweede termijn
+  van een 4-wekelijkse, gaat eraf; past het potje er niet omheen, dan "te krap voor <post>" met een voorstel. Valkuil:
+  Abonnementen juli EUR 31 was Huurwoningen, en telde als een maand boven budget.
+- **`v409` · potjes in hetzelfde patroon zijn een regel in Let op**, en een stijgende trend krijgt drie voorstellen (laatste
+  maand, gemiddelde van de laatste 2, reservering) zonder voorselectie.
 - **`v408` · een signaal per potje, zonder tegenspraak.** Een potje dat vooruitkijkend te ruim is krijgt niet tegelijk
   terugkijkend "boven budget"; met een breuk (laatste maand of verwacht eind onder de helft van het gemiddelde ervoor) is het
   een regel "veranderd · was X, nu Y" naar de te-ruim-sheet, zonder breuk zegt Zien het. Laten staan geldt deze maand voor alle

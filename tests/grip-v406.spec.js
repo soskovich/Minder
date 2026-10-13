@@ -33,7 +33,8 @@ test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => 
   });
   test('2 van 3 telt, 1 van 3 niet (het budget van die maand, maandPotjes)', async ({ page }) => {
     await S.boot(page);
-    const n = await page.evaluate(() => { const r = []; SET.budgetHist = SET.budgetHist || {};
+    const n = await page.evaluate(() => { const r = []; SET.budgetHist = {};   // v409: alle drie bewaard, anders telt het huidige budget voor alle drie
+      for (const m of ['2026-07', '2026-08', '2026-09']) SET.budgetHist[m] = Object.assign({}, SET.budgets);
       SET.budgetHist['2026-08'] = Object.assign({}, SET.budgets, { vices: 200 }); save(); r.push((potBovenLijst().find(x => x.k === 'vices') || {}).n || 0);
       SET.budgetHist['2026-07'] = Object.assign({}, SET.budgets, { vices: 200 }); save(); r.push((potBovenLijst().find(x => x.k === 'vices') || {}).n || 0); return r; });
     expect(n).toEqual([2, 0]);

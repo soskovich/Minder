@@ -24,7 +24,7 @@ test.describe('A1 · een potje dat te ruim is krijgt geen "boven budget"; met ee
     expect(huur.length).toBe(1);
     expect(huur[0].soort).toBe('veranderd');
     expect(huur[0].naam).toBe('Huur veranderd · was €760/mnd, nu €137');
-    expect(huur[0].sub).toBe('jul €760 · aug €760 · sep €137 · budget €700');
+    expect(huur[0].sub).toBe('jul €760 · aug €760 · sep €137 · budget €700 (huidig budget)');   // v409: geen bewaarde potjes
     expect(huur[0].act).toBe("openTeRuim('huur')");
     expect(L.map(x => x.naam).join('|')).not.toMatch(/Huur · \d van 3 mnd boven budget/);
     await page.evaluate(() => { openTeRuim('huur'); });
@@ -38,7 +38,7 @@ test.describe('A1 · een potje dat te ruim is krijgt geen "boven budget"; met ee
     const L = await letop(page), h = L.find(x => x.key === 'huur');
     expect(h.soort).toBe('veranderd');
     expect(h.naam).toMatch(/^Huur veranderd · was €760\/mnd, nu €\d+$/);
-    expect(h.sub).toMatch(/^jul €760 · aug €760 · sep €760 · okt verwacht €\d+ · budget €700$/);
+    expect(h.sub).toMatch(/^jul €760 · aug €760 · sep €760 · okt verwacht €\d+ · budget €700 \(huidig budget\)$/);
   });
   test('te ruim zonder breuk: geen regel over Huur in Let op (Zien zegt het, niet gebruikt)', async ({ page }) => {
     await S.boot(page);
@@ -94,7 +94,7 @@ test.describe('B3 · maanden altijd met naam, oud naar nieuw', () => {
     await S.boot(page);
     await page.evaluate(({ MAIN }) => { for (const d of ['2026-07-25', '2026-08-25']) { const t = { id: 'x8ov' + d, date: d, amount: -220, acc: MAIN, name: 'Hema Winkel', desc: 'X', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'overig'; } save(); }, { MAIN: S.MAIN });
     const o = (await letop(page)).find(x => x.key === 'overig');
-    expect(o).toEqual(expect.objectContaining({ soort: 'boven', groep: 'a', naam: 'Overig · 2 van 3 mnd boven budget', sub: 'jul €600 · aug €600 · sep €380 · budget €500', act: "openPotHerzien('overig')" }));
+    expect(o).toEqual(expect.objectContaining({ soort: 'boven', groep: 'a', naam: 'Overig · 2 van 3 mnd boven budget', sub: 'jul €600 · aug €600 · sep €380 · budget €500 (huidig budget)', act: "openPotHerzien('overig')" }));
     const h = await page.evaluate(() => { openPotHerzien('overig'); return [...document.querySelectorAll('[data-phhist]')].map(e => e.dataset.phhist); });
     expect(h).toEqual(['2026-07', '2026-08', '2026-09']);
   });
@@ -130,9 +130,11 @@ test.describe('C4 · boven budget gebruikt de uitschieter-drempel', () => {
     await S.boot(page);
     const r = await page.evaluate(() => ({ P: potMaanden('shopping'), boven: potBovenLijst().map(x => x.k) }));
     expect(r.P.bedragen).toEqual([99, 160, 0]); expect(r.P.budgets).toEqual([95, 95, 95]);   // invoermeting
-    expect(r.P.boven).toEqual([false, true, false]);
+    // v409: augustus is Bol Abonnement Select (kwartaal, EUR 95): 160 - 95 = 65, geen boven-maand meer; juli 99 tegen 95 haalt de drempel niet
+    expect(r.P.boven).toEqual([false, false, false]);
     expect(r.boven).not.toContain('shopping');
-    expect((await letop(page)).some(x => x.key === 'shopping')).toBe(false);
+    expect((await letop(page)).some(x => x.key === 'shopping' && x.soort === 'boven')).toBe(false);
+    expect(await page.evaluate(() => uitschieterAfw(99 - 95, 95))).toBe(false);
   });
   test('een functie: potMaanden en de signalen lezen allebei uitschieterAfw()', async ({ page }) => {
     await S.boot(page);
@@ -171,16 +173,16 @@ test.describe('E6 · een stijgende trend zonder potje', () => {
   test('Kinderen: eerst potje met de laatste maand, dan reservering, met "stijgt:" en de maanden', async ({ page }) => {
     await S.boot(page);
     const k = (await letop(page)).find(x => x.key === 'e_kinderen');
-    expect(k.sub).toBe('potje €136 of reservering in Plan €15/mnd · stijgt: jul €4 · aug €35 · sep €136');
+    expect(k.sub).toBe('potje €136 of €86, of reservering in Plan €15/mnd · stijgt: jul €4 · aug €35 · sep €136');   // v409: drie voorstellen
     expect(k.act).toBe("openZonderKeuze('e_kinderen')");
   });
   test('de keuze: potje eerst (€136), reservering tweede (12 mnd gemiddeld), geen voorselectie', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => { openZonderKeuze('e_kinderen'); return { o: [...document.querySelectorAll('[data-zkoptie]')].map(e => [e.dataset.zkoptie, e.dataset.gekozen, e.querySelector('span span').textContent]), knop: document.querySelector('[data-zkbevestig]').disabled }; });
-    expect(r.o.map(x => x[0])).toEqual(['pot', 'res']);
+    expect(r.o.map(x => x[0])).toEqual(['pot', 'pot2', 'res']);   // v409
     expect(r.o.every(x => x[1] === '0')).toBe(true);
     expect(r.o[0][2]).toBe('Potje maken · €136 per maand');
-    expect(r.o[1][2]).toBe('Reservering in Plan · €15 per maand');
+    expect(r.o[1][2]).toBe('Potje maken · €86 per maand'); expect(r.o[2][2]).toBe('Reservering in Plan · €15 per maand');
     expect(r.knop).toBe(true);
   });
   test('vanaf nul is het geen trend maar een piek (Vakantie jul €0 · aug €40 · sep €350)', async ({ page }) => {

@@ -54,7 +54,7 @@ test.describe('A · meten aan het eigen maandbudget', () => {
     await grip(page);
     const r = await brug(page);
     const tr = r.st.filter(s => s.soort === 'teruim');
-    expect(tr.map(s => [s.k, s.label, s.label2, s.waarde])).toEqual([['huur', 'Huur', 'niet gebruikt', -629], ['vervoer', 'Vervoer', 'niet gebruikt', -390]]);   // v406: korte vaste naam
+    expect(tr.map(s => [s.k, s.label, s.label2, s.waarde])).toEqual([['huur', 'Huur', 'niet gebruikt', -558], ['vervoer', 'Vervoer', 'niet gebruikt', -390]]);   // v406: korte vaste naam
     const d = await page.evaluate(() => ({ grijs: [...document.querySelectorAll('#gripBrug [data-brugstap="teruim"] [data-brugniet]')].map(i => i.style.background),
       gearceerd: document.querySelectorAll('#gripBrug [data-gearceerd], #gripBrug [data-eerlijklijn], #gripBrug [data-haaktekst]').length,
       as: document.querySelector('[data-zienas]').innerText.trim(), tekst: document.querySelector('#gripInhoud').innerText + document.querySelector('#gripMeters').innerText }));
@@ -91,27 +91,27 @@ test.describe('A · meten aan het eigen maandbudget', () => {
 });
 
 test.describe('A · de feitregel onder de meter', () => {
-  test('twee potjes: "waarvan €1.019 niet gebruikt in 2 potjes ›", geen "Eerlijk budget lager"', async ({ page }) => {
+  test('twee potjes: "waarvan €948 niet gebruikt in 2 potjes ›", geen "Eerlijk budget lager"', async ({ page }) => {
     await grip(page);
     const r = page.locator('#gripMeters ~ [data-nietgebruikt]');
-    expect(await r.innerText()).toBe('waarvan €1.019 niet gebruikt in 2 potjes ›');
+    expect(await r.innerText()).toBe('waarvan €948 niet gebruikt in 2 potjes ›');
     expect(await page.locator('#gripMeters').innerText()).not.toMatch(/eerlijk/i);
     expect(await page.locator('[data-eerlijkregel]').count()).toBe(0);
     await r.click();
     expect(await page.locator('#teRuimSheet[data-teruimlijst]').count()).toBe(1);   // twee potjes: eerst kiezen welk
   });
-  test('een potje: "waarvan €629 Huur niet gebruikt ›", en de tik opent dat potje', async ({ page }) => {
+  test('een potje: "waarvan €558 Huur niet gebruikt ›", en de tik opent dat potje', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => { SET.budgets.vervoer = 710; save(); renderMaand(); });
     const r = page.locator('#gripMeters ~ [data-nietgebruikt]');
-    expect(await r.innerText()).toBe('waarvan €629 Huur niet gebruikt ›');
+    expect(await r.innerText()).toBe('waarvan €558 Huur niet gebruikt ›');
     await r.click();
     expect(await page.locator('#teRuimSheet').getAttribute('data-teruimpotje')).toBe('huur');
   });
   test('na een eigen keuze: "· zelf gekozen", en de regel blijft', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => { SET.budgets.vervoer = 710; teRuimLaten('huur'); renderMaand(); });
-    expect(await page.locator('#gripMeters ~ [data-nietgebruikt]').innerText()).toBe('waarvan €629 Huur niet gebruikt › · zelf gekozen');
+    expect(await page.locator('#gripMeters ~ [data-nietgebruikt]').innerText()).toBe('waarvan €558 Huur niet gebruikt › · zelf gekozen');
     expect(await page.locator('[data-zelfgekozen]').count()).toBe(1);
   });
   test('niets te ruim: geen regel', async ({ page }) => {
@@ -141,8 +141,8 @@ test.describe('B · de te-ruim-sheet', () => {
     const sh = page.locator('#teRuimSheet');
     await expect(sh).toContainText('Huur · ruimer dan nodig');
     expect(await page.locator('[data-feitbudget]').innerText()).toContain('€700');
-    expect(await page.locator('[data-feitnodig]').innerText()).toMatch(/€71 okt/);
-    expect(await page.locator('[data-feitniet]').innerText()).toContain('€629');
+    expect(await page.locator('[data-feitnodig]').innerText()).toMatch(/€142 sep/)   // v409: twee termijnen Shurgard in september 2027;
+    expect(await page.locator('[data-feitniet]').innerText()).toContain('€558');
     expect(await page.locator('[data-teruimhist]').evaluateAll(e => e.map(x => x.dataset.teruimhist))).toEqual(['2026-07', '2026-08', '2026-09']);
     expect(await page.locator('[data-teruimoptie][data-gekozen="1"]').count()).toBe(0);
     expect(await page.locator('[data-teruimbestem]').count()).toBe(0);
@@ -152,16 +152,16 @@ test.describe('B · de te-ruim-sheet', () => {
   test('bestemming verplicht: na a geen voorselectie en de knop uit, na een keuze noemt de knop de handeling', async ({ page }) => {
     await grip(page);
     await huurSheet(page, 'a');
-    expect(await page.locator('[data-teruimwaarheen]').innerText()).toContain('Waar gaat €629 naartoe?');
+    expect(await page.locator('[data-teruimwaarheen]').innerText()).toContain('Waar gaat €558 naartoe?');
     expect(await page.locator('[data-teruimbestem]').evaluateAll(e => e.map(x => x.dataset.teruimbestem))).toEqual(['plan', 'res', 'beleg', 'pot:uiteten', 'pot:vices']);
     expect(await page.locator('[data-teruimbestem].on').count()).toBe(0);
     expect(await page.locator('[data-teruimgevolg]').count()).toBe(0);
-    expect(await knop(page)).toEqual({ uit: true, tekst: 'Bevestigen', reden: 'Kies waar €629 naartoe gaat' });
+    expect(await knop(page)).toEqual({ uit: true, tekst: 'Bevestigen', reden: 'Kies waar €558 naartoe gaat' });
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
     await page.evaluate(() => teRuimBevestig());   // de schrijver eist de keuze zelf ook
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
     await page.click('[data-teruimbestem="plan"]');
-    expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €71 zetten', reden: '' });
+    expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €142 zetten', reden: '' });
   });
   test('b: een bedrag tussen nodig en het huidige budget, daarbuiten met een reden; a en c klappen in', async ({ page }) => {
     await grip(page);
@@ -187,7 +187,7 @@ test.describe('B · de te-ruim-sheet', () => {
     expect(g.budget).toBe('Maandbudget €3.325 blijft');
     expect(g.verwacht).toBe('Verwacht oktober €1.711 → €2.011');
     expect(g.meter).toBe(`Budget-meter 51% → ${Math.round(2011 / 3325 * 100)}% · €1.314 onder`);
-    expect(g.nogruim).toBe('Nog €329 ruimer dan nodig (€71). Je keuze blijft staan; volgende maand toetst Minder opnieuw.');
+    expect(g.nogruim).toBe('Nog €258 ruimer dan nodig (€142). Je keuze blijft staan; volgende maand toetst Minder opnieuw.');
     expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €400 zetten', reden: '' });
   });
   /* v399: pot:uiteten (boven met €67, en €300 vrij) wordt een splitsing; die staat in plan-inleg.spec.js. */
@@ -206,7 +206,7 @@ test.describe('B · de te-ruim-sheet', () => {
     expect(r.huur).toBe(400);
     expect(r.proj).toBe(stijgt ? 2011 : 1711);
     expect(r.som).toBe(r.proj);
-    expect(r.stap).toBe(-329);   // Huur 400 met 71 nodig: 329 niet gebruikt
+    expect(r.stap).toBe(-258);   // Huur 400 met 142 nodig (v409): 258 niet gebruikt
     expect(r.uit).toBe(uit0);
   });
   test('Plan: de inleg gaat met het bedrag omhoog en Plan verdeelt zelf; veilig te besteden blijft gelijk', async ({ page }) => {

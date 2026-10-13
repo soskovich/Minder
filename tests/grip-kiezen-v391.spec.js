@@ -26,7 +26,8 @@ test.describe('3 · overig in potjes', () => {
     // v395: de bridge begint bij het eerlijke budget, dus het te ruime deel van Huur (EUR 629) staat gearceerd in de
     // eerste balk en niet meer als -629 in overig; de rij "Te ruim begroot" is weg.
     expect(r.terug).toBe(0);
-    expect(r.V.map(x => x[0])).not.toContain('huur');
+    // v409: te ruim is 558 (voorstel 142, twee termijnen Shurgard); wat Huur deze maand onder het voorstel blijft (142 - 71) staat in overig
+    expect(r.V).toContainEqual(['huur', -71]);
     expect(r.R.map(x => x[0])).toContain('boodschappen');
   });
   test('met centen: de potjes tellen nog steeds exact op tot hun groep (de groep rondt een keer af, niet per potje)', async ({ page }) => {
@@ -99,7 +100,7 @@ test.describe('10 · te ruim begroot vanaf de 2e maand in Kiezen', () => {
     const r = await page.evaluate(() => { const rows = [...document.querySelectorAll('[data-kiezen] [data-kiesherzien], [data-kiezen] [data-kiesrij]')];
       return { eerste: rows[0].dataset.kiesherzien, tekst: rows[0].innerText.replace(/\s+/g, ' ') }; });
     expect(r.eerste).toBe('huur');
-    expect(r.tekst).toContain('Huur herzien'); expect(r.tekst).toContain('2e maand'); expect(r.tekst).toContain('€629 te ruim');
+    expect(r.tekst).toContain('Huur herzien'); expect(r.tekst).toContain('2e maand'); expect(r.tekst).toContain('€558 te ruim');
     expect(await tekst(page, '[data-kiesvoortgang]')).toBe('0 van 1');   // telt niet als patroon
     await page.click('[data-kiesherzien="huur"]');
     expect(await page.locator('#teRuimSheet').count()).toBe(1);

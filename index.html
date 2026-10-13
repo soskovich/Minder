@@ -3009,6 +3009,7 @@ function recurringSchedule(){
   return out.sort((a,b)=>a.nextDate-b.nextDate);
 }
 const VAST_CLUSTER_DAGEN=7, VAST_4W={min:26, max:29}, VAST_MAAND={min:30, max:32};
+const VAST_4W_DAGEN=28;   // v409: 13 termijnen per jaar, vooruit gerekend (teRuimTermijnen())
 /* v384: de cadans van een vaste last uit de afstand tussen betalingen. Geeft null als de afstand in geen van de twee
    vormen valt (dan houdt het schema de vorm van voor v384), {stil:true} als de post niet meer loopt, en anders het
    item met `verwacht` (de termijnen die in de lopende kalendermaand nog komen, een of twee) en `komend` (de volgende
@@ -8201,18 +8202,65 @@ function potLaten(k, ym){ ym=ym||thisYM();
 /* v408: BOVEN BUDGET GEBRUIKT DE UITSCHIETER-DREMPEL (uitschieterAfw(), dezelfde toets als de signalen in Begrijpen): een
    maand telt alleen als hij minstens EUR 10 en 25% boven het budget van die maand eindigde, of minstens EUR 50 erboven.
    GEMELD op het toestel: Online shopping juli EUR 99 tegen EUR 95 telde als boven. */
+/* v409: HET BUDGET VAN DIE MAAND, OF HET HUIDIGE VOOR ALLE DRIE, NOOIT DOOR ELKAAR (gevraagd door de gebruiker; GEMELD op het
+   toestel: Huur juli en augustus tegen EUR 420, september tegen EUR 750). Draagt elk van de drie maanden een bewaard
+   potjebedrag (maandPotjes(), v309), dan telt elke maand tegen zijn eigen budget; ontbreekt er een, dan tellen alle drie
+   tegen je huidige budget en zegt de regel "(huidig budget)" (potBudgetTekst()).
+   v409: EEN BEKENDE PERIODIEKE POST IN ZIJN MAAND IS GEEN "BOVEN BUDGET": wat een kwartaal- of jaarpost, of de tweede
+   termijn van een 4-wekelijkse post, in die maand afschreef (potPeriodiek()) gaat eraf voordat de maand getoetst wordt.
+   Past het potje er niet omheen, dan zegt potKrapLijst() dat, met een voorstel. */
 function potMaanden(k, m){ m=m||thisYM(); const ms=[3,2,1].map(i=>valtOpYmPlus(m,-i));
   const bedragen=ms.map(mm=>{ let v=0; try{ v=+(catSpendMap(mm)||{})[k]||0; }catch(_){} return Math.round(Math.max(v,0)); });
-  const budgets=ms.map(mm=>{ let b=0; try{ b=+(maandPotjes(mm).B||{})[k]||0; }catch(_){} return Math.round(b); });
-  const boven=ms.map((_,i)=>budgets[i]>0 && bedragen[i]>budgets[i] && uitschieterAfw(bedragen[i]-budgets[i], budgets[i]));
-  return {ms, bedragen, budgets, boven}; }
+  let MP=[]; try{ MP=ms.map(mm=>maandPotjes(mm)); }catch(_){}
+  const huidig=!(MP.length===ms.length && MP.every(p=>p && p.bron==='bewaard'));
+  const budgets=ms.map((mm,i)=>Math.round(+((huidig?SET.budgets:MP[i].B)||{})[k]||0));
+  const R=periodiekePosten(k), per=ms.map(mm=>potPeriodiek(k, mm, R));
+  const boven=ms.map((_,i)=>{ const b=bedragen[i]-Math.round(per[i].bedrag); return budgets[i]>0 && b>budgets[i] && uitschieterAfw(b-budgets[i], budgets[i]); });
+  return {ms, bedragen, budgets, boven, huidig, periodiek:per}; }
+/* De bekende periodieke posten van een categorie: een interval boven een maand, of 4-wekelijks (v384). */
+function periodiekePosten(k){ let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && ((+s.intervalM||1)>1 || (s.cadans==='4w' && +s.afstand>0))); }catch(_){} return R; }
+/* Wat de periodieke posten in maand mm afschreven buiten een gewone maand: een kwartaal- of jaarpost helemaal, een
+   4-wekelijkse post alles boven de eerste termijn. */
+function potPeriodiek(k, mm, R){ R=R||periodiekePosten(k); const leeg={bedrag:0, posten:[]}; if(!R.length) return leeg;
+  const per={}; try{ for(const t of txOfMonth(mm)){ if(!(t.amount<0) || catOf(t)!==k) continue; const s=R.find(x=>x.key===recurKey(t)); if(!s) continue;
+    (per[s.key]=per[s.key]||{s, a:[]}).a.push(-t.amount); } }catch(_){ return leeg; }
+  let bedrag=0; const posten=[];
+  for(const key in per){ const {s,a}=per[key]; a.sort((p,q)=>q-p);
+    const x=((+s.intervalM||1)>1?a:a.slice(1)).reduce((p,v)=>p+v,0);
+    if(x>0){ bedrag+=x; posten.push({naam:titleCase(cleanMerch(s.name)||s.name||''), bedrag:Math.round(x)}); } }
+  return {bedrag, posten}; }
+function potBudgetTekst(x){ const b=x.budgets||[];
+  if(x.huidig) return `budget ${euro0(x.bud)} (huidig budget)`;
+  if(b.length && b.every(v=>v===b[0])) return `budget ${euro0(b[0])}`;
+  return `budget ${maandReeksTekst(x.ms, b)}`; }
+/* v409: TE KRAP VOOR EEN PERIODIEKE POST. Een potje dat in de duurste van de komende twaalf maanden (je gewone maand plus de
+   periodieke posten in hun maand, potjeMaandVloer(), met de tweede termijn van een 4-wekelijkse post) meer nodig heeft dan
+   het potje, met de uitschieter-drempel. Een post die al in je reserveringen staat telt niet. Het voorstel is die maand op
+   tien euro naar boven (ruimAfrond()), de bestaande herzien-sheet maakt het. */
+function potKrapLijst(m){ m=m||thisYM(); const B=SET.budgets||{}, uit=[];
+  let skip=new Set(); try{ skip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron)); }catch(_){}
+  const ms=[3,2,1].map(i=>valtOpYmPlus(m,-i));
+  for(const k of Object.keys(B)){ const bud=Math.round(+B[k]||0);
+    if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k) || potLaten(k, m)) continue;
+    const R=periodiekePosten(k).filter(s=>!skip.has(s.key)); if(!R.length) continue;
+    let Vl=null; try{ Vl=potjeMaandVloer(k, ms, m, skip); }catch(_){} if(!Vl || !Vl.maand) continue;
+    if(!(Vl.vloer>bud) || !uitschieterAfw(Vl.vloer-bud, bud)) continue;
+    const posten=R.map(s=>{ const vier=s.cadans==='4w', mnd=[];
+      for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(ym); }
+      return {naam:titleCase(cleanMerch(s.name)||s.name||''), bedrag:Math.round(+s.amount||0), maanden:mnd, vier}; }).filter(p=>p.maanden.length);
+    if(!posten.length) continue;
+    const P=potMaanden(k, m);
+    uit.push({k, naam:CATS[k].name, bud, krap:true, posten, vloer:Vl.vloer, vloerMaand:Vl.maand, gewoon:Vl.gewoon, voorstel:ruimAfrond(Vl.vloer),
+      ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, huidig:P.huidig, boven:P.boven, n:P.boven.filter(Boolean).length}); }
+  return uit.sort((a,b)=>((b.voorstel-b.bud)-(a.voorstel-a.bud)) || (a.naam<b.naam?-1:1)); }
+function potKrapPostTekst(p){ return `${p.naam} (${euro0(p.bedrag)}${p.vier?' 2×':''} in ${p.maanden.map(ym=>MNAMES[+ym.slice(5,7)-1]).join(' · ')})`; }
 function potBovenLijst(m, metLaten){
   m=m||thisYM(); const B=SET.budgets||{}, uit=[];
   for(const k of Object.keys(B)){ const bud=+B[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k) || (!metLaten && potLaten(k, m))) continue;
     const P=potMaanden(k, m), n=P.boven.filter(Boolean).length;
     if(n<BOVEN_MIN_MAANDEN) continue;
     const gem=P.bedragen.reduce((a,x)=>a+x,0)/P.ms.length;
-    uit.push({k, naam:CATS[k].name, ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, boven:P.boven, n, bud:Math.round(bud), gem, voorstel:Math.max(Math.ceil(gem/5)*5, Math.round(bud)+5), meer:Math.round(gem-bud)}); }
+    uit.push({k, naam:CATS[k].name, ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, boven:P.boven, huidig:P.huidig, periodiek:P.periodiek, n, bud:Math.round(bud), gem, voorstel:Math.max(Math.ceil(gem/5)*5, Math.round(bud)+5), meer:Math.round(gem-bud)}); }
   return uit.sort((a,b)=>(b.meer-a.meer) || (a.naam<b.naam?-1:1));
 }
 /* v408: EEN BREUK. Een potje dat nu te ruim is (vooruitkijkend, teRuimLijst()) en terugkijkend boven zijn budget eindigde
@@ -8252,7 +8300,7 @@ const TREND_FACTOR=2;
 function zonderJaar(k, m){ m=m||thisYM(); let jaar=0; for(let i=1;i<=12;i++){ try{ jaar+=Math.max(+(catSpendMap(valtOpYmPlus(m,-i))||{})[k]||0,0); }catch(_){} } return Math.round(jaar); }
 function zonderTrend(x, m){ const c=(x.bedragen||[]).slice(0,3).reverse().map(v=>Math.round(Math.max(+v||0,0)));   // oud naar nieuw
   if(c.length<3 || !(c[0]>0) || !(c[0]<c[1] && c[1]<c[2]) || c[2]<c[0]*TREND_FACTOR) return null;   // een trend vraagt uitgaven in elke maand; vanaf nul is het een piek
-  const jaar=zonderJaar(x.k, m); return {laatste:c[2], perMaand:Math.round(jaar/12), jaar, reeks:c}; }
+  const jaar=zonderJaar(x.k, m); return {laatste:c[2], gem2:Math.round((c[1]+c[2])/2), perMaand:Math.round(jaar/12), jaar, reeks:c}; }   // v409: ook het gemiddelde van de laatste 2
 function gripLetOpItems(RO, SIG, BV){
   const L=[];
   const terug=(soort, naam, sub, dot)=>({soort, naam, sub, dot:dot||'let op', act:`openGripLetOp('${soort}')`});
@@ -8267,9 +8315,14 @@ function gripLetOpItems(RO, SIG, BV){
   let VV=null; try{ VV=maandVooruit(); }catch(_){}
   const trK=new Set(); try{ if(VV && !VV.onbekend) for(const x of teRuim(VV)) trK.add(x.k); }catch(_){}
   const patK={}; try{ gripPatronen().forEach((p,i)=>{ for(const g of (p.sig||[])) if(g.soort==='potje' && g.k && !patK[g.k]) patK[g.k]={pid:p.id, nr:i+1}; }); }catch(_){}
-  const patGedaan=new Set();
+  /* v409: POTJES IN HETZELFDE PATROON STAAN IN EEN REGEL: "n potjes zitten in patroon k · <namen>" (een potje alleen houdt
+     "<potje> · zit in patroon k"). De regel staat op de plek van het eerste potje en groeit met de volgende. */
+  const patGedaan=new Set(), patRegel={};
+  const patNaam=r=>r.namen.length===1?`${r.namen[0]} · zit in patroon ${r.nr}`:`${r.namen.length} potjes zitten in patroon ${r.nr} · ${r.namen.join(', ')}`;
   const patRij=(k, naam)=>{ if(patGedaan.has(k)) return; patGedaan.add(k); const P=patK[k];
-    L.push({soort:'patroon', key:k, naam:`${naam} · zit in patroon ${P.nr}`, sub:'', dot:'let op', act:`gripNaarBegrijpen('${esc(P.pid)}')`}); };
+    const r=patRegel[P.pid]; if(r){ r.namen.push(naam); r.keys.push(k); r.naam=patNaam(r); return; }
+    const n={soort:'patroon', key:k, keys:[k], namen:[naam], nr:P.nr, sub:'', dot:'let op', act:`gripNaarBegrijpen('${esc(P.pid)}')`}; n.naam=patNaam(n);
+    patRegel[P.pid]=n; L.push(n); };
   for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
   /* v406: een potje boven zijn grens deze maand draagt een handeling (bijstellen, grens) en zijn bedrag: groep a */
@@ -8327,7 +8380,7 @@ function gripLetOpItems(RO, SIG, BV){
   for(const x of ZV){ if(resVan.includes(x.k)) continue;   // v406: een categorie met een reservering in Plan vraagt niets meer
     const E=zvExtra[x.k], vs=Math.round(x.gemiddeld||0), TS=zonderTrend(x), PK=TS?null:zonderPiek(x), bw=zonderBewijsTekst(x);
     /* v408: een stijgende trend gaat voor een piek: eerst potje maken met de laatste maand, dan een reservering (12 mnd) */
-    const sub=TS?`potje ${euro0(TS.laatste)} of reservering in Plan ${euro0(TS.perMaand)}/mnd · stijgt: ${bw}`
+    const sub=TS?`potje ${euro0(TS.laatste)} of ${euro0(TS.gem2)}, of reservering in Plan ${euro0(TS.perMaand)}/mnd · stijgt: ${bw}`
       :PK?`reservering in Plan ${euro0(PK.perMaand)}/mnd of potje maken · ${bw}`:('potje maken'+(E?E.sub:(vs>0?` · voorstel ${euro0(vs)} per maand · ${bw}`:'')));
     L.push({soort:'zonderpot', groep:'a', bedrag:TS?TS.laatste:PK?PK.perMaand:vs, key:x.k, voorstel:vs, piek:!!PK, trend:!!TS, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub, dot:'let op', act:(TS||PK)?`openZonderKeuze('${esc(x.k)}')`:(E?E.act:`openPotForm('${esc(x.k)}',${vs})`)}); }
   /* v406: gaat de lek-regel over dezelfde categorie, dan opent de tik zijn sheet (categorie wijzigen, potje maken en het
@@ -8339,8 +8392,12 @@ function gripLetOpItems(RO, SIG, BV){
     if(patK[x.k]){ patRij(x.k, x.naam); continue; }
     if(trK.has(x.k)){ const Bk=potBreuk(x, potEind(VV, x.k)); if(!Bk) continue;   // te ruim zonder breuk: Zien zegt het
       L.push({soort:'veranderd', groep:'a', bedrag:Math.abs(Bk.was-Bk.nu), key:x.k, naam:`${x.naam} veranderd · was ${euro0(Bk.was)}/mnd, nu ${euro0(Bk.nu)}`,
-        sub:`${maandReeksTekst(x.ms, x.bedragen)}${Bk.verwacht?` · ${MNAMES[+thisYM().slice(5,7)-1]} verwacht ${euro0(Bk.nu)}`:''} · budget ${euro0(x.bud)}`, dot:'let op', act:`openTeRuim('${esc(x.k)}')`}); continue; }
-    L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${maandReeksTekst(x.ms, x.bedragen)} · budget ${euro0(x.bud)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
+        sub:`${maandReeksTekst(x.ms, x.bedragen)}${Bk.verwacht?` · ${MNAMES[+thisYM().slice(5,7)-1]} verwacht ${euro0(Bk.nu)}`:''} · ${potBudgetTekst(x)}`, dot:'let op', act:`openTeRuim('${esc(x.k)}')`}); continue; }
+    L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${maandReeksTekst(x.ms, x.bedragen)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
+  /* v409: te krap voor een periodieke post, een signaal per potje: niet als het al boven, te ruim, laten of in een patroon staat */
+  try{ const pk=new Set(PBL.map(x=>x.k)); for(const x of potKrapLijst()){ if(pk.has(x.k) || trK.has(x.k) || patK[x.k]) continue;
+    L.push({soort:'krap', groep:'a', bedrag:x.voorstel-x.bud, key:x.k, naam:`${x.naam} te krap voor ${x.posten.map(potKrapPostTekst).join(', ')} · voorstel ${euro0(x.voorstel)}`,
+      sub:`${maandReeksTekst(x.ms, x.bedragen)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -9207,11 +9264,12 @@ function grensRestZet(k){
    in de twaalf maanden vanaf de bijstelling de posten bij die in die maand vallen. De ondergrens is het
    hoogste daarvan, en de sheet noemt welke post in welke maand hem zet. */
 function potjeMaandVloer(k, maanden, vanaf, zonder){
-  let sched=[]; try{ sched=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)>1); }catch(_){}
+  let sched=[], vier=[]; try{ const R=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k);
+    sched=R.filter(s=>(+s.intervalM||1)>1); vier=R.filter(s=>s.cadans==='4w' && +s.afstand>0); }catch(_){}
   const keys=new Set(sched.map(s=>s.key));
   /* v358: een post die al in je reserveringen staat hoeft het potje niet te dragen; hij telt niet in het
      gewone deel (hij komt niet elke maand) en zet ook geen maand meer. */
-  if(zonder) sched=sched.filter(s=>!zonder.has(s.key));
+  if(zonder){ sched=sched.filter(s=>!zonder.has(s.key)); vier=vier.filter(s=>!zonder.has(s.key)); }
   let som=0;
   for(const m of (maanden||[])){
     let c=0; try{ c=Math.max(+(catSpendMap(m)||{})[k]||0,0); }catch(_){}
@@ -9223,9 +9281,12 @@ function potjeMaandVloer(k, maanden, vanaf, zonder){
   let best={bedrag:gewoon, maand:null, posten:[]};
   for(let i=0;i<12;i++){
     const ym=valtOpYmPlus(vanaf,i), idx=ymIdx(ym);
-    const ps=sched.filter(x=>{ const nd=x.nextDate instanceof Date?x.nextDate:new Date(x.nextDate); const n0=nd.getFullYear()*12+nd.getMonth(); return idx>=n0 && (idx-n0)%(+x.intervalM)===0; });
-    const b=gewoon+ps.reduce((t,x)=>t+(+x.amount||0),0);
-    if(ps.length && b>best.bedrag) best={bedrag:b, maand:ym, posten:ps.map(x=>({naam:titleCase(cleanMerch(x.name)||x.name||''), bedrag:Math.round(+x.amount||0)}))};
+    /* v409: de termijnen komen uit teRuimTermijnen(), de ene telling (ook van te ruim). Een 4-wekelijkse post zit een keer
+       per maand al in het gewone deel; in de maand met twee termijnen telt de tweede erbij. */
+    const ps=sched.filter(x=>teRuimTermijnen(x, ym)>0).map(x=>({x, n:teRuimTermijnen(x, ym)}))
+      .concat(vier.map(x=>({x, n:teRuimTermijnen(x, ym)-1, vier:true})).filter(y=>y.n>0));
+    const b=gewoon+ps.reduce((t,y)=>t+y.n*(+y.x.amount||0),0);
+    if(ps.length && b>best.bedrag) best={bedrag:b, maand:ym, posten:ps.map(y=>({naam:titleCase(cleanMerch(y.x.name)||y.x.name||''), bedrag:Math.round(+y.x.amount||0), tweede:!!y.vier}))};
   }
   return {gewoon:Math.round(gewoon), vloer:Math.round(best.bedrag), maand:best.maand, posten:best.posten};
 }
@@ -9253,7 +9314,7 @@ function openPotjeBijstel(k, dek){
       <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">potje ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}${x.vloerMaand?`, in ${esc(ymFull(x.vloerMaand))} ${euro0(x.vloer)}`:''} · ruimte ${euro0(x.ruimte)}</div></div>
       <div class="amt" style="color:var(--teal)">${D&&D.k===x.k?'gekozen':'kies'}</div></div>`;
   const gevolg = D
-    ? `Vanaf ${esc(Vn)} gaat ${esc(P.naam)} van ${euro0(P.van)} naar ${euro0(P.naar)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. ${D.vloerMaand?` In ${esc(ymFull(D.vloerMaand))} vraagt ${esc(D.naam)} ${euro0(D.vloer)}: gewoonlijk ${euro0(D.gewoon)} plus ${esc(opsomming(D.vloerPosten.map(x=>`${x.naam} ${euro0(x.bedrag)}`)))}. Dat past in ${euro0(D.bud-P.meer)}.`:''} Deze maand blijven je potjes staan. Je maandbudget blijft ${euro0(P.tot)}.`
+    ? `Vanaf ${esc(Vn)} gaat ${esc(P.naam)} van ${euro0(P.van)} naar ${euro0(P.naar)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. ${D.vloerMaand?` In ${esc(ymFull(D.vloerMaand))} vraagt ${esc(D.naam)} ${euro0(D.vloer)}: gewoonlijk ${euro0(D.gewoon)} plus ${esc(opsomming(D.vloerPosten.map(x=>`${x.naam} ${euro0(x.bedrag)}${x.tweede?' (tweede termijn)':''}`)))}. Dat past in ${euro0(D.bud-P.meer)}.`:''} Deze maand blijven je potjes staan. Je maandbudget blijft ${euro0(P.tot)}.`
     : (P.kand.length
       ? `Nog te dekken: ${euro0(P.meer)}. Wijs het potje aan dat inlevert; je maandbudget blijft dan ${euro0(P.tot)}.`
       : `Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft, ook in de maand waarin een kwartaal- of jaarpost valt, dus er valt niets te verschuiven. Een grens zetten kan wel.`);
@@ -9423,7 +9484,7 @@ function renderRuimBijstel(){
       <div class="small muted" style="line-height:1.45;margin-top:2px">Geen betaling in ${esc(mn)}, en er wordt er geen verwacht. Dat is geen gewoonte die je bijstelt maar een bedrag dat veranderde.</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px">${splitMag(p.k)?`<span class="small" data-ruimsplits style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSplits('${esc(p.k)}')">Splitsen ›</span>`:''}<span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
     const post=p.vloerMaand && p.vloerPosten.length && p.gewoonM<p.vloer
-      ? `<div class="small" data-ruimpost style="line-height:1.45;margin-top:4px">In ${esc(ymFull(p.vloerMaand))} komt ${esc(opsomming(p.vloerPosten.map(x=>{ const q=p.posten.find(y=>y.naam===x.naam); return `${x.naam}, ${euro0(x.bedrag)} ${q?resIntervalLabel(ruimResInterval(q.intervalM)):''}`.trim(); })))}. Verlaag je het potje naar ${euro0(p.gewoonM)}, dan is ${esc(ymFull(p.vloerMaand))} niet gedekt.</div>` : '';
+      ? `<div class="small" data-ruimpost style="line-height:1.45;margin-top:4px">In ${esc(ymFull(p.vloerMaand))} komt ${esc(opsomming(p.vloerPosten.map(x=>{ const q=p.posten.find(y=>y.naam===x.naam); return `${x.naam}, ${euro0(x.bedrag)} ${x.tweede?'als tweede termijn van 4 weken':q?resIntervalLabel(ruimResInterval(q.intervalM)):''}`.trim(); })))}. Verlaag je het potje naar ${euro0(p.gewoonM)}, dan is ${esc(ymFull(p.vloerMaand))} niet gedekt.</div>` : '';
     const ch=[];
     if(p.opties.res!=null) ch.push(chip(p.k,'res',`${esc(opsomming(p.posten.map(x=>x.naam)))} naar reserveringen, potje ${euro0(p.opties.res)}`));
     if(p.opties.voorstel!=null) ch.push(chip(p.k,'voorstel',`Potje ${euro0(p.opties.voorstel)}`));
@@ -9756,8 +9817,11 @@ function teRuimTermijnen(s, ym){
   if(!nd || isNaN(nd)) return 0;
   const ymIdx=x=>{ const [y,m]=String(x).split('-').map(Number); return y*12+m-1; };
   const idx=ymIdx(ym);
+  /* v409: EEN 4-WEKELIJKSE POST KOMT 13 KEER PER JAAR, dus er is in twaalf maanden altijd een maand met twee. De gemeten
+     afstand (mediaan van de betaaldagen) is daar niet de lat: een weekend of een feestdag schuift een betaling een dag op,
+     en met 29 dagen komt de tweede termijn in een maand pas na jaren. Vooruit rekent hij daarom met VAST_4W_DAGEN (28). */
   if(s.cadans==='4w' && +s.afstand>0){ let n=0; const d=new Date(nd);
-    for(let g=0; g<40; g++){ const i=d.getFullYear()*12+d.getMonth(); if(i>idx) break; if(i===idx) n++; d.setDate(d.getDate()+(+s.afstand)); }
+    for(let g=0; g<40; g++){ const i=d.getFullYear()*12+d.getMonth(); if(i>idx) break; if(i===idx) n++; d.setDate(d.getDate()+VAST_4W_DAGEN); }
     return n; }
   const iv=+s.intervalM||1, n0=nd.getFullYear()*12+nd.getMonth();
   if(idx<n0) return 0;
@@ -10344,7 +10408,8 @@ function teRuimLaten(k, reden){
 const POTHERZIEN_REDENEN=['eenmalige maanden', 'bewust krap', 'twijfel nog'];
 function openPotHerzien(k){ window._ph={k, optie:null, bedrag:null, bron:null, bestem:null, reden:''}; renderPotHerzien(); showSheetBg(); }
 function potHerzienStand(){ const S=window._ph||{}; let V=null; try{ V=maandVooruit(); }catch(_){}
-  const x=potBovenLijst().find(y=>y.k===S.k)||null; let TR=[]; try{ TR=V&&!V.onbekend?teRuim(V):[]; }catch(_){}
+  let x=potBovenLijst().find(y=>y.k===S.k)||null; if(!x){ try{ x=potKrapLijst().find(y=>y.k===S.k)||null; }catch(_){} }   // v409: ook te krap voor een periodieke post
+  let TR=[]; try{ TR=V&&!V.onbekend?teRuim(V):[]; }catch(_){}
   return {S, V, x, TR:TR.filter(t=>t.k!==S.k)}; }
 function potHerzienNieuw(S, x){
   if(S.optie==='a') return {nieuw:x.voorstel, verschil:x.voorstel-x.bud, reden:''};
@@ -10395,9 +10460,9 @@ function renderPotHerzien(){
   const knop=reden?'':(S.optie==='c'?`${esc(x.naam)} laten staan`:`${esc(x.naam)} op ${euro0(N.nieuw)} zetten`);
   $('#sheet').innerHTML=`<div class="grab"></div><div id="potHerzienSheet" data-phpotje="${esc(x.k)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} · potje herzien</div>
-    <div class="small muted" style="margin:4px 0 2px">${x.n} van ${x.ms.length} afgeronde maanden boven je budget van ${euro0(x.bud)}</div>
+    <div class="small muted" ${x.krap?'data-phkrap':''} style="margin:4px 0 2px">${x.krap?`te krap voor ${esc(x.posten.map(potKrapPostTekst).join(', '))}`:`${x.n} van ${x.ms.length} afgeronde maanden boven je ${esc(potBudgetTekst(x))}`}</div>
     <div class="small muted" style="margin:0 0 4px">${hist}</div>
-    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, 'gemiddeld over de 3 maanden, afgerond op 5')}
+    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, x.krap?`je gewone maand plus ${esc(opsomming(x.posten.map(p=>p.naam)))} in ${esc(ymFull(x.vloerMaand))}, op tien euro naar boven`:'gemiddeld over de 3 maanden, afgerond op 5')}
     ${opt('b', 'Zelf een bedrag kiezen', 'hoger of lager dan nu', invoer+(N.reden&&S.bedrag!=null?`<div class="small" data-phbedragreden style="color:var(--amber);margin:4px 0 0 24px">${esc(N.reden)}</div>`:''))}
     ${keuze}${gevolg}
     ${opt('c', 'Laten staan', 'deze maand niets aanpassen; Let op vraagt het niet meer deze maand', redenen)}
@@ -10430,15 +10495,18 @@ function openZonderKeuze(k){ window._zk={k, optie:null}; renderZonderKeuze(); sh
 function zonderKeuzeStand(){ const S=window._zk||{}; let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===S.k); }catch(_){}
   if(!x) return null; const TS=zonderTrend(x), PK=TS?null:zonderPiek(x); if(!TS && !PK) return null;
   /* v408: bij een stijgende trend is het potje de laatste maand en staat het eerst; bij een piek het gemiddelde, na de reservering */
-  return {S, x, TS, PK, res:TS?TS.perMaand:PK.perMaand, jaar:TS?TS.jaar:PK.jaar, pot:TS?TS.laatste:Math.round(x.gemiddeld||0)}; }
+  return {S, x, TS, PK, res:TS?TS.perMaand:PK.perMaand, jaar:TS?TS.jaar:PK.jaar, pot:TS?TS.laatste:Math.round(x.gemiddeld||0), pot2:TS?TS.gem2:null}; }
 function renderZonderKeuze(){
   const Z=zonderKeuzeStand(); if(!Z){ window._zk=null; closeSheet(); return; }
   const {S, x, TS, PK}=Z;
   const radio=on=>`<span style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${on?'var(--teal)':'var(--bar)'};${on?'background:var(--teal);':''}flex-shrink:0;margin-top:2px"></span>`;
   const opt=(k,t,sub)=>`<div data-zkoptie="${k}" data-gekozen="${S.optie===k?1:0}" role="button" onclick="window._zk.optie='${k}';renderZonderKeuze()" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer"><div class="row" style="gap:8px;align-items:flex-start">${radio(S.optie===k)}<span style="flex:1;min-width:0"><span style="font-weight:700;display:block">${t}</span><span class="small muted">${sub}</span></span></div></div>`;
-  const knop=S.optie==='res'?`Reservering ${euro0(Z.res)}/mnd in Plan`:S.optie==='pot'?'Naar potje maken':'';
+  const knop=S.optie==='res'?`Reservering ${euro0(Z.res)}/mnd in Plan`:(S.optie==='pot'||(S.optie==='pot2'&&TS))?'Naar potje maken':'';
   const oRes=opt('res', `Reservering in Plan · ${euro0(Z.res)} per maand`, `de laatste 12 maanden samen ${euro0(Z.jaar)}, gedeeld door 12; het geld staat klaar als de piek komt, en je maandbudget stijgt ermee`);
+  /* v409: bij een stijgende trend drie voorstellen, zonder voorselectie: de laatste maand, het gemiddelde van de laatste 2, en
+     een reservering in Plan (12 mnd gedeeld door 12) */
   const oPot=TS?opt('pot', `Potje maken · ${euro0(Z.pot)} per maand`, 'de laatste maand; het stijgt elke maand, dus het gemiddelde loopt achter')
+      +opt('pot2', `Potje maken · ${euro0(Z.pot2)} per maand`, 'het gemiddelde van de laatste 2 maanden')
     :opt('pot', `Potje maken · voorstel ${euro0(Z.pot)} per maand`, 'het gemiddelde van de 3 maanden; in een piekmaand loopt het potje over');
   $('#sheet').innerHTML=`<div class="grab"></div><div id="zonderKeuzeSheet" data-zkcat="${esc(x.k)}"${TS?' data-zktrend':''}>
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} zonder potje</div>
@@ -10448,7 +10516,8 @@ function renderZonderKeuze(){
 }
 function zonderKeuzeZet(){
   const Z=zonderKeuzeStand(); if(!Z || !Z.S.optie) return; const {x}=Z;
-  if(Z.S.optie==='pot'){ window._zk=null; openPotForm(x.k, Z.pot); return; }
+  if(Z.S.optie==='pot'){ window._zk=null; openPotForm(x.k, Z.pot, Z.TS?'de laatste maand':null); return; }
+  if(Z.S.optie==='pot2'){ if(!Z.TS) return; window._zk=null; openPotForm(x.k, Z.pot2, 'het gemiddelde van de laatste 2 maanden'); return; }
   planInlegVoeg('res', Z.res, x.k); save(); window._zk=null; closeSheet(); render(); toast(`Reservering ${euro0(Z.res)}/mnd voor ${x.naam} in Plan`);
 }
 /* v364: de ENIGE ingang naar de budgeteditor op Grip, sinds v387 onder de bridge van Zien. */
@@ -10510,7 +10579,7 @@ function renderMaand(){
   if(tab==='zien'){
     /* De terugval van v188/v340: niets om te meten (geen regel dekking, buffer of doel, niets om te beleggen) en geen
        ander signaal dan een potje boven zijn grens of de lek-regel. */
-    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot'&&x.soort!=='eenmalig'&&x.soort!=='boven'&&x.soort!=='veranderd'&&x.soort!=='patroon');   // v408: veranderd en de verwijzing naar een patroon zijn potje-signalen; v406: eenmalig en boven ook niet; v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
+    const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot'&&x.soort!=='eenmalig'&&x.soort!=='boven'&&x.soort!=='veranderd'&&x.soort!=='patroon'&&x.soort!=='krap');   // v409: te krap ook; v408: veranderd en de verwijzing naar een patroon zijn potje-signalen; v406: eenmalig en boven ook niet; v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
     let eam=''; try{ eigenAutoMeldingCheck(); eam=eigenAutoMeldingRegel(); }catch(_){}
     inhoud=eam+gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');
@@ -17735,11 +17804,14 @@ function potVerhoogGevolg(P){
   let inc=0; try{ inc=Math.round(SET.autoIncome?baseIncome():(+SET.income||0)); }catch(_){}
   return {nu, safe0:a.s, safe1:nu?b.s:a.s, cap0:a.cap, cap1:b.cap, inc};
 }
-function openPotForm(k, voorstel){
+function openPotForm(k, voorstel, herkomst){
   window._potForm = k ? {cat:k, vast:true} : {cat:null};
   /* v404: een voorstel uit Let op (een categorie zonder potje die er vaker is): het gemiddelde per maand van de laatste
      afgeronde maanden, ingevuld en met zijn herkomst erbij. Het formulier vraagt verder alles zoals altijd. */
-  if(k && voorstel>0){ const vp=zonderPotjeVoorstel(k); if(vp){ window._potForm.bedrag=vp.bedrag; window._potForm.voorstel=vp; } }
+  if(k && voorstel>0){ const vp=zonderPotjeVoorstel(k);
+    /* v409: een voorstel uit de trend-keuze (de laatste maand, of het gemiddelde van de laatste 2) is dat bedrag, met zijn herkomst */
+    if(vp && herkomst){ const b=Math.round(voorstel); window._potForm.bedrag=b; window._potForm.voorstel=Object.assign({}, vp, {bedrag:b, herkomst}); }
+    else if(vp){ window._potForm.bedrag=vp.bedrag; window._potForm.voorstel=vp; } }
   renderPotForm(); showSheetBg();
 }
 function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{}; d[f]=v;
@@ -17872,7 +17944,7 @@ function renderPotForm(){
     <label class="fld">Bedrag per maand (€)</label>
     ${vast?'':`<div class="chips" style="margin-bottom:6px"><span class="chip ${d.open?'on':''}" data-potopen onclick="potFormZetVeld('open',${!d.open})">Bedrag nog niet vastgesteld</span></div>`}
     ${d.open&&!vast?potFormResHTML(d, ms):`<input type="text" inputmode="decimal" id="potFormBedrag" value="${esc(d.bedrag==null?'':String(d.bedrag))}" placeholder="0" oninput="potFormZetVeld('bedrag',this.value,false)" style="width:100%">
-    ${d.voorstel?`<div class="small muted" data-potvoorstel="${d.voorstel.bedrag}" style="margin-top:4px;line-height:1.5">Voorstel: gemiddeld ${euro0(d.voorstel.bedrag)} per maand in ${opsomming(d.voorstel.maanden.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(Math.round(d.voorstel.bedragen[i]))}`))}.</div>`:''}
+    ${d.voorstel?`<div class="small muted" data-potvoorstel="${d.voorstel.bedrag}" style="margin-top:4px;line-height:1.5">Voorstel: ${d.voorstel.herkomst?`${euro0(d.voorstel.bedrag)} per maand (${esc(d.voorstel.herkomst)}) · `:`gemiddeld ${euro0(d.voorstel.bedrag)} per maand in `}${opsomming(d.voorstel.maanden.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(Math.round(d.voorstel.bedragen[i]))}`))}.</div>`:''}
     <label class="fld">Vanaf</label>
     <select id="potFormVanaf" onchange="potFormZetVeld('vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
     ${P.wekNodig?`<label class="fld">Telt mee in je weekbedrag?</label><div class="chips" data-potformwek>${[['ja','wekelijks'],['nee','niet']].map(([v,l])=>`<span class="chip ${d.wek===v?'on':''}" data-potwek="${v}" onclick="potFormZetVeld('wek','${v}')">${l}</span>`).join('')}</div>`:''}
@@ -27522,15 +27594,24 @@ function diagTeRuim(){
    die maand, of de maand boven telt met de uitschieter-drempel, te ruim ja/nee, de breuk, en welke regel Let op toont.
    Alleen lezen (v244). */
 function diagEenSignaal(V){
-  const L=['--- een signaal per potje (v408): potje | maanden (uitgaven / budget, * = boven met de drempel) | te ruim | breuk | Let op'];
+  const L=['--- een signaal per potje (v408/v409): potje | maanden (uitgaven / budget van die maand, - periodiek, * = boven met de drempel) | budgetbron | te ruim | breuk | Let op'];
+  const krap={}; try{ for(const x of potKrapLijst()) krap[x.k]=x; }catch(_){}
   const tr=new Set(); try{ for(const x of teRuim(V)) tr.add(x.k); }catch(_){}
   const patK={}; try{ gripPatronen().forEach((p,i)=>{ for(const g of (p.sig||[])) if(g.soort==='potje'&&g.k&&!patK[g.k]) patK[g.k]=i+1; }); }catch(_){}
   for(const k of Object.keys(SET.budgets||{})){ const bud=+SET.budgets[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
-    const P=potMaanden(k), n=P.boven.filter(Boolean).length; if(!n && !tr.has(k) && !patK[k]) continue;
-    const mt=maandReeks(P.ms, P.bedragen).map((b,i)=>`${MNAMES[+b.ym.slice(5,7)-1]} ${b.v}/${P.budgets[i]}${P.boven[i]?'*':''}`).join(' · ');
+    const P=potMaanden(k), n=P.boven.filter(Boolean).length, kr=krap[k]; if(!n && !tr.has(k) && !patK[k] && !kr && !P.periodiek.some(x=>x.bedrag>0)) continue;
+    /* v409: per maand het budget dat gebruikt is (de maanden staan op volgorde, ms is al oud naar nieuw) */
+    const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` -${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
     const Bk=potBreuk(P, potEind(V, k));
-    const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:'niets (minder dan 2 van 3)';
-    L.push(`  ${CATS[k].name}: ${mt} | ${tr.has(k)?'te ruim':'-'} | ${Bk?`was ${Bk.was}, nu ${Bk.nu}${Bk.verwacht?' (verwacht eind)':` (${ymFull(Bk.ym)})`}`:'-'} | ${wat}`); }
+    const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:kr?`te krap, voorstel ${kr.voorstel} (duurste maand ${ymFull(kr.vloerMaand)}: ${Math.round(kr.vloer)})`:'niets (minder dan 2 van 3)';
+    L.push(`  ${CATS[k].name}: ${mt} | ${P.huidig?'huidig budget voor alle drie (geen bewaarde potjes voor elke maand)':'bewaarde potjes per maand'} | ${tr.has(k)?'te ruim':'-'} | ${Bk?`was ${Bk.was}, nu ${Bk.nu}${Bk.verwacht?' (verwacht eind)':` (${ymFull(Bk.ym)})`}`:'-'} | ${wat}`); }
+  /* v409: per periodieke post de cadans en de maanden van de komende twaalf met een dubbele betaling (4-wekelijks) of de post (kwartaal, jaar) */
+  L.push('--- periodieke posten (v409): post | categorie | cadans | laatste bedrag | maanden in de komende 12');
+  let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && ((+s.intervalM||1)>1 || s.cadans==='4w')); }catch(_){}
+  for(const s of R){ const vier=s.cadans==='4w', mnd=[];
+    for(let i=0;i<12;i++){ const ym=valtOpYmPlus(V.m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(`${MNAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}${n>1?' 2x':''}`); }
+    L.push(`  ${titleCase(cleanMerch(s.name)||s.name||'')} | ${(CATS[s.cat]||{}).name||s.cat||'-'} | ${vier?`4-wekelijks (gemeten afstand ${s.afstand} dagen, vooruit ${VAST_4W_DAGEN})`:`elke ${s.intervalM} maanden`} | ${Math.round(+s.amount||0)} | ${vier?(mnd.length?'dubbel in '+mnd.join(', '):'geen dubbele maand'):mnd.join(', ')||'-'}`); }
+  if(!R.length) L.push('  geen periodieke posten');
   return L;
 }
 /* v401: DE BOEKINGEN ACHTER "ZONDER POTJE" VAN DEZE MAAND, om het getal op het toestel na te lopen. V.zonder is de

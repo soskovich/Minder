@@ -1367,3 +1367,14 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Blok 19** `diagEenSignaal()`: per potje de maanden met naam (uitgaven/budget, * = boven), te ruim, breuk en wat Let op toont.
 - **Specs** nieuw `grip-v408.spec.js` en fixture `grip-v408-stand.js`; gemigreerd: grip-v406, grip-dashboard o, grip-eigen-budget, grip-vast-in-brug, maand-ingang-per-regel, zien-blok19-gelijk, zonder-potje-zuiver.
 - `sw.js` naar `minder-v408`.
+
+## v409 · cadans, historisch budget, kwartaalposten, Let op
+- **Cadans**: een 4-wekelijkse post rekent vooruit met 28 dagen (`VAST_4W_DAGEN`, 13 termijnen per jaar) in `teRuimTermijnen()`, de ene telling voor te ruim, `potjeMaandVloer()` (de tweede termijn telt erbij) en de nieuwe te-krap-toets. Gemeten op de nagebouwde stand: Huur nodig EUR 142 in sep 2027 (twee termijnen Shurgard), voorstel 142, te ruim EUR 558 (was 629 met nodig 71). Met de gemeten afstand van 29 dagen kwam de dubbele maand pas na jaren.
+- **Historisch budget**: `potMaanden()` toetst elke maand tegen zijn bewaarde potje als alle drie de maanden er een hebben, anders alle drie tegen het huidige budget (`huidig:true`, "(huidig budget)" in de regel via `potBudgetTekst()`). Nooit twee budgetten door elkaar.
+- **Periodieke post**: `periodiekePosten()` en `potPeriodiek()` halen een kwartaal- of jaarpost (en de tweede termijn van een 4-wekelijkse) uit een maand voordat die als boven telt. Abonnementen juli EUR 31 (Huurwoningen) is geen boven-maand meer. `potKrapLijst()`: past het potje er niet omheen, dan "<potje> te krap voor <post> (EUR X in <maanden>) · voorstel EUR Y" naar de bestaande herzien-sheet (`[data-phkrap]`); een signaal per potje, posten in je reserveringen tellen niet, met de uitschieter-drempel. Op de nagebouwde stand ook Online shopping (Bol Abonnement Select, voorstel EUR 150).
+- **Let op**: potjes in hetzelfde patroon zijn een regel ("2 potjes zitten in patroon 1 · Uit eten & café, Vices").
+- **Trend**: drie voorstellen zonder voorselectie (laatste maand, gemiddelde van de laatste 2, reservering); het formulier toont het gekozen bedrag met zijn herkomst (`openPotForm(k, voorstel, herkomst)`; tot v409 toonde het altijd het gemiddelde van drie maanden).
+- **Blok 19**: per potje per maand uitgaven/budget met de periodieke aftrek en de budgetbron; per periodieke post de cadans en de maanden (4-wekelijks: de dubbele).
+- **Specs**: nieuw `grip-v409.spec.js` (21) en `grip-v409-stand.js`; 15 sabotages, alle rood. Gemigreerd: grip-eigen-budget, grip-kring, grip-kring-deel2, grip-kiezen-v391 (Huur 558; in overig staat Huur nu met -71, het deel onder het voorstel deze maand), grip-v406 (de historie voor alle drie de maanden), grip-v408 ("(huidig budget)", shopping augustus is Bol, drie trend-voorstellen).
+- **Gemeten** op 390x844: Zien zeven kolommen, knop 771px tegen menubalk 772px; Let op open 7 regels, 461px, zonder scroll.
+- `sw.js` naar `minder-v409`.
