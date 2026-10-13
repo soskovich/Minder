@@ -1329,3 +1329,10 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Gemeten** op `grip-kring-stand` met Kinderen (3 van 3, oktober 2 x EUR 19,99) en Vakantie (2 van 3, EUR 19,99): beide regels in de Let op-kaart, de oude rest week een euro af en de nieuwe stap is gelijk aan `V.zonder`. De regel in de sheet is 67px op 360 en 390px, zonder overloop.
 - **Spec** `zien-blok19-gelijk.spec.js` (7); `zonder-potje-zuiver` g gemigreerd (het voorstel in de regel). Tien sabotages, alle tien rood.
 - `sw.js` naar `minder-v404`.
+
+## v405 · Een definitie van uitgave overal: coach en lek lezen wat Inzichten en Grip lezen (`minder-v405`)
+- **`isUitgave(t, B)`** is de ene definitie: een uitgavencategorie (een eigen overboeking is intern) en geen persoonlijke overboeking zonder potje of op vast (`buitenUitgave()`), tegen de potjes van de maand van de boeking (`maandPotjes()`). Lezers: `catSpendMap()` (coach, signalen, potjes, Grip, Terugblik), `noPotLeak()` (lek-detectie, nu netto via `uitgaveNorm()` en met `perCat`), `grootsteHefboom()`, `insInNorm()` en `totals()`. Tot v405 telden coach en lek met een eigen filter, en bruto.
+- **Afgesloten maand**: de grijze regel "EUR X persoonlijke overboekingen · niet in je budget ›" staat ook op Inzichten bij vorige maand of een periode; de sheet toont die maanden, categorie geven kan daar ook, en de Terugblik op Grip rekent die maand opnieuw (hij leest `catSpendMap()` live).
+- **Gemeten** op `grip-kring-stand` met Tikkie in september en oktober, een "From Main to Buffer" en Vakantie zonder potje: coach, lek, Inzichten en Grip geven per categorie hetzelfde bedrag in beide maanden, en de som is `spendNorm`. Een categorie geven aan de Tikkie van september zet de afspraak "Uit eten max" in de Terugblik van gelukt naar niet gelukt.
+- **Spec** `uitgave-een-definitie.spec.js` (8). Acht sabotages, alle acht rood (drie pas nadat de stand een deel uit een reservering, een grote Tikkie in augustus en een potje voor augustus droeg).
+- `sw.js` naar `minder-v405`.

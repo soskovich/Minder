@@ -2041,6 +2041,13 @@ function uitgaveNorm(t){ return (-t.amount)-uitReserveringBedrag(t); }
 const ZONDER_UIT=['persoonlijk'];
 function buitenUitgave(c, B){ B=B||SET.budgets||{};
   return ZONDER_UIT.includes(c) && !!(CATS[c] && CATS[c].type==='expense' && !CATS[c].geenNorm) && !((+B[c]||0)>0) && !potHeelVast(c); }
+/* v405: DE ENE DEFINITIE VAN UITGAVE, voor alle schermen en de coach. Een boeking is een uitgave als zijn categorie een
+   uitgavencategorie is (een eigen overboeking is 'intern' en dus nooit een uitgave) en hij geen persoonlijke overboeking
+   zonder potje is (buitenUitgave), gemeten tegen de potjes van ZIJN maand (maandPotjes, v309). Lezers: catSpendMap() (de
+   coach, de signalen, de potjes en Grip), noPotLeak() (de lek-detectie), grootsteHefboom(), insInNorm() (Inzichten, die
+   daarbovenop ook geenNorm uitlaat) en totals() (spendNorm). Tot v405 telden coach en lek met een eigen filter. */
+function isUitgave(t, B){ const c=catOf(t), meta=CATS[c]; if(!(meta && meta.type==='expense')) return false;
+  return !buitenUitgave(c, B||maandPotjes(String(t.date).slice(0,7)).B); }
 function uitReserveringSom(txns){ let s=0; for(const t of (txns||[])) s+=uitReserveringBedrag(t); return s; }
 function zetUitReservering(id, bedrag, heropen){
   const t=TX.find(x=>x.id===id); if(!t) return;
@@ -2079,13 +2086,13 @@ function maandInkomen(m){
   return {alles, onregelmatig, norm:alles-onregelmatig};
 }
 function totals(m){
-  const list=txOfMonth(m);
+  const list=txOfMonth(m), BU=maandPotjes(m||thisYM()).B;   // v405: de potjes van die maand
   let spend=0, internal=0, buitenNorm=0, uitRes=0, persoonlijk=0; const persTx=[];
   const byCat={}, uitResCat={};
   for(const t of list){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
-    if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; else if(buitenUitgave(c)){ persoonlijk+=uitgaveNorm(t); persTx.push(t); } }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
+    if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; else if(!isUitgave(t, BU)){ persoonlijk+=uitgaveNorm(t); persTx.push(t); } }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
     /* v269: de derde term in dezelfde aftrekking, naast buitenNorm. uitResCat draagt hem per
        categorie zodat de regel op Inzichten per constructie optelt tot uitReservering, precies
@@ -4979,21 +4986,22 @@ function projVarEstimate(){
 // grootste lek, gestructureerd (voor de coach-dialoog): échte impuls vs noodzaak-zonder-potje vs over-budget
 function noPotLeak(m){   // grootste NETTO uitgave per winkel zonder potje, gesplitst in impuls vs vaste behoefte (gedeeld door coachLeak/coachSandwich/coachWeekRisk)
   let EB={}; try{ EB=effectiveBudgets(m).out; }catch(_){}
-  const byM={};
+  const byM={}, perCat={};   // v405: perCat is wat de lek-detectie per categorie telt, met dezelfde definitie als elk scherm
+  const BU=maandPotjes(m||thisYM()).B;
   for(const x of txOfMonth(m)){
-    if(!(isExpenseTx(x) && !isFixed(x))) continue;
+    if(!(isUitgave(x, BU) && !isFixed(x))) continue;   // v405: de ene definitie van uitgave
     if(+EB[catOf(x)]>0) continue;                        // categorie heeft al een potje → valt onder budget-logica
     if(geenNorm(catOf(x))) continue;                     // v234: een uitgave die je niet kon vermijden is geen impuls en geen lek
     const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop');
     const e=(byM[nm]=byM[nm]||{name:nm,net:0,k:catOf(x),rec:isRecurringMerchant(x.name)});
-    e.net+=-x.amount;                                    // netto: terugstorting verrekent per winkel
+    e.net+=uitgaveNorm(x); perCat[catOf(x)]=(perCat[catOf(x)]||0)+uitgaveNorm(x);                               // netto: terugstorting verrekent per winkel (v405: uitgaveNorm, zoals overal)
   }
   let imp=null, need=null;
   for(const nm in byM){ const e=byM[nm]; if(e.net<25) continue;
     if(!isFixedCat(e.k) && !e.rec){ if(!imp||e.net>imp.amt) imp={amt:Math.round(e.net),name:e.name,k:e.k}; }   // echte impuls: discretionair, niet terugkerend, zonder potje
     else { if(!need||e.net>need.amt) need={amt:Math.round(e.net),name:e.name,k:e.k}; }                          // noodzaak / terugkerend zonder potje
   }
-  return {imp,need};
+  return {imp,need,perCat};
 }
 function coachLeak(m){
   const {imp,need}=noPotLeak(m);
@@ -16020,7 +16028,7 @@ function grootsteHefboom(){
     const done=months().filter(x=>x<nowYM).slice(-6);
     if(!done.length) return null;
     const vc={};
-    for(const mm of done){ for(const t of txOfMonth(mm)){ if(isExpenseTx(t)&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }
+    for(const mm of done){ for(const t of txOfMonth(mm)){ if(isUitgave(t)&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+uitgaveNorm(t);} } }
     const top=Object.entries(vc).map(([k,v])=>({k,avg:v/done.length})).sort((a,b)=>b.avg-a.avg)[0];
     if(!top || !CATS[top.k] || !(top.avg>0)) return null;
     return {cat:top.k, naam:CATS[top.k].name, perMaand:Math.round(top.avg), maanden:done.length};
@@ -18093,7 +18101,7 @@ function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
    renderCatBreak() en renderTxList() tellen hun eigen lijst op en komen hier niet langs, dus hun
    totaal blijft per constructie gelijk aan de rijen eronder. Daarom kon deze functie de norm
    worden in plaats van dat er een tweede map naast kwam. */
-function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+function catSpendMap(m){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
@@ -20566,7 +20574,7 @@ function openInsFilter(){
    v355), variabel de rest; samen zijn ze per constructie spendNorm (de uitgaven met een norm), en dat
    staat als assertie vast. Dezelfde snede als maandVooruit(): daar valt een herkende incasso buiten
    piekInScope() en een heel vast potje buiten het gemiddelde. */
-function insInNorm(t, B){ const c=catOf(t), meta=CATS[c]; return !!(meta && meta.type==='expense' && !meta.geenNorm) && !buitenUitgave(c, B); }   // v403: geen persoonlijke overboeking zonder potje
+function insInNorm(t, B){ return isUitgave(t, B) && !geenNorm(catOf(t)); }   // v405: de ene definitie (isUitgave), zonder geenNorm
 function insVastTx(t){ return isFixed(t) || potHeelVast(catOf(t)); }
 function insSoortUit(m, soort){
   if(soort!=='var' && soort!=='vast') return totals(m).spendNorm;
@@ -20853,11 +20861,13 @@ function insMaandStand(){
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
    v309), en wat er over bleef of erboven ging. Geen tempo en niets meer te gaan. */
 function insPeriodeStand(ms){
-  let vb=0, pu=0, zp=0, B=0;
+  let vb=0, pu=0, zp=0, B=0, pers=0; const persTx=[];
   for(const m of ms){ const S=maandStaaf(m); B+=S.budget; const MB=maandPotjes(m).B||{};
-    for(const t of txOfMonth(m)){ const s=insTxSoort(t, MB); if(!s) continue; const v=uitgaveNorm(t); if(s==='vast') vb+=v; else if(s==='potje') pu+=v; else zp+=v; } }
+    for(const t of txOfMonth(m)){ const s=insTxSoort(t, MB);
+      if(!s){ const meta=CATS[catOf(t)]; if(meta && meta.type==='expense' && !isUitgave(t, MB)){ pers+=uitgaveNorm(t); persTx.push(t); } continue; }   /* v405: de grijze regel ook op een afgesloten maand */
+      const v=uitgaveNorm(t); if(s==='vast') vb+=v; else if(s==='potje') pu+=v; else zp+=v; } }
   const R=brugAfronden([{k:'vast',v:vb},{k:'potjes',v:pu},{k:'zonder',v:zp}], Math.round(vb+pu+zp));
-  return {B:Math.round(B), vast:R.vast, potjes:R.potjes, zonder:R.zonder, uit:R.vast+R.potjes+R.zonder};
+  return {B:Math.round(B), vast:R.vast, potjes:R.potjes, zonder:R.zonder, uit:R.vast+R.potjes+R.zonder, pers:Math.round(pers), persTx, ms:ms.slice()};
 }
 const INS_SEG={vast:'var(--mut2)', potjes:'var(--green)', zonder:'var(--amber)',
   nogvast:'repeating-linear-gradient(45deg,color-mix(in srgb,var(--mut2) 55%,var(--card2)) 0 3px,var(--card2) 3px 6px)',
@@ -20883,7 +20893,7 @@ function insMaandKaart(P, soort){
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px" role="button" onclick="openInsTegel('uitgegeven')"><span><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b>${bud>0?` <span class="muted" data-insgetal>van ${euro0(bud)}</span>`:''}</span>${bud>0?`<span class="small" style="font-weight:700;color:${over<0?'var(--amber)':'var(--green)'}" data-insgetal>${euro0(Math.abs(over))} ${over<0?'boven':'onder'} budget</span>`:''}</div>
       <div class="ins-mb" style="margin:8px 0 4px">${segs}</div>
       <div class="ins-leg2">${delen.filter(d=>d.v!==0).map(d=>insLegRij(d.k, d.v)).join('')}</div>
-      ${soort!=='alle'?`<div class="small" style="color:var(--mut2);margin-top:4px">Een budget is niet per soort te splitsen.</div>`:''}</div>`;
+      ${soort!=='alle'?`<div class="small" style="color:var(--mut2);margin-top:4px">Een budget is niet per soort te splitsen.</div>`:''}${insPersRegel(S)}</div>`;
   }
   const S=insMaandStand();
   if(!(S.B>0) && !(S.uit>0)) return `<div class="card" id="insMaand" data-insmaand="leeg"><div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}</div><div class="small muted">Je hebt nog geen potjes. Zet ze op Grip met "Budget aanpassen".</div></div>`;
@@ -20938,17 +20948,22 @@ function insLegPaar(links, rechts){
    (de bestaande categoriekeuze, openSheet): een boeking met een andere categorie telt gewoon mee. */
 function insPersRegel(S){
   if(!(S.pers>0)) return '';
-  return `<div class="small" data-inspers="${S.pers}" role="button" onclick="openInsPersoonlijk()" style="color:var(--mut2);margin-top:8px;cursor:pointer">${euro0(S.pers)} persoonlijke overboekingen · niet in je budget ›</div>`;
+  const arg=S.ms?`'${esc(S.ms.join(','))}'`:'';   // v405: een afgesloten periode geeft zijn maanden mee
+  return `<div class="small" data-inspers="${S.pers}" role="button" onclick="openInsPersoonlijk(${arg})" style="color:var(--mut2);margin-top:8px;cursor:pointer">${euro0(S.pers)} persoonlijke overboekingen · niet in je budget ›</div>`;
 }
-function openInsPersoonlijk(){
-  const S=insMaandStand();
+/* v405: ook voor een afgesloten periode (ms, kommagescheiden). Een categorie geven daar verandert de maand, en de
+   Terugblik op Grip rekent die maand opnieuw, want hij leest catSpendMap() live. */
+function insPersStand(ms){ if(ms){ const L=String(ms).split(',').filter(Boolean); const S=insPeriodeStand(L); return {pers:S.pers, persTx:S.persTx, label:L.length===1?ymFull(L[0]):`${ymFull(L[L.length-1])} tot ${ymFull(L[0])}`, ms:L.join(',')}; }
+  const S=insMaandStand(); return {pers:S.pers, persTx:S.persTx, label:ymFull(S.m), ms:''}; }
+function openInsPersoonlijk(ms){
+  const S=insPersStand(ms);
   const L=S.persTx.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  window._werklijst={persoonlijk:true};
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="insPersSheet" data-inswaarde="${S.pers}">${insSheetKop('Persoonlijke overboekingen · '+esc(ymFull(S.m)), 'tellen niet als uitgave en staan niet in je budget', euro0(S.pers))}
+  window._werklijst={persoonlijk:true, ms:S.ms};
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="insPersSheet" data-inswaarde="${S.pers}">${insSheetKop('Persoonlijke overboekingen · '+esc(S.label), 'tellen niet als uitgave en staan niet in je budget', euro0(S.pers))}
     <div class="small muted" style="margin:0 2px 10px;line-height:1.5">Het geld is wel van je rekening af, dus het telt in je saldo. Hoort een boeking toch bij een uitgave, geef hem dan een categorie: dan telt hij gewoon mee.</div>
     ${L.map(t=>`<div class="tx" data-persrij="${uitgaveNorm(t)}" style="cursor:default">
       <div class="info"><div class="nm">${esc(txNaam(t))}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}</div></div>
-      <div style="text-align:right"><div class="amt neg">${euro(t.amount)}</div><div class="small" data-perscat role="button" onclick="window._werklijst={persoonlijk:true};openSheet('${esc(t.id)}')" style="color:var(--teal);font-weight:700;cursor:pointer">categorie geven ›</div></div></div>`).join('')||'<div class="small muted">Deze maand geen persoonlijke overboekingen.</div>'}</div>`;
+      <div style="text-align:right"><div class="amt neg">${euro(t.amount)}</div><div class="small" data-perscat role="button" onclick="window._werklijst={persoonlijk:true, ms:'${esc(S.ms)}'};openSheet('${esc(t.id)}')" style="color:var(--teal);font-weight:700;cursor:pointer">categorie geven ›</div></div></div>`).join('')||'<div class="small muted">Deze maand geen persoonlijke overboekingen.</div>'}</div>`;
   showSheetBg();
 }
 /* "zonder potje ›": de boekingen die op geen potje vallen, die per constructie optellen tot het getal op de kaart. */
@@ -21878,7 +21893,7 @@ function setCat(id,k){
   const t=TX.find(x=>x.id===id); if(!t) return;
   /* v338: vanuit de werklijst is elke keuze een eigen keuze, ook Overig, en daarna keer je terug naar de lijst. */
   const wl=window._werklijst||null;
-  const terug=()=>{ if(wl){ if(wl.persoonlijk){ if(insMaandStand().pers>0) openInsPersoonlijk(); return; } if(k==='overig'){ OVR[id]='overig'; save(); render(); } if(wl.archief) openPotArchiefWerk(); else openAfsluitOverig(wl); } };
+  const terug=()=>{ if(wl){ if(wl.persoonlijk){ try{ render(); }catch(_){} if(insPersStand(wl.ms||'').pers>0) openInsPersoonlijk(wl.ms||''); return; } if(k==='overig'){ OVR[id]='overig'; save(); render(); } if(wl.archief) openPotArchiefWerk(); else openAfsluitOverig(wl); } };
   if(k!=='uitgeleend' && k!=='geleend' && unmarkLoan(id)) save();   // terug naar uitgave: post opruimen
   const mk=document.getElementById('mkrule');
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel

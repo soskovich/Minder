@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v405` · Een definitie van uitgave voor alle schermen en de coach.** `isUitgave()` is de enige plek die zegt wat een
+  uitgave is: een uitgavencategorie (een eigen overboeking is intern) en geen persoonlijke overboeking zonder potje, tegen
+  de potjes van de maand van de boeking. Coach, lek-detectie, Inzichten en Grip lezen hem, en geven per categorie en per
+  maand hetzelfde bedrag. Tot v405 hadden de coach (`catSpendMap()`) en de lek-detectie (`noPotLeak()`, bruto) een eigen
+  telling, en dan kan de coach een persoonlijke overboeking als lek aanwijzen terwijl geen scherm hem als uitgave telt.
+  Valkuil: de potjes van NU zijn niet die van een afgesloten maand; een lezer zonder maand neemt die van de boeking. De
+  grijze regel staat ook op een afgesloten maand, en categorie geven daar rekent de Terugblik opnieuw (hij leest live).
 - **`v404` · Zonder potje wordt een keer afgerond, op het eind, en de rest staat bij naam.** Twee afrondingen van
   hetzelfde getal (het verschil van afgeronde delen in blok 19 en een eigen afronding op Zien) gaven 277 tegen 276. Nu is
   `V.zonder` de onafgeronde som afgerond en leest de stap dat getal. Valkuil: `L.fixDue` is al afgerond, dus de som
