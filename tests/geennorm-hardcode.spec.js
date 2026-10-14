@@ -72,6 +72,9 @@ const TOEGESTAAN = new Set(['contantOpslaan']);
 const TOEGESTAAN_REGEL = [
   { fn: 'gripLetOpItems', re: /terug\('contant',/ },
   { fn: 'renderGripLetOp', re: /G\.soort==='contant'/ },
+  /* v420: een opname is een uitgave Contant (besluit van de gebruiker). De sleutel staat op EEN plek, als constante bij RULES,
+     net als contantOpslaan() hierboven: de bron van de post zelf, geen beslissing over geenNorm-categorieen. */
+  { fn: 'ICON', re: /^const CONTANT_CAT='contant';$/ },   // top-level: functieRond() noemt de functie ervoor
 ];
 const regelMag = (t) => TOEGESTAAN_REGEL.some((x) => x.fn === t.fn && x.re.test(t.tekst));
 

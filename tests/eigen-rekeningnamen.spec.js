@@ -140,7 +140,9 @@ test('i. een bevestigde overboeking met een eigen keuze voedt de terugbetalingsk
   expect(await cat(page, 'Overboeking van Reservering naar Leef', '2026-09-23', 25)).toBe('overig');   // erft nu van een -50/-30 op Overig
   await page.evaluate(() => eigenNaamZet('leefgeld', 'ja'));
   expect(await cat(page, 'Overboeking van Reservering naar Leefgeld', '2026-09-22', -50)).toBe('overig');   // eigen keuze wint
-  expect(await cat(page, 'Overboeking van Reservering naar Leef', '2026-09-23', 25)).toBe('intern');
+  /* v420: hij erft niets meer (de eigenschap van deze test), en zonder bewijs is een nieuwe bijschrijving een overboeking van een
+     ander: Persoonlijke overboeking, niet 'intern' */
+  expect(await cat(page, 'Overboeking van Reservering naar Leef', '2026-09-23', 25)).toBe('persoonlijk');
 });
 
 test('j. de werklijst van de afsluiting wijst naar de kandidaten', async ({ page }) => {

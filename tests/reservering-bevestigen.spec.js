@@ -64,7 +64,7 @@ function seed() {
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_own: JSON.stringify([A]),
     minder_accmeta: JSON.stringify({ [A]: { balance: 1000, date: '2026-09-28' } }),
-    minder_set: JSON.stringify({ limit: 70, toonLegeRek: true, manualBal: {},
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, toonLegeRek: true, manualBal: {},
       budgets: { vervoer: 1100, boodschappen: 400 },
       rules: [{ kw: 'TANGO', cat: 'vervoer' }] }),   // TANGO staat niet in de ingebouwde RULES
     minder_plan: '{}',

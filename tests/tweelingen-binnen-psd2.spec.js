@@ -118,7 +118,7 @@ function seed() {
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_own: JSON.stringify(own),
     minder_accmeta: JSON.stringify({ [PSD]: { balance: 500, date: '2026-09-28' } }),
-    minder_set: JSON.stringify({ limit: 70, toonLegeRek: true, manualBal: {}, budgets: { boodschappen: 400 },
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, toonLegeRek: true, manualBal: {}, budgets: { boodschappen: 400 },
       psd2Accounts: { [PSD]: { uid: 'u', iban: 'DE89' + PSD, hash: 'h', label: 'Zakgeld', bank: 'N26', exp: '2026-12-27' } } }),
     minder_plan: '{}',
   };

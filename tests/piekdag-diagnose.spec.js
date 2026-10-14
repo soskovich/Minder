@@ -66,7 +66,7 @@ function seed(opt) {
      echt, want een geplande of pending boeking kan op vandaag of later staan. */
   if (opt.toekomst) add(ymd(komendeZo), -55, 'Etos', 'BEA, Etos');
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
-    minder_set: JSON.stringify({ limit: 70, autoIncome: true, manualBal: { [ABN]: 4200 },
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, autoIncome: true, manualBal: { [ABN]: 4200 },
       budgets: { boodschappen: 400, uiteten: 200, overig: 500 } }),
     minder_own: '[]', minder_accmeta: '{}', minder_plan: '{}' };
 }

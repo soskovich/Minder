@@ -55,6 +55,7 @@ function seed(o) {
   for (const e of (o.extra || [])) add(e.id, CUR, e.day || '02', e.amount, e.naam, e.desc);
   const set = Object.assign({
     limit: 70, mode: 'begeleid', autoIncome: false, income: 6000,
+    opnameVanaf: '2099-12-31',   // v420: het model van v258 (een opname is intern, de telling boekt de uitgave); het model van v420 staat in v420.spec.js
     manualBal: { [MAIN]: 3600, [SPAAR]: 0 },
     budgets: { huur: 1200, boodschappen: 700 },
     savingMode: 'amount', savingAmount: 500, savingsAcc: { [SPAAR]: true },
@@ -370,10 +371,11 @@ test.describe('de poort kan niet uit de pas lopen met RULES', () => {
      catOf(t)==='intern', en categorize() zet zo'n boeking op 'overig'. Gemeten toen 'GEA BETAALPAS'
      zonder komma er nog bij stond: nul treffers, terwijl de lijst suggereerde dat hij vuurde.
      Deze test leest de bron, zodat een woord dat er ooit bij komt niet stil dood staat. */
-  test('elk woord in OPNAME_KW staat ook in de intern-rij van RULES', async ({ page }) => {
+  /* v420: een opname staat in de rij 'contant' van RULES (een uitgave contant); voor de grens maakt categorize() er 'intern' van */
+  test('elk woord in OPNAME_KW staat ook in de contant-rij van RULES', async ({ page }) => {
     await boot(page, {});
     const r = await page.evaluate(() => {
-      const rij = RULES.find((x) => x[0] === 'intern')[1].map((w) => w.toUpperCase());
+      const rij = RULES.find((x) => x[0] === 'contant')[1].map((w) => w.toUpperCase());
       return { kw: OPNAME_KW.slice(), mist: OPNAME_KW.filter((w) => !rij.includes(w.toUpperCase())) };
     });
     expect(r.kw.length).toBeGreaterThan(0);

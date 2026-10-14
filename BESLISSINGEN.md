@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v420` · de v419-regels in de app, en wat al als uitgave staat telt niet nog eens.** Een opname is een uitgave Contant op het
+  moment van opnemen; de telling boekt alleen het verschil met wat al in Contant staat. Valkuil (die van `v419`): een telling van
+  voor `v420` boekte het verschil al, dus een opname tot en met die dag blijft 'intern' (`SET.opnameVanaf`). Eigen rekening alleen
+  met bewijs; wat er al stond wisselt pas na je bevestiging in Zien (niets stil), een nieuwe boeking volgt meteen. Valkuil: Revolut,
+  Wise, N26 en Tikkie alleen uit de intern-rij halen maakt er Overig van, en dan tellen ze in een potje; ze staan daarom in de rij
+  'persoonlijk'. De holding komt uit je eigen markering onregelmatig, niet uit een naam in de code; een lening van dezelfde
+  tegenpartij streept vanzelf weg, al het andere vraagt. Reserveringen netto negatief tellen gewoon mee.
 - **`v419` · blok 20 sluit, en de app zelf is niet omgezet.** Een eigen overboeking heeft een bewijs (eigen IBAN, een tegenkant in
   je gegevens, een bevestigde of herkende rekeningnaam, je eigen naam); een 'intern'-boeking zonder bewijs telt in blok 20 als contant
   of als overboeking aan een ander. Valkuil: dezelfde regel in de app maakt van een opname een uitgave terwijl de telling van `v258`

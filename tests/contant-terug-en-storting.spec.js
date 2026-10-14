@@ -31,6 +31,7 @@ function seed(o) {
   for (const e of (o.extra || [])) add(e.m || CUR, e.day, e.amount, e.naam, e.desc);
   const set = Object.assign({
     limit: 70, mode: 'begeleid', autoIncome: false, income: 6000,
+    opnameVanaf: '2099-12-31',   // v420: het model van v258 (een opname is intern, de telling boekt de uitgave); het model van v420 staat in v420.spec.js
     manualBal: { [MAIN]: 3000, [SPAAR]: 0 },
     budgets: { huur: 1200 }, savingMode: 'amount', savingAmount: 500, savingsAcc: { [SPAAR]: true },
   }, o.set || {});

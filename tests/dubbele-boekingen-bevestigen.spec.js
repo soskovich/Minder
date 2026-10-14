@@ -145,7 +145,7 @@ function seed() {
     minder_own: JSON.stringify([...new Set(tx.map((t) => t.acc))]),
     minder_accmeta: JSON.stringify({ [PSD]: { balance: 1000, date: YM + '-28' }, [ABN]: { balance: 500, date: YM + '-28' },
       [PB]: { balance: 200, date: YM + '-28' }, [CSV]: { balance: 100, date: YM + '-28' } }),
-    minder_set: JSON.stringify({ limit: 70, toonLegeRek: true, manualBal: {},
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, toonLegeRek: true, manualBal: {},
       budgets: { overig: POTJE_OVERIG, boodschappen: 400 },
       contant: { stand: 400, datum: TEL },
       psd2Accounts: { [PSD]: { uid: 'u', iban: 'DE89' + PSD, hash: 'h', label: 'Zakgeld', bank: 'N26', exp: '2026-12-27' },

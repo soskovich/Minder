@@ -17,11 +17,11 @@ test.describe('v419: blok 20 sluit', () => {
   test('Geldmaat -500 op 16-04 telt als uitgave contant in april, niet als eigen overboeking, en april sluit', async ({ page }) => {
     await S.boot(page);
     await zet(page, [{ date: '2026-04-16', amount: -500, name: 'Geldmaat Zwanebloem 9', desc: 'GEA, BETAALPAS GELDMAAT ZWANEBLOEM 9' }]);
-    expect(await page.evaluate(() => catOf(TX.find(t => t.date === '2026-04-16' && t.amount === -500)))).toBe('intern');   // de app zelf: ongewijzigd
+    expect(await page.evaluate(() => catOf(TX.find(t => t.date === '2026-04-16' && t.amount === -500)))).toBe('contant');   // v420: ook in de app een uitgave contant
     const L = await lees(page);
-    expect(L.find(x => x.startsWith('      waarvan contant opgenomen'))).toContain('apr 500');
-    expect(L.find(x => x.startsWith('  buiten vast en potjes'))).toMatch(/apr 500 /);
-    expect(L.join('\n')).toContain('      apr: 16-04 -500.00 Geldmaat Zwanebloem 9 -> uitgave in contant');
+    expect(L.find(x => x.startsWith('      waarvan contant'))).toContain('apr 500');
+    expect(L.find(x => x.startsWith('  buiten vast en potjes:'))).toMatch(/apr 500 /);
+    expect(L.join('\n')).not.toContain('Geldmaat Zwanebloem 9 -> uitgave in contant');   // geen wissel meer: de app zet hem zelf op Contant
     expect(sectie(L, 'CONTROLE').find(r => r.startsWith('  apr:'))).toMatch(/: klopt$/);
   });
   test('Western Union, een Tikkie en een betaling aan Sandra Sumter zijn een overboeking aan een ander; je eigen naam niet', async ({ page }) => {
@@ -33,8 +33,11 @@ test.describe('v419: blok 20 sluit', () => {
       { date: '2026-08-07', amount: -300, name: 'Vincent Ernst Sumter', desc: 'VINCENT ERNST SUMTER' }]);
     const L = await lees(page), W = L.slice(L.findIndex(x => x.startsWith('  WISSELT VAN GROEP')));
     const aug = W.find(x => x.startsWith('      aug:'));
-    expect(aug).toBe('      aug: 03-08 -100.00 Western Union -> persoonlijke overboeking, 05-08 -40.00 Renate Galdeij -> persoonlijke overboeking, 06-08 -60.00 Sandra Sumter -> persoonlijke overboeking');
-    expect(L.find(x => x.startsWith('      waarvan overboeking aan een ander'))).toContain('aug 200');
+    /* v420: Western Union en de Tikkie zet de app zelf om (nieuw, dus niet in de lijst die op bevestiging wacht); Sandra Sumter
+       staat door een eigen keuze op eigen rekening en telt alleen in blok 20 als overboeking aan een ander */
+    expect(aug).toBe('      aug: 03-08 -100.00 Western Union -> persoonlijke overboeking (omgezet), 05-08 -40.00 Renate Galdeij -> persoonlijke overboeking (omgezet), 06-08 -60.00 Sandra Sumter -> persoonlijke overboeking');
+    expect(L.find(x => x.startsWith('      waarvan overboeking aan een ander'))).toContain('aug 60');
+    expect(L.find(x => x.startsWith('      waarvan persoonlijke overboeking zonder potje'))).toContain('aug 140');
     /* de 300 aan jezelf heeft geen tegenkant: het verschil, bij naam, en het sluit */
     const C = sectie(L, 'CONTROLE'), r = C.find(x => x.startsWith('  aug:'));
     expect(r).toMatch(/VERSCHILT -300$/);
@@ -64,16 +67,16 @@ test.describe('v419: blok 20 sluit', () => {
     expect(O.join('\n')).toContain('      sep: 25-09 3840.58 From Buffer Rust to Instant Savings');
     expect(sectie(L, 'CONTROLE').find(x => x.startsWith('  sep:'))).toMatch(/: klopt$/);
   });
-  test('reserveringen netto onder nul: punt 4 telt 0, de controle noemt het en sluit', async ({ page }) => {
+  test('reserveringen netto onder nul: punt 4 telt het negatief mee (v420), en de controle klopt', async ({ page }) => {
     await S.boot(page);
     const RA = 'NL00RESV0000000003', SP = 'NL00SPAR0000000004';
     await zet(page, [
       { date: '2026-09-25', amount: -400, name: 'Naar Spaar', acc: RA, ovr: 'intern' }, { date: '2026-09-25', amount: 400, name: 'Van Reserveringen', acc: SP, sav: true, ovr: 'intern' }]);
     await page.evaluate(RA => { SET.resAcc = RA; save(); }, RA);
-    const C = sectie(await lees(page), 'CONTROLE'), r = C.find(x => x.startsWith('  sep:'));
-    expect(r).toMatch(/VERSCHILT \+400$/);
-    expect(C[C.indexOf(r) + 1]).toBe('      het verschil bij naam (samen 400.00, sluit):');
-    expect(C[C.indexOf(r) + 2]).toContain('je reserveringen gingen netto -400.00, en die telt punt 4 als 0');
+    const L = await lees(page), C = sectie(L, 'CONTROLE'), r = C.find(x => x.startsWith('  sep:'));
+    expect(sectie(L, '4. OPZIJ').find(x => x.startsWith('  naar je reserveringen'))).toContain('sep -400');
+    expect(r).toMatch(/: klopt$/);
+    expect(await page.evaluate(() => resThisMonth('2026-09'))).toBe(-400);
   });
   test('verwacht wordt een keer afgerond: V.projectie is round(projectieExact), en de meter en de brug lezen dat getal', async ({ page }) => {
     await S.boot(page);

@@ -1468,3 +1468,14 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Controle**: het verschil per boeking of per oorzaak, met "sluit" of de rest zonder naam.
 - **Specs**: nieuw `blok20-v419.spec.js` (6 tests); `blok20` test 5 gemigreerd (Revolut zonder eigen IBAN is nu een overboeking aan een ander; de eigen overboeking zonder tegenkant is je eigen naam).
 - `sw.js` naar `minder-v419`.
+
+## v420 · holding apart, leningen, en de v419-regels in de app
+- **Punt 1 (holding)**: `holdingKeys()` is een partij met een bijschrijving die je onregelmatig markeerde en een afschrijving. Zijn boekingen buiten inkomen staan op de nieuwe categorie Holding (internal); het onregelmatige deel blijft inkomen-categorie (`v259`). Blok 20: HOLDING netto per maand met de boekingen; overige inkomsten zonder dat deel.
+- **Punt 2 (uitgeleend)**: `loanAutoAfletter()` streept een bijschrijving van dezelfde tegenpartij weg (`l.terugAuto`); twijfel (`loanVragen()`, uit `loanMatch()`) vraagt Zien onder "Kloppen mijn gegevens?" met Ja / Nee (`SET.loanNee`). Bedragen in centen. Blok 20: UITGELEEND per lening en TOTAAL NOG OPEN.
+- **Punt 3**: `resThisMonth()` klemt niet meer op nul. Blok 20 meldt een negatief "buiten vast en potjes" met de boeking en de ontbrekende groep. De controle telt holding en uitgeleend netto rechts.
+- **Punt 4 (Nikki)**: `recurringSchedule()` neemt een uitgave mee die jij per partij op vast zette (`SET.fixOvrM`); de signaalrij zegt "vast €47 per maand sinds aug"; de herzien-sheet biedt "Potje op budget + €47 vast" (`potVastMaand()`, optie `v`).
+- **Punt 5a**: rij 'contant' in RULES; de telling boekt alleen het verschil met wat al in Contant staat (`contantAlGeboekt()`), de eerste telling boekt terug wat er van de opnames nog in je zak zit. `SET.opnameVanaf` (`opnameMigreer()`, `contantVoorGrens()`) houdt een opname tot je laatste telling van voor v420 op intern. `CONTANT_CAT` is de ene plek van die sleutel.
+- **Punt 5b**: Revolut, Wise, N26 en Tikkie (`ANDER_KW`) in de rij 'persoonlijk'; `eigenOverboekingBewijs()` zet een eigen rekening zonder bewijs op Persoonlijke overboeking. Wat er al stond wacht op je bevestiging (`SET.wissel420`, `openWisselVraag()`, `wisselBevestig()`, `wisselEigen()`).
+- **Punt 6**: blok 20 eindigt met "UITGAVEN ZONDER WONING EN STUDIESCHULD" (woning = de partij met het meeste vaste geld in Huur, een post of het vaste potje, uit je gegevens).
+- **Specs**: nieuw `v420.spec.js` (9 tests, 19 sabotages, alle rood). Gemigreerd: `blok20-v419` (opname, wissel, reserveringen negatief), `contant-stand` en `contant-terug-en-storting` (`opnameVanaf` 2099: het model van v258; de contant-rij), tien diagnostische fixtures met Geldmaat-paren (historie van voor v420), `geennorm-hardcode` (uitzondering `CONTANT_CAT`), `herhaling` (reserveringen netto nul), `kerncijfers-splitsing`, `eigen-rekeningnamen` i.
+- `sw.js` naar `minder-v420`.

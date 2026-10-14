@@ -66,7 +66,7 @@ function seed() {
   add(WO, -14, ABN, 'mt940', 'Shell', 'BEA, BETAALPAS SHELL NR:1234, ' + dd(WO) + '/08:00 TERMIJN ' + dd(ZA));
   add(WO, -16, ABN, 'mt940', 'Kiosk', 'BEA, BETAALPAS KIOSK NR:77, 01.01.20/12:00 EN ' + dd(WO) + '/13:00');
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
-    minder_set: JSON.stringify({ limit: 70, autoIncome: false, income: 4000,
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, autoIncome: false, income: 4000,
       manualBal: { [ABN]: 3000, [N26]: 500 },
       psd2Accounts: { [N26]: { uid: 'u1', iban: 'NL00TEST0123456789', label: 'Main', bank: 'N26' } },
       budgets: { boodschappen: 500, overig: 300, sport: 50 } }),

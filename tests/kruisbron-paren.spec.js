@@ -65,7 +65,7 @@ function seed() {
   add({ id: 'e-ps2', date: D(18), amount: -22, name: 'Etos', desc: 'Etos Purmerend PMNT twee', src: 'psd2' });
 
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
-    minder_set: JSON.stringify({ limit: 70, autoIncome: false, income: 3000,
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, autoIncome: false, income: 3000,
       manualBal: { [ABN]: 2000 }, budgets: { boodschappen: 400, overig: 300, vervoer: 200 } }),
     minder_own: JSON.stringify([ABN]), minder_accmeta: '{}', minder_plan: '{}' };
 }

@@ -94,7 +94,8 @@ test.describe('a · de spaarquote telt de hele vermogensopbouw', () => {
     expect(r.res).toBe(150);
     expect(r.spaar).toBe(200);
     expect(r.resInSpaar).toBe(false);          // v128: geen dubbeltelling, structureel uitgesloten
-    expect(r.src).toContain('Math.max(Math.round(net),0)');   // zelfde klem en afronding
+    expect(r.src).toContain('return Math.round(net);');   // v420: dezelfde afronding, zonder de klem op nul (besluit van de gebruiker)
+    expect(r.src).not.toContain('Math.max(Math.round(net),0)');
   });
 
   test('zonder reserveringsrekening telt die stroom niet mee en heet dat ook zo', async ({ page }) => {

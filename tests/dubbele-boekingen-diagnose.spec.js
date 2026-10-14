@@ -62,7 +62,7 @@ function seed() {
   add({ date: ymd(WOENSDAG), amount: -50, name: 'Albert Heijn',
     desc: 'BEA, BETAALPAS ALBERT HEIJN 1234,PAS123 NR:XY9Z8W, ' + descDag(WOENSDAG) + '/09:05', src: 'mt940' });
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
-    minder_set: JSON.stringify({ limit: 70, autoIncome: false, income: 4000,
+    minder_set: JSON.stringify({ limit: 70, opnameVanaf: '2099-12-31' /* v420: deze fixture is historie van voor v420, dus een opname blijft intern (contantVoorGrens) */, autoIncome: false, income: 4000,
       manualBal: { [ABN]: 3000, [N26]: 100 }, budgets: { boodschappen: 400, overig: 300 } }),
     minder_own: JSON.stringify([ABN, N26]), minder_accmeta: '{}', minder_plan: '{}' };
 }

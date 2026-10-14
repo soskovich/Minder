@@ -23,6 +23,10 @@ function seed(o = {}) {
       add(m, '05', -400, MAIN, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     }
     if (!(nu && o.geenUitgaven)) add(m, '16', -10, RES, 'Reserve', 'RESERVERING');
+    /* v420: netto naar je reserveringen klemt niet meer op nul; met alleen de -10 hierboven werd het grondtal van de
+       spaarquote -10 en zei de tegel "te klein voor een percentage". Een storting van 10 erbij zet hem op nul, de stand van voor v420, en daar
+       gaat deze spec over (het verloop), niet over het teken. */
+    if (!(nu && o.geenUitgaven)) add(m, '10', 10, RES, 'Van Main', 'EIGEN REKENING');
   });
   /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
      niets te verdelen. Deze spec gaat over wat er dáárna gebeurt, dus staat de buffer hier vol. */
