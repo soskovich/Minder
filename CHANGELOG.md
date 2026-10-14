@@ -1434,3 +1434,11 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v415.spec.js` (11 tests, 20 sabotages, alle rood); gemigreerd: `grip-eigen-budget` (7 naar 6 kolommen, punt 5), `grip-v406` (eenmalig naar `openEenmalig`, potje maken naar de keuze, de piek met 30/30/300 omdat 10/10/200 de drempel van 25 niet haalt, de opties met `nee`), `grip-v408` en `grip-v409` (de opties met `nee`), `zien-blok19-gelijk` (de keuze), `grip-v414` (de lijst sluit na een keuze), `drempel-gemengd` A (de noot +€5 staat nu bij Uit eten, want "1 boven" schoof daar aan).
 - `sw.js` naar `minder-v415`.
 
+## v416 · vervolg: te krap, nodig, gestopt, ongedaan
+- **A1**: `mediaan()`, `potKrapGewoon()`; `potKrapLijst()` eist gewone maand <= budget en gewone maand + post boven budget met `uitschieterAfw()`. Ook een dubbele sleutel `gewoon` in de rij hersteld (de tweede, `N.varMax`, heet nu `varMax`).
+- **A2**: `potNodig()` met `varMed`; in een latere maand met een periodieke post telt de gewone maand; opbouw "variabel gewoon". `potOndergrens()` leest beide labels als variabel.
+- **B3**: herzien-sheet begint met de gestopt-optie per post (`g:<key>`); `potHerzienBevestig()` roept `postZet()`; `data-phgestopt` weg uit die sheet.
+- **C4**: `setSnapAlles()`; herzien, zonder potje (reservering), te ruim verlagen en het potje-formulier eindigen in `keuzeKlaar()` met ongedaan maken.
+- **D5, D6, E7, E8, F**: al gebouwd in `v415`.
+- **Specs**: nieuw `grip-v416.spec.js` (16 tests, 15 sabotages, alle rood). Gemigreerd: `grip-v409` (Abonnementen: gewone maand 20 boven budget 5, dus boven en geen te krap; blok 19 "variabel gewoon"), `grip-v410` (shopping nodig 160 in nov; de Coolblue-test zegt nu dat te krap aan de gewone maand plus de post hangt), `grip-v411` (ondergrenzen 160 en 40, blok 19-teksten), `grip-v412` (B5 nodig 31 vanaf nov; knoppen via de gestopt-optie in plaats van de link).
+- `sw.js` naar `minder-v416`.

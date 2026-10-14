@@ -16,6 +16,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v416` · te krap alleen als de post het verschil maakt.** De gewone maand is de mediaan zonder periodieke posten; past die
+  niet, dan is het boven en geen te krap. Valkuil: tegen de duurste maand gemeten krijgt een potje dat gewoon net past (84 tegen
+  95) een signaal voor een post van EUR 15. Hetzelfde in `potNodig()`: een post optellen bij de hoogste maand uit de historie
+  telt een uitschieter en een piek samen. Gestopt is een keuze in de herzien-sheet, want het is vaak het juiste antwoord op te krap.
 - **`v415` · een keuze sluit zijn sheet, en elk signaal is af te sluiten.** Zonder potje: "niet meer vragen" met een
   terugkeerdrempel (2x het hoogste bedrag); eenmalig: "Klopt, eenmalig" per boeking. Valkuil: een signaal zonder uitweg blijft
   elke maand staan en wordt ruis. Laten staan stopt de vraag en niet de informatie: `teRuim()` leest `potLaten()` niet.

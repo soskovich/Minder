@@ -56,7 +56,7 @@ test.describe('3 · een definitie van "nodig": te ruim en te krap lezen potNodig
       return potKrapLijst().map(x => ({ k: x.k, vloer: x.vloer, maand: x.vloerMaand, voorstel: x.voorstel, trNodig: tr[x.k].nodig, trMaand: tr[x.k].maand, trVoorstel: tr[x.k].voorstel })); });
     expect(r.map(x => x.k)).toEqual(['shopping', 'abonnement']);
     for (const x of r) { expect(x.vloer).toBe(x.trNodig); expect(x.maand).toBe(x.trMaand); expect(x.voorstel).toBe(x.trVoorstel); }
-    expect(r.map(x => [x.vloer, x.maand, x.voorstel])).toEqual([[194, '2026-11', 200], [51, '2026-10', 60]]);
+    expect(r.map(x => [x.vloer, x.maand, x.voorstel])).toEqual([[160, '2026-11', 160], [51, '2026-10', 60]]);   // v416: shopping november = gewone maand 65 + Bol 95, niet de hoogste 99 + 95
   });
   test('te krap alleen als de duurste maand een periodieke post draagt', async ({ page }) => {
     await S.boot(page);
@@ -64,13 +64,15 @@ test.describe('3 · een definitie van "nodig": te ruim en te krap lezen potNodig
     expect(r.vices.nodig).toBeGreaterThan(20); expect(r.vices.periodiek).toEqual([]);   // invoermeting: duurder dan het potje, zonder periodieke post
     expect(r.krap).not.toContain('vices');
   });
-  test('een potje met een periodieke post waarvan de duurste maand die post niet draagt, is niet te krap', async ({ page }) => {
+  test('v416: te krap hangt aan de gewone maand plus de post, niet aan de duurste maand', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(({ MAIN }) => { const t = { id: 'v10okshop', date: '2026-10-08', amount: -500, acc: MAIN, name: 'Coolblue', desc: 'BEA, BETAALPAS COOLBLUE', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'shopping'; save(); const V = maandVooruit();
       return { N: potNodig('shopping', V), R: periodiekePosten('shopping').length, krap: potKrapLijst().map(x => x.k) }; }, { MAIN: S.MAIN });
     expect(r.R).toBe(1); expect(r.N.maand).toBe('2026-10'); expect(r.N.nodig).toBeGreaterThan(95); expect(r.N.periodiek).toEqual([]);   // invoermeting
-    expect(r.krap).not.toContain('shopping');
+    /* v416: de duurste maand is nu oktober (Coolblue EUR 500), maar de gewone maand (jul 99, aug 65 na Bol, sep 0: 65) past in
+       het budget van 95 en met Bol (95) niet: Bol maakt het verschil, dus te krap */
+    expect(r.krap).toContain('shopping');
   });
 });
 

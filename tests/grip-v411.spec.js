@@ -22,7 +22,7 @@ test.describe('2 · een ondergrens: het voorstel in Let op is de ondergrens in b
     test(`${k}: Let op = formulier = bijstellen = te ruime potjes`, async ({ page }) => {
       await S.boot(page);
       const lo = await voorstelLetOp(page, k);
-      expect(lo).toBe(k === 'abonnement' ? 60 : 200);   // invoermeting: het potje is te krap en Let op noemt het voorstel
+      expect(lo).toBe(k === 'abonnement' ? 60 : 160);   // v416: shopping nodig 160 (gewone maand 65 + Bol 95), was 194   // invoermeting: het potje is te krap en Let op noemt het voorstel
       /* het potje ruim genoeg maken om in te leveren; het voorstel van potNodig() hangt niet aan het budget */
       const r = await page.evaluate((k) => { SET.budgets[k] = 600; SET.budgetsNext = Object.assign({}, SET.budgetsNext || {}, { [k]: 600 }); save();
         window._potForm = { cat: 'vices', vast: true, bedrag: 40, vanaf: nextYM(thisYM()), bron: 'dek' }; renderPotForm(); showSheetBg();
@@ -31,11 +31,14 @@ test.describe('2 · een ondergrens: het voorstel in Let op is de ondergrens in b
         const kd = potFormVoorstel({ cat: 'vices', vast: true, bedrag: 40, vanaf: nextYM(thisYM()), bron: 'dek' }).kand.find(x => x.k === k);
         const P = potjeBijstelVoorstel('vices'); const bj = P ? P.kand.find(x => x.k === k) : null;
         let rb = null; try { const D = ruimBijstelData({ keuze: {}, eigen: {}, best: {}, vanaf: null }); const p = D && D.pots.find(x => x.k === k); rb = p ? p.vloer : null; } catch (_) {}
-        return { pfv, kd: kd ? kd.vloer : null, bj: bj ? bj.vloer : null, rb, onder: potOndergrens(k, maandVooruit()).vloer }; }, k);
+        return { pfv, kd: kd ? kd.vloer : null, bj: bj ? bj.vloer : null, rb, onder: potOndergrens(k, maandVooruit()).vloer, volgend: potOndergrens(k, maandVooruit(), null, nextYM(thisYM())).vloer }; }, k);
       expect(r.onder).toBe(lo);
-      expect(r.kd).toBe(lo);
-      expect(r.pfv).toBe(lo);
-      expect(r.bj).toBe(lo);   // bijstellen: het potje dat inlevert
+      /* v416: het formulier en bijstellen rekenen vanaf volgende maand (v412), en sinds v416 telt een periodieke post bij de
+         gewone maand: vanaf november is de duurste maand januari (gewoon 0 + Huurwoningen 31), dus 40 bij abonnement */
+      expect(r.kd).toBe(r.volgend);
+      expect(r.pfv).toBe(r.volgend);
+      expect(r.bj).toBe(r.volgend);   // bijstellen: het potje dat inlevert
+      if (k === 'abonnement') expect(r.volgend).toBe(40);
       expect(r.rb).toBe(lo);   // te ruime potjes bijstellen (met een potje van 600 is het te ruim)
     });
   }
@@ -52,9 +55,9 @@ test.describe('3 · blok 19 toont de opbouw van nodig', () => {
     await S.boot(page);
     const d = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
     expect(d).toContain('Abonnementen: jul 31/5 -31 Huurwoningen Premium · aug 20/5* · sep 0/5 | nodig 51 = okt 2026: variabel verwacht 20 + vast verwacht 31 (Huurwoningen Premium 31) |');
-    expect(d).toContain('Online shopping: jul 99/95 · aug 160/95 -95 Bol Abonnement Select · sep 0/95 | nodig 194 = nov 2026: variabel hoogst 99 + Bol Abonnement Select 95 |');
-    expect(d).toContain('Verzekeringen: jul 164/335 · aug 164/335 · sep 324/335 -160 Dela Natura- en levensv | nodig 324 = dec 2026: variabel hoogst 0 + Zilveren Kruis Zorgverze 164 + Dela Natura- en levensv 160 |');
-    expect(d).toContain('nodig 142 = sep 2027: variabel hoogst 0 + Shurgard Nl 71 x2 |');
+    expect(d).toContain('Online shopping: jul 99/95 · aug 160/95 -95 Bol Abonnement Select · sep 0/95 | nodig 160 = nov 2026: variabel gewoon 65 + Bol Abonnement Select 95 |');
+    expect(d).toContain('Verzekeringen: jul 164/335 · aug 164/335 · sep 324/335 -160 Dela Natura- en levensv | nodig 324 = dec 2026: variabel gewoon 0 + Zilveren Kruis Zorgverze 164 + Dela Natura- en levensv 160 |');
+    expect(d).toContain('nodig 142 = sep 2027: variabel gewoon 0 + Shurgard Nl 71 x2 |');   // v416: een post telt bij de gewone maand
     /* de som van de delen is nodig, voor elk potje */
     for (const m of d.matchAll(/nodig (\d+) = \w+ \d{4}: ([^|]+)\|/g)) {
       const som = [...m[2].replace(/\([^)]*\)/g, '').matchAll(/(\d+)(?: x(\d+))?(?= \+|\s*$)/g)].reduce((a, x) => a + (+x[1]) * (x[2] ? +x[2] : 1), 0);

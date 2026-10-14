@@ -58,16 +58,14 @@ test.describe('A1/A3 · een gestopte kwartaalpost telt niet mee', () => {
     /* Let op: het te-krap-signaal vraagt of de post gestopt is */
     const k = (await letOp(page)).find(x => x.soort === 'krap' && x.key === 'abonnement');
     expect(k.sub).toContain('of is Huurwoningen Premium gestopt? ›');
-    /* de te-krap-sheet: een link per post, die de status-sheet opent; de knop schrijft pas */
+    /* v416: de te-krap-sheet heeft gestopt als eerste keuze (de losse link is weg); kiezen schrijft niets, bevestigen wel */
     await page.evaluate(() => openPotHerzien('abonnement'));
-    const link = page.locator(`[data-phgestopt="${key}"]`);
-    await expect(link).toHaveText('of is Huurwoningen Premium gestopt? ›');
-    await link.click();
-    await expect(page.locator('#postStatusSheet')).toHaveAttribute('data-poststatus', 'actief');
-    expect(await page.evaluate(() => SET.postStatus || {})).toEqual({});   // openen schrijft niets
-    await page.locator('[data-postzet="gestopt"]').click();
+    expect(await page.locator('[data-phgestopt]').count()).toBe(0);
+    await page.locator(`[data-phoptie="g:${key}"]`).click();
+    expect(await page.evaluate(() => SET.postStatus || {})).toEqual({});   // kiezen schrijft niets
+    await page.locator('[data-phbevestig]').click();
     expect(await page.evaluate((key) => postStatus(key).status, key)).toBe('gestopt');
-    await expect(page.locator('#potHerzienSheet')).toHaveCount(0);   // te krap is weg, dus de sheet sluit
+    expect(await page.evaluate(() => document.getElementById('sheetBg').classList.contains('show'))).toBe(false);   // v416: de sheet sluit na de keuze
     /* Vaste lasten: per post de status met "toch actief" */
     await page.evaluate(() => openVasteLasten());
     const rij = page.locator('[data-poststatusrij="gestopt"]');
@@ -152,7 +150,8 @@ test.describe('B5 · potNodig() heeft een startmaand', () => {
     const r = await page.evaluate(() => { const V = maandVooruit();
       return [0, 1, 2, 4].map(i => { const st = valtOpYmPlus(thisYM(), i), N = potNodig('abonnement', V, null, { start: st }); return [st, N.nodig, N.maand, N.start]; }); });
     /* oktober is de lopende maand (verwacht eind 51); vanaf november valt Huurwoningen in januari, vanaf februari in april */
-    expect(r).toEqual([['2026-10', 51, '2026-10', '2026-10'], ['2026-11', 51, '2027-01', '2026-11'], ['2026-12', 51, '2027-01', '2026-12'], ['2027-02', 51, '2027-04', '2027-02']]);
+    /* v416: in de maand van Huurwoningen telt de post bij de gewone maand (mediaan 0), niet bij de hoogste (20): 31 */
+    expect(r).toEqual([['2026-10', 51, '2026-10', '2026-10'], ['2026-11', 31, '2027-01', '2026-11'], ['2026-12', 31, '2027-01', '2026-12'], ['2027-02', 31, '2027-04', '2027-02']]);
   });
   test('bijstellen, het formulier en te ruime potjes bijstellen geven hun ingangsmaand mee', async ({ page }) => {
     await S.boot(page);
