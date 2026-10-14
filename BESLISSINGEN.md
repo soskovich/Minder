@@ -16,6 +16,19 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v412` · een terugkerende post heeft een status: actief, gestopt door jou, of verlopen.** `SET.postStatus[key]` draagt
+  alleen wat jij koos (`gestopt`, of `actief` als antwoord op verlopen); verlopen is een meting (`postStatusVan()`: de volgende
+  betaling na de laatste is langer uit dan `POST_TOL`, maand 7, kwartaal 14, jaar 30, 4-wekelijks 7 dagen). Een post die niet
+  actief is telt nergens mee: `postTelt()` zit in `potNodig()` (dus nodig, te krap, te ruim, de ondergrens) en in
+  `verwachtInMaand()` (nog te betalen, de bridge, vrij te besteden). Gemeten op `grip-v409-stand`: Huurwoningen Premium
+  gestopt, Abonnementen nodig 51 → 20 en geen te krap meer. Valkuil 1: los van `SET.fixDueExcl` ("uitgesloten", `v231`); op
+  het toestel staan daar ook posten die doorlopen (`v329`: DELA als reservering), dus samenvoegen zou die stil stoppen.
+  Valkuil 2: een gestopte post blijft herkend als vaste last (`recurringKeys()`), want dat gaat over boekingen die er al zijn;
+  daarom leest `potMaanden()` zijn periodieke posten met `periodiekePosten(k, true)`.
+- **`v412` · het venster van nodig loopt vanaf een startmaand.** `potNodig(k, V, zonder, {start})`, standaard de lopende maand;
+  bijstellen (vanaf volgende maand), het formulier (de gekozen maand) en te ruime potjes bijstellen (de gekozen maand) geven hun
+  ingangsmaand mee. Dat lost de valkuil van `v411` op. Alleen de lopende maand rekent met het verwachte eind. De ondergrens
+  noemt altijd een maand en een jaar (`ondergrensTekst()`, `maandJaar()`), en "(weinig historie)" zonder drie afgeronde maanden.
 - **`v411` · de ondergrens van een potje is `potNodig()`, en dus het voorstel van Let op.** Bijstellen, te ruime potjes
   bijstellen en het potje-formulier hadden elk de ondergrens van `v350` (`potjeMaandVloer()`: het gemiddelde zonder periodieke
   posten plus de post in zijn maand, twaalf maanden vanaf de gekozen maand). Twee definities van wat een potje minstens nodig heeft

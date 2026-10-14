@@ -22,7 +22,7 @@ test.describe('1 · 4-wekelijks: 28 dagen, of de gemeten mediaan vanaf 4 gemeten
   test('blok 19 zegt welke van de twee: Shurgard heeft 2 gemeten afstanden, dus vast 28', async ({ page }) => {
     await S.boot(page);
     const d = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
-    expect(d).toContain('Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen over 2 afstanden, vooruit 28 = vast 28 (minder dan 4 afstanden)) | 71 | dubbel in sep 2027 2x');
+    expect(d).toContain('Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen over 2 afstanden, vooruit 28 = vast 28 (minder dan 4 afstanden)) | 71 | actief | 2026-09-30 | dubbel in sep 2027 2x');
   });
   test('met 4 gemeten afstanden staat er "gemeten mediaan"', async ({ page }) => {
     await S.boot(page);
@@ -37,7 +37,7 @@ test.describe('2 · Bol in Online shopping: een kwartaalpost uit de fixture', ()
   test('blok 19: Bol Abonnement Select, elke 3 maanden, €95, nov · feb · mei · aug', async ({ page }) => {
     await S.boot(page);
     const d = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
-    expect(d).toContain('  Bol Abonnement Select | Online shopping | elke 3 maanden | 95 | nov 2026, feb 2027, mei 2027, aug 2027');
+    expect(d).toContain('  Bol Abonnement Select | Online shopping | elke 3 maanden | 95 | actief | 2026-08-16 | nov 2026, feb 2027, mei 2027, aug 2027');
   });
 });
 
