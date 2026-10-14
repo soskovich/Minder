@@ -10696,7 +10696,17 @@ function openPotHerzien(k){ window._ph={k, optie:null, bedrag:null, bron:null, b
 function potHerzienStand(){ const S=window._ph||{}; let V=null; try{ V=maandVooruit(); }catch(_){}
   let x=potBovenLijst().find(y=>y.k===S.k)||null; if(!x){ try{ x=potKrapLijst().find(y=>y.k===S.k)||null; }catch(_){} }   // v409: ook te krap voor een periodieke post
   let TR=[]; try{ TR=V&&!V.onbekend?teRuim(V):[]; }catch(_){}
+  if(x && !x.krap && V && !V.onbekend){ try{ x=potHerzienMetPost(x, V); }catch(_){} }
   return {S, V, x, TR:TR.filter(t=>t.k!==S.k)}; }
+/* v417: EEN POTJE DAT BOVEN BUDGET IS EN EEN PERIODIEKE POST HEEFT (beslissing van de gebruiker): het voorstel telt de post mee,
+   dus de gewone maand plus de post in de maand waarin hij valt, en dat is potNodig(). Nooit onder het gemiddelde van de drie
+   maanden (het oude voorstel). Onder het voorstel staat een regel: "inclusief <post> EUR X in <maand>". Zonder periodieke post
+   blijft het voorstel het gemiddelde. */
+function potHerzienMetPost(x, V){
+  const N=potNodig(x.k, V); if(!N.periodiek.length) return x;
+  const posten=N.periodiek.map(s=>({naam:titleCase(cleanMerch(s.name)||s.name||''), bedrag:Math.round((+s.amount||0)*Math.max(teRuimTermijnen(s, N.maand)||1,1))}));
+  return Object.assign({}, x, {voorstel:Math.max(N.voorstel, x.voorstel), nodigPost:N.nodig, postMaand:N.maand,
+    inclusief:`inclusief ${posten.map(p=>`${p.naam} ${euro0(p.bedrag)}`).join(' en ')} in ${maandJaar(N.maand)}`}); }
 function potHerzienNieuw(S, x){
   if(S.optie==='a') return {nieuw:x.voorstel, verschil:x.voorstel-x.bud, reden:''};
   if(S.optie==='b'){ const n=S.bedrag; if(n==null || !isFinite(n)) return {nieuw:null, verschil:0, reden:'Vul een bedrag in'};
@@ -10750,7 +10760,7 @@ function renderPotHerzien(){
     <div class="small muted" ${x.krap?'data-phkrap':''} style="margin:4px 0 2px">${x.krap?`te krap voor ${esc(x.posten.map(potKrapPostTekst).join(', '))}`:`${x.n} van ${x.ms.length} afgeronde maanden boven je ${esc(potBudgetTekst(x))}`}</div>
     <div class="small muted" style="margin:0 0 4px">${hist}</div>
     ${x.krap?x.posten.map(p=>{ const P=postStatus(p.key); return opt('g:'+p.key, `${esc(p.naam)} is gestopt \u00b7 telt niet meer mee`, `laatste betaling ${P.laatste?esc(dagKort(P.laatste)+' '+P.laatste.slice(0,4)):'onbekend'} \u00b7 ${euro0(p.bedrag)} ${esc(P.cadansTxt||'')}`.replace(/\s+$/,'')); }).join(''):''}
-    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, x.krap?`de duurste maand van de komende 12: ${esc(maandJaar(x.vloerMaand))}, met ${esc(opsomming(x.posten.map(p=>p.naam)))}, op tien euro naar boven`:'gemiddeld over de 3 maanden, afgerond op 5')}
+    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, x.krap?`de duurste maand van de komende 12: ${esc(maandJaar(x.vloerMaand))}, met ${esc(opsomming(x.posten.map(p=>p.naam)))}, op tien euro naar boven`:x.inclusief?`<span data-phinclusief>${esc(x.inclusief)}</span>`:'gemiddeld over de 3 maanden, afgerond op 5')}
     ${opt('b', 'Zelf een bedrag kiezen', 'hoger of lager dan nu', invoer+(N.reden&&S.bedrag!=null?`<div class="small" data-phbedragreden style="color:var(--amber);margin:4px 0 0 24px">${esc(N.reden)}</div>`:''))}
     ${keuze}${gevolg}
     ${opt('c', 'Laten staan', 'deze maand niets aanpassen; Let op vraagt het niet meer deze maand', redenen)}

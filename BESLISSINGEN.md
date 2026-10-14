@@ -16,6 +16,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v417` · een boven-potje met een periodieke post krijgt potNodig() als voorstel.** Boven blijft boven (de gewone maand past
+  niet, dus de post is niet de oorzaak), maar een voorstel zonder de post laat de maand met de post opnieuw boven eindigen.
+  Valkuil: het gemiddelde van drie maanden smeert een kwartaalpost uit (Abonnementen 35 tegen nodig 52 in oktober). Nooit onder
+  dat gemiddelde, en de regel eronder noemt de post, het bedrag en de maand.
 - **`v416` · te krap alleen als de post het verschil maakt.** De gewone maand is de mediaan zonder periodieke posten; past die
   niet, dan is het boven en geen te krap. Valkuil: tegen de duurste maand gemeten krijgt een potje dat gewoon net past (84 tegen
   95) een signaal voor een post van EUR 15. Hetzelfde in `potNodig()`: een post optellen bij de hoogste maand uit de historie
