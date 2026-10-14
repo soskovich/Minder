@@ -9108,7 +9108,7 @@ function maandVooruit(){
      dat de stap op Zien, de sheet, de opbouw en blok 19 lezen. */
   const losP=zonderLosPosten(L, m), losSom=losP.reduce((a,x)=>a+x.bedrag,0);
   const zonderExact=Z.geboekt+Z.verwacht+losSom, zonderLos=zonderBreed-Z.geboekt-Z.verwacht;
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact:zonderBreed+varEindR+vasteEindR+inleg, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -27999,6 +27999,174 @@ function diagZonderPotje(V){
   L.push(`  deze maand als eigen overboeking herkend en dus NIET hierin (v401): ${n}`);
   return L;
 }
+/* v418 (gevraagd als v417b): BLOK 20, HOE JE SALARIS ZICH VERDEELT OVER VAST, POTJES EN OPZIJ, PER MAAND, EN OF DE VASTE LASTEN STIJGEN
+   (gevraagd door de gebruiker). De laatste zes afgeronde maanden en de lopende maand (geboekt plus verwacht). Alleen lezen
+   (v244): geen save(), niets naar SET. Elk getal komt uit de bron die de app zelf leest (v104): het salaris uit de bron van
+   salarisBetalingLaatst(), het inkomen uit maandInkomen(), vast uit isFixed() en potHeelVast() (de definitie van
+   maandSplitsing), de potjes uit de snede van piekInScope(), opzij uit vermogensInleg(), en de lopende maand uit
+   maandVooruit(). Bedragen worden onafgerond opgeteld en pas in de uitvoer afgerond. */
+const DIAG_SAL_MAANDEN=6;
+function diagSalarisVerdeling(){
+  const L=[], e0=x=>Math.round(+x||0), c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
+  const cur=thisYM(), ms=[]; for(let i=DIAG_SAL_MAANDEN;i>=1;i--) ms.push(valtOpYmPlus(cur,-i)); ms.push(cur);
+  const af=ms.slice(0,-1);
+  L.push('DEFINITIE VAN VAST (v355/v383, dezelfde als Grip en Inzichten via maandSplitsing): een uitgave is vast als de app hem als terugkerende betaling herkent (isFixed: een herkende herhaling, of jouw keuze per boeking of per winkel) of als het potje door jou op vast staat (potHeelVast). Alle andere uitgaven met een norm zijn potjes (de snede van piekInScope), met of zonder potje. Uitgaven zonder norm (onvoorzien, contant), een persoonlijke overboeking zonder potje en het deel dat je uit een reservering betaalde zijn geen van beide en staan apart als "buiten vast en potjes".');
+  L.push(`Maanden: ${af.map(MN).join(' · ')} afgerond, ${MN(cur)} lopend (geboekt plus verwacht). Eigen overboekingen (intern) tellen nergens als inkomen of uitgave. Afgerond wordt pas na het optellen.`);
+  /* het salaris: de bron van salarisBetalingLaatst(), over alles tot en met deze maand */
+  let sal=null; try{ sal=salarisBetalingLaatst(valtOpYmPlus(cur,1)); }catch(_){}
+  const salKey=sal?recurKey(sal):null;
+  const isSal=t=>salKey!=null && recurKey(t)===salKey;
+  const sav=new Set((()=>{ try{ return n26SavingsAccounts(); }catch(_){ return []; } })()), resA=(()=>{ try{ return resAccId(); }catch(_){ return ''; } })();
+  const opzijRek=a=>sav.has(a) || (resA && a===resA);
+  /* een maand: inkomen, vast per post, potjes per categorie, buiten, opzij, en wat er op je betaalrekeningen netto bleef */
+  const maand=ym=>{
+    const tx=txOfMonth(ym), B=maandPotjes(ym).B;
+    let salaris=0, buiten=0, betaal=0; const salTx=[], overTx=[], posten={}, vastPot={}, potjes={}, zonder={}, postNaam={}, postTx={};
+    for(const t of tx){ const c=catOf(t), meta=CATS[c]||{};
+      if(!opzijRek(t.acc)) betaal+=t.amount;
+      if(meta.type==='income'){ const v=Math.max(t.amount,0), o=onregelmatigBedrag(t);
+        if(isSal(t)){ salaris+=v-o; salTx.push(t); if(o>0) overTx.push({t, v:o, onr:true}); } else if(v>0) overTx.push({t, v}); continue; }
+      if(meta.type!=='expense') continue;
+      const geld=-t.amount, vn=uitgaveNorm(t);
+      if(geenNorm(c) || !isUitgave(t, B)){ buiten+=geld; continue; }
+      buiten+=geld-vn;
+      if(isFixed(t)){ const k=recurKey(t); posten[k]=(posten[k]||0)+vn; postNaam[k]=postNaam[k]||t; (postTx[k]=postTx[k]||[]).push(t); }
+      else if(potHeelVast(c)) vastPot[c]=(vastPot[c]||0)+vn;
+      else if((+B[c]||0)>0) potjes[c]=(potjes[c]||0)+vn;
+      else zonder[c]=(zonder[c]||0)+vn; }
+    const MI=maandInkomen(ym), overige=MI.alles-salaris;
+    let VI={totaal:null, delen:[]}; try{ VI=vermogensInleg(ym); }catch(_){}
+    const deel=k=>{ const d=(VI.delen||[]).find(x=>x.key===k); return d&&d.bedrag!=null?+d.bedrag:0; };
+    const ontt=[]; for(const t of tx) if(opzijRek(t.acc) && t.amount<0 && catOf(t)!=='income') ontt.push(t);
+    const som=o=>Object.values(o).reduce((a,x)=>a+x,0);
+    const vast=som(posten)+som(vastPot), pot=som(potjes)+som(zonder), opzij=deel('spaar')+deel('res')+deel('bel');
+    return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, vast, pot, potMet:som(potjes), potZonder:som(zonder),
+      spaar:deel('spaar'), res:deel('res'), bel:deel('bel'), ontt, onttSom:ontt.reduce((a,t)=>a-t.amount,0), opzij, betaal, VIbekend:VI.totaal!=null};
+  };
+  const R=ms.map(maand), Rc=R[R.length-1];
+  /* de lopende maand: geboekt plus wat de app nog verwacht */
+  let V=null, Lq=null, S=null; try{ V=maandVooruit(); }catch(_){} try{ Lq=monthLiquidity(); }catch(_){} try{ S=safeToSpend(); }catch(_){}
+  const vk=V&&!V.onbekend;
+  Rc.salarisVerwacht=Lq?Math.max(+Lq.incDue||0,0):0;
+  Rc.vastVerwacht=vk?(V.vasteEindR+(V.zonderLosPosten||[]).reduce((a,x)=>a+x.bedrag,0))-Rc.vast:0;
+  Rc.potVerwacht=vk?(V.varEindR+V.zonderStand.geboekt+V.zonderStand.verwacht)-Rc.pot:0;
+  Rc.opzijVerwacht=(S?Math.max(+S.saveReserved||0,0):0)+(()=>{ try{ return inlegNogDezeMaand(cur); }catch(_){ return 0; } })();
+  const tot=(r,k)=>r[k]+(r===Rc?(r[k+'Verwacht']||0):0);
+  const kol=f=>R.map(r=>`${MN(r.ym)}${r===Rc?'*':''} ${e0(f(r))}`).join(' · ');
+  /* 1. inkomsten */
+  L.push('', '1. INKOMSTEN (* = lopend: geboekt plus verwacht)');
+  if(!sal) L.push('  salaris: niet herkend (geen inkomensboeking voor of in deze maand)');
+  else L.push(`  salaris herkend op tegenpartij: "${titleCase(cleanMerch(sal.name)||sal.name||'')}" (recurKey "${salKey}", de bron van salarisBetalingLaatst(): de grootste inkomensboeking van de laatste maand met inkomen, en elke boeking met dezelfde naam)${salKey===''?'; LET OP: de naam is leeg, dus elke inkomensboeking zonder naam telt als salaris':''}`);
+  for(const r of R){ const d=r.salTx.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)}`).join(', ');
+    L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: salaris ${e0(tot(r,'salaris'))}${d?` (${d})`:' (geen betaling)'}${r===Rc?` = geboekt ${e0(r.salaris)} + nog te ontvangen ${e0(r.salarisVerwacht)} (monthLiquidity().incDue, je norm min wat er binnen is)`:''}`);
+    L.push(`      overige inkomsten ${e0(r.overige)}${r.overTx.length?': '+r.overTx.sort((a,b)=>b.v-a.v).map(o=>`${titleCase(cleanMerch(o.t.name)||o.t.name||'?')} ${c2(o.v)}${o.onr?' (onregelmatig deel)':''}`).join(', '):''}${Math.abs(r.overige-r.overTx.reduce((a,o)=>a+o.v,0))>0.005?' (+ ontvangst bij een lening zonder boeking, v343)':''}`); }
+  /* 2. vast */
+  L.push('', '2. VAST: per post het bedrag in die maand (status nu), de vaste delen van je potjes, en het totaal');
+  let sched=[]; try{ sched=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){}
+  const keys=[...new Set(R.flatMap(r=>Object.keys(r.posten)))];
+  const naamVan=k=>{ const s=sched.find(x=>x.key===k); if(s) return titleCase(cleanMerch(s.name)||s.name||k); const r=R.find(x=>x.postNaam[k]); return r?titleCase(cleanMerch(r.postNaam[k].name)||r.postNaam[k].name||k):k; };
+  const statusVan=k=>{ try{ const P=postStatus(k); return (POST_STATUS_TXT[P.status]||P.status); }catch(_){ return '?'; } };
+  const actief=keys.filter(k=>{ try{ return postTelt(k); }catch(_){ return true; } }), niet=keys.filter(k=>!actief.includes(k));
+  const postRij=k=>`  ${naamVan(k)} (${statusVan(k)}): ${R.map(r=>`${MN(r.ym)} ${e0(r.posten[k]||0)}`).join(' · ')}`;
+  actief.sort((a,b)=>(R[R.length-2].posten[b]||0)-(R[R.length-2].posten[a]||0)).forEach(k=>L.push(postRij(k)));
+  if(niet.length){ L.push('  niet actief nu (telt in die maand wel mee, want toen ging het geld eruit):'); niet.forEach(k=>L.push(postRij(k))); }
+  const vpK=[...new Set(R.flatMap(r=>Object.keys(r.vastPot)))];
+  for(const k of vpK) L.push(`  vast deel potje ${(CATS[k]||{}).name||k} (door jou op vast): ${R.map(r=>`${MN(r.ym)} ${e0(r.vastPot[k]||0)}`).join(' · ')}`);
+  if(!keys.length && !vpK.length) L.push('  geen vaste lasten herkend');
+  if(vk){ const open=(Lq&&Lq.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje);
+    L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.vastVerwacht)} (maandVooruit: vaste lasten verwacht ${e0(V.vasteEindR)} + vaste lasten zonder categorie ${e0((V.zonderLosPosten||[]).reduce((a,x)=>a+x.bedrag,0))} min geboekt ${e0(Rc.vast)})${open.length?'; nog te betalen: '+open.map(x=>`${titleCase(cleanMerch(x.name)||x.name||x.key)} ${e0(x.amount)}`).join(', '):''}`); }
+  L.push(`  TOTAAL VAST: ${kol(r=>tot(r,'vast'))}`);
+  /* 3. potjes */
+  L.push('', '3. POTJES: variabele uitgaven per potje (met een potje in die maand), zonder potje apart');
+  const pK=[...new Set(R.flatMap(r=>Object.keys(r.potjes)))], zK=[...new Set(R.flatMap(r=>Object.keys(r.zonder)))];
+  const srt=(arr,f)=>arr.sort((a,b)=>R.reduce((s,r)=>s+(f(r)[b]||0),0)-R.reduce((s,r)=>s+(f(r)[a]||0),0));
+  for(const k of srt(pK,r=>r.potjes)) L.push(`  ${(CATS[k]||{}).name||k}: ${R.map(r=>`${MN(r.ym)} ${e0(r.potjes[k]||0)}`).join(' · ')}`);
+  for(const k of srt(zK,r=>r.zonder)) L.push(`  ${(CATS[k]||{}).name||k} (zonder potje): ${R.map(r=>`${MN(r.ym)} ${e0(r.zonder[k]||0)}`).join(' · ')}`);
+  if(!pK.length && !zK.length) L.push('  geen variabele uitgaven');
+  L.push(`  met potje: ${kol(r=>r.potMet)}`);
+  L.push(`  zonder potje: ${kol(r=>r.potZonder)}`);
+  if(vk) L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.potVerwacht)} (maandVooruit: potjes verwacht ${e0(V.varEindR)} + zonder potje ${e0(V.zonderStand.geboekt+V.zonderStand.verwacht)} min geboekt ${e0(Rc.pot)})`);
+  L.push(`  TOTAAL POTJES: ${kol(r=>tot(r,'pot'))}`);
+  L.push(`  buiten vast en potjes (geen norm, persoonlijk zonder potje, uit een reservering betaald): ${kol(r=>r.buiten)}`);
+  /* 4. opzij */
+  L.push('', '4. OPZIJ (vermogensInleg: netto naar je spaarrekening, je reserveringen en je beleggingen)');
+  L.push(`  naar Plan en sparen (spaarrekening, netto): ${kol(r=>r.spaar)}`);
+  L.push(`  naar je reserveringen (netto, niet onder nul): ${kol(r=>r.res)}`);
+  L.push(`  beleggen: ${kol(r=>r.bel)}`);
+  L.push(`  onttrekkingen (afschrijvingen van je spaar- en reserveringsrekening, zitten al in het netto): ${kol(r=>r.onttSom)}`);
+  for(const r of R) if(r.ontt.length) L.push(`      ${MN(r.ym)}: ${r.ontt.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
+  L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.opzijVerwacht)} (nog te sparen uit safeToSpend + inleg in Plan die nog moet)`);
+  L.push(`  NETTO OPZIJ: ${kol(r=>tot(r,'opzij'))}${R.some(r=>!r.VIbekend)?' (een maand zonder spaar- of reserveringsrekening en zonder beleggingsboeking telt als 0: niet gemeten)':''}`);
+  /* 5. rest en 6. percentages */
+  const rest=r=>tot(r,'salaris')-tot(r,'vast')-tot(r,'pot')-tot(r,'opzij');
+  L.push('', '5. REST = salaris - vast - potjes - netto opzij');
+  L.push(`  ${kol(rest)}`);
+  L.push('', '6. PERCENTAGES van het salaris: vast | potjes | netto opzij');
+  for(const r of R){ const s=tot(r,'salaris'), p=x=>s>0?Math.round(x/s*100)+'%':'-';
+    L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: ${p(tot(r,'vast'))} | ${p(tot(r,'pot'))} | ${p(tot(r,'opzij'))}${s>0?'':' (geen salaris)'}`); }
+  /* de controle: links wat er gemeten naar vast, potjes, buiten en opzij ging plus wat er op je betaalrekeningen bleef, rechts
+     wat er binnenkwam. Alleen de afgeronde maanden: verwacht is geen meting. */
+  L.push('', 'CONTROLE (afgeronde maanden): vast + potjes + buiten + netto opzij + netto op je betaalrekeningen = salaris + overige inkomsten');
+  L.push('  (de rest uit punt 5 rekent alleen met het salaris; hier staat ernaast wat er gemeten op je betaalrekeningen bleef, de rekeningen buiten je spaar- en reserveringsrekening)');
+  for(const r of R.slice(0,-1)){ const links=r.vast+r.pot+r.buiten+r.opzij+r.betaal, rechts=r.salaris+r.overige, d=links-rechts;
+    L.push(`  ${MN(r.ym)}: ${e0(r.vast)} + ${e0(r.pot)} + ${e0(r.buiten)} + ${e0(r.opzij)} + ${e0(r.betaal)} = ${e0(links)} tegen ${e0(r.salaris)} + ${e0(r.overige)} = ${e0(rechts)}: ${Math.abs(d)<0.5?'klopt':'VERSCHILT '+(d>0?'+':'')+e0(d)}`);
+    if(Math.abs(d)>=0.5){ /* waar het verschil kan zitten: een eigen overboeking op een betaalrekening zonder tegenkant in je gegevens */
+      const tx=txOfMonth(r.ym), los=tx.filter(t=>!opzijRek(t.acc) && (CATS[catOf(t)]||{}).type==='internal' && !tx.some(u=>u!==t && u.acc!==t.acc && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date)-new Date(t.date))<=3*864e5));
+      if(los.length) L.push(`      eigen overboekingen zonder tegenkant in je gegevens (samen ${e0(los.reduce((a,t)=>a+t.amount,0))}): ${los.slice().sort((a,b)=>Math.abs(b.amount)-Math.abs(a.amount)).slice(0,5).map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`); } }
+  /* 7. de lopende maand in groepen, uit maandVooruit() */
+  L.push('', `7. ${MN(cur).toUpperCase()} IN GROEPEN: budget | verwacht | onder/boven (maandVooruit, de getallen van Grip)`);
+  if(!vk) L.push('  geen drie afgeronde maanden: maandVooruit() is onbekend');
+  else {
+    const B=SET.budgets||{}, SP=maandSplitsing(cur, Lq||undefined);
+    let bVast=0, bVar=0; const bBuiten=[];
+    for(const k in B){ const b=+B[k]||0; if(!b) continue; const m=CATS[k];
+      if(!m || m.type!=='expense' || geenNorm(k)){ bBuiten.push({k, b}); continue; }
+      if(potHeelVast(k)) bVast+=b; }
+    for(const x of SP.potBasis){ bVar+=x.vBud; bVast+=x.bud-x.vBud; }
+    const bTot=totalBudget(), bRest=bTot-bVast-bVar-bBuiten.reduce((a,x)=>a+x.b,0);
+    const vzp=(V.vastePotjes||[]).filter(x=>x.zonderPotje), vzpS=vzp.reduce((a,x)=>a+(+x.eindR||0),0);
+    const losP=V.zonderLosPosten||[], losS=losP.reduce((a,x)=>a+x.bedrag,0), Z=V.zonderStand, zS=Z.geboekt+Z.verwacht;
+    const g=[
+      {n:'vast (potjes)', b:bVast, v:V.vasteEindR-vzpS},
+      {n:'vast zonder potje', b:0, v:vzpS+losS},
+      {n:'potjes (variabel)', b:bVar, v:V.varEindR},
+      {n:'zonder potje (variabel)', b:0, v:zS},
+      {n:'inleg in Plan', b:V.inleg, v:V.inleg},
+      {n:'potjes buiten de norm', b:bBuiten.reduce((a,x)=>a+x.b,0)+bRest, v:0},
+      {n:'rest zonder naam', b:0, v:+V.zonderRest||0}];
+    for(const x of g) if(Math.abs(x.b)>=0.005 || Math.abs(x.v)>=0.005) L.push(`  ${x.n}: budget ${c2(x.b)} | verwacht ${c2(x.v)} | ${x.v-x.b>0.005?'boven '+c2(x.v-x.b):x.v-x.b<-0.005?'onder '+c2(x.b-x.v):'gelijk'}`);
+    const sb=g.reduce((a,x)=>a+x.b,0), sv=g.reduce((a,x)=>a+x.v,0);
+    L.push(`  SOM: budget ${c2(sb)} = afgerond ${e0(sb)} tegen V.budget ${V.budget}: ${e0(sb)===V.budget?'klopt':'VERSCHILT '+(e0(sb)-V.budget)} | verwacht ${c2(sv)} = afgerond ${e0(sv)} tegen V.projectie ${V.projectie}: ${e0(sv)===V.projectie?'klopt':`VERSCHILT ${e0(sv)-V.projectie} (V.projectie rondt geboekt, vast en rest elk apart af)`}`);
+    if(bBuiten.length) L.push(`  potjes buiten de norm (geen uitgavencategorie of geen norm): ${bBuiten.map(x=>`${(CATS[x.k]||{}).name||x.k} ${c2(x.b)}`).join(', ')}`);
+    /* wat er in blok 19 bij geen enkel potje staat: verwacht min wat de potjes met een bedrag dragen */
+    const inPot=(V.potjes||[]).reduce((a,x)=>a+(+x.eindR||0),0)+V.potKlein+(V.vastePotjes||[]).filter(x=>!x.zonderPotje).reduce((a,x)=>a+(+x.eindR||0),0);
+    L.push(`  BIJ GEEN POTJE: verwacht ${c2(V.projectieExact)} min wat je potjes dragen ${c2(inPot)} = ${c2(V.projectieExact-inPot)} (afgerond ${e0(V.projectieExact-inPot)}), en dat is:`);
+    for(const x of vzp) L.push(`    ${x.naam}: ${c2(x.eindR)} | VAST (herkende vaste last zonder potje${x.namen&&x.namen.length?': '+x.namen.map(n=>n.naam).join(', '):''})`);
+    for(const x of losP) L.push(`    ${titleCase(cleanMerch(x.naam)||x.naam)}: ${c2(x.bedrag)} | VAST (verwachte vaste last ${x.cat?'in '+((CATS[x.cat]||{}).name||x.cat)+' zonder norm':'zonder categorie'})`);
+    for(const x of Z.rijen.filter(r=>r.telt && (r.geboekt||r.verwacht))) L.push(`    ${x.naam}: ${c2(x.geboekt+x.verwacht)} (geboekt ${c2(x.geboekt)} + verwacht ${c2(x.verwacht)}) | VARIABEL (zonder potje)`);
+    for(const x of planInlegRegels(cur).rijen) L.push(`    inleg ${x.naam}: ${c2(x.bedrag)} | OPZIJ (inleg in Plan, telt in het maandbudget)`);
+    if(Math.abs(+V.zonderRest||0)>=0.005) L.push(`    rest zonder naam: ${c2(V.zonderRest)} | centen uit de afronding van de delen`);
+    const naam=vzpS+losS+zS+V.inleg+(+V.zonderRest||0);
+    L.push(`    samen ${c2(naam)}: ${Math.abs(naam-(V.projectieExact-inPot))<0.01?'klopt':'VERSCHILT '+c2(naam-(V.projectieExact-inPot))}`);
+  }
+  /* 8. veranderingen in de vaste lasten over de afgeronde maanden */
+  L.push('', `8. VASTE LASTEN ${MN(af[0])} TEGEN ${MN(af[af.length-1])}: per post de eerste en de laatste afgeronde maand`);
+  const A=R.slice(0,-1), eerste=A[0], laatste=A[A.length-1];
+  const eersteBoeking=k=>{ let d=null; for(const t of TX) if(!t.pending && recurKey(t)===k && t.amount<0 && (!d || t.date<d)) d=t.date; return d; };
+  for(const k of keys){ const a=eerste.posten[k]||0, b=laatste.posten[k]||0; const s=sched.find(x=>x.key===k), per=s&&((+s.intervalM||1)>1||s.cadans==='4w');
+    const regs=A.flatMap(r=>(r.postTx[k]||[]).slice().sort((x,y)=>x.date<y.date?-1:1).map(t=>uitgaveNorm(t))).filter(x=>x>0);
+    L.push(`  ${naamVan(k)}: ${MN(eerste.ym)} ${e0(a)} -> ${MN(laatste.ym)} ${e0(b)} (${b-a>=0?'+':''}${e0(b-a)})${per&&regs.length?` · per termijn eerst ${e0(regs[0])}, laatst ${e0(regs[regs.length-1])} (${s.cadans==='4w'?'4-wekelijks':'elke '+s.intervalM+' mnd'})`:''}`); }
+  const nieuw=keys.filter(k=>{ const d=eersteBoeking(k); return d && d.slice(0,7)>eerste.ym; });
+  const begin=TX.reduce((a,t)=>!a||t.date<a?t.date:a,'').slice(0,7);
+  L.push(`  NIEUW in deze periode (eerste betaling in je gegevens): ${nieuw.length?nieuw.map(k=>`${naamVan(k)} vanaf ${ymFull(eersteBoeking(k).slice(0,7))} ${eersteBoeking(k).slice(0,4)}${eersteBoeking(k).slice(0,7)===begin?' (je gegevens beginnen in die maand)':''}`).join(', '):'geen'}`);
+  const gestopt=[]; for(const s of sched){ let P=null; try{ P=postStatus(s.key); }catch(_){} if(!P || P.status==='actief') continue;
+    const lst=String(P.laatste||s.lastDate||'').slice(0,10); if(lst && lst.slice(0,7)<af[0]) continue;
+    gestopt.push(`${titleCase(cleanMerch(s.name)||s.name||s.key)} (${POST_STATUS_TXT[P.status]||P.status}, laatste betaling ${lst?ymFull(lst.slice(0,7))+' '+lst.slice(0,4):'onbekend'})`); }
+  L.push(`  GESTOPT in deze periode: ${gestopt.length?gestopt.join(', '):'geen'}`);
+  const dv=laatste.vast-eerste.vast;
+  L.push(`  TOTAAL VAST: ${MN(eerste.ym)} ${e0(eerste.vast)} -> ${MN(laatste.ym)} ${e0(laatste.vast)} (${dv>=0?'+':''}${e0(dv)})`);
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -28019,6 +28187,7 @@ const DIAG_BLOKKEN=[
   {titel:'hoe een storting van contant geld er bij je banken uitziet', lees:diagContantStorting},
   {titel:'reserveringen en doelen in de lange-termijnprojectie, en de lijn naast de band', lees:diagReisReserveringen},
   {titel:'te ruim begroot per potje, en de meters op Grip', lees:diagTeRuim},
+  {titel:'je salaris over vast, potjes en opzij, per maand, en of de vaste lasten stijgen', lees:diagSalarisVerdeling},
 ];
 
 async function diagTekst(){

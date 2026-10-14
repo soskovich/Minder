@@ -1452,3 +1452,9 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Punt 4, aanvulling**: een potje zonder variabel deel (helemaal vast of alles herkend) heeft geen afgeronde maanden in de berekening; daar toont de rij wat er uitging (`alles:true`). Blok 19 zet een periodieke post met + achter de afgeronde maanden (hij zit er niet in), met - alleen bij `alles`.
 - **Specs**: nieuw `grip-v417.spec.js` (15 tests, 17 sabotages, alle rood). Gemigreerd: `grip-v408`, `grip-v409`, `grip-v416` (invoermetingen lezen `P.totaal`, wat er uitging), `grip-v409`/`grip-v411` (blok 19: "jul 0/5 +31 Huurwoningen Premium", "aug 65/95 +95 Bol"), `grip-v412` (gestopt en verlopen: "-" in plaats van maanden).
 - `sw.js` naar `minder-v417`.
+
+## v418 (gevraagd als v417b) · blok 20: salaris over vast, potjes en opzij
+- Nieuw diagnoseblok `diagSalarisVerdeling()` (blok 20), alleen lezen: zes afgeronde maanden plus de lopende (geboekt plus verwacht). Inkomsten (salaris uit de bron van `salarisBetalingLaatst()`, overige bij naam), vast per post (status nu) en het vaste deel van potjes op vast, potjes per categorie met en zonder potje, buiten vast en potjes, opzij uit `vermogensInleg()` met onttrekkingen, rest, percentages, een controle tegen wat er op je betaalrekeningen bleef, de lopende maand in groepen (telt op tot `V.budget` en `V.projectie`, met wat bij geen potje staat) en de veranderingen in de vaste lasten (eerste tegen laatste maand, nieuw, gestopt, totaal).
+- `maandVooruit()` geeft daarvoor ook `varEindR`, `vasteEindR`, `potKlein` en `projectieExact` terug; geen scherm leest ze.
+- Spec `blok20.spec.js` (10 tests, 11 sabotages, alle rood; twee pas nadat de fixture een spaarrekening en een uit-reservering-deel droeg).
+- `sw.js` naar `minder-v418` (de versieregel in Instellingen leest alleen cijfers).

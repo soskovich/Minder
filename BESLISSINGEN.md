@@ -16,6 +16,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v418` · blok 20 controleert tegen een meting, niet tegen zijn eigen formule.** De rest is salaris min vast, potjes en
+  opzij; de controle zet daar wat er netto op je betaalrekeningen bleef naast, want vast + potjes + opzij + (salaris - vast -
+  potjes - opzij) is per constructie het salaris en meet dan alleen de overige inkomsten. Valkuil: een aansluiting die zijn eigen
+  uitkomst als invoer leest kan niet vallen (meetles a). Vast is de definitie van `maandSplitsing()` en staat bovenaan het blok.
 - **`v417` · een boven-potje met een periodieke post krijgt potNodig() als voorstel.** Boven blijft boven (de gewone maand past
   niet, dus de post is niet de oorzaak), maar een voorstel zonder de post laat de maand met de post opnieuw boven eindigen.
   Valkuil: het gemiddelde van drie maanden smeert een kwartaalpost uit (Abonnementen 35 tegen nodig 52 in oktober). Nooit onder
