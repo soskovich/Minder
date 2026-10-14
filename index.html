@@ -8237,20 +8237,24 @@ function potBudgetTekst(x){ const b=x.budgets||[];
    periodieke posten in hun maand, potjeMaandVloer(), met de tweede termijn van een 4-wekelijkse post) meer nodig heeft dan
    het potje, met de uitschieter-drempel. Een post die al in je reserveringen staat telt niet. Het voorstel is die maand op
    tien euro naar boven (ruimAfrond()), de bestaande herzien-sheet maakt het. */
-function potKrapLijst(m){ m=m||thisYM(); const B=SET.budgets||{}, uit=[];
+function potKrapLijst(m, V){ m=m||thisYM(); const B=SET.budgets||{}, uit=[];
+  if(V===undefined){ try{ V=maandVooruit(); }catch(_){ V=null; } }
+  if(!V || V.onbekend) return [];
   let skip=new Set(); try{ skip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron)); }catch(_){}
   const ms=[3,2,1].map(i=>valtOpYmPlus(m,-i));
   for(const k of Object.keys(B)){ const bud=Math.round(+B[k]||0);
     if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k) || potLaten(k, m)) continue;
     const R=periodiekePosten(k).filter(s=>!skip.has(s.key)); if(!R.length) continue;
-    let Vl=null; try{ Vl=potjeMaandVloer(k, ms, m, skip); }catch(_){} if(!Vl || !Vl.maand) continue;
-    if(!(Vl.vloer>bud) || !uitschieterAfw(Vl.vloer-bud, bud)) continue;
+    /* v410: "nodig" is potNodig(), dezelfde functie als te ruim: de duurste maand van de komende twaalf. Te krap is het
+       alleen als die maand een periodieke post draagt (anders is het een gewone maand die boven komt, en dat zegt boven). */
+    let N=null; try{ if(V && V.m===m) N=potNodig(k, V, skip); }catch(_){} if(!N || !N.periodiek.length) continue;
+    if(!(N.nodig>bud) || !uitschieterAfw(N.nodig-bud, bud)) continue;
     const posten=R.map(s=>{ const vier=s.cadans==='4w', mnd=[];
       for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(ym); }
       return {naam:titleCase(cleanMerch(s.name)||s.name||''), bedrag:Math.round(+s.amount||0), maanden:mnd, vier}; }).filter(p=>p.maanden.length);
     if(!posten.length) continue;
     const P=potMaanden(k, m);
-    uit.push({k, naam:CATS[k].name, bud, krap:true, posten, vloer:Vl.vloer, vloerMaand:Vl.maand, gewoon:Vl.gewoon, voorstel:ruimAfrond(Vl.vloer),
+    uit.push({k, naam:CATS[k].name, bud, krap:true, posten, vloer:N.nodig, vloerMaand:N.maand, gewoon:N.varMax, voorstel:N.voorstel,
       ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, huidig:P.huidig, boven:P.boven, n:P.boven.filter(Boolean).length}); }
   return uit.sort((a,b)=>((b.voorstel-b.bud)-(a.voorstel-a.bud)) || (a.naam<b.naam?-1:1)); }
 function potKrapPostTekst(p){ return `${p.naam} (${euro0(p.bedrag)}${p.vier?' 2×':''} in ${p.maanden.map(ym=>MNAMES[+ym.slice(5,7)-1]).join(' · ')})`; }
@@ -9827,6 +9831,34 @@ function teRuimTermijnen(s, ym){
   if(idx<n0) return 0;
   return (idx-n0)%iv===0?1:0;
 }
+/* v410: EEN DEFINITIE VAN "NODIG" (beslissing van de gebruiker): de duurste maand van de komende twaalf, met de periodieke
+   posten in de maand waarin ze vallen. Maand 0 is het verwachte eind van deze maand (vast plus variabel); een latere
+   maand is het duurste variabele deel van de drie afgeronde maanden plus de vaste posten van die maand
+   (teRuimTermijnen(): een kwartaal- of jaarpost in zijn maand, een 4-wekelijkse een of twee keer). Te ruim
+   (teRuimLijst()) en te krap (potKrapLijst()) lezen allebei deze functie; `zonder` zijn de posten die al in je
+   reserveringen staan (die draagt het potje niet). Het voorstel is die duurste maand, bij een variabel deel op tien
+   euro naar boven (RUIM_MARGE), en nooit onder wat er deze maand al uit is. */
+function potNodig(k, V, zonder, pre){
+  pre=pre||{};
+  let sched=pre.sched; if(!sched){ sched=[]; try{ sched=recurringSchedule().filter(s=>s.type==='fixed'); }catch(_){} }
+  let cs=pre.cs; if(!cs){ cs={}; try{ cs=catSpendMap(V.m)||{}; }catch(_){} }
+  const m=V.m, va=(V.potjes||[]).find(x=>x.k===k)||null, vs=(V.vastePotjes||[]).find(x=>x.k===k)||null;
+  const varMax=va&&va.maanden.length?Math.max(...va.maanden):0, varNu=va?Math.max(varMax, Math.round(va.eindR||0)):0;
+  const posten=sched.filter(s=>s.cat===k && !(zonder && zonder.has(s.key)));
+  const naamVan=s=>titleCase(cleanMerch(s.name)||s.name||'');
+  let best={v:-1, ym:m, reden:'', per:[]};
+  for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i); let v, reden='', per=[];
+    /* maand 0 is het verwachte eind (de vaste posten van deze maand zitten daar al in); de periodieke posten die in deze
+       maand vallen worden wel genoemd, zodat te krap ook een post van deze maand kan aanwijzen */
+    v=i===0?(vs?Math.round(vs.eind):0)+varNu:varMax;
+    for(const s of posten){ const n=teRuimTermijnen(s, ym); if(!n) continue; if(i>0) v+=n*(+s.amount||0);
+      if(n>1){ reden=`${n===2?'twee':n} termijnen ${naamVan(s)} in ${ymFull(ym)}`; per.push(s); }
+      else if((+s.intervalM||1)>1){ if(!reden) reden=`${naamVan(s)} in ${ymFull(ym)}`; per.push(s); } }
+    if(v>best.v) best={v, ym, reden, per}; }
+  const nodig=Math.max(Math.round(best.v),0), al=Math.round(Math.max(+cs[k]||0,0));
+  return {nodig, maand:best.ym, reden:best.ym!==m?best.reden:'', periodiek:best.per, varMax, varNu, al,
+    voorstel:Math.max(va?ruimAfrond(nodig):nodig, al), va, vs};
+}
 function teRuimLijst(V){
   if(V===undefined){ try{ V=maandVooruit(); }catch(_){ V=null; } }
   if(!V || V.onbekend) return [];
@@ -9837,22 +9869,11 @@ function teRuimLijst(V){
   for(const k of Object.keys(B)){
     const bud=Math.round(+B[k]||0); if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
     const va=V.potjes.find(x=>x.k===k)||null, vs=(V.vastePotjes||[]).find(x=>x.k===k)||null;
-    const varMax=va&&va.maanden.length?Math.max(...va.maanden):0, varNu=va?Math.max(varMax, Math.round(va.eindR||0)):0;
-    const posten=sched.filter(s=>s.cat===k);
     const rij={k, naam:CATS[k].name, bud, vast:vs?{bud:vs.bud, eind:Math.round(vs.eind), geen:!!vs.geen}:null,
       variabel:va?{bud:va.bud, maanden:va.maanden.slice()}:null, nodig:0, maand:m, reden:'', voorstel:bud, teRuim:0, ruim:false};
     if(vs && vs.geen && !va){ uit.push(rij); continue; }
-    let best={v:-1, ym:m, reden:''};
-    for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i); let v, reden='';
-      if(i===0) v=(vs?Math.round(vs.eind):0)+varNu;
-      else { v=varMax;
-        for(const s of posten){ const n=teRuimTermijnen(s, ym); if(!n) continue; v+=n*(+s.amount||0);
-          if(n>1) reden=`${n===2?'twee':n} termijnen ${titleCase(cleanMerch(s.name)||s.name||'')} in ${ymFull(ym)}`;
-          else if((+s.intervalM||1)>1 && !reden) reden=`${titleCase(cleanMerch(s.name)||s.name||'')} in ${ymFull(ym)}`; } }
-      if(v>best.v) best={v, ym, reden}; }
-    const nodig=Math.max(Math.round(best.v),0);
-    const al=Math.round(Math.max(+cs[k]||0,0));
-    const voorstel=Math.max(va?ruimAfrond(nodig):nodig, al);
+    const N=potNodig(k, V, null, {sched, cs});
+    const varMax=N.varMax, nodig=N.nodig, al=N.al, voorstel=N.voorstel, best={ym:N.maand, reden:N.reden};
     rij.nodig=nodig; rij.maand=best.ym; rij.reden=best.ym!==m?best.reden:''; rij.voorstel=voorstel; rij.al=al;
     rij.ruim=nodig<=bud*RUIMER_DREMPEL.deel && bud-voorstel>=RUIMER_DREMPEL.euro && !(vs&&vs.geen);
     /* v392: EEN GEMENGD POTJE TOETST ZIJN VARIABELE DEEL APART (keuze van de gebruiker). Het variabele deel heeft nodig
@@ -10462,7 +10483,7 @@ function renderPotHerzien(){
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} · potje herzien</div>
     <div class="small muted" ${x.krap?'data-phkrap':''} style="margin:4px 0 2px">${x.krap?`te krap voor ${esc(x.posten.map(potKrapPostTekst).join(', '))}`:`${x.n} van ${x.ms.length} afgeronde maanden boven je ${esc(potBudgetTekst(x))}`}</div>
     <div class="small muted" style="margin:0 0 4px">${hist}</div>
-    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, x.krap?`je gewone maand plus ${esc(opsomming(x.posten.map(p=>p.naam)))} in ${esc(ymFull(x.vloerMaand))}, op tien euro naar boven`:'gemiddeld over de 3 maanden, afgerond op 5')}
+    ${opt('a', `Naar het voorstel · ${euro0(x.voorstel)}`, x.krap?`de duurste maand van de komende 12: ${esc(ymFull(x.vloerMaand))}, met ${esc(opsomming(x.posten.map(p=>p.naam)))}, op tien euro naar boven`:'gemiddeld over de 3 maanden, afgerond op 5')}
     ${opt('b', 'Zelf een bedrag kiezen', 'hoger of lager dan nu', invoer+(N.reden&&S.bedrag!=null?`<div class="small" data-phbedragreden style="color:var(--amber);margin:4px 0 0 24px">${esc(N.reden)}</div>`:''))}
     ${keuze}${gevolg}
     ${opt('c', 'Laten staan', 'deze maand niets aanpassen; Let op vraagt het niet meer deze maand', redenen)}
@@ -27594,8 +27615,9 @@ function diagTeRuim(){
    die maand, of de maand boven telt met de uitschieter-drempel, te ruim ja/nee, de breuk, en welke regel Let op toont.
    Alleen lezen (v244). */
 function diagEenSignaal(V){
-  const L=['--- een signaal per potje (v408/v409): potje | maanden (uitgaven / budget van die maand, - periodiek, * = boven met de drempel) | budgetbron | te ruim | breuk | Let op'];
-  const krap={}; try{ for(const x of potKrapLijst()) krap[x.k]=x; }catch(_){}
+  const L=['--- een signaal per potje (v408/v409): potje | maanden (uitgaven / budget van die maand, - periodiek, * = boven met de drempel) | nodig (v410: potNodig, duurste maand van de komende 12) | budgetbron | te ruim | breuk | Let op'];
+  const krap={}; try{ for(const x of potKrapLijst(thisYM(), V)) krap[x.k]=x; }catch(_){}
+  let krapSkip=new Set(); try{ krapSkip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron)); }catch(_){}
   const tr=new Set(); try{ for(const x of teRuim(V)) tr.add(x.k); }catch(_){}
   const patK={}; try{ gripPatronen().forEach((p,i)=>{ for(const g of (p.sig||[])) if(g.soort==='potje'&&g.k&&!patK[g.k]) patK[g.k]=i+1; }); }catch(_){}
   for(const k of Object.keys(SET.budgets||{})){ const bud=+SET.budgets[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
@@ -27603,8 +27625,9 @@ function diagEenSignaal(V){
     /* v409: per maand het budget dat gebruikt is (de maanden staan op volgorde, ms is al oud naar nieuw) */
     const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` -${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
     const Bk=potBreuk(P, potEind(V, k));
-    const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:kr?`te krap, voorstel ${kr.voorstel} (duurste maand ${ymFull(kr.vloerMaand)}: ${Math.round(kr.vloer)})`:'niets (minder dan 2 van 3)';
-    L.push(`  ${CATS[k].name}: ${mt} | ${P.huidig?'huidig budget voor alle drie (geen bewaarde potjes voor elke maand)':'bewaarde potjes per maand'} | ${tr.has(k)?'te ruim':'-'} | ${Bk?`was ${Bk.was}, nu ${Bk.nu}${Bk.verwacht?' (verwacht eind)':` (${ymFull(Bk.ym)})`}`:'-'} | ${wat}`); }
+    const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:kr?`te krap, voorstel ${kr.voorstel} (duurste maand ${MNAMES[+kr.vloerMaand.slice(5,7)-1]} ${kr.vloerMaand.slice(0,4)}: ${Math.round(kr.vloer)})`:'niets (minder dan 2 van 3)';
+    let Nd=null; try{ Nd=potNodig(k, V, krapSkip); }catch(_){}
+    L.push(`  ${CATS[k].name}: ${mt} | ${Nd?`nodig ${Nd.nodig} (${MNAMES[+Nd.maand.slice(5,7)-1]} ${Nd.maand.slice(0,4)})`:'nodig -'} | ${P.huidig?'huidig budget voor alle drie (geen bewaarde potjes voor elke maand)':'bewaarde potjes per maand'} | ${tr.has(k)?'te ruim':'-'} | ${Bk?`was ${Bk.was}, nu ${Bk.nu}${Bk.verwacht?' (verwacht eind)':` (${ymFull(Bk.ym)})`}`:'-'} | ${wat}`); }
   /* v409: per periodieke post de cadans en de maanden van de komende twaalf met een dubbele betaling (4-wekelijks) of de post (kwartaal, jaar) */
   L.push('--- periodieke posten (v409): post | categorie | cadans | laatste bedrag | maanden in de komende 12');
   let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && ((+s.intervalM||1)>1 || s.cadans==='4w')); }catch(_){}
