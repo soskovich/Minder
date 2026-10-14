@@ -188,7 +188,7 @@ test('k. een eigen bedrag onder december zegt dat; boven het potje kan niet', as
   await boot(page); await open(page);
   await kies(page, 'verzekering', 'eigen');
   await page.fill('[data-ruimeigen="verzekering"]', '200');
-  expect(await tekst(page, '[data-ruimonder="verzekering"]')).toBe('Lager dan €330: in december is het potje dan niet gedekt.');   // v411: de ondergrens is het voorstel van potNodig()
+  expect(await tekst(page, '[data-ruimonder="verzekering"]')).toBe('Lager dan €330: in december 2026 is het potje dan niet gedekt.');   // v411: de ondergrens is het voorstel van potNodig()
   expect(await tekst(page, '#ruimVrij')).toBe('€500 komt vrij. Waar gaat het heen?');
   await page.fill('[data-ruimeigen="verzekering"]', '800');
   expect(await page.evaluate(() => { const p = ruimBijstelData().pots.find((x) => x.k === 'verzekering'); return [p.ok, p.vrij]; })).toEqual([false, 0]);

@@ -12,7 +12,7 @@ const { test, expect } = require('@playwright/test');
 /* v308: DE DAG STAAT VAST. De tempo-som klemt sinds v308 op de resterende dagen, en op de laatste
    dag van de maand is hij nul: dan staat de regel onder de tegel in geen enkele stap, en is de eis
    dat hij de bron draagt nergens getoetst. Dezelfde pin als de zes potjes-tests van v306. */
-const { pinDag } = require('./vaste-dag');
+const { pinDag, openDag } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
@@ -31,7 +31,7 @@ function seed(extra) {
   MS.forEach((m) => {
     const nu = (m === CUR);
     if (!nu) { add(m, '25', 3000, 'Werkgever', 'SALARIS LOON');
-      add(m, '02', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING'); }
+      add(m, openDag(), -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING'); }
     add(m, '05', -(nu ? 300 : 500), 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     if (nu && extra > 0) add(m, '06', -extra, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
   });

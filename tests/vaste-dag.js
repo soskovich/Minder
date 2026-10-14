@@ -64,4 +64,9 @@ async function pinDatum(page, ymd) {
   return d;
 }
 
-module.exports = { DAGEN_OVER, vasteDatum, pinDag, pinDatum };
+/* v412: DE DAG VAN EEN VASTE POST DIE DEZE MAAND NOG MOET KOMEN. Sinds v412 is een maandpost die langer dan 7 dagen
+   na zijn dag uitblijft VERLOPEN en telt hij niet meer mee (POST_TOL). Een fixture die een post "nog open" wil hebben
+   zet hem daarom NA de vaste dag (`vasteDatum()` plus `na` dagen), en niet in het begin van de maand: op dag dim-7 is
+   een post van de 3e drie weken te laat. Twee dagen na de vaste dag past in elke maand (dim-5). */
+function openDag(na = 2) { return String(vasteDatum().getDate() + na).padStart(2, '0'); }
+module.exports = { DAGEN_OVER, vasteDatum, pinDag, pinDatum, openDag };

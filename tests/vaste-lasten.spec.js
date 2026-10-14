@@ -8,7 +8,7 @@
 // vuurde nooit; hij leest nu de gedeelde lijst.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { pinDag, vasteDatum } = require('./vaste-dag');
+const { pinDag, vasteDatum, openDag } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 /* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
@@ -32,7 +32,7 @@ function seed(o) {
   for (let i = 3; i >= 0; i--) {
     const m = mnd(i);
     add('i' + m, m, '01', 3000, 'Werkgever', 'SALARIS LOON');
-    if (!(o.zonderNetflixNu && i === 0)) add('n' + m, m, '06', -12, 'Netflix', 'SEPA INCASSO NETFLIX ABONNEMENT');
+    if (!(o.zonderNetflixNu && i === 0)) add('n' + m, m, o.netflixDag || (o.zonderNetflixNu ? openDag() : '06'), -12, 'Netflix', 'SEPA INCASSO NETFLIX ABONNEMENT');
     add('h' + m, m, '02', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('g' + m, m, '03', -20, 'Greenpeace', 'PERIODIEKE OVERBOEKING MAANDELIJKSE GIFT');
     if (i === 3 || i === 0) add('v' + m, m, '10', -150, 'Verzekeraar', 'SEPA INCASSO KWARTAALPREMIE');
@@ -173,7 +173,7 @@ test.describe('c - een afschrijving na de opzegdatum is een melding', () => {
   });
 
   test('een pinbetaling bij dezelfde naam is geen afschrijving van de post', async ({ page }) => {
-    const p = seed({ zonderNetflixNu: true, set: { fixDueExcl: { [NETFLIX]: { sinds: mnd(1) + '-20' } } } });
+    const p = seed({ zonderNetflixNu: true, netflixDag: '06', set: { fixDueExcl: { [NETFLIX]: { sinds: mnd(1) + '-20' } } } });   // v412: de vorige betaling voor de opzegdatum
     const tx = JSON.parse(p.minder_tx);
     tx.push({ id: 'nx', date: CUR + '-08', amount: -12, acc: MAIN, name: 'Netflix', desc: 'BEA, BETAALPAS NETFLIX', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
     p.minder_tx = JSON.stringify(tx);

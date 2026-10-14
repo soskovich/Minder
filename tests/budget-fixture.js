@@ -1,6 +1,7 @@
 // Gedeelde fixture voor de in-browser budget-/liquiditeitschecks (v53/v54/v55).
 // Bewust kalender-onafhankelijk: elk bedrag hieronder is gelijk op elke dag van de maand.
 // Alleen varDue (tempo x resterende dagen) beweegt mee met de datum.
+const { openDag } = require('./vaste-dag');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now);
@@ -41,7 +42,7 @@ function seed({ giftCharged = true, maanden = 3 } = {}) {
   for (const m of [M2, M1, CUR]) {
     add('inc-' + m, m, '05', 3000, 'Werkgever', 'SALARIS LOON', MAIN, 'Main');
     add('fit-' + m, m, '04', -25, 'Basic-Fit', 'ECOM BASIC FIT BETAALPAS', MAIN, 'Main');   // FIXED_CATS-categorie, maar per kaart
-    if (m !== CUR || giftCharged) add('gift-' + m, m, '03', -20, 'Greenpeace', 'PERIODIEKE OVERBOEKING MAANDELIJKSE GIFT', MAIN, 'Main');
+    if (m !== CUR || giftCharged) add('gift-' + m, m, giftCharged ? '03' : openDag(), -20, 'Greenpeace', 'PERIODIEKE OVERBOEKING MAANDELIJKSE GIFT', MAIN, 'Main');
   }
   // Huur alleen in de twee afgeronde maanden: staat deze maand dus nog open (fixDue).
   for (const m of [M2, M1]) add('huur-' + m, m, '20', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING', MAIN, 'Main');

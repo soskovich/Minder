@@ -178,8 +178,8 @@ test.describe('ondergrens per maand bij Potje bijstellen', () => {
     // v411: de ondergrens is potNodig() (potOndergrens()), niet meer het gemiddelde plus de post (potjeMaandVloer() is weg)
     expect([r.v.nodig, r.v.vloer, r.v.vloerMaand]).toEqual([310, 310, '2026-12']);
     expect(r.v.ruimte).toBe(675 - 310);
-    expect(r.rij).toBe('potje €675, nodig €310 in december · ondergrens €310 · ruimte €365');
-    expect(r.gevolg).toContain('In december vraagt Verzekeringen €310: Centraal Beheer €150 en Dela €160. Dat past in €590.');
+    expect(r.rij).toBe('potje €675, nodig €310 in december 2026 · ondergrens €310 · ruimte €365');
+    expect(r.gevolg).toContain('In december 2026 vraagt Verzekeringen €310: Centraal Beheer €150 en Dela €160. Dat past in €590.');
   });
   test('een potje dat op het gemiddelde wel, maar in december niet past, staat er niet tussen', async ({ page }) => {
     await dm.boot(page, { extraTx: dela, set: { budgets: Object.assign({}, dm.BUDGETS, { verzekering: 300 }) } });

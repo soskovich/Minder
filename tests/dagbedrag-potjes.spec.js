@@ -31,7 +31,7 @@
 // dagen" zegt, en dat is een tweede waarheid op de noemer. Het open punt staat in CLAUDE.md.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
+const { pinDag, vasteDatum, DAGEN_OVER, openDag } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron } = require('./bron-kaal');
@@ -58,7 +58,7 @@ function seed(o) {
   for (const m of [M2, M1]) {
     add('i' + m, m, '05', 6000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, m, '02', -1200, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
-    add('ab' + m, m, '08', -389, 'Ziggo', 'SEPA INCASSO ZIGGO ABONNEMENT');
+    add('ab' + m, m, openDag(), -389, 'Ziggo', 'SEPA INCASSO ZIGGO ABONNEMENT');
     add('b' + m, m, '12', -700, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
   }
   add('iC', CUR, '05', 6000, 'Werkgever', 'SALARIS LOON');
@@ -245,7 +245,7 @@ test.describe('d · de dagregel leest de potjes en niets anders', () => {
     const a = await (async () => { await boot(page); return potjesPost(page); })();
     expect(a.achter).toBeTruthy();
     // het abonnement komt deze maand alsnog langs, dus fixDue valt weg
-    await boot(page, { extraTx: (add) => add('ab' + CUR, CUR, '08', -389, 'Ziggo', 'SEPA INCASSO ZIGGO ABONNEMENT') });
+    await boot(page, { extraTx: (add) => add('ab' + CUR, CUR, openDag(), -389, 'Ziggo', 'SEPA INCASSO ZIGGO ABONNEMENT') });
     const b = await potjesPost(page);
     expect(await page.evaluate(() => monthLiquidity().fixDue)).toBe(0);
     expect(b.kop).toBe(a.kop);
