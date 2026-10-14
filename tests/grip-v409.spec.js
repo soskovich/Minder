@@ -144,9 +144,9 @@ test.describe('5 · potje maken bij een stijgende trend: drie voorstellen, geen 
     const k = (await letop(page)).find(x => x.key === 'e_kinderen');
     expect(k.sub).toBe('potje €136 of €86, of reservering in Plan €15/mnd · stijgt: jul €4 · aug €35 · sep €136');
     const r = await page.evaluate(() => { openZonderKeuze('e_kinderen'); return { o: [...document.querySelectorAll('[data-zkoptie]')].map(e => [e.dataset.zkoptie, e.dataset.gekozen, e.querySelector('span span').textContent]), knop: document.querySelector('[data-zkbevestig]').disabled }; });
-    expect(r.o.map(x => x[0])).toEqual(['pot', 'pot2', 'res']);
+    expect(r.o.map(x => x[0])).toEqual(['pot', 'pot2', 'res', 'nee']);   // v415: geen potje nodig
     expect(r.o.every(x => x[1] === '0')).toBe(true);
-    expect(r.o.map(x => x[2])).toEqual(['Potje maken · €136 per maand', 'Potje maken · €86 per maand', 'Reservering in Plan · €15 per maand']);
+    expect(r.o.map(x => x[2])).toEqual(['Potje maken · €136 per maand', 'Potje maken · €86 per maand', 'Reservering in Plan · €15 per maand', 'Geen potje nodig · niet meer vragen']);
     expect(r.knop).toBe(true);
   });
   test('het tweede voorstel opent het formulier met €86', async ({ page }) => {

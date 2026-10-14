@@ -564,6 +564,7 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .scr-foot{text-align:center;color:var(--mut2);font-size:var(--fs-xs);letter-spacing:.02em;padding:var(--s3) 0 var(--s2);opacity:.85}
 #toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,20px);max-width:90%;background:var(--teal-d);color:#fff;padding:11px 16px;border-radius:12px;font-size:var(--fs-md);font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:80;text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.show.actie{pointer-events:auto}
 .note{background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.22);border-radius:10px;padding:8px 10px;margin-top:9px;font-size:var(--fs-sm);color:var(--txt);white-space:pre-wrap;word-break:break-word}
 .mini.note-btn{flex:0 0 44px}
 /* gestapelde balk vast/variabel */
@@ -3838,10 +3839,10 @@ function openOudePosten(){
       <span class="chip" data-oudzet="gestopt" onclick="oudePostZet('${kk(P.key)}','gestopt')">gestopt</span><span class="chip" data-oudzet="actief" onclick="oudePostZet('${kk(P.key)}','actief')">nog actief</span></div>`).join('')}</div>`;
   showSheetBg();
 }
-function oudePostZet(key, status){ postZet(key, status, 'oud'); }
-function oudePostenAlleGestopt(){ const L=postOudLijst(); if(!L.length) return; SET.postStatus=SET.postStatus||{};
+function oudePostZet(key, status){ postZet(key, status); }
+function oudePostenAlleGestopt(){ const L=postOudLijst(); if(!L.length) return; const herstel=setSnap(['postStatus']); SET.postStatus=SET.postStatus||{};
   for(const P of L) SET.postStatus[P.key]={status:'gestopt', op:vandaagYMD(), laatste:P.laatste||''};
-  save(); try{ render(); }catch(_){} closeSheet(); toast(`${ICON('check')} ${L.length} oude post${L.length===1?'':'en'} gestopt`); }
+  save(); keuzeKlaar(`${L.length} oude post${L.length===1?'':'en'} gestopt`, herstel); }
 /* v413: de cadans in woorden, voor de regel in Let op ("EUR 31 per kwartaal"). */
 function postCadansTxt(s){ if(!s) return ''; if(s.cadans==='4w') return 'per 4 weken'; if(s.cadans==='maand') return 'per maand';
   const iv=+s.intervalM||1; return ({1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'})[iv]||`per ${iv} maanden`; }
@@ -3876,11 +3877,13 @@ function postZet(key, status, terug){
   if(!key) return; SET.postStatus=SET.postStatus||{};
   let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
   const laatste=s?String(s.lastDate||'').slice(0,10):(((SET.postStatus[key]||{}).laatste)||'');
+  const herstel=setSnap(['postStatus','fixDueExcl','uitResAntw']);
   if(status==='gestopt' || status==='actief') SET.postStatus[key]={status, op:vandaagYMD(), laatste};
-  save(); try{ render(); }catch(_){}
+  save();
   const nm=s?titleCase(cleanMerch(s.name)||s.name||''):'Post';
-  toast(status==='gestopt'?`${ICON('check')} ${esc(nm)} gestopt · telt niet meer mee`:`${ICON('check')} ${esc(nm)} actief · telt weer mee`);
-  if(terug==='vaste') openVasteLasten(); else if(terug==='oud') openOudePosten(); else if(terug && terug.indexOf('ph:')===0) openPotHerzien(terug.slice(3)); else closeSheet();
+  /* v415: de sheet sluit en alles rekent opnieuw; vanuit de lijst Vaste lasten gaat hij terug naar die lijst */
+  if(terug==='vaste'){ try{ render(); }catch(_){} openVasteLasten(); toast(status==='gestopt'?`${ICON('check')} ${esc(nm)} gestopt`:`${ICON('check')} ${esc(nm)} actief`); return; }
+  keuzeKlaar(status==='gestopt'?`${nm} gestopt`:`${nm} actief`, herstel);
 }
 /* De sheet van een post: de status, de laatste betaling, en de handeling die past. Openen schrijft niets. */
 function openPostStatus(key, terug){
@@ -3921,10 +3924,14 @@ function uitResKeuze(key){ return (((SET.uitResAntw||{})[key])||{}).keuze||''; }
 function uitResOpen(){ return Object.keys(SET.fixDueExcl||{}).filter(k=>!uitResKeuze(k) && postStatus(k).status!=='gestopt'); }
 function uitResAntwZet(key, keuze){
   if(!key || (keuze!=='gestopt' && keuze!=='reservering')) return;
+  const herstel=setSnap(['postStatus','fixDueExcl','uitResAntw']);
   SET.uitResAntw=SET.uitResAntw||{}; const voor=(SET.fixDueExcl||{})[key];
   SET.uitResAntw[key]={keuze, op:vandaagYMD(), voor:voor===undefined?null:voor};
-  if(keuze==='gestopt'){ if(SET.fixDueExcl) delete SET.fixDueExcl[key]; postZet(key, 'gestopt'); return; }
-  save(); try{ render(); }catch(_){} closeSheet(); toast(`${ICON('check')} Uit reservering \u00b7 onthouden`);
+  const nm=postStatus(key).naam||titleCase(cleanMerch(key)||key);
+  if(keuze==='gestopt'){ if(SET.fixDueExcl) delete SET.fixDueExcl[key]; SET.postStatus=SET.postStatus||{};
+    let sc=null; try{ sc=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
+    SET.postStatus[key]={status:'gestopt', op:vandaagYMD(), laatste:sc?String(sc.lastDate||'').slice(0,10):''}; }
+  save(); keuzeKlaar(keuze==='gestopt'?`${nm} gestopt`:`${nm} uit reservering`, herstel);
 }
 /* De afschrijving die na het opzeggen nog mag komen: tot en met `tot`, anders tot en met de dag van opzeggen. */
 function opzegGrens(key){ return opzegTot(key) || opgezegdSinds(key) || ''; }
@@ -4574,6 +4581,19 @@ function renderReminder(){
   const {act,lab,zin}=importCta();
   return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div><div class="st"><b>Je data is ${days} dagen oud.</b> ${esc(zin)} <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${act}">${lab} ›</span></div></div>`;
 }
+/* v415: NA EEN KEUZE IN EEN SHEET: de sheet sluit, alles rekent opnieuw (render()), en een toast van KEUZE_TOAST_MS zegt
+   wat er gebeurde met "ongedaan maken". `herstel` zet de opgeslagen velden terug zoals ze voor de keuze waren. */
+const KEUZE_TOAST_MS=5000;
+function setSnap(keys){ const o={}; for(const k of keys) o[k]=SET[k]===undefined?undefined:JSON.parse(JSON.stringify(SET[k]));
+  return ()=>{ for(const k of keys){ if(o[k]===undefined) delete SET[k]; else SET[k]=JSON.parse(JSON.stringify(o[k])); } save(); try{ render(); }catch(_){} }; }
+function keuzeKlaar(tekst, herstel){
+  try{ closeSheet(); }catch(_){} try{ render(); }catch(_){}
+  window._ongedaan=herstel||null;
+  let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); }
+  el.innerHTML=`${ICON('check')} ${esc(tekst)}${herstel?` \u00b7 <span data-ongedaan role="button" style="text-decoration:underline;cursor:pointer" onclick="keuzeOngedaan()">ongedaan maken</span>`:''}`;
+  el.className='show'+(herstel?' actie':''); clearTimeout(window._tt);
+  window._tt=setTimeout(()=>{ el.className=''; window._ongedaan=null; }, KEUZE_TOAST_MS); }
+function keuzeOngedaan(){ const f=window._ongedaan; window._ongedaan=null; const el=document.getElementById('toast'); if(el) el.className=''; if(f) f(); }
 function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.innerHTML=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
 
 /* ----- MICRO-UITLEG bij vaktermen -----
@@ -8496,7 +8516,7 @@ function gripLetOpItems(RO, SIG, BV){
   /* v406: EENMALIG ZONDER POTJE. Een categorie zonder potje met uitgaven deze maand (minstens EUR 25) die er in minder dan
      ZONDER_MIN_MAANDEN van de laatste maanden was, houdt een regel met de vraag of de categorie klopt (openCategory); de
      lek-regel zegt dan niets meer over die categorie. */
-  let EM=[]; try{ EM=zonderPotjeStand(thisYM()).rijen.filter(x=>x.telt && x.n<ZONDER_MIN_MAANDEN && Math.round(x.geboekt)>=25); }catch(_){}
+  let EM=[]; try{ EM=zonderPotjeStand(thisYM()).rijen.filter(x=>x.telt && x.n<ZONDER_MIN_MAANDEN && Math.round(eenmaligOpen(x))>=25); }catch(_){}
   const emK=new Set(EM.map(x=>x.k));
   const zvExtra={}; let lekApart=false;
   try{ const m=thisYM(), Lk0=lekSignaal(m, budgetFlaggedCats(m));
@@ -8522,17 +8542,18 @@ function gripLetOpItems(RO, SIG, BV){
      regel en in het formulier; opslaan blijft jouw handeling (potFormZet). */
   /* v406: het voorstel draagt zijn bewijs (de drie maanden), en piekuitgaven krijgen eerst een reservering in Plan. */
   const resVan=(((SET.planInleg||{}).res||{}).van)||[];
-  for(const x of ZV){ if(resVan.includes(x.k)) continue;   // v406: een categorie met een reservering in Plan vraagt niets meer
+  for(const x of ZV){ if(resVan.includes(x.k) || !zonderSignaal(x)) continue;   // v415: minstens 2 maanden van EUR 25, en niet als je "niet meer vragen" koos; v406: een categorie met een reservering in Plan vraagt niets meer
     const E=zvExtra[x.k], vs=Math.round(x.gemiddeld||0), TS=zonderTrend(x), PK=TS?null:zonderPiek(x), bw=zonderBewijsTekst(x);
     /* v408: een stijgende trend gaat voor een piek: eerst potje maken met de laatste maand, dan een reservering (12 mnd) */
     const sub=TS?`potje ${euro0(TS.laatste)} of ${euro0(TS.gem2)}, of reservering in Plan ${euro0(TS.perMaand)}/mnd · stijgt: ${bw}`
       :PK?`reservering in Plan ${euro0(PK.perMaand)}/mnd of potje maken · ${bw}`:('potje maken'+(E?E.sub:(vs>0?` · voorstel ${euro0(vs)} per maand · ${bw}`:'')));
-    L.push({soort:'zonderpot', groep:'a', bedrag:TS?TS.laatste:PK?PK.perMaand:vs, key:x.k, voorstel:vs, piek:!!PK, trend:!!TS, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub, dot:'let op', act:(TS||PK)?`openZonderKeuze('${esc(x.k)}')`:(E?E.act:`openPotForm('${esc(x.k)}',${vs})`)}); }
+    L.push({soort:'zonderpot', groep:'a', bedrag:TS?TS.laatste:PK?PK.perMaand:vs, key:x.k, voorstel:vs, piek:!!PK, trend:!!TS, naam:`${x.naam} zonder potje · ${x.n} van ${x.maanden} mnd`, sub, dot:'let op', act:E?E.act:`openZonderKeuze('${esc(x.k)}')`}); }   // v415: de keuze heeft altijd "geen potje nodig"
   /* v406: gaat de lek-regel over dezelfde categorie, dan opent de tik zijn sheet (categorie wijzigen, potje maken en het
      gesprek, v359), zodat de ingang naar de coach blijft; staat de partij als eigen regel, of gaat het lek over iets
      anders, dan de boekingen van de categorie. */
   let lekCat=null; try{ const Lk1=lekSignaal(thisYM(), budgetFlaggedCats(thisYM())); lekCat=Lk1&&!lekApart?Lk1.cat:null; }catch(_){}
-  for(const x of EM) L.push({soort:'eenmalig', groep:'b', bedrag:x.geboekt, key:x.k, naam:`${x.naam} ${euro0(x.geboekt)} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'eenmalig · categorie klopt? ›', dot:'let op', geenPijl:true, act:lekCat===x.k?"openGripLetOp('lek')":`openCategory('${esc(x.k)}','${esc(thisYM())}')`});
+  /* v415: de tik opent de sheet van de eenmalige uitgave, met eerst "Klopt, eenmalig" (sluit het signaal voor die boekingen) */
+  for(const x of EM){ const g=eenmaligOpen(x); L.push({soort:'eenmalig', groep:'b', bedrag:g, key:x.k, naam:`${x.naam} ${euro0(g)} zonder potje · ${x.n} van ${x.maanden} mnd`, sub:'eenmalig · categorie klopt? ›', dot:'let op', geenPijl:true, act:`openEenmalig('${esc(x.k)}')`}); }
   try{ for(const x of PBL){
     if(patK[x.k]){ patRij(x.k, x.naam); continue; }
     if(trK.has(x.k)){ const Bk=potBreuk(x, potEind(VV, x.k)); if(!Bk) continue;   // te ruim zonder breuk: Zien zegt het
@@ -8626,7 +8647,7 @@ function gripLekKaart(){
   return `<div data-lek="${esc(Lk.cat)}"><div style="font-weight:800;font-size:var(--fs-lg)">${esc(Lk.catNaam)} · ${Lk.catVal} zonder potje</div>
     ${sub?`<div class="small muted" style="margin-top:2px" data-lekwinkel>${esc(sub)}</div>`:''}
     <div class="small" style="line-height:1.5;margin-top:8px">${esc(Lk.hyp)}</div>
-    <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>
+    ${Lk.imp?`<div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>`:''}
     <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-lekpotje style="width:auto;padding:9px 14px" onclick="openPotForm('${esc(Lk.cat)}',1)">Potje maken</button><button class="btn sec" data-lekcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${esc(Lk.cat)}','${esc(m)}')">Categorie wijzigen ›</button></div>
     <div class="small" data-lekcoach style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek ›</div></div>`;
 }
@@ -8834,7 +8855,39 @@ function overboekActieTekst(A){ return `Verhoog je automatische overboeking naar
    verwachting. ZONDER_UIT telt niet mee, niet geboekt en niet verwacht: een persoonlijke overboeking is geen uitgave zonder
    potje (keuze van de gebruiker). Vier lezers: maandVooruit() (de uitkomst), de bridge op Zien (dicht geboekt, licht
    verwacht), Let op (een regel per categorie die er vaker is) en blok 19 (per categorie de reden). */
-const ZONDER_MIN_MAANDEN=2;   // ZONDER_UIT en buitenUitgave() staan bij uitgaveNorm() (v403)
+const ZONDER_MIN_MAANDEN=2;
+/* v415: HET SIGNAAL "ZONDER POTJE" IN LET OP vraagt minstens ZONDER_MIN_MAANDEN maanden van ZONDER_SIGNAAL_EUR (25) of meer
+   (de verwachting in maandVooruit() blijft bij "uitgaven in 2 van 3"). "Geen potje nodig · niet meer vragen" schrijft
+   SET.zonderNee[k]={op, max}; de vraag komt pas terug als een afgeronde maand vanaf `op` minstens ZONDER_OPNIEUW_FACTOR (2)
+   keer `max` (het hoogste bedrag van de drie maanden op het moment van kiezen) draagt. */
+const ZONDER_SIGNAAL_EUR=25, ZONDER_OPNIEUW_FACTOR=2;
+/* v415: EENMALIG, "Klopt, eenmalig": SET.eenmaligOk[t.id]={op}. Wat je zo bevestigde telt niet meer mee in het signaal; een
+   nieuwe boeking in dezelfde categorie wel. */
+function eenmaligOpen(x){ const ok=SET.eenmaligOk||{}; return (x.tx||[]).filter(t=>!ok[t.id]).reduce((a,t)=>a+uitgaveNorm(t),0); }
+function openEenmalig(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===k); }catch(_){}
+  if(!x){ closeSheet(); return; } const ok=SET.eenmaligOk||{}, tx=(x.tx||[]).filter(t=>!ok[t.id]), kk=esc(k).replace(/'/g,"\\'");
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligSheet" data-eenmalig="${esc(k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} ${euro0(eenmaligOpen(x))} zonder potje</div>
+    ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}</div>`).join('')}
+    <div class="small" data-eenmaliguitleg style="line-height:1.5;margin-top:8px">Eenmalige uitgave zonder potje. Klopt dat, dan hoef je niets te doen.</div>
+    <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-eenmaligklopt style="width:auto;padding:9px 14px" onclick="eenmaligKlopt('${kk}')">Klopt, eenmalig</button>
+      <button class="btn sec" data-eenmaligcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${kk}','${esc(thisYM())}')">Categorie wijzigen</button></div>
+    ${(()=>{ let Lk=null; try{ Lk=lekSignaal(thisYM(), budgetFlaggedCats(thisYM())); }catch(_){} return Lk&&Lk.cat===k?`<div class="small" data-lekcoach style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek ›</div>`:''; })()}</div>`;
+  showSheetBg(); }
+function eenmaligKlopt(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===k); }catch(_){} if(!x) return;
+  const herstel=setSnap(['eenmaligOk']); SET.eenmaligOk=SET.eenmaligOk||{};
+  for(const t of (x.tx||[])) if(!SET.eenmaligOk[t.id]) SET.eenmaligOk[t.id]={op:vandaagYMD(), cat:k};
+  save(); keuzeKlaar(`${x.naam}: eenmalig`, herstel); }
+function zonderMaandBedrag(k, ym){ let v=0; for(const t of txOfMonth(ym)){ if(!piekInScope(t) || catOf(t)!==k) continue; v+=uitgaveNorm(t); } return v; }
+function zonderSignaal(x, m){ m=m||thisYM();
+  if((x.bedragen||[]).filter(v=>v>=ZONDER_SIGNAAL_EUR).length<ZONDER_MIN_MAANDEN) return false;
+  const N=(SET.zonderNee||{})[x.k]; if(!N) return true;
+  for(let ym=N.op; ym<m; ym=valtOpYmPlus(ym,1)){ if(zonderMaandBedrag(x.k, ym)>=ZONDER_OPNIEUW_FACTOR*(+N.max||0)) return true; }
+  return false; }
+function zonderNeeZet(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===k); }catch(_){}
+  const herstel=setSnap(['zonderNee']); SET.zonderNee=SET.zonderNee||{};
+  SET.zonderNee[k]={op:thisYM(), max:Math.round(Math.max(0, ...((x&&x.bedragen)||[0])))};
+  save(); window._zk=null; keuzeKlaar(`${(CATS[k]||{}).name||k}: geen potje nodig`, herstel); }   // ZONDER_UIT en buitenUitgave() staan bij uitgaveNorm() (v403)
 function zonderPotjeCat(k){ const B=SET.budgets||{};
   return !!(CATS[k] && CATS[k].type==='expense' && !geenNorm(k) && !((+B[k]||0)>0) && !potHeelVast(k)); }
 /* De uitgaven per categorie (piekInScope, netto) in de afgeronde maanden voor m, in de snede van maandVooruit(). */
@@ -10266,6 +10319,7 @@ function brugTekenVast(R){ if(R['~ovB']<0){ R['~ovO']=(R['~ovO']||0)+R['~ovB']; 
 function brugKort(k, naam){ return BRUG_KORT[k] || String(naam||k).split(/\s*&\s*/)[0]; }
 const BRUG_KORT={uiteten:'Uit eten', boodschappen:'Bood­schappen', verzekering:'Verzeke­ringen', abonnement:'Abonne­menten', bankkosten:'Bank­kosten', belasting:'Belasting', vakantie:'Vakantie', goededoel:'Goede doelen', persoonlijk:'Persoonlijk', studie:'Studie­schuld', shopping:'Shopping', zorg:'Zorg'};
 const BRUG_KORT_SET=new Set(Object.values(BRUG_KORT));
+const BRUG_KLEIN=10;
 function gripZienBrug(V, TR){
   if(!V || V.onbekend || !(V.budget>0)) return null;
   TR=TR||teRuim(V);
@@ -10319,8 +10373,14 @@ function gripZienBrug(V, TR){
   const ovO={soort:'overig', k:'onder', label:nO?`${nO} onder`:'onder', titel:`${nO} onder je budget`, waarde:R['~ovO']||0, onder:nO, boven:S.boven};
   const OD=gripOnderDrempelLijst(V).filter(x=>!los.some(l=>l.k===x.k));
   if(OD.length) ovB.noot={tekst:'+'+euro0(OD.reduce((a,x)=>a+Math.round(x.overR),0)), tik:'gripOnderDrempelTik()', titel:gripOnderDrempelTekst(V)};
+  /* v415: EEN SAMENGEVOEGDE STAP VAN MINDER DAN BRUG_KLEIN (10) KRIJGT GEEN EIGEN KOLOM: hij schuift bij de dichtstbijzijnde
+     stap aan dezelfde kant (boven bij boven, onder bij onder), en de som blijft gelijk. Zonder zo'n stap blijft hij staan. */
+  for(const ov of [ovB, ovO]){ const w=ov.waarde; if(!w || Math.abs(w)>=BRUG_KLEIN) continue;
+    const mid=stappen.slice(1).filter(st=>st.waarde && Math.sign(st.waarde)===Math.sign(w));
+    if(!mid.length) continue; const doel=mid[mid.length-1];   // de dichtstbijzijnde: de laatste ervoor, want overig staat achteraan
+    doel.waarde+=w; doel.bij=(doel.bij||0)+w; doel.titel=`${doel.titel||doel.label} \u00b7 ${w>0?'+':'−'}${euro0(Math.abs(w))} uit ${ov.label}`; if(ov.noot){ doel.noot=ov.noot; ov.noot=null; } ov.waarde=0; ov.opgeschoven=w; }
   if(ovB.waarde) stappen.push(ovB);
-  if(ovO.waarde || !ovB.waarde) stappen.push(ovO);
+  if(ovO.waarde || (!ovB.waarde && !ovB.opgeschoven && !ovO.opgeschoven)) stappen.push(ovO);
   stappen.push({soort:'eind', label:'verwacht', waarde:P, breed:1.3});
   let run=Bud; const lv=[Bud, P];
   for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
@@ -10328,7 +10388,7 @@ function gripZienBrug(V, TR){
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
   const tweekleur=stappen.some(st=>st.soort==='zonder' && st.geboekt && st.verwacht);
-  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, korteLabels:true, verschil:diff, budget:Bud, tweekleur};
+  return {tegen:'budget', stappen, basis, tik:'gripZienTik', gap:2, korteLabels:true, verschil:diff, budget:Bud, tweekleur, opgeschoven:[ovB, ovO].filter(o=>o.opgeschoven && !stappen.includes(o))};
 }
 function gripZienTik(soort,k){
   if(soort==='teruim'){ openTeRuim(k||undefined); return; }
@@ -10369,7 +10429,7 @@ function gripOverigSamen(V, losKs, tot, O){
 }
 function gripOverigDelen(V){
   const Br=gripZienBrug(V); if(!Br) return null;
-  const tot=Br.stappen.filter(x=>x.soort==='overig').reduce((a,x)=>a+x.waarde-(x.zonderIn||0),0);   // v406: boven en onder samen; v408: zonder potje in "n boven" telt hier niet
+  const ovs=[...Br.stappen.filter(x=>x.soort==='overig'), ...(Br.opgeschoven||[])], tot=ovs.reduce((a,x)=>a+(x.waarde||0)+(x.opgeschoven||0)-(x.zonderIn||0),0);   // v415: ook wat bij een andere stap aanschoof   // v406: boven en onder samen; v408: zonder potje in "n boven" telt hier niet
   return gripOverigSamen(V, Br.stappen.filter(x=>x.soort==='potje').map(x=>x.k), tot, teRuim(V));
 }
 function openGripOverig(kant){ window._ovKant=kant==='boven'||kant==='onder'?kant:null; renderGripOverig(); showSheetBg(); }
@@ -10591,7 +10651,7 @@ function teRuimKies(k){ const S=window._tr; if(!S) return; if(S.optie!==k){ S.op
 function teRuimBevestig(){
   const {S, V, x}=teRuimStand(); if(!S || !x || !V) return;
   const ym=thisYM();
-  if(S.optie==='c'){ teRuimLaten(x.k, [S.reden, (S.redenVrij||'').trim()].filter(Boolean).join(' · ')); closeSheet(); renderMaand(); return; }
+  if(S.optie==='c'){ const herstel=setSnap(['teRuimLaten','teRuimLatenReden']); teRuimLaten(x.k, [S.reden, (S.redenVrij||'').trim()].filter(Boolean).join(' · ')); window._tr=null; keuzeKlaar(`${x.naam} laten staan`, herstel); return; }
   const N=teRuimNieuw(S, x); if(N.reden || !(N.vrij>0)) return;
   const d=teRuimBestemVan(V, x, S.bestem); if(!d) return;
   const T=teRuimDelen(S, V, x, N, d); if(T.reden || !T.delen.length) return;
@@ -10703,7 +10763,9 @@ function potHerzienBevestig(){
    voorselectie; de reservering is een inleg in Plan (planInlegVoeg, v399), potje maken opent het formulier met het voorstel. */
 function openZonderKeuze(k){ window._zk={k, optie:null}; renderZonderKeuze(); showSheetBg(); }
 function zonderKeuzeStand(){ const S=window._zk||{}; let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===S.k); }catch(_){}
-  if(!x) return null; const TS=zonderTrend(x), PK=TS?null:zonderPiek(x); if(!TS && !PK) return null;
+  if(!x) return null; const TS=zonderTrend(x), PK=TS?null:zonderPiek(x);
+  /* v415: zonder trend of piek: potje maken met het gemiddelde eerst, dan een reservering (12 mnd gedeeld door 12) */
+  if(!TS && !PK){ const jaar=zonderJaar(x.k); return {S, x, TS:null, PK:null, gewoon:true, res:Math.round(jaar/12), jaar, pot:Math.round(x.gemiddeld||0), pot2:null}; }
   /* v408: bij een stijgende trend is het potje de laatste maand en staat het eerst; bij een piek het gemiddelde, na de reservering */
   return {S, x, TS, PK, res:TS?TS.perMaand:PK.perMaand, jaar:TS?TS.jaar:PK.jaar, pot:TS?TS.laatste:Math.round(x.gemiddeld||0), pot2:TS?TS.gem2:null}; }
 function renderZonderKeuze(){
@@ -10711,21 +10773,23 @@ function renderZonderKeuze(){
   const {S, x, TS, PK}=Z;
   const radio=on=>`<span style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${on?'var(--teal)':'var(--bar)'};${on?'background:var(--teal);':''}flex-shrink:0;margin-top:2px"></span>`;
   const opt=(k,t,sub)=>`<div data-zkoptie="${k}" data-gekozen="${S.optie===k?1:0}" role="button" onclick="window._zk.optie='${k}';renderZonderKeuze()" style="padding:8px 0;border-top:1px solid var(--line);cursor:pointer"><div class="row" style="gap:8px;align-items:flex-start">${radio(S.optie===k)}<span style="flex:1;min-width:0"><span style="font-weight:700;display:block">${t}</span><span class="small muted">${sub}</span></span></div></div>`;
-  const knop=S.optie==='res'?`Reservering ${euro0(Z.res)}/mnd in Plan`:(S.optie==='pot'||(S.optie==='pot2'&&TS))?'Naar potje maken':'';
+  const knop=S.optie==='res'?`Reservering ${euro0(Z.res)}/mnd in Plan`:(S.optie==='pot'||(S.optie==='pot2'&&TS))?'Naar potje maken':S.optie==='nee'?'Niet meer vragen':'';
   const oRes=opt('res', `Reservering in Plan · ${euro0(Z.res)} per maand`, `de laatste 12 maanden samen ${euro0(Z.jaar)}, gedeeld door 12; het geld staat klaar als de piek komt, en je maandbudget stijgt ermee`);
   /* v409: bij een stijgende trend drie voorstellen, zonder voorselectie: de laatste maand, het gemiddelde van de laatste 2, en
      een reservering in Plan (12 mnd gedeeld door 12) */
   const oPot=TS?opt('pot', `Potje maken · ${euro0(Z.pot)} per maand`, 'de laatste maand; het stijgt elke maand, dus het gemiddelde loopt achter')
       +opt('pot2', `Potje maken · ${euro0(Z.pot2)} per maand`, 'het gemiddelde van de laatste 2 maanden')
-    :opt('pot', `Potje maken · voorstel ${euro0(Z.pot)} per maand`, 'het gemiddelde van de 3 maanden; in een piekmaand loopt het potje over');
+    :opt('pot', `Potje maken · voorstel ${euro0(Z.pot)} per maand`, Z.gewoon?'het gemiddelde van de 3 maanden':'het gemiddelde van de 3 maanden; in een piekmaand loopt het potje over');
+  const oNee=opt('nee', 'Geen potje nodig \u00b7 niet meer vragen', 'de vraag komt pas terug als een maand minstens twee keer zo hoog is als de hoogste van deze drie');
   $('#sheet').innerHTML=`<div class="grab"></div><div id="zonderKeuzeSheet" data-zkcat="${esc(x.k)}"${TS?' data-zktrend':''}>
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} zonder potje</div>
-    <div class="small muted" data-zkbewijs style="margin:4px 0 6px;line-height:1.45">${TS?'stijgt: ':''}${zonderBewijsTekst(x)}${TS?'':` · ${x.n===2?'uitgaven in 2 van de 3 maanden':`een maand draagt ${PK.deel}%`}`}</div>
-    ${TS?oPot+oRes:oRes+oPot}
+    <div class="small muted" data-zkbewijs style="margin:4px 0 6px;line-height:1.45">${TS?'stijgt: ':''}${zonderBewijsTekst(x)}${TS||Z.gewoon?'':` · ${x.n===2?'uitgaven in 2 van de 3 maanden':`een maand draagt ${PK.deel}%`}`}</div>
+    ${(TS||Z.gewoon?oPot+oRes:oRes+oPot)+oNee}
     ${sheetVoet(`<button class="btn" data-zkbevestig ${knop?'':'disabled'} onclick="zonderKeuzeZet()">${knop||'Bevestigen'}</button>`, knop?'':'Kies een optie')}</div>`;
 }
 function zonderKeuzeZet(){
   const Z=zonderKeuzeStand(); if(!Z || !Z.S.optie) return; const {x}=Z;
+  if(Z.S.optie==='nee'){ zonderNeeZet(x.k); return; }
   if(Z.S.optie==='pot'){ window._zk=null; openPotForm(x.k, Z.pot, Z.TS?'de laatste maand':null); return; }
   if(Z.S.optie==='pot2'){ if(!Z.TS) return; window._zk=null; openPotForm(x.k, Z.pot2, 'het gemiddelde van de laatste 2 maanden'); return; }
   planInlegVoeg('res', Z.res, x.k); save(); window._zk=null; closeSheet(); render(); toast(`Reservering ${euro0(Z.res)}/mnd voor ${x.naam} in Plan`);
@@ -11006,7 +11070,7 @@ function gripBrugNa(V, p, optie){
   const Br=gripZienBrug(V); if(!Br) return null;
   if(!optie || optie.werkt!=='nu') return {voor:Br, na:Br, delta:0};
   const ks=new Set(gripPotSignalen(p).map(s=>s.k)); let delta=0;
-  const st=Br.stappen.map(s=>{ if(s.soort==='potje' && ks.has(s.k)){ delta+=s.waarde; return Object.assign({}, s, {waarde:0}); } return Object.assign({}, s); });
+  const st=Br.stappen.map(s=>{ if(s.soort==='potje' && ks.has(s.k)){ delta+=s.waarde-(s.bij||0); return Object.assign({}, s, {waarde:s.bij||0}); }   /* v415: wat er aan overig aanschoof blijft */ return Object.assign({}, s); });
   /* een potje uit het patroon dat niet los in de bridge staat (in overig), telt via zijn eigen overschrijding */
   for(const s of gripPotSignalen(p)) if(!Br.stappen.some(x=>x.soort==='potje'&&x.k===s.k)){ const o=st.find(x=>x.soort==='overig'); if(o){ o.waarde-=Math.max(s.bedrag,0); delta+=Math.max(s.bedrag,0); } }
   const e=st.find(s=>s.soort==='eind'); if(e) e.waarde=Math.round(e.waarde-delta);
@@ -20918,7 +20982,7 @@ function lekSignaal(m, exclude){
   let catBedrag=bedrag; try{ const v=Math.round(+catSpendMap(m)[L.cat]||0); if(v>0) catBedrag=v; }catch(_){}
   const T = L.kind==='missing-pot'
     ? {hyp:terug?`${L.name} komt vaker terug (${BW.tekst}) en heeft nog geen potje.`:`${cat} ${euro0(catBedrag)} zonder potje.`,
-       imp:`Een vaste behoefte zonder potje valt buiten elke grens die je hebt gezet.`}
+       imp:''}   // v415: de zin "Een vaste behoefte zonder potje valt buiten elke grens die je hebt gezet." is weg
     : L.kind==='over-budget'
     ? {hyp:`${L.name} ging deze maand over het potje heen.`,
        imp:`Dat deel viel buiten de grens die je zelf had gezet.`}

@@ -92,9 +92,11 @@ test.describe('4 · oude verlopen posten in een regel', () => {
     const lijst = await page.evaluate(() => [...document.querySelectorAll('#oudePosten [data-oudepost]')].map(e => e.innerText.replace(/\s+/g, ' ')));
     expect(lijst).toEqual(['Oude Opslag €90 per kwartaal · laatste betaling 23 mrt 2026 gestopt nog actief', 'Oude Krant €25 per maand · laatste betaling 5 mrt 2026 gestopt nog actief']);
     expect(await page.evaluate(() => JSON.stringify(SET.postStatus || {}))).toBe(voor.set);   // openen schrijft niets
-    /* per post: nog actief voor de krant; de sheet blijft open met de rest */
+    /* per post: nog actief voor de krant; v415: de sheet sluit na een keuze, de lijst heeft daarna nog een post */
     await page.locator(`[data-oudepost="${a}"] [data-oudzet="actief"]`).click();
     expect(await page.evaluate((a) => postStatus(a).status, a)).toBe('actief');
+    expect(await page.evaluate(() => document.getElementById('sheetBg').classList.contains('show'))).toBe(false);
+    await page.evaluate(() => openOudePosten());
     expect(await page.locator('#oudePosten [data-oudepost]').count()).toBe(1);
     await page.locator('[data-oudallegestopt]').click();
     expect(await page.evaluate(({ a, b }) => [postStatus(a).status, postStatus(b).status], { a, b })).toEqual(['actief', 'gestopt']);

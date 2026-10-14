@@ -84,7 +84,7 @@ test.describe('A2/A3 · volgorde en eenmalig', () => {
   test('Zorg & apotheek €159 eenmalig: de regel blijft, met "eenmalig · categorie klopt? ›" en zonder losse pijl', async ({ page }) => {
     await S.boot(page);
     const z = (await letop(page)).find(x => x.soort === 'eenmalig');
-    expect(z).toEqual({ soort: 'eenmalig', naam: 'Zorg & apotheek €159 zonder potje · 0 van 3 mnd', sub: 'eenmalig · categorie klopt? ›', act: "openGripLetOp('lek')", groep: 'b', bedrag: 159, pijl: false });
+    expect(z).toEqual({ soort: 'eenmalig', naam: 'Zorg & apotheek €159 zonder potje · 0 van 3 mnd', sub: 'eenmalig · categorie klopt? ›', act: "openEenmalig('zorg')", groep: 'b', bedrag: 159, pijl: false });   // v415: de eenmalig-sheet (met "Klopt, eenmalig"); het gesprek staat daarin als het lek over dezelfde categorie gaat
     /* het lek gaat hier over dezelfde categorie en heeft geen eigen partij-regel: de tik opent zijn sheet (categorie wijzigen,
        potje maken, het gesprek), zodat de ingang naar de coach blijft (v359) */
     expect(await page.evaluate(() => (lekSignaal(thisYM(), budgetFlaggedCats(thisYM())) || {}).cat)).toBe('zorg');
@@ -105,7 +105,7 @@ test.describe('B · potje maken met bewijs, piek naar een reservering in Plan', 
     await extra(page, [['2026-07-09', -30, 'Stichting Een', 'goededoel'], ['2026-08-09', -30, 'Stichting Een', 'goededoel'], ['2026-09-09', -36, 'Stichting Een', 'goededoel'], ['2026-10-09', -30, 'Stichting Een', 'goededoel']]);
     const g = (await letop(page)).find(x => x.soort === 'zonderpot' && x.naam.startsWith('Goede'));
     expect(g.sub).toBe('potje maken · voorstel €32 per maand · jul €30 · aug €30 · sep €36');
-    expect(g.act).toBe("openPotForm('goededoel',32)");
+    expect(g.act).toBe("openZonderKeuze('goededoel')");   // v415: de keuze met "geen potje nodig"
   });
   test('Vakantie (2 van 3 mnd): eerst een reservering in Plan, jaarbedrag gedeeld door 12', async ({ page }) => {
     await S.boot(page);
@@ -114,7 +114,7 @@ test.describe('B · potje maken met bewijs, piek naar een reservering in Plan', 
   });
   test('een maand met meer dan 60%: ook een piek', async ({ page }) => {
     await S.boot(page);
-    await extra(page, [['2026-07-09', -10, 'Fietsenmaker', 'goededoel'], ['2026-08-09', -10, 'Fietsenmaker', 'goededoel'], ['2026-09-09', -200, 'Fietsenmaker', 'goededoel']]);
+    await extra(page, [['2026-07-09', -30, 'Fietsenmaker', 'goededoel'], ['2026-08-09', -30, 'Fietsenmaker', 'goededoel'], ['2026-09-09', -300, 'Fietsenmaker', 'goededoel']]);
     const g = (await letop(page)).find(x => x.soort === 'zonderpot' && x.naam.startsWith('Goede'));
     expect(g.act).toBe("openZonderKeuze('goededoel')");
   });
@@ -124,7 +124,7 @@ test.describe('B · potje maken met bewijs, piek naar een reservering in Plan', 
       const v = { opties: [...sh.querySelectorAll('[data-zkoptie]')].map(e => e.dataset.zkoptie), gekozen: [...sh.querySelectorAll('[data-zkoptie]')].filter(e => e.dataset.gekozen === '1').length, uit: sh.querySelector('[data-zkbevestig]').disabled };
       window._zk.optie = 'res'; renderZonderKeuze(); zonderKeuzeZet();
       return Object.assign(v, { res: SET.planInleg.res.bedrag, van: SET.planInleg.res.van, rij: gripLetOpItems([], [], []).some(x => x.key === 'vakantie') }); });
-    expect(r.opties).toEqual(['res', 'pot']); expect(r.gekozen).toBe(0); expect(r.uit).toBe(true);
+    expect(r.opties).toEqual(['res', 'pot', 'nee']);   // v415: derde keuze "geen potje nodig" expect(r.gekozen).toBe(0); expect(r.uit).toBe(true);
     expect(r.res).toBe(33); expect(r.van).toContain('vakantie'); expect(r.rij).toBe(false);
   });
   test('potje maken vanuit de keuze opent het formulier met het voorstel', async ({ page }) => {

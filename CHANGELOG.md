@@ -1424,3 +1424,13 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v414.spec.js` (13 tests, 14 sabotages, alle rood); gemigreerd: `grip-v412` en `grip-v413` (de nieuwe vorm), `grip-v413` 5 (de vraag over een andere post), `standkaart-sluit.fixture` (de vlaggen beantwoord met uit reservering), `uitgesloten-keuzes` i (idem voor de extra post).
 - `sw.js` naar `minder-v414`.
 
+## v415 · sheets sluiten, signalen af te sluiten, brug
+- **Punt 1**: `keuzeKlaar()`, `setSnap()`, `keuzeOngedaan()`, `KEUZE_TOAST_MS` 5000, `#toast.show.actie` klikbaar. Na gestopt, actief, uit reservering, alle gestopt, laten staan, niet meer vragen en klopt eenmalig: sheet dicht, `render()`, toast met ongedaan maken.
+- **Punt 2**: `zonderSignaal()`, `ZONDER_SIGNAAL_EUR` 25, `SET.zonderNee`, `ZONDER_OPNIEUW_FACTOR` 2, `zonderMaandBedrag()`, `zonderNeeZet()`; `openZonderKeuze()` ook zonder trend of piek, met de derde keuze. Vakantie zoals op het toestel (jul €11, aug €99): geen signaal.
+- **Punt 3**: `openEenmalig()`, `eenmaligKlopt()`, `eenmaligOpen()`, `SET.eenmaligOk`; de imp-zin van een lek zonder potje is weg.
+- **Punt 4**: niet gewijzigd in de code (laten staan raakt `teRuim()` niet); vastgelegd in een test. Op grip-kring-stand en grip-v409-stand blijft Huur na laten staan in de grijze stap.
+- **Punt 5**: `BRUG_KLEIN` 10; `gripBrugNa()` laat het aangeschoven deel staan; `gripOverigDelen()` leest `Br.opgeschoven`.
+- **Niet gebouwd**: "te krap alleen als de post het verschil maakt" en "gestopt als eigen keuze": de tekst is niet aangekomen.
+- **Specs**: nieuw `grip-v415.spec.js` (11 tests, 20 sabotages, alle rood); gemigreerd: `grip-eigen-budget` (7 naar 6 kolommen, punt 5), `grip-v406` (eenmalig naar `openEenmalig`, potje maken naar de keuze, de piek met 30/30/300 omdat 10/10/200 de drempel van 25 niet haalt, de opties met `nee`), `grip-v408` en `grip-v409` (de opties met `nee`), `zien-blok19-gelijk` (de keuze), `grip-v414` (de lijst sluit na een keuze).
+- `sw.js` naar `minder-v415`.
+

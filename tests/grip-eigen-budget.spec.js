@@ -259,7 +259,7 @@ test('Zien past op 390x844 boven de menubalk, labels op een regel en zonder over
     breed: [...document.querySelectorAll('#gripBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width),
     knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }));
   console.log(`zien 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-  expect(r.kol).toBe(7);   // v406: budget, Uit eten, Huur, Vervoer, overig boven, overig onder, verwacht
+  expect(r.kol).toBe(6);   // v415: overig boven was +€5, minder dan BRUG_KLEIN, en schoof bij Uit eten aan; budget, Uit eten, Huur, Vervoer, overig onder, verwacht
   for (const b of r.breed) expect(b).toBeGreaterThanOrEqual(40);
   expect(r.knop).toBeLessThanOrEqual(r.nav);
   expect(r.sw).toBeLessThanOrEqual(390);

@@ -179,7 +179,7 @@ test.describe('E6 · een stijgende trend zonder potje', () => {
   test('de keuze: potje eerst (€136), reservering tweede (12 mnd gemiddeld), geen voorselectie', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => { openZonderKeuze('e_kinderen'); return { o: [...document.querySelectorAll('[data-zkoptie]')].map(e => [e.dataset.zkoptie, e.dataset.gekozen, e.querySelector('span span').textContent]), knop: document.querySelector('[data-zkbevestig]').disabled }; });
-    expect(r.o.map(x => x[0])).toEqual(['pot', 'pot2', 'res']);   // v409
+    expect(r.o.map(x => x[0])).toEqual(['pot', 'pot2', 'res', 'nee']);   // v409; v415: geen potje nodig
     expect(r.o.every(x => x[1] === '0')).toBe(true);
     expect(r.o[0][2]).toBe('Potje maken · €136 per maand');
     expect(r.o[1][2]).toBe('Potje maken · €86 per maand'); expect(r.o[2][2]).toBe('Reservering in Plan · €15 per maand');

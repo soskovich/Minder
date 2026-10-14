@@ -16,6 +16,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v415` · een keuze sluit zijn sheet, en elk signaal is af te sluiten.** Zonder potje: "niet meer vragen" met een
+  terugkeerdrempel (2x het hoogste bedrag); eenmalig: "Klopt, eenmalig" per boeking. Valkuil: een signaal zonder uitweg blijft
+  elke maand staan en wordt ruis. Laten staan stopt de vraag en niet de informatie: `teRuim()` leest `potLaten()` niet.
+- **`v415` · een kleine samengevoegde stap krijgt geen kolom.** Onder EUR 10 schuift hij bij een stap aan dezelfde kant;
+  de som blijft gelijk en de overig-sheet telt hem mee. Valkuil: `gripBrugNa()` zette een potje-stap op nul; het aangeschoven
+  deel moet blijven, anders verschuift de meetlat in Kiezen.
 - **`v414` · een signaal per post.** Een open vraag gestopt of uit reservering verdringt de regel van `v329` en de
   verlopen-regel voor dezelfde post. Valkuil: de v329-specs bouwen op een stand met de vlag; die stand draagt nu het antwoord
   "uit reservering", anders staat er alleen de vraag. Oude verlopen posten (laatste betaling ouder dan 6 maanden) staan samen in
