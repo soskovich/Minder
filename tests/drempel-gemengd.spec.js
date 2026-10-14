@@ -22,7 +22,7 @@ test.describe('A · onder de drempel', () => {
       return { over: Math.round(x.overR), uit: potjeUitschieter(x), noten, toasts, kolom,
         regels: document.querySelectorAll('[data-onderdrempel]').length }; });
     expect(r.over).toBe(5); expect(r.uit).toBe(false);
-    expect(r.noten).toEqual([['overig', '+€5']]);
+    expect(r.noten).toEqual([['potje', '+€5']]);   // v415: "1 boven" (+€5) is kleiner dan BRUG_KLEIN en schoof met zijn noot bij Uit eten aan
     expect(r.toasts).toEqual(['Vices · onder de drempel']);
     expect(r.kolom).toBe(0);   // de noot heeft een eigen tik; de kolom (de sheet overig) opent niet
     expect(r.regels).toBe(0);  // geen eigen grijze regel meer

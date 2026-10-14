@@ -1431,6 +1431,6 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Punt 4**: niet gewijzigd in de code (laten staan raakt `teRuim()` niet); vastgelegd in een test. Op grip-kring-stand en grip-v409-stand blijft Huur na laten staan in de grijze stap.
 - **Punt 5**: `BRUG_KLEIN` 10; `gripBrugNa()` laat het aangeschoven deel staan; `gripOverigDelen()` leest `Br.opgeschoven`.
 - **Niet gebouwd**: "te krap alleen als de post het verschil maakt" en "gestopt als eigen keuze": de tekst is niet aangekomen.
-- **Specs**: nieuw `grip-v415.spec.js` (11 tests, 20 sabotages, alle rood); gemigreerd: `grip-eigen-budget` (7 naar 6 kolommen, punt 5), `grip-v406` (eenmalig naar `openEenmalig`, potje maken naar de keuze, de piek met 30/30/300 omdat 10/10/200 de drempel van 25 niet haalt, de opties met `nee`), `grip-v408` en `grip-v409` (de opties met `nee`), `zien-blok19-gelijk` (de keuze), `grip-v414` (de lijst sluit na een keuze).
+- **Specs**: nieuw `grip-v415.spec.js` (11 tests, 20 sabotages, alle rood); gemigreerd: `grip-eigen-budget` (7 naar 6 kolommen, punt 5), `grip-v406` (eenmalig naar `openEenmalig`, potje maken naar de keuze, de piek met 30/30/300 omdat 10/10/200 de drempel van 25 niet haalt, de opties met `nee`), `grip-v408` en `grip-v409` (de opties met `nee`), `zien-blok19-gelijk` (de keuze), `grip-v414` (de lijst sluit na een keuze), `drempel-gemengd` A (de noot +€5 staat nu bij Uit eten, want "1 boven" schoof daar aan).
 - `sw.js` naar `minder-v415`.
 
