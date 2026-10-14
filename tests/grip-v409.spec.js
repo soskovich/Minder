@@ -71,7 +71,8 @@ test.describe('3 · een bekende periodieke post in zijn maand is geen "boven bud
     await S.boot(page);
     const r = await page.evaluate(() => ({ P: potMaanden('abonnement'), s: recurringSchedule().find(x => x.name === 'Huurwoningen Premium'), pb: potBovenLijst().map(x => x.k) }));
     expect([r.s.intervalM, r.s.cat, r.s.amount]).toEqual([3, 'abonnement', 31]);   // invoermeting: een kwartaalpost in Abonnementen
-    expect(r.P.bedragen).toEqual([31, 20, 0]);
+    expect(r.P.totaal).toEqual([31, 20, 0]);   // v417: wat er uitging
+    expect(r.P.bedragen).toEqual([0, 20, 0]);   // v417: de berekening, zonder de herkende post
     expect(r.P.periodiek[0].bedrag).toBe(31);
     expect(r.P.boven).toEqual([false, true, false]);   // zonder de aftrek waren juli en augustus allebei boven: 2 van 3
     expect(r.pb).not.toContain('abonnement');
@@ -165,7 +166,7 @@ test.describe('6 · blok 19: het budget per maand en de cadans van de periodieke
     const d = await page.evaluate(() => diagEenSignaal(maandVooruit()));
     const tekst = d.join('\n');
     expect(tekst).toContain('  Huur: jul 760/700* · aug 760/700* · sep 137/700 -66 Shurgard Nl | nodig 142 = sep 2027: variabel gewoon 0 + Shurgard Nl 71 x2 | huidig budget voor alle drie');
-    expect(tekst).toContain('  Abonnementen: jul 31/5 -31 Huurwoningen Premium · aug 20/5* · sep 0/5 |');
+    expect(tekst).toContain('  Abonnementen: jul 0/5 +31 Huurwoningen Premium · aug 20/5* · sep 0/5 |');   // v417: de afgeronde maanden van de berekening, de post erbij
     expect(tekst).toContain('te krap, voorstel 60');
     expect(tekst).toContain('  Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen over 2 afstanden, vooruit 28 = vast 28 (minder dan 4 afstanden)) | 71 | actief | 2026-09-30 | dubbel in sep 2027 2x');
     expect(tekst).toContain('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | actief | 2026-07-20 | okt 2026, jan 2027, apr 2027, jul 2027');

@@ -128,8 +128,8 @@ const kinderopvang = page => page.evaluate(({ MAIN }) => {
 test.describe('4 · de signaalrij is de berekening', () => {
   test('voor elk potje: de maanden van de signaalrij zijn de afgeronde maanden van maandVooruit()', async ({ page }) => {
     await boot(page); await kinderopvang(page);
-    const r = await page.evaluate(() => { const V = maandVooruit(); return V.potjes.map(va => ({ k: va.k, calc: va.maanden.slice().reverse(), rij: potMaanden(va.k).bedragen })); });
-    expect(r.length).toBeGreaterThan(3);
+    const r = await page.evaluate(() => { const V = maandVooruit(); return V.potjes.filter(va => va.maanden.some(v => v > 0)).map(va => ({ k: va.k, calc: va.maanden.slice().reverse(), rij: potMaanden(va.k).bedragen })); });
+    expect(r.length).toBeGreaterThan(3);   // een potje zonder variabel deel toont wat er uitging (geen afgeronde maanden in de berekening)
     for (const x of r) expect(x.rij, x.k).toEqual(x.calc);
   });
   test('Vices: de vaste last staat apart, en boven rekent met wat er uitging', async ({ page }) => {

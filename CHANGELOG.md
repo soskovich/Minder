@@ -1449,5 +1449,6 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Punt 3**: `V.zonder` = round(geboekt + verwacht + zonderLosPosten); `zonderBreed` houdt de oude som; de rest zonder naam valt in overig. `gripZienBrug()`: een kleine "n boven" schuift niet meer aan bij "z. potje" (de oorzaak van 206 tegen 205).
 - **Punt 4**: `potVarMaanden()` (memo op `_dataGen`), gelezen door `maandVooruit()` en `potMaanden()`; `potMaanden()` geeft `bedragen`, `vast`, `totaal`; `potReeksTekst()` in Let op en de herzien-sheet; blok 19 "+N vast".
 - **Punt 5**: `teRuimTermijnen()` geeft 0 voor een post die niet meetelt; het te-ruim-rapport en blok 19 tonen hem niet in een maand.
-- **Specs**: nieuw `grip-v417.spec.js`.
+- **Punt 4, aanvulling**: een potje zonder variabel deel (helemaal vast of alles herkend) heeft geen afgeronde maanden in de berekening; daar toont de rij wat er uitging (`alles:true`). Blok 19 zet een periodieke post met + achter de afgeronde maanden (hij zit er niet in), met - alleen bij `alles`.
+- **Specs**: nieuw `grip-v417.spec.js` (15 tests, 17 sabotages, alle rood). Gemigreerd: `grip-v408`, `grip-v409`, `grip-v416` (invoermetingen lezen `P.totaal`, wat er uitging), `grip-v409`/`grip-v411` (blok 19: "jul 0/5 +31 Huurwoningen Premium", "aug 65/95 +95 Bol"), `grip-v412` (gestopt en verlopen: "-" in plaats van maanden).
 - `sw.js` naar `minder-v417`.

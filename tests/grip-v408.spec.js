@@ -129,7 +129,7 @@ test.describe('C4 · boven budget gebruikt de uitschieter-drempel', () => {
   test('Online shopping juli €99 tegen €95 telt niet: 1 van 3, dus geen signaal', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => ({ P: potMaanden('shopping'), boven: potBovenLijst().map(x => x.k) }));
-    expect(r.P.bedragen).toEqual([99, 160, 0]); expect(r.P.budgets).toEqual([95, 95, 95]);   // invoermeting
+    expect(r.P.totaal).toEqual([99, 160, 0]);   // v417: wat er uitging; bedragen zijn de afgeronde maanden van de berekening expect(r.P.budgets).toEqual([95, 95, 95]);   // invoermeting
     // v409: augustus is Bol Abonnement Select (kwartaal, EUR 95): 160 - 95 = 65, geen boven-maand meer; juli 99 tegen 95 haalt de drempel niet
     expect(r.P.boven).toEqual([false, false, false]);
     expect(r.boven).not.toContain('shopping');

@@ -118,7 +118,7 @@ test.describe('A2 · verlopen', () => {
     expect(r.st).toBe('verlopen');
     expect(r.telt).toBe(false);
     expect(r.per).toBe(false);
-    expect(r.diag).toEqual(['  Verlopen Verzekering | Verzekeringen | elke 3 maanden | 45 | verlopen, niet meegeteld (verwacht 2026-09-01, tolerantie 14 dagen) | 2026-06-01 | dec 2026, mrt 2027, jun 2027, sep 2027']);
+    expect(r.diag).toEqual(['  Verlopen Verzekering | Verzekeringen | elke 3 maanden | 45 | verlopen, niet meegeteld (verwacht 2026-09-01, tolerantie 14 dagen) | 2026-06-01 | -']);   // v417: een post die niet meetelt heeft geen maanden
     const lo = (await letOp(page)).filter(x => x.soort === 'verlopen');
     expect(lo.map(x => x.naam)).toEqual(['Verlopen Verzekering gestopt? · €45 per kwartaal · niet betaald sinds 1 jun']);   // v414: naam en vraag vooraan, details erna
     /* nee, nog actief: hij telt weer mee en de vraag is weg */
@@ -140,7 +140,7 @@ test.describe('A4 · blok 19: status en laatste betaling', () => {
     const regel = () => page.evaluate(() => diagEenSignaal(maandVooruit()).find(l => /^  Huurwoningen Premium \|/.test(l)));
     expect(await regel()).toBe('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | actief | 2026-07-20 | okt 2026, jan 2027, apr 2027, jul 2027');
     await page.evaluate((key) => postZet(key, 'gestopt'), key);
-    expect(await regel()).toBe('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | gestopt door jou | 2026-07-20 | okt 2026, jan 2027, apr 2027, jul 2027');
+    expect(await regel()).toBe('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | gestopt door jou | 2026-07-20 | -');   // v417: gestopt heeft geen maanden
   });
 });
 

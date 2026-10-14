@@ -8379,6 +8379,9 @@ function potMaanden(k, m){ m=m||thisYM(); const ms=[3,2,1].map(i=>valtOpYmPlus(m
   const budgets=ms.map((mm,i)=>Math.round(+((huidig?SET.budgets:MP[i].B)||{})[k]||0));
   const R=periodiekePosten(k, true), per=ms.map(mm=>potPeriodiek(k, mm, R));
   const boven=ms.map((_,i)=>{ const b=totaal[i]-Math.round(per[i].bedrag); return budgets[i]>0 && b>budgets[i] && uitschieterAfw(b-budgets[i], budgets[i]); });
+  /* Een potje zonder variabel deel (helemaal vast, of alles herkend) heeft in de berekening geen afgeronde maanden: potNodig()
+     rekent dan met de vaste posten. Dan toont de rij wat er uitging, zoals tot v417, en geen "EUR 0 · EUR 0 · EUR 0 · vast". */
+  if(potHeelVast(k) || !bedragen.some(v=>v>0)) return {ms, bedragen:totaal.slice(), vast:ms.map(()=>0), totaal, budgets, boven, huidig, periodiek:per, alles:true};
   const vast=ms.map((_,i)=>Math.max(totaal[i]-bedragen[i]-Math.round(per[i].bedrag),0));
   return {ms, bedragen, vast, totaal, budgets, boven, huidig, periodiek:per}; }
 /* v417: de signaalrij: de afgeronde maanden van de berekening, met de herkende vaste lasten erachter als die er zijn. */
@@ -27936,7 +27939,7 @@ function diagTeRuim(){
    die maand, of de maand boven telt met de uitschieter-drempel, te ruim ja/nee, de breuk, en welke regel Let op toont.
    Alleen lezen (v244). */
 function diagEenSignaal(V){
-  const L=['--- een signaal per potje (v408/v409): potje | maanden (v417: afgeronde maanden zoals potNodig, +N vast = herkende vaste lasten / budget van die maand, - periodiek, * = boven met de drempel) | nodig (v410: potNodig, duurste maand van de komende 12; v411: = maand: de delen) | budgetbron | te ruim | breuk | Let op'];
+  const L=['--- een signaal per potje (v408/v409): potje | maanden (v417: afgeronde maanden zoals potNodig, +N vast = herkende vaste lasten / budget van die maand, +N periodiek (buiten de afgeronde maanden), of -N als de rij wat er uitging toont (een potje zonder variabel deel), * = boven met de drempel) | nodig (v410: potNodig, duurste maand van de komende 12; v411: = maand: de delen) | budgetbron | te ruim | breuk | Let op'];
   const krap={}; try{ for(const x of potKrapLijst(thisYM(), V)) krap[x.k]=x; }catch(_){}
   let krapSkip=new Set(); try{ krapSkip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron)); }catch(_){}
   const tr=new Set(); try{ for(const x of teRuim(V)) tr.add(x.k); }catch(_){}
@@ -27944,7 +27947,7 @@ function diagEenSignaal(V){
   for(const k of Object.keys(SET.budgets||{})){ const bud=+SET.budgets[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
     const P=potMaanden(k), n=P.boven.filter(Boolean).length, kr=krap[k]; if(!n && !tr.has(k) && !patK[k] && !kr && !P.periodiek.some(x=>x.bedrag>0)) continue;
     /* v409: per maand het budget dat gebruikt is (de maanden staan op volgorde, ms is al oud naar nieuw) */
-    const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}${P.vast[i]?`+${P.vast[i]} vast`:''}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` -${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
+    const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}${P.vast[i]?`+${P.vast[i]} vast`:''}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` ${P.alles?'-':'+'}${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
     const Bk=potBreuk(P, potEind(V, k));
     const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:kr?`te krap, voorstel ${kr.voorstel} (duurste maand ${MNAMES[+kr.vloerMaand.slice(5,7)-1]} ${kr.vloerMaand.slice(0,4)}: ${Math.round(kr.vloer)})`:'niets (minder dan 2 van 3)';
     let Nd=null; try{ Nd=potNodig(k, V, krapSkip); }catch(_){}

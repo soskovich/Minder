@@ -22,7 +22,7 @@ test.describe('A1 · te krap alleen als de post het verschil maakt', () => {
   test('de stand van het toestel: Online shopping 84 + Bol 15 = 99 tegen 95: geen signaal', async ({ page }) => {
     await S.boot(page); await shopping(page, 84, 15);
     const r = await signalen(page);
-    expect(r.P.bedragen).toEqual([84, 99, 84]);   // invoermeting
+    expect(r.P.totaal).toEqual([84, 99, 84]);   // invoermeting (v417: totaal is wat er uitging)
     expect(r.gewoon).toBe(84);
     expect(r.krap).not.toContain('shopping');
     expect(r.boven).not.toContain('shopping');

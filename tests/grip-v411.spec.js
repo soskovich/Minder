@@ -54,8 +54,8 @@ test.describe('3 · blok 19 toont de opbouw van nodig', () => {
   test('per potje: maand, gewone uitgaven en de periodieke posten, en de delen tellen op', async ({ page }) => {
     await S.boot(page);
     const d = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
-    expect(d).toContain('Abonnementen: jul 31/5 -31 Huurwoningen Premium · aug 20/5* · sep 0/5 | nodig 51 = okt 2026: variabel verwacht 20 + vast verwacht 31 (Huurwoningen Premium 31) |');
-    expect(d).toContain('Online shopping: jul 99/95 · aug 160/95 -95 Bol Abonnement Select · sep 0/95 | nodig 160 = nov 2026: variabel gewoon 65 + Bol Abonnement Select 95 |');
+    expect(d).toContain('Abonnementen: jul 0/5 +31 Huurwoningen Premium · aug 20/5* · sep 0/5 | nodig 51 = okt 2026: variabel verwacht 20 + vast verwacht 31 (Huurwoningen Premium 31) |');
+    expect(d).toContain('Online shopping: jul 99/95 · aug 65/95 +95 Bol Abonnement Select · sep 0/95 | nodig 160 = nov 2026: variabel gewoon 65 + Bol Abonnement Select 95 |');
     expect(d).toContain('Verzekeringen: jul 164/335 · aug 164/335 · sep 324/335 -160 Dela Natura- en levensv | nodig 324 = dec 2026: variabel gewoon 0 + Zilveren Kruis Zorgverze 164 + Dela Natura- en levensv 160 |');
     expect(d).toContain('nodig 142 = sep 2027: variabel gewoon 0 + Shurgard Nl 71 x2 |');   // v416: een post telt bij de gewone maand
     /* de som van de delen is nodig, voor elk potje */
