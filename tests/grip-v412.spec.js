@@ -86,7 +86,7 @@ test.describe('A1/A3 · een gestopte kwartaalpost telt niet mee', () => {
     await page.evaluate(({ MAIN }) => { const t = { id: 'v412weer', date: '2026-10-08', amount: -31, acc: MAIN, name: 'Huurwoningen Premium', desc: 'SEPA INCASSO HUURWONINGEN PREMIUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'abonnement'; save(); }, { MAIN: S.MAIN });
     const w = (await letOp(page)).filter(x => x.soort === 'weerbetaald');
-    expect(w.map(x => x.naam)).toEqual(['Huurwoningen Premium weer betaald · actief zetten?']);
+    expect(w.map(x => x.naam)).toEqual(['Huurwoningen Premium · €31 per kwartaal · weer betaald op 8 okt · actief zetten?']);   // v413: bedrag en cadans erbij
     expect(await page.evaluate((key) => postStatus(key).status, key)).toBe('gestopt');
     /* "blijft gestopt" laat de vraag vallen; een volgende betaling vraagt het opnieuw */
     await page.evaluate((key) => postZet(key, 'gestopt'), key);
@@ -122,7 +122,7 @@ test.describe('A2 · verlopen', () => {
     expect(r.per).toBe(false);
     expect(r.diag).toEqual(['  Verlopen Verzekering | Verzekeringen | elke 3 maanden | 45 | verlopen, niet meegeteld (verwacht 2026-09-01, tolerantie 14 dagen) | 2026-06-01 | dec 2026, mrt 2027, jun 2027, sep 2027']);
     const lo = (await letOp(page)).filter(x => x.soort === 'verlopen');
-    expect(lo.map(x => x.naam)).toEqual(['Verlopen Verzekering niet betaald sinds 1 jun · gestopt?']);
+    expect(lo.map(x => x.naam)).toEqual(['Verlopen Verzekering · €45 per kwartaal · niet betaald sinds 1 jun · gestopt?']);   // v413: bedrag en cadans erbij
     /* nee, nog actief: hij telt weer mee en de vraag is weg */
     await page.evaluate((key) => openPostStatus(key), key);
     await expect(page.locator('#postStatusSheet')).toHaveAttribute('data-poststatus', 'verlopen');

@@ -2960,7 +2960,13 @@ function openSavingsPots(){
 // groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
 function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
 function shiftWeekendToMonday(d){ const x=new Date(d); const w=x.getDay(); if(w===6) x.setDate(x.getDate()+2); else if(w===0) x.setDate(x.getDate()+1); return x; }
-function recurringSchedule(){
+/* v413: EEN VERLOPEN POST VERDWIJNT NIET VANZELF UIT HET SCHEMA (gevraagd door de gebruiker). Tot v412 viel een vaste
+   post eruit zodra zijn laatste betaling langer dan 1,6 keer zijn interval plus 7 dagen geleden was (55 dagen bij een
+   maandpost); dan stond hij nergens meer, ook niet als "verlopen". Met `metOud` geeft het schema zo'n post WEL terug, met
+   `oud:true`. De gewone aanroep (alle lezers die rekenen: nog te betalen, isFixed, recurringCats, potNodig) laat hem weg,
+   tenzij jij hem op "nog actief" zette (SET.postStatus[key] actief bij die laatste betaling): dan telt hij weer. Lezers met
+   `metOud`: postStatusMap() (dus Let op en de status), postZet(), openPostStatus(), blok 19 en Vaste lasten. */
+function recurringSchedule(metOud){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
@@ -2972,6 +2978,9 @@ function recurringSchedule(){
   const now=new Date(); now.setHours(0,0,0,0); const today=now.getTime();
   const ym0=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const out=[];
+  const PS=SET.postStatus||{};
+  // een stil (oud) item blijft alleen staan met metOud, of als jij hem bij deze laatste betaling op actief zette
+  const houd=it=>{ it.oud=true; const E=PS[it.key]; return !!metOud || !!(E && E.status==='actief' && E.laatste===String(it.lastDate||'').slice(0,10)); };
   for(const k in map){ const r=map[k];
     /* v384: DE CADANS KOMT UIT DE AFSTAND TUSSEN BETALINGEN, NIET UIT DE KALENDERMAAND (gevraagd door de gebruiker na
        Shurgard: 3 aug, 1 sep en 30 sep). Tot v384 hield deze lus per kalendermaand alleen de grootste betaling; twee
@@ -2984,7 +2993,7 @@ function recurringSchedule(){
        huur die door het weekend op 30 september valt in plaats van 1 oktober IS de huur van oktober (keuze van de
        gebruiker: splitsen op 29/30, want met "laatste plus afstand" krijgt een huur met mediaan 30 op 1 okt een tweede
        verwachting op 31 okt). Andere afstanden en inkomen houden de vorm van voor v384. */
-    if(r.type==='fixed'){ const C=vastCadans(Object.assign({key:k}, r), now, today); if(C){ if(C.stil) continue; out.push(C.item); continue; } }
+    if(r.type==='fixed'){ const C=vastCadans(Object.assign({key:k}, r), now, today); if(C){ if(C.stil && !houd(C.item)) continue; out.push(C.item); continue; } }
     const byYm={}; for(const o of r.occ){ if(!byYm[o.ym]||o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
     const occ=Object.values(byYm).sort((a,b)=>a.date.localeCompare(b.date));
     if(occ.length<2) continue;
@@ -2992,7 +3001,7 @@ function recurringSchedule(){
     gaps.sort((a,b)=>a-b); const medGap=gaps[Math.floor(gaps.length/2)]||30;
     const intervalM = medGap<=45?1 : medGap<=135?3 : medGap<=225?6 : 12;
     const last=occ[occ.length-1]; const lastD=new Date(last.date); lastD.setHours(0,0,0,0);
-    if((today-lastD.getTime())/86400000 > intervalM*30*1.6 + 7) continue;
+    const oud=(today-lastD.getTime())/86400000 > intervalM*30*1.6 + 7; if(oud && (r.type!=='fixed')) continue;
     const dom=lastD.getDate(); const chargedThisMonth=occ.some(o=>o.ym===ym0);
     let nx;
     if(intervalM===1 && !chargedThisMonth){
@@ -3005,6 +3014,7 @@ function recurringSchedule(){
     nx=shiftWeekendToMonday(nx);                                // incasso in het weekend -> maandag erna
     out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc,incasso:(r.tot>0 && r.inc/r.tot>=0.5),periodic:(r.tot>0 && r.per/r.tot>=0.5),
       amts:occ.map(o=>o.amt)});   // v231: één bedrag per maand, zodat een lezer de spreiding kan meten zonder zelf te detecteren
+    if(oud && !houd(out[out.length-1])) out.pop();   // v413: een oude vaste post alleen met metOud of na "nog actief"
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
 }
@@ -3033,7 +3043,7 @@ function vastCadans(r, now, today){
   const vier=med>=VAST_4W.min && med<=VAST_4W.max, maand=med>=VAST_MAAND.min && med<=VAST_MAAND.max;
   if(!vier && !maand) return null;
   const last=occ[occ.length-1], lastD=lok(last.date);
-  if((today-lastD.getTime())/dag > 30*1.6+7) return {stil:true};
+  const stil=(today-lastD.getTime())/dag > 30*1.6+7;   // v413: niet meer weg, maar gemarkeerd (zie recurringSchedule)
   const j=now.getFullYear(), mo=now.getMonth();
   const mStart=new Date(j,mo,1).getTime(), mEind=new Date(j,mo+1,0).getTime();
   const verwacht=[], komend=[];
@@ -3065,7 +3075,7 @@ function vastCadans(r, now, today){
   const next=verwacht.length?verwacht[0]:(komend[0]||new Date(now));
   return {item:{key:r.key, name:r.name, cat:r.cat, type:r.type, amount:last.amt, day:next.getDate(), intervalM:1, cadans:vier?'4w':'maand', afstand:med,
     verwacht, komend:komend.map(ymdVan), nextDate:new Date(next), lastDate:last.date, count:r.occ.length, monthlyEq:Math.round(last.amt), acc:last.acc,
-    incasso:(r.tot>0 && r.inc/r.tot>=0.5), periodic:(r.tot>0 && r.per/r.tot>=0.5), amts:occ.map(o=>o.amt)}};
+    incasso:(r.tot>0 && r.inc/r.tot>=0.5), periodic:(r.tot>0 && r.per/r.tot>=0.5), amts:occ.map(o=>o.amt)}, stil};
 }
 // Herkende herhaling: sleutels van de gedetecteerde terugkerende vaste betalingen (incasso/periodieke overboeking, >=2x, regelmatig).
 // Bron van waarheid voor isFixed. Licht gememoïseerd op _dataGen (recurringSchedule loopt over alle TX; roept isFixed NIET aan -> geen circulariteit).
@@ -3768,15 +3778,15 @@ function openFixedDue(){
       <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?opgezegdLabel(s.key):fmt(s.day)+' · '+c.name+(opg?' · '+opgezegdLabel(s.key):'')}</div>
         ${opg?`<div class="small" data-opzeglink style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openOpzegTot('${kk}','due')">laatste afschrijving ›</div>`:''}</div>
       <div class="amt neg" style="margin-right:10px${isExcl?';text-decoration:line-through;color:var(--mut2)':''}">−${euro(s.amount)}</div>
-      <div onclick="toggleFixDueExcl('${kk}')" title="${opg?'Weer meetellen':'Uitsluiten'}">${sw(opg)}</div></div>`;};
+      <div onclick="toggleFixDueExcl('${kk}')" title="${opg?'Weer meetellen':'Uit reservering'}">${sw(opg)}</div></div>`;};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('lock')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Nog te betalen vaste lasten</div>
       <div class="muted small">rest van ${MFULL[mo]} · ${active.length} post${active.length===1?'':'en'} die meetell${active.length===1?'t':'en'}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(L.fixDue)}</div></div>
     ${active.length?active.map(s=>row(s,false)).join(''):'<div class="muted small center" style="padding:16px">Geen vaste lasten die deze maand nog meetellen.</div>'}
-    ${excl.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uitgesloten · telt niet mee</div>${excl.map(s=>row(s,true)).join('')}`:''}
+    ${excl.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uit reservering · telt hier niet mee</div>${excl.map(s=>row(s,true)).join('')}`:''}
     ${inPot.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">In een potje · telt daar</div>${inPot.map(s=>{const c=CATS[s.cat]||CATS.overig; return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div><div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${fmt(s.day)} · uit je potje ${c.name}</div></div><div class="amt" style="color:var(--mut)">${euro(s.amount)}</div></div>`;}).join('')}`:''}
-    <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Heb je een post opgezegd, of was hij eenmalig? Zet 'm uit met de schakelaar: dan telt hij niet mee in 'nog te betalen' en 'veilig te besteden', wordt hij niet opnieuw voorspeld, en meldt Minder het als hij toch wordt afgeschreven. Dezelfde lijst staat onder Instellingen, Vaste lasten. Terugzetten kan altijd.</div>`;
+    <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Betaal je een post uit een reservering? Zet 'm uit met de schakelaar: dan telt hij niet mee in 'nog te betalen' en 'veilig te besteden'. Is hij gestopt, zet hem dan op gestopt in Vaste lasten. Dezelfde lijst staat onder Instellingen, Vaste lasten. Terugzetten kan altijd.</div>`;
   showSheetBg();
 }
 /* v231: één vlag voor 'deze post keert niet meer terug', met de dag waarop je dat vastlegde. Hij
@@ -3788,7 +3798,7 @@ function openFixedDue(){
    en niet gemigreerd (v214: geen stille schrijfactie op je data). */
 function opgezegdSinds(key){ const f=(SET.fixDueExcl||{})[key]; if(!f) return null; return (typeof f==='object'&&f.sinds)?String(f.sinds):''; }
 function opgezegdLabel(key){ const s=opgezegdSinds(key); if(s===null) return ''; const t=opzegTot(key);
-  return (s?`Opgezegd op ${dagKort(s)}`:'Opgezegd')+(t?` \u00b7 laatste afschrijving ${dagKort(t)}`:''); }
+  return (s?`Uit reservering sinds ${dagKort(s)}`:'Uit reservering')+(t?` \u00b7 laatste afschrijving ${dagKort(t)}`:''); }
 /* v369: OPZEGGEN MET EEN LAATSTE BETALING. SET.fixDueExcl[key] draagt naast `sinds` een optionele `tot`, de dag van
    de laatste afschrijving (jjjj-mm-dd). Leeg is de standaard en betekent meteen, zoals tot v368. Tot en met de MAAND
    van die dag blijft de post verwacht; daarna niet meer. verwachtInMaand() is de ENE lezer van die vraag: monthLiquidity()
@@ -3811,6 +3821,9 @@ function verwachtInMaand(key, ym){
    hij weer actief is; hij blijft gestopt tot je kiest. Geen enkele post krijgt een status uit de code. Los van
    SET.fixDueExcl ("uitgesloten" van nog te betalen, v231/v329): uitsluiten is niet altijd gestopt. */
 const POST_TOL={maand:7, kwartaal:14, jaar:30, vier:7};
+/* v413: de cadans in woorden, voor de regel in Let op ("EUR 31 per kwartaal"). */
+function postCadansTxt(s){ if(!s) return ''; if(s.cadans==='4w') return 'per 4 weken'; if(s.cadans==='maand') return 'per maand';
+  const iv=+s.intervalM||1; return ({1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'})[iv]||`per ${iv} maanden`; }
 function postTolerantie(s){ if(s.cadans==='4w') return POST_TOL.vier; const iv=+s.intervalM||1; return iv>=12?POST_TOL.jaar:iv>=3?POST_TOL.kwartaal:POST_TOL.maand; }
 function postVerwachtNa(s){ if(!s || !/^\d{4}-\d{2}-\d{2}/.test(String(s.lastDate||''))) return null;
   const [y,mo,d]=String(s.lastDate).slice(0,10).split('-').map(Number);
@@ -3820,7 +3833,8 @@ function postStatusVan(s, vandaag){
   const vn=postVerwachtNa(s), tol=postTolerantie(s);
   const grens=vn?new Date(vn.getFullYear(), vn.getMonth(), vn.getDate()+tol):null;
   const verlopen=!!grens && vandaag.getTime()>grens.getTime();
-  const basis={key:s.key, naam:titleCase(cleanMerch(s.name)||s.name||''), laatste, verwachtNa:vn?ymdVan(vn):'', tol};
+  const basis={key:s.key, naam:titleCase(cleanMerch(s.name)||s.name||'')||String(s.key||''), laatste, verwachtNa:vn?ymdVan(vn):'', tol,
+    bedrag:Math.round(+s.amount||0), cadansTxt:postCadansTxt(s)};
   if(E && E.status==='gestopt') return Object.assign(basis, {status:'gestopt', door:'jij', op:E.op||'', weerBetaald:!!laatste && laatste>String(E.laatste||E.op||'')});
   if(verlopen && !(E && E.status==='actief' && E.laatste===laatste)) return Object.assign(basis, {status:'verlopen'});
   return Object.assign(basis, {status:'actief', bevestigd:!!(E && E.status==='actief')});
@@ -3829,7 +3843,7 @@ let _postSt=null, _postStSleutel='';
 function postStatusMap(){
   const sl=_dataGen+'|'+vandaagYMD(); if(_postSt && _postStSleutel===sl) return _postSt;
   const M={}, v=new Date(); v.setHours(0,0,0,0);
-  let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed'); }catch(_){}
+  let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){}
   for(const s of R) M[s.key]=postStatusVan(s, v);
   _postSt=M; _postStSleutel=sl; return M; }
 function postStatus(key){ const M=postStatusMap(); if(M[key]) return M[key];
@@ -3838,7 +3852,7 @@ function postTelt(key){ return postStatus(key).status==='actief'; }
 const POST_STATUS_TXT={actief:'actief', gestopt:'gestopt door jou', verlopen:'verlopen, niet meegeteld'};
 function postZet(key, status, terug){
   if(!key) return; SET.postStatus=SET.postStatus||{};
-  let s=null; try{ s=recurringSchedule().find(x=>x.key===key); }catch(_){}
+  let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
   const laatste=s?String(s.lastDate||'').slice(0,10):(((SET.postStatus[key]||{}).laatste)||'');
   if(status==='gestopt' || status==='actief') SET.postStatus[key]={status, op:vandaagYMD(), laatste};
   save(); try{ render(); }catch(_){}
@@ -3848,7 +3862,7 @@ function postZet(key, status, terug){
 }
 /* De sheet van een post: de status, de laatste betaling, en de handeling die past. Openen schrijft niets. */
 function openPostStatus(key, terug){
-  let s=null; try{ s=recurringSchedule().find(x=>x.key===key); }catch(_){}
+  let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
   const P=postStatus(key), nm=P.naam||(s?titleCase(cleanMerch(s.name)||s.name||''):key);
   const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,'');
   const cad=s?(s.cadans==='4w'?'4-wekelijks':s.cadans==='maand'?'per maand':(INTERVAL_TXT[s.intervalM]||`elke ${s.intervalM} maanden`)):'';
@@ -3866,6 +3880,29 @@ function openPostStatus(key, terug){
     <div class="small" style="line-height:1.5">${uitleg}</div>
     <div class="row" style="gap:8px;margin-top:14px">${knoppen}</div></div>`;
   showSheetBg();
+}
+/* v413: de eenmalige vraag bij een post met SET.fixDueExcl. Openen schrijft niets; uitResAntwZet() wel. Gestopt zet de
+   status (postZet) en haalt de vlag weg (de oude waarde staat in het antwoord, `voor`); uit reservering laat de vlag staan. */
+function openUitResVraag(key){
+  const P=postStatus(key), nm=P.naam||titleCase(cleanMerch(key)||key);
+  const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="uitResVraag">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(nm)}</div>
+    <div class="small muted" style="margin:2px 0 8px">${P.bedrag?`${euro0(P.bedrag)} ${esc(P.cadansTxt||'')} \u00b7 `:''}uit reservering${P.laatste?` \u00b7 laatste betaling ${dagKort(P.laatste)}`:''}</div>
+    <div class="small" style="line-height:1.5">Deze post telt niet in nog te betalen. Is hij gestopt, of betaal je hem uit een reservering? Gestopt haalt hem ook uit wat een potje nodig heeft en uit te krap en te ruim. Uit reservering laat alles zoals het nu is.</div>
+    <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" data-uitresantw="gestopt" onclick="uitResAntwZet('${kk}','gestopt')">Gestopt</button>
+      <button class="btn sec" data-uitresantw="reservering" onclick="uitResAntwZet('${kk}','reservering')">Uit reservering</button></div></div>`;
+  showSheetBg();
+}
+function uitResKeuze(key){ return (((SET.uitResAntw||{})[key])||{}).keuze||''; }
+/* De posten met de vlag zonder antwoord; een post die je al op gestopt zette telt als beantwoord. */
+function uitResOpen(){ return Object.keys(SET.fixDueExcl||{}).filter(k=>!uitResKeuze(k) && postStatus(k).status!=='gestopt'); }
+function uitResAntwZet(key, keuze){
+  if(!key || (keuze!=='gestopt' && keuze!=='reservering')) return;
+  SET.uitResAntw=SET.uitResAntw||{}; const voor=(SET.fixDueExcl||{})[key];
+  SET.uitResAntw[key]={keuze, op:vandaagYMD(), voor:voor===undefined?null:voor};
+  if(keuze==='gestopt'){ if(SET.fixDueExcl) delete SET.fixDueExcl[key]; postZet(key, 'gestopt'); return; }
+  save(); try{ render(); }catch(_){} closeSheet(); toast(`${ICON('check')} Uit reservering \u00b7 onthouden`);
 }
 /* De afschrijving die na het opzeggen nog mag komen: tot en met `tot`, anders tot en met de dag van opzeggen. */
 function opzegGrens(key){ return opzegTot(key) || opgezegdSinds(key) || ''; }
@@ -3892,7 +3929,7 @@ function openOpzegTot(key, terug){
   showSheetBg();
 }
 function dagKort(ymd){ const d=String(ymd||''); return d.length>=10?`${+d.slice(8,10)} ${MNAMES[+d.slice(5,7)-1]||''}`:d; }
-function toggleFixDueExcl(key, terug){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]={sinds:vandaagYMD()}; save(); try{render();}catch(_){}; if(terug==='vaste') openVasteLasten(); else openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Opgezegd · onthouden`:'Post telt weer mee'); }
+function toggleFixDueExcl(key, terug){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]={sinds:vandaagYMD()}; save(); try{render();}catch(_){}; if(terug==='vaste') openVasteLasten(); else openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Uit reservering · telt niet in nog te betalen`:'Post telt weer mee'); }
 // drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
 // drill vanuit 'Uitgegeven' op de budgetkaart: waar ging je geld deze maand heen (per categorie → openCategory).
 // Maand-drill-down: hier wonen sinds v66 de categorieën én de top uitgaven, met een segment-toggle
@@ -4834,7 +4871,7 @@ function scoreNotifs(opts){
      afschrijving zijn open en vragen bedragen per voorkomen. Horizon direct: het gaat over één
      boeking van nu, niet over een patroon. Buiten de coachOff-guard, om dezelfde reden als park-:
      je hebt hier zelf om gevraagd. Een oude vlag zonder datum krijgt geen melding. */
-  try{ const met=Object.keys(SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k));
+  try{ const met=Object.keys(SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k) && uitResKeuze(k)!=='reservering');   // v413: uit reservering verwacht een betaling
     /* v369: de grens is de laatste afschrijving als je die opgaf (opzegGrens), anders de dag van opzeggen. */
     if(met.length){ const ks=new Set(met); const laatst={};
       for(const t of TX){ if(!(t.amount<0)||t.pending) continue; if(!(isIncasso(t)||isPeriodicTransfer(t))) continue;
@@ -4843,7 +4880,7 @@ function scoreNotifs(opts){
       for(const k in laatst){ const t=laatst[k];
         push({key:'opgezegd-'+k.replace(/[^A-Z0-9]/g,'').slice(0,16), h:'direct', score:64, t:'warn', ic:ICON('repeat'),
           l1:`${cleanMerch(t.name)||t.name} is op ${dagKort(t.date)} toch afgeschreven.`,
-          l2:`Je gaf aan dat je dit had opgezegd. Bekijk de boeking`, act:`openSheet('${t.id}')`}); } } }catch(_){}
+          l2:`Je zette deze post op uit reservering. Bekijk de boeking`, act:`openSheet('${t.id}')`}); } } }catch(_){}
   if(isNow){ try{ const inc=txOfMonth(m).find(x=>x.amount>0 && CATS[catOf(x)].type==='income' && x.date===today);
     if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today, h:'direct',score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('vooruit')"}); } }catch(_){} }
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
@@ -8485,8 +8522,16 @@ function gripLetOpItems(RO, SIG, BV){
   /* v412: EEN VERLOPEN POST VRAAGT OF HIJ GESTOPT IS, en een gestopte post die weer betaald wordt of hij weer actief is.
      Tot je antwoordt telt een verlopen post niet mee (postTelt()). */
   try{ const M=postStatusMap(); for(const key in M){ const P=M[key], kk=esc(key).replace(/'/g,"\\'");
-    if(P.status==='verlopen') L.push({soort:'verlopen', groep:'a', bedrag:0, key, naam:`${P.naam} niet betaald sinds ${dagKort(P.laatste)} · gestopt?`, sub:'verlopen, telt niet mee tot je antwoordt', dot:'let op', act:`openPostStatus('${kk}')`});
-    else if(P.status==='gestopt' && P.weerBetaald) L.push({soort:'weerbetaald', groep:'a', bedrag:0, key, naam:`${P.naam} weer betaald · actief zetten?`, sub:`betaald op ${dagKort(P.laatste)}, gestopt door jou`, dot:'let op', act:`openPostStatus('${kk}')`}); } }catch(_){}
+    /* v413: de regel draagt het laatste bedrag en de cadans, en sorteert op dat bedrag mee (groep a, `bedrag`). */
+    const wat=`${P.naam||key} \u00b7 ${euro0(P.bedrag||0)} ${P.cadansTxt||''}`.replace(/\s+$/,''), dag=P.laatste?dagKort(P.laatste):'onbekend';
+    if(P.status==='verlopen') L.push({soort:'verlopen', groep:'a', bedrag:P.bedrag||0, key, naam:`${wat} \u00b7 niet betaald sinds ${dag} \u00b7 gestopt?`, sub:'verlopen, telt niet mee tot je antwoordt', dot:'let op', act:`openPostStatus('${kk}')`});
+    else if(P.status==='gestopt' && P.weerBetaald) L.push({soort:'weerbetaald', groep:'a', bedrag:P.bedrag||0, key, naam:`${wat} \u00b7 weer betaald op ${dag} \u00b7 actief zetten?`, sub:'gestopt door jou', dot:'let op', act:`openPostStatus('${kk}')`}); } }catch(_){}
+  /* v413: EEN POST MET DE OUDE VLAG "OPGEZEGD" (SET.fixDueExcl) KRIJGT EEN KEER DE VRAAG wat hij is: gestopt, of betaald
+     uit een reservering. Tot het antwoord blijft de werking zoals hij was (niet in nog te betalen). Het antwoord staat in
+     SET.uitResAntw[key]; geen stille omzetting. */
+  try{ const M=postStatusMap();
+    for(const key of uitResOpen()){ const P=M[key]||postStatus(key), kk=esc(key).replace(/'/g,"\\'");
+      L.push({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, naam:`${P.naam||titleCase(cleanMerch(key)||key)}: gestopt, of betaal je hem uit een reservering?`, sub:'telt nu niet in nog te betalen', dot:'let op', act:`openUitResVraag('${kk}')`}); } }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -27743,7 +27788,7 @@ function diagEenSignaal(V){
    betaling en de maanden van de komende twaalf. Een maandelijkse post staat erbij als hij gestopt of verlopen is. */
 function diagPeriodiekePosten(m){
   const L=['--- periodieke posten (v409/v412): post | categorie | cadans | laatste bedrag | status | laatste betaling | maanden in de komende 12'];
-  let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && ((+s.intervalM||1)>1 || s.cadans==='4w' || !postTelt(s.key))); }catch(_){}
+  let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed' && ((+s.intervalM||1)>1 || s.cadans==='4w' || !postTelt(s.key))); }catch(_){}
   for(const s of R){ const vier=s.cadans==='4w', mnd=[], P=postStatus(s.key), per=(+s.intervalM||1)>1||vier;
     if(per) for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(`${MNAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}${n>1?' 2x':''}`); }
     const cad=vier?(()=>{ const vs=vierStap(s); return `4-wekelijks (gemeten afstand ${s.afstand} dagen over ${vs.n} afstand${vs.n===1?'':'en'}, vooruit ${vs.stap} = ${vs.bron==='gemeten'?'gemeten mediaan':'vast '+VAST_4W_DAGEN+' (minder dan '+VAST_4W_MIN_AFSTANDEN+' afstanden)'})`; })():s.cadans==='maand'?'per maand':`elke ${s.intervalM||1} maand${(+s.intervalM||1)>1?'en':''}`;
@@ -27887,7 +27932,7 @@ function setTransacties(){
   const vlWeg=vl.filter(s=>s.opgezegd).length, R=Array.isArray(SET.rules)?SET.rules:[];
   return `
     <div class="small muted" style="margin-bottom:10px">Hoe Minder je boekingen indeelt.</div>
-    <div class="toggle" style="cursor:pointer" onclick="openVasteLasten()"><div><div style="font-weight:600">${ICON('repeat')} Vaste lasten</div><div class="small muted">${vl.length?`${vl.length} herkend${vlWeg?`, ${vlWeg} opgezegd`:''} · incasso's en periodieke overboekingen`:'nog niets herkend'}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
+    <div class="toggle" style="cursor:pointer" onclick="openVasteLasten()"><div><div style="font-weight:600">${ICON('repeat')} Vaste lasten</div><div class="small muted">${vl.length?`${vl.length} herkend${vlWeg?`, ${vlWeg} uit reservering`:''} · incasso's en periodieke overboekingen`:'nog niets herkend'}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
     <div style="padding:10px 0;border-bottom:1px solid var(--line)" data-regels="${R.length}"><div style="font-weight:600">Je regels</div>
       ${R.length?R.map(r=>`<div class="small muted" style="margin-top:3px">${esc(r.kw)} → ${CATS[r.cat]?esc(CATS[r.cat].name):esc(r.cat)}</div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}
       <div class="small muted" style="margin-top:6px">Een regel maak je in een boeking zelf: tik hem aan, kies een categorie en vink "voortaan" aan.</div></div>
@@ -29312,8 +29357,8 @@ function isPeriodicTransfer(t){ const U=((t.desc||'')+' '+(t.name||'')).toUpperC
    De oude afbakening 'opzegbaar' bestaat nog als weergavefilter (opzegbarePosten) voor het gesprek
    en de coachtip, niet als tweede detectie. Eén vlag, met datum: zie toggleFixDueExcl(). */
 const INTERVAL_TXT={1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'};
-function vasteLasten(){
-  let sched=[]; try{ sched=recurringSchedule(); }catch(_){ return []; }
+function vasteLasten(metOud){   // v413: metOud geeft ook de posten die langer stil zijn (oud), voor de lijst in Vaste lasten
+  let sched=[]; try{ sched=recurringSchedule(!!metOud); }catch(_){ return []; }
   return sched.filter(s=>s.type==='fixed' && (s.incasso||s.periodic))
     .map(s=>{ const sinds=opgezegdSinds(s.key); return Object.assign({}, s, {opgezegd:sinds!==null, sinds:sinds||null}); })
     .sort((a,b)=>b.monthlyEq-a.monthlyEq);
@@ -29329,7 +29374,7 @@ function opzegbarePosten(){
   });
 }
 function openVasteLasten(){
-  const L=vasteLasten(); const actief=L.filter(s=>!s.opgezegd), weg=L.filter(s=>s.opgezegd);
+  const L=vasteLasten(true); const oudL=L.filter(s=>s.oud && !postTelt(s.key)), Lr=L.filter(s=>!oudL.includes(s)); const actief=Lr.filter(s=>!s.opgezegd), weg=Lr.filter(s=>s.opgezegd);
   const tot=actief.reduce((a,s)=>a+(+s.monthlyEq||0),0);
   const row=s=>{ const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px;align-items:flex-start${s.opgezegd?';opacity:.55':''}">
@@ -29337,12 +29382,13 @@ function openVasteLasten(){
         <div class="small muted">${euro0(s.amount)} ${INTERVAL_TXT[s.intervalM]||''}${s.intervalM!==1?` · ${euro0(s.monthlyEq)} per maand`:''} · ${esc(c.name)}</div>
         ${s.opgezegd?`<div class="small" style="color:var(--mut2)">${opgezegdLabel(s.key)} <span data-opzeglink style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openOpzegTot('${kk}','vaste')">laatste afschrijving \u203a</span></div>`:''}
         ${(()=>{ const P=postStatus(s.key); return `<div class="small" data-poststatusrij="${esc(P.status)}" style="color:var(--mut2)">${esc(POST_STATUS_TXT[P.status]||P.status)}${P.laatste?` · laatste betaling ${dagKort(P.laatste)}`:''} <span data-postknop style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPostStatus('${kk}','vaste')">${P.status==='actief'?'gestopt':P.status==='gestopt'?'toch actief':'gestopt?'} \u203a</span></div>`; })()}</div>
-      <button class="chip ${s.opgezegd?'on':''}" style="flex-shrink:0" onclick="toggleFixDueExcl('${kk}','vaste')">${s.opgezegd?'Toch niet':'Opgezegd'}</button></div>`; };
+      <button class="chip ${s.opgezegd?'on':''}" style="flex-shrink:0" data-uitreschip onclick="toggleFixDueExcl('${kk}','vaste')">${s.opgezegd?'Toch niet':'Uit reservering'}</button></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('repeat')} Vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:10px;line-height:1.5">${actief.length} ${actief.length===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent. Heb je iets opgezegd, leg dat hier vast: dan telt het niet meer mee in je prognose, en meldt Minder het als het toch wordt afgeschreven.</div>
+    <div class="small muted" style="margin-bottom:10px;line-height:1.5">${actief.length} ${actief.length===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent. Is een post gestopt, zet hem op gestopt; betaal je hem uit een reservering, zet hem op uit reservering: dan telt hij niet in nog te betalen.</div>
     ${actief.map(row).join('')||'<div class="small muted">Nog geen vaste lasten herkend.</div>'}
-    ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Opgezegd</div>${weg.map(row).join('')}`:''}
+    ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uit reservering</div>${weg.map(row).join('')}`:''}
+    ${oudL.length?`<div data-vastoud style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Langer niet betaald · telt niet mee</div>${oudL.map(row).join('')}`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }

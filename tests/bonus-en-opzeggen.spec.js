@@ -220,20 +220,20 @@ test.describe('B · opgezegd per 8 november', () => {
     await page.evaluate((k) => { openFixedDue(); document.querySelector('#sheet [data-opzeglink]').click(); document.getElementById('opzegTot').value = '2026-11-08';
       [...document.querySelectorAll('#sheet button')].find((b) => /Opslaan/.test(b.innerText)).click(); }, key);
     const r = await page.evaluate((k) => ({ tot: SET.fixDueExcl[k].tot, sinds: SET.fixDueExcl[k].sinds, label: opgezegdLabel(k), telt: !monthLiquidity().fixDueItems.find((s) => s.key === k).excl }), key);
-    expect(r).toEqual({ tot: '2026-11-08', sinds: '2026-10-07', label: 'Opgezegd op 7 okt · laatste afschrijving 8 nov', telt: true });
+    expect(r).toEqual({ tot: '2026-11-08', sinds: '2026-10-07', label: 'Uit reservering sinds 7 okt · laatste afschrijving 8 nov', telt: true });
     await page.evaluate((k) => zetOpzegTot(k, '', 'due'), key);
     expect(await page.evaluate((k) => [SET.fixDueExcl[k].tot, monthLiquidity().fixDueItems.find((s) => s.key === k).excl], key)).toEqual([undefined, true]);
   });
 
   test('alleen verwachtInMaand en de schrijvers lezen SET.fixDueExcl', () => {
     const src = kaalBron(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));
-    const toegestaan = ['verwachtInMaand', 'opzegTot', 'opgezegdSinds', 'toggleFixDueExcl', 'zetOpzegTot', 'openOpzegTot', 'uitgeslotenTeltMee', 'ruimBijstelZet', 'scoreNotifs'];
+    const toegestaan = ['verwachtInMaand', 'opzegTot', 'opgezegdSinds', 'toggleFixDueExcl', 'zetOpzegTot', 'openOpzegTot', 'uitgeslotenTeltMee', 'ruimBijstelZet', 'scoreNotifs', 'uitResOpen', 'uitResAntwZet'];   // v413: de vraag gestopt of uit reservering
     const regels = src.split('\n'); let fn = ''; const fout = [];
     regels.forEach((l) => { const m = l.match(/^(?:async )?function (\w+)/); if (m) fn = m[1]; if (/SET\.fixDueExcl/.test(l) && !toegestaan.includes(fn)) fout.push(fn); });
     expect(fout).toEqual([]);
     /* scoreNotifs leest alleen de sleutels; de grens komt uit opzegGrens(). */
     const sn = src.slice(src.indexOf('function scoreNotifs('));
-    expect(sn.slice(0, sn.indexOf('\nfunction ')).match(/SET\.fixDueExcl[^;]*/g)).toEqual(['SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k))']);
+    expect(sn.slice(0, sn.indexOf('\nfunction ')).match(/SET\.fixDueExcl[^;]*/g)).toEqual(["SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k) && uitResKeuze(k)!=='reservering')"]);   // v413: na "uit reservering" geen melding
     for (const f of ['function maandLiqBasis(', 'function liquidityDaily(', 'function accountShortfalls(', 'function potLagerGevolg(']) expect(sectieVan(src, f)).toContain('verwachtInMaand(');
   });
 });

@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v413` · een verlopen post verdwijnt niet vanzelf.** `recurringSchedule(metOud)`: een vaste post die langer dan 1,6 keer
+  zijn interval plus 7 dagen stil is draagt `oud:true` in plaats van te verdwijnen. Alleen `metOud` (status, Let op, blok 19,
+  Vaste lasten) ziet hem, en "nog actief" bij die laatste betaling haalt hem terug in de gewone lijst. Valkuil: de gewone
+  aanroep voedt `recurringKeys()`/`isFixed()` en `recurringCats()`; zou een oude post daar meetellen, dan wordt een categorie
+  met een incasso van jaren terug weer een terugkerend potje.
+- **`v413` · "opgezegd" heet "uit reservering", en is niet hetzelfde als gestopt.** `SET.fixDueExcl` betekent: telt niet in nog
+  te betalen, wordt betaald uit een reservering. Een post met de vlag krijgt een keer de vraag gestopt of uit reservering
+  (`SET.uitResAntw`); tot het antwoord verandert er niets. Gestopt haalt de vlag weg (oude waarde in `voor`); uit reservering
+  laat hem staan en zet de melding "toch afgeschreven" uit, want een betaling is dan verwacht. Valkuil: stil omzetten zou
+  DELA (kwartaal, uit een reservering) op gestopt zetten en uit nodig halen.
 - **`v412` · een terugkerende post heeft een status: actief, gestopt door jou, of verlopen.** `SET.postStatus[key]` draagt
   alleen wat jij koos (`gestopt`, of `actief` als antwoord op verlopen); verlopen is een meting (`postStatusVan()`: de volgende
   betaling na de laatste is langer uit dan `POST_TOL`, maand 7, kwartaal 14, jaar 30, 4-wekelijks 7 dagen). Een post die niet

@@ -65,7 +65,7 @@ test.describe('a - één lijst uit één bron', () => {
     expect(L.find((s) => s.name === 'Woningcorporatie').incasso).toBe(true);
     // gesorteerd op maandequivalent, en de bron is recurringSchedule
     expect(L[0].name).toBe('Woningcorporatie');
-    expect(await page.evaluate(() => /recurringSchedule\(\)/.test(vasteLasten.toString()))).toBe(true);
+    expect(await page.evaluate(() => /recurringSchedule\(!!metOud\)/.test(vasteLasten.toString()))).toBe(true);   // v413: met de oude posten op verzoek
   });
 
   test('de oude afbakening is een weergavefilter, geen tweede detectie', async ({ page }) => {
@@ -98,10 +98,10 @@ test.describe('b - één vlag, met datum, en de term is opgezegd', () => {
     }, NETFLIX);
     expect(r.vlag).toEqual({ sinds: ymd(now) });
     expect(r.cancel).toBeNull();
-    expect(r.sheet).toContain('Opgezegd op ' + now.getDate() + ' ');
+    expect(r.sheet).toContain('Uit reservering sinds ' + now.getDate() + ' ');   // v413: opgezegd heet uit reservering
     /* v369: de kop heet "Opgezegd" en niet meer "Opgezegd · telt niet mee": een post met een laatste afschrijving telt
        tot die datum nog mee (verwachtInMaand()), dus die belofte klopt niet meer voor elke post eronder. */
-    expect(r.sheet).toMatch(/ Opgezegd /i);   // de kop staat in kapitalen via CSS
+    expect(r.sheet).toMatch(/ UIT RESERVERING /);   // de kop staat in kapitalen via CSS
     expect(r.sheet).not.toMatch(/telt niet mee/i);
     expect(r.sheet).toContain('Toch niet');
   });
@@ -128,7 +128,7 @@ test.describe('b - één vlag, met datum, en de term is opgezegd', () => {
     const na = await page.evaluate(() => monthLiquidity().fixDue);
     expect(voor - na).toBe(12);
     const home = await page.evaluate(() => { openFixedDue(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
-    expect(home).toContain('Opgezegd op ' + now.getDate() + ' ');
+    expect(home).toContain('Uit reservering sinds ' + now.getDate() + ' ');
     expect(home).not.toContain('niet meer terugkerend');
   });
 
@@ -140,7 +140,7 @@ test.describe('b - één vlag, met datum, en de term is opgezegd', () => {
     expect(n.sinds).toBeNull();
     expect(await page.evaluate(() => monthLiquidity().fixDueItems.find((s) => s.name === 'Netflix').excl)).toBe(true);
     const s = await sheet(page);
-    expect(s.txt).toMatch(/Opgezegd(?! op)/);
+    expect(s.txt).toMatch(/Uit reservering(?! sinds)/);
   });
 });
 
@@ -156,7 +156,7 @@ test.describe('c - een afschrijving na de opzegdatum is een melding', () => {
     expect(n.h).toBe('direct');
     expect(n.t).toBe('warn');
     expect(n.l1).toMatch(/^Netflix is op 6 \w+ toch afgeschreven\.$/);   // de laatste, deze maand
-    expect(n.l2).toContain('Je gaf aan dat je dit had opgezegd');
+    expect(n.l2).toContain('Je zette deze post op uit reservering');
     expect(n.act).toMatch(/^openSheet\('/);
     // en hij staat in de meldingenlijst
     expect(await page.evaluate(() => notifList().some((x) => x.key.indexOf('opgezegd-') === 0))).toBe(true);

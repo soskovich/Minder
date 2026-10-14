@@ -2,12 +2,14 @@
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
+/* v413: de vraag per post met de vlag uit reservering (groep a) kan de regel onder "nog N" duwen; dan staat hij in de
+   lijst achter die link (openGripLetOpLijst()). */
 /* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de
    sheet #gripLetOpSheet. De helper opent die regel zoals een tik dat doet, leest de kaart daar, en eist
    dat hij niet meer los op Grip staat. Zonder regel is er geen kaart, en dan zijn er geen rijen. */
 const rijen = page => page.evaluate(()=>{ go('maand'); renderMaand();
   if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip');
-  const regel=document.querySelector('#gripLetOp [data-letop="uit"]');
+  const regel=(document.querySelector('#gripLetOp [data-letop="uit"]')||(openGripLetOpLijst(),document.querySelector('#gripLetOpLijst [data-letop="uit"]')));
   if(!regel){ if(typeof closeSheet==='function') closeSheet(); return []; }
   regel.click();
   const sh=document.querySelector('#gripLetOpSheet');
