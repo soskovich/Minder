@@ -248,8 +248,9 @@ test.describe('e. potje bijstellen volgt de dekkingsregel: een ander potje lever
       return { naar: +s.dataset.naar, kand: [...s.querySelectorAll('[data-dekkies]')].map((e) => e.dataset.dekkies),
         gevolg: s.querySelector('[data-bijstelgevolg]').innerText, uit: s.querySelector('[data-bijstelsave]').disabled }; });
     expect(r.naar).toBe(135);
-    // ruimte boven wat je er gewoonlijk uitgeeft: sport 600-73, verzekering 675-150; abonnement (70) kan 85 niet dragen
-    expect(r.kand).toEqual(['sport', 'verzekering']);
+    // v411: ruimte boven de ondergrens van potNodig(): verzekering 675-150, sport 600-80 (de duurste maand op tien euro
+    // naar boven, tot v411 het gemiddelde 73); abonnement (70) kan 85 niet dragen
+    expect(r.kand).toEqual(['verzekering', 'sport']);
     expect(r.gevolg).toContain('Nog te dekken: €85');
     expect(r.gevolg).toContain('je maandbudget blijft dan €3.375');
     expect(r.uit).toBe(true);

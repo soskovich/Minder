@@ -1388,3 +1388,9 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v410.spec.js`; gemigreerd `grip-v409` (voorstel 40 → 60, patroonnamen, blok 19, fit ≥ 16px), `grip-v408` D5 (patroonnaam), `grip-v406` C (afgekapt is scrollWidth, niet de ellipsis-stijl).
 - `sw.js` naar `minder-v410`.
 
+## v411 · beslissingen C op v410
+- **Te krap en de lopende maand**: ongewijzigd; Abonnementen nodig 51 in oktober (de lopende maand), voorstel 60.
+- **Ondergrens**: `potOndergrens()` (het voorstel van `potNodig()`) in bijstellen, te ruime potjes bijstellen en het potje-formulier; `potjeMaandVloer()` is weg. Verzekeringen in de te-ruim-sheet 324 → 330, `#ruimVrij` 376 → 370.
+- **Blok 19**: `potNodigTekst()` geeft de opbouw ("nodig 324 = dec 2026: variabel hoogst 0 + Zilveren Kruis Zorgverze 164 + Dela Natura- en levensv 160").
+- **Specs**: nieuw `grip-v411.spec.js` (5 tests); 7 sabotages, alle rood. Gemigreerd: deze-maand-bridge e, grip-ruim-bijstel g/i/k, grip-v409 (ondergrens en blok 19), uitgesloten-reservering-maand f, vermogen-ronde (ondergrens per maand).
+- `sw.js` naar `minder-v411`.

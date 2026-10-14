@@ -27,12 +27,13 @@ test.describe('1 · cadans: een 4-wekelijkse post heeft in twaalf maanden een ma
       return uit; });
     for (const [d, som, twee] of r) { expect(som, 'dag ' + d).toBeGreaterThanOrEqual(13); expect(twee, 'dag ' + d).toBeGreaterThanOrEqual(1); }
   });
-  test('ook de ondergrens per maand (potjeMaandVloer) telt de tweede termijn', async ({ page }) => {
+  /* v411: potjeMaandVloer() is weg; de ondergrens is potOndergrens() (potNodig()). Dezelfde eigenschap: de tweede termijn telt. */
+  test('ook de ondergrens (potOndergrens, v411) telt de tweede termijn', async ({ page }) => {
     await S.boot(page);
-    const v = await page.evaluate(() => potjeMaandVloer('huur', ['2026-07', '2026-08', '2026-09'], '2026-10'));
+    const v = await page.evaluate(() => potOndergrens('huur', maandVooruit()));
     expect(v.maand).toBe('2027-09');
-    expect(v.posten).toEqual([{ naam: 'Shurgard Nl', bedrag: 71, tweede: true }]);
-    expect(v.vloer).toBe(v.gewoon + 71);
+    expect(v.posten).toEqual([{ key: v.posten[0].key, naam: 'Shurgard Nl', bedrag: 71, n: 2, tweede: true }]);
+    expect(v.vloer).toBe(142);
   });
 });
 
@@ -161,14 +162,14 @@ test.describe('6 · blok 19: het budget per maand en de cadans van de periodieke
     await S.boot(page);
     const d = await page.evaluate(() => diagEenSignaal(maandVooruit()));
     const tekst = d.join('\n');
-    expect(tekst).toContain('  Huur: jul 760/700* · aug 760/700* · sep 137/700 -66 Shurgard Nl | nodig 142 (sep 2027) | huidig budget voor alle drie');
+    expect(tekst).toContain('  Huur: jul 760/700* · aug 760/700* · sep 137/700 -66 Shurgard Nl | nodig 142 = sep 2027: variabel hoogst 0 + Shurgard Nl 71 x2 | huidig budget voor alle drie');
     expect(tekst).toContain('  Abonnementen: jul 31/5 -31 Huurwoningen Premium · aug 20/5* · sep 0/5 |');
     expect(tekst).toContain('te krap, voorstel 60');
     expect(tekst).toContain('  Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen over 2 afstanden, vooruit 28 = vast 28 (minder dan 4 afstanden)) | 71 | dubbel in sep 2027 2x');
     expect(tekst).toContain('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | okt 2026, jan 2027, apr 2027, jul 2027');
     await page.evaluate(() => { SET.budgetHist = { '2026-07': { huur: 420 }, '2026-08': { huur: 420 }, '2026-09': { huur: 750 } }; save(); });
     const d2 = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
-    expect(d2).toContain('  Huur: jul 760/420* · aug 760/420* · sep 137/750 -66 Shurgard Nl | nodig 142 (sep 2027) | bewaarde potjes per maand');
+    expect(d2).toContain('  Huur: jul 760/420* · aug 760/420* · sep 137/750 -66 Shurgard Nl | nodig 142 = sep 2027: variabel hoogst 0 + Shurgard Nl 71 x2 | bewaarde potjes per maand');
     console.log(d.join('\n'));
   });
 });

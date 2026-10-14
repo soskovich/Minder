@@ -124,7 +124,7 @@ test('f. opslaan staat uit tot de vrije ruimte verdeeld is, en de schrijver eist
 test('g. zonder potjekeuze of zonder maand geen opslag', async ({ page }) => {
   await boot(page); await open(page);
   await kies(page, 'verzekering', 'voorstel');
-  await vul(page, 'verlagen', 376);
+  await vul(page, 'verlagen', 370);   // v411: het voorstel is potNodig() 330 (324 op tien euro naar boven), dus 700-330
   expect(await page.evaluate(() => [ruimBijstelData().klaar, document.querySelector('[data-ruimsave]').disabled])).toEqual([false, true]);
   await page.selectOption('[data-ruimvanaf]', '2026-11');
   expect(await page.evaluate(() => [ruimBijstelData().klaar, document.querySelector('[data-ruimsave]').disabled])).toEqual([true, false]);
@@ -161,15 +161,15 @@ test('i. het voorstel zonder verplaatsen: potje EUR 324, geen reservering, het r
   await boot(page); await open(page);
   await kies(page, 'verzekering', 'voorstel');
   await page.selectOption('[data-ruimvanaf]', '2026-12');
-  expect(await tekst(page, '#ruimVrij')).toBe('€376 komt vrij. Waar gaat het heen?');
+  expect(await tekst(page, '#ruimVrij')).toBe('€370 komt vrij. Waar gaat het heen?');   // v411: voorstel 330 = potNodig()
   await page.click('[data-ruimbest="verlagen"] span[onclick]');   // "de rest"
   await page.click('[data-ruimsave]');
   const r = await page.evaluate(() => ({ plan: SET.budgetPlan, next: SET.budgetsNext, res: resLijst().length, excl: Object.keys(SET.fixDueExcl || {}).length,
     dec: Object.values(budgetVoorMaand('2026-12')).reduce((a, b) => a + b, 0), nov: Object.values(budgetVoorMaand('2026-11')).reduce((a, b) => a + b, 0) }));
-  expect(r.plan).toEqual({ '2026-12': { verzekering: 324 } });
+  expect(r.plan).toEqual({ '2026-12': { verzekering: 330 } });
   expect(r.res).toBe(0);
   expect(r.excl).toBe(0);
-  expect(r.dec).toBe(2344);
+  expect(r.dec).toBe(2350);
   expect(r.nov).toBe(2720);   // eerdere maanden blijven
 });
 
@@ -188,7 +188,7 @@ test('k. een eigen bedrag onder december zegt dat; boven het potje kan niet', as
   await boot(page); await open(page);
   await kies(page, 'verzekering', 'eigen');
   await page.fill('[data-ruimeigen="verzekering"]', '200');
-  expect(await tekst(page, '[data-ruimonder="verzekering"]')).toBe('Lager dan €324: in december is het potje dan niet gedekt.');
+  expect(await tekst(page, '[data-ruimonder="verzekering"]')).toBe('Lager dan €330: in december is het potje dan niet gedekt.');   // v411: de ondergrens is het voorstel van potNodig()
   expect(await tekst(page, '#ruimVrij')).toBe('€500 komt vrij. Waar gaat het heen?');
   await page.fill('[data-ruimeigen="verzekering"]', '800');
   expect(await page.evaluate(() => { const p = ruimBijstelData().pots.find((x) => x.k === 'verzekering'); return [p.ok, p.vrij]; })).toEqual([false, 0]);

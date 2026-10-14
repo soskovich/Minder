@@ -99,15 +99,16 @@ test('f. DELA naar de reserveringen in Te ruime potjes: dezelfde regel, het potj
   await page.click('[data-ruimsave]');
   const r = await page.evaluate(() => { const R = resLijst().filter(x => /dela/i.test(x.naam));
     const s = recurringSchedule().find(x => /DELA/.test(x.name));
-    return { R, nov: budgetVoorMaand('2026-11').verzekering, dec: budgetVoorMaand('2026-12').verzekering, excl: !!SET.fixDueExcl[s.key], gewoon: potjeMaandVloer('verzekering', maandVooruit().band.maanden, '2026-11').gewoon }; });
+    return { R, nov: budgetVoorMaand('2026-11').verzekering, dec: budgetVoorMaand('2026-12').verzekering, excl: !!SET.fixDueExcl[s.key], zonder: potOndergrens('verzekering', maandVooruit(), new Set([s.key])).vloer }; });
   expect(r.R.length).toBe(1);
   expect(r.R[0]).toMatchObject({ bedrag: 160, intervalM: 3, vervalmaand: '2026-12' });
   expect(r.excl).toBe(true);
   /* het potje is de gewone maand zonder DELA (op tien euro naar boven), dus DELA staat alleen in de reservering */
   expect(r.nov).toBe(170);
   expect(r.dec).toBe(170);
-  expect(r.nov).toBeLessThan(r.gewoon + 10 + 1);
-  expect(r.gewoon).toBe(164);
+  // v411: het potje is potNodig() zonder DELA (potjeMaandVloer() is weg): 164 per maand, op tien euro naar boven
+  expect(r.nov).toBe(r.zonder);
+  expect(r.zonder).toBe(170);
 });
 
 for (const w of [360, 390]) {

@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v411` · de ondergrens van een potje is `potNodig()`, en dus het voorstel van Let op.** Bijstellen, te ruime potjes
+  bijstellen en het potje-formulier hadden elk de ondergrens van `v350` (`potjeMaandVloer()`: het gemiddelde zonder periodieke
+  posten plus de post in zijn maand, twaalf maanden vanaf de gekozen maand). Twee definities van wat een potje minstens nodig heeft
+  spreken elkaar tegen: Verzekeringen had in de te-ruim-sheet een ondergrens van 324 en een voorstel van 330. Nu is de ondergrens
+  het voorstel van `potNodig()` (`potOndergrens()`), op tien euro naar boven bij een variabel deel. Valkuil: het venster is de
+  komende twaalf maanden vanaf NU en niet vanaf de gekozen maand; bij een bijstelling vanaf een latere maand valt de laatste
+  maand(en) van dat venster erbuiten. Gemeten: Abonnementen 60 en Online shopping 200 in Let op, formulier, bijstellen en te ruim.
+- **`v411` · blok 19 schrijft de opbouw van nodig uit.** Een getal zonder zijn delen is niet na te rekenen (Abonnementen 51 bleek
+  variabel verwacht 20 plus de kwartaalpost Huurwoningen 31 in oktober). Valkuil: in maand 0 zit de periodieke post IN vast
+  verwacht, dus hij staat tussen haakjes en niet als losse term; anders telt de som hem twee keer.
 - **`v410` · een definitie van "nodig".** De duurste maand van de komende twaalf met de periodieke posten in hun maand
   (`potNodig()`), voor te ruim EN te krap. Tot `v410` las te krap `potjeMaandVloer()` (het gemiddelde van drie maanden zonder
   periodieke posten, plus de posten), en te ruim het duurste variabele deel; dezelfde vraag ("hoeveel heeft dit potje nodig")
