@@ -36,14 +36,15 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
     expect(rijen.length).toBe(6);
     for (const r of rijen) expect(r).toMatch(/: klopt$/);
   });
-  test('een eigen overboeking zonder tegenkant: VERSCHILT met het bedrag, en de boeking staat erbij', async ({ page }) => {
+  test('een eigen overboeking zonder tegenkant: VERSCHILT met het bedrag, en het verschil staat per boeking (v419)', async ({ page }) => {
     await S.boot(page);
-    await page.evaluate(({ MAIN }) => { const t = { id: 'b20int', date: '2026-08-14', amount: -250, acc: MAIN, name: 'Naar Revolut', desc: 'REVOLUT TOPUP', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+    await page.evaluate(({ MAIN }) => { const t = { id: 'b20int', date: '2026-08-14', amount: -250, acc: MAIN, name: 'Vincent Ernst Sumter', desc: 'OVERBOEKING VINCENT ERNST SUMTER', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'intern'; save(); }, { MAIN: S.MAIN });
     const C = sectie(await lees(page), 'CONTROLE');
     const aug = C.find(r => r.startsWith('  aug:'));
     expect(aug).toMatch(/VERSCHILT -250$/);
-    expect(C[C.indexOf(aug) + 1]).toContain('eigen overboekingen zonder tegenkant in je gegevens (samen -250): 14-08 -250.00 Naar Revolut');
+    expect(C[C.indexOf(aug) + 1]).toBe('      het verschil bij naam (samen -250.00, sluit):');
+    expect(C[C.indexOf(aug) + 2]).toBe('        14-08 -250.00 Vincent Ernst Sumter (Eigen rekening / overboeking zonder tegenkant in je gegevens, eigen: naam)');
     expect(C.find(r => r.startsWith('  sep:'))).toMatch(/: klopt$/);
   });
   test('rest is salaris - vast - potjes - netto opzij, in elke kolom, ook de lopende', async ({ page }) => {

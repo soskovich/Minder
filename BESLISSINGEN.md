@@ -16,6 +16,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v419` · blok 20 sluit, en de app zelf is niet omgezet.** Een eigen overboeking heeft een bewijs (eigen IBAN, een tegenkant in
+  je gegevens, een bevestigde of herkende rekeningnaam, je eigen naam); een 'intern'-boeking zonder bewijs telt in blok 20 als contant
+  of als overboeking aan een ander. Valkuil: dezelfde regel in de app maakt van een opname een uitgave terwijl de telling van `v258`
+  het verschil ook nog als uitgave boekt, dus hetzelfde geld twee keer. Verwacht wordt een keer afgerond (2989,35 is 2989), net als
+  zonder potje; valkuil: drie afgeronde delen geven 2990.
 - **`v418` · blok 20 controleert tegen een meting, niet tegen zijn eigen formule.** De rest is salaris min vast, potjes en
   opzij; de controle zet daar wat er netto op je betaalrekeningen bleef naast, want vast + potjes + opzij + (salaris - vast -
   potjes - opzij) is per constructie het salaris en meet dan alleen de overige inkomsten. Valkuil: een aansluiting die zijn eigen

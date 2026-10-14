@@ -1458,3 +1458,13 @@ Gevraagd door de gebruiker als vervolg op v398.
 - `maandVooruit()` geeft daarvoor ook `varEindR`, `vasteEindR`, `potKlein` en `projectieExact` terug; geen scherm leest ze.
 - Spec `blok20.spec.js` (10 tests, 11 sabotages, alle rood; twee pas nadat de fixture een spaarrekening en een uit-reservering-deel droeg).
 - `sw.js` naar `minder-v418` (de versieregel in Instellingen leest alleen cijfers).
+
+## v419 · blok 20 sluit, en de besluiten op v418
+- **Punt 1**: in blok 20 is een opname (Geldmaat, GEA) zonder eigen bewijs "contant opgenomen" onder buiten vast en potjes. De app zelf houdt een opname op 'intern' (`v258`).
+- **Punt 2**: `eigenBewijs()` en `eigenContext()` uit `applyOwnAccounts()` gelicht (gedrag gelijk), `eigenNaamIn()` en `EIGEN_NAMEN`. Blok 20: een 'intern' op een betaalrekening zonder tegenkant en zonder bewijs is een overboeking aan een ander; "WISSELT VAN GROEP" per maand. De intern-rij van RULES is niet aangeraakt.
+- **Punt 3**: blok 20 telt als onttrekking alleen spaar of reserveringen naar een betaalrekening; tussen spaar- en reserveringsrekeningen staat apart.
+- **Punt 4**: `V.projectie = round(projectieExact)`; meter en brug lezen dat getal.
+- **Punt 5 en 6**: niet gebouwd, de keuze stond nog open in de vraag. Punt 7: akkoord, niets te doen.
+- **Controle**: het verschil per boeking of per oorzaak, met "sluit" of de rest zonder naam.
+- **Specs**: nieuw `blok20-v419.spec.js` (6 tests); `blok20` test 5 gemigreerd (Revolut zonder eigen IBAN is nu een overboeking aan een ander; de eigen overboeking zonder tegenkant is je eigen naam).
+- `sw.js` naar `minder-v419`.

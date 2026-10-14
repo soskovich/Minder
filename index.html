@@ -1034,30 +1034,52 @@ function rolloverBudgets(){
 
 // Overboekingen tussen eigen rekeningen → 'intern' (tellen niet als inkomen/uitgave).
 // Salaris/inkomen blijft inkomen, ook al staat het op een eigen rekening.
-function applyOwnAccounts(){
-  OWN=[...new Set(TX.map(t=>t.acc).filter(Boolean))];
-  // namen van eigen N26-potjes (uit Account Name) + vaste aliassen voor onderlinge overboekingen
+/* v419: WAT EEN EIGEN OVERBOEKING BEWIJST staat op een plek, met twee lezers: applyOwnAccounts() (die zet de categorie)
+   en blok 20 (die leest welke 'intern'-boekingen GEEN eigen overboeking zijn). Tot v419 stonden deze toetsen alleen in
+   applyOwnAccounts(), en dan kon blok 20 een overboeking naar jezelf niet scheiden van een betaling aan een ander die via
+   een woord in RULES op 'intern' landt (Western Union, een Tikkie). Een eigen overboeking is: een eigen of gekoppelde IBAN
+   als tegenpartij, een N26-Space of je eigen naam (EIGEN_NAMEN), een rekeningnaam die jij bevestigde, of "From <A> to <B>"
+   als hele omschrijving. Geeft {r, N}: r is de grond of '' en N de namen bij 'auto'. */
+const EIGEN_NAMEN=['ve sumter','vincent sumter','vincent ernst sumter'];
+function eigenContext(){
   const ownNames=new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
-    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
-    've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
+    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter', ...EIGEN_NAMEN].filter(Boolean));
   // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
   const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
-  const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
   /* v401: ook de IBAN van een GEKOPPELDE rekening zonder boekingen is een eigen rekening (OWN komt uit TX). */
   const gekoppeld=new Set(Object.values((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).map(p=>ibanNum(p&&p.iban)).filter(Boolean));
+  return {ownNames, N26INT, gekoppeld};
+}
+function eigenBewijs(t, C){
+  C=C||eigenContext();
+  if((t.refNums||[]).some(n=>OWN.includes(n) || C.gekoppeld.has(n))) return {r:'iban'};   // MT940/PSD2: eigen IBAN als tegenpartij
+  if(t.src==='csv' && /transfer/i.test(t.typ||'') && C.ownNames.has((t.partner||'').toLowerCase())) return {r:'potje'}; // N26 CSV: potje↔potje
+  if(t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(C.ownNames.has(nm) || C.N26INT.test(t.name||'')) return {r:'potje'}; } // N26 PSD2: Spaces/eigen naam
+  if(eigenOverboeking(t)) return {r:'bevestigd'};   // v338b: een rekeningnaam uit je bankkoppeling die JIJ bevestigde
+  /* v401: "From <A> to <B>" als HELE omschrijving is een overboeking tussen je eigen rekeningen (de N26-vorm), ook
+     zonder tegenboeking en zonder gekoppelde tegenrekening. Niet stil: de namen staan in "Dit is mijn rekening" met
+     "klopt niet" (SET.eigenAutoNee), en een eigen keuze (OVR) slaat applyOwnAccounts() al over. */
+  const N=eigenAutoTelt(t); if(N) return {r:'auto', N};
+  return {r:''};
+}
+/* v419: je eigen naam als tegenpartij of in de omschrijving, ook buiten PSD2. Alleen blok 20 leest dit: in de app maakt
+   de intern-rij van RULES zo'n boeking al 'intern', en hier gaat het om de vraag of een 'intern'-boeking werkelijk naar
+   jezelf ging. Een los woord, dus 'Sandra Sumter' telt niet als 've sumter'. */
+function eigenNaamIn(t){
+  const U=' '+String((t.name||'')+' '+(t.desc||'')).toUpperCase().replace(/[^A-Z]+/g,' ')+' ';
+  return EIGEN_NAMEN.some(n=>U.includes(' '+n.toUpperCase()+' '));
+}
+function applyOwnAccounts(){
+  OWN=[...new Set(TX.map(t=>t.acc).filter(Boolean))];
+  const C=eigenContext();   // v419: de toetsen staan in eigenBewijs(), met blok 20 als tweede lezer
+  const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
   EIGEN_AUTO=new Map();
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
-    let intern = (t.refNums||[]).some(n=>OWN.includes(n) || gekoppeld.has(n));   // MT940/PSD2: eigen IBAN als tegenpartij
-    if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
-    if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
-    if(!intern && eigenOverboeking(t)) intern=true;   // v338b: een rekeningnaam uit je bankkoppeling die JIJ bevestigde
-    /* v401: "From <A> to <B>" als HELE omschrijving is een overboeking tussen je eigen rekeningen (de N26-vorm), ook
-       zonder tegenboeking en zonder gekoppelde tegenrekening. Niet stil: de namen staan in "Dit is mijn rekening" met
-       "klopt niet" (SET.eigenAutoNee), en een eigen keuze (OVR) is hierboven al overgeslagen. */
-    if(!intern){ const N=eigenAutoTelt(t); if(N){ intern=true; EIGEN_AUTO.set(t.id, {namen:N, rc}); } }
+    const E=eigenBewijs(t, C); let intern=!!E.r;
+    if(E.r==='auto') EIGEN_AUTO.set(t.id, {namen:E.N, rc});
     t.autoCat = intern ? 'intern' : rc;
     /* v341: een kosten-regel van een bezitting maakt van een afschrijving op Sparen & beleggen Bankkosten.
        Een eigen keuze (OVR) wint, want die is hierboven al overgeslagen. */
@@ -9055,7 +9077,7 @@ function maandVooruit(){
   const rest=Math.round(Math.max(restTot,0)), uitZ=uit;
   /* v399: de inleg in Plan telt mee in het maandbudget en gaat verwacht volledig uit (planInlegRegels): netto op budget. */
   const inleg=planInlegRegels(m).tot;
-  const projectie=uitZ+vast+rest+inleg, budget=Math.round((T.budget||0)+inleg);
+  const budget=Math.round((T.budget||0)+inleg);
   const band={min:uitZ+vast+Math.round(Math.min(...totP)), max:uitZ+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Het variabele deel van elk potje
      uit maandSplitsing(); een potje dat helemaal vast is staat daar niet in. */
@@ -9108,7 +9130,12 @@ function maandVooruit(){
      dat de stap op Zien, de sheet, de opbouw en blok 19 lezen. */
   const losP=zonderLosPosten(L, m), losSom=losP.reduce((a,x)=>a+x.bedrag,0);
   const zonderExact=Z.geboekt+Z.verwacht+losSom, zonderLos=zonderBreed-Z.geboekt-Z.verwacht;
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact:zonderBreed+varEindR+vasteEindR+inleg, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  /* v419: VERWACHT WORDT EEN KEER AFGEROND, NA HET OPTELLEN (gevraagd door de gebruiker, zoals zonder potje bij v404/v417). Tot
+     v419 was V.projectie de som van drie al afgeronde delen (geboekt, vast, rest) plus de inleg, en GEMELD kwam daar 2990 uit
+     terwijl de exacte som 2989,35 is. Nu is V.projectie round(projectieExact); de budget-meter, de brug en blok 20 lezen dat
+     getal. De band blijft op de afgeronde delen: die is een bereik en geen uitkomst. */
+  const projectieExact=zonderBreed+varEindR+vasteEindR+inleg, projectie=Math.round(projectieExact);
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -28018,18 +28045,39 @@ function diagSalarisVerdeling(){
   const isSal=t=>salKey!=null && recurKey(t)===salKey;
   const sav=new Set((()=>{ try{ return n26SavingsAccounts(); }catch(_){ return []; } })()), resA=(()=>{ try{ return resAccId(); }catch(_){ return ''; } })();
   const opzijRek=a=>sav.has(a) || (resA && a===resA);
+  const EC=eigenContext();
   /* een maand: inkomen, vast per post, potjes per categorie, buiten, opzij, en wat er op je betaalrekeningen netto bleef */
   const maand=ym=>{
     const tx=txOfMonth(ym), B=maandPotjes(ym).B;
     let salaris=0, buiten=0, betaal=0; const salTx=[], overTx=[], posten={}, vastPot={}, potjes={}, zonder={}, postNaam={}, postTx={};
+    const bDeel={geennorm:0, persoonlijk:0, uitres:0, kas:0, persOverb:0};
+    /* v419: WELKE 'INTERN'-BOEKING IS GEEN EIGEN OVERBOEKING. Eerst de paren: een interne boeking met een tegenkant op een
+       andere eigen rekening in dezelfde maand (zelfde bedrag, andere kant, hooguit 3 dagen) is een eigen overboeking, want
+       het geld kwam bij jou aan. Beleggingsinleg en, zonder spaarrekening, de terugval van savedNet() staan apart (X): die
+       tellen in punt 4. Een 'intern' op een betaalrekening zonder tegenkant, zonder eigen IBAN, zonder eigen naam en zonder
+       bevestigde of herkende rekeningnaam is GEEN eigen overboeking: een opname of storting van contant geld is een uitgave
+       contant, al het andere een persoonlijke overboeking. Beide staan onder 'buiten vast en potjes'. */
+    const belIds=new Set((()=>{ try{ return beleggingsTx(ym); }catch(_){ return []; } })().map(t=>t.id));
+    const X=new Set(tx.filter(t=>belIds.has(t.id) || (!sav.size && catOf(t)==='sparen' && t.amount<0)).map(t=>t.id));
+    const intTx=tx.filter(t=>(CATS[catOf(t)]||{}).type==='internal' && !X.has(t.id)), paar=new Map();
+    for(let dd=0; dd<=3; dd++) for(const t of intTx){ if(paar.has(t.id)) continue;
+      const u=intTx.find(u=>u!==t && !paar.has(u.id) && u.acc!==t.acc && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date)-new Date(t.date))===dd*864e5);
+      if(u){ paar.set(t.id,u); paar.set(u.id,t); } }
+    const wissel=[], zonderKant=[];
+    for(const t of intTx){ if(paar.has(t.id)) continue;
+      const eigen=eigenBewijs(t, EC).r || (eigenNaamIn(t)?'naam':'');
+      if(catOf(t)==='intern' && !opzijRek(t.acc) && !eigen){
+        const U=String(t.desc||'').toUpperCase(), cont=t.amount<0 ? OPNAME_KW.some(w=>U.includes(w)) : STORT_KW.test(U);
+        const g=cont?'kas':'persOverb'; buiten+=-t.amount; bDeel[g]+=-t.amount; wissel.push({t, g}); }
+      else zonderKant.push({t, eigen}); }
     for(const t of tx){ const c=catOf(t), meta=CATS[c]||{};
       if(!opzijRek(t.acc)) betaal+=t.amount;
       if(meta.type==='income'){ const v=Math.max(t.amount,0), o=onregelmatigBedrag(t);
         if(isSal(t)){ salaris+=v-o; salTx.push(t); if(o>0) overTx.push({t, v:o, onr:true}); } else if(v>0) overTx.push({t, v}); continue; }
       if(meta.type!=='expense') continue;
       const geld=-t.amount, vn=uitgaveNorm(t);
-      if(geenNorm(c) || !isUitgave(t, B)){ buiten+=geld; continue; }
-      buiten+=geld-vn;
+      if(geenNorm(c) || !isUitgave(t, B)){ buiten+=geld; bDeel[geenNorm(c)?'geennorm':'persoonlijk']+=geld; continue; }
+      buiten+=geld-vn; bDeel.uitres+=geld-vn;
       if(isFixed(t)){ const k=recurKey(t); posten[k]=(posten[k]||0)+vn; postNaam[k]=postNaam[k]||t; (postTx[k]=postTx[k]||[]).push(t); }
       else if(potHeelVast(c)) vastPot[c]=(vastPot[c]||0)+vn;
       else if((+B[c]||0)>0) potjes[c]=(potjes[c]||0)+vn;
@@ -28037,11 +28085,22 @@ function diagSalarisVerdeling(){
     const MI=maandInkomen(ym), overige=MI.alles-salaris;
     let VI={totaal:null, delen:[]}; try{ VI=vermogensInleg(ym); }catch(_){}
     const deel=k=>{ const d=(VI.delen||[]).find(x=>x.key===k); return d&&d.bedrag!=null?+d.bedrag:0; };
-    const ontt=[]; for(const t of tx) if(opzijRek(t.acc) && t.amount<0 && catOf(t)!=='income') ontt.push(t);
+    /* v419: EEN ONTTREKKING IS GELD VAN JE SPAAR- OF RESERVERINGSREKENING NAAR EEN BETAALREKENING (besluit van de gebruiker).
+       Een afschrijving met een tegenkant op een andere spaar- of reserveringsrekening (zelfde bedrag, hooguit 3 dagen, of die
+       rekening als tegen-IBAN) is een verschuiving binnen je opzij en staat apart. */
+    const ontt=[], binnen=[]; for(const t of tx) if(opzijRek(t.acc) && t.amount<0 && catOf(t)!=='income'){
+      const tegen=(t.refNums||[]).some(n=>n!==t.acc && opzijRek(n)) || tx.some(u=>u!==t && u.acc!==t.acc && opzijRek(u.acc) && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date)-new Date(t.date))<=3*864e5);
+      (tegen?binnen:ontt).push(t); }
     const som=o=>Object.values(o).reduce((a,x)=>a+x,0);
     const vast=som(posten)+som(vastPot), pot=som(potjes)+som(zonder), opzij=deel('spaar')+deel('res')+deel('bel');
-    return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, vast, pot, potMet:som(potjes), potZonder:som(zonder),
-      spaar:deel('spaar'), res:deel('res'), bel:deel('bel'), ontt, onttSom:ontt.reduce((a,t)=>a-t.amount,0), opzij, betaal, VIbekend:VI.totaal!=null};
+    /* voor de controle: wat er werkelijk op je spaar- en reserveringsrekening bewoog, de boekingen achter X, negatief inkomen */
+    const opzijBoek=tx.filter(t=>opzijRek(t.acc)).reduce((a,t)=>a+t.amount,0), xBoek=tx.filter(t=>X.has(t.id)).reduce((a,t)=>a+t.amount,0);
+    const negInk=tx.filter(t=>(CATS[catOf(t)]||{}).type==='income' && t.amount<0);
+    const paarRest=intTx.filter(t=>paar.has(t.id)).reduce((a,t)=>a+t.amount,0);
+    const resBoek=resA?tx.filter(t=>t.acc===resA).reduce((a,t)=>a+t.amount,0):0;
+    return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, bDeel, wissel, zonderKant, vast, pot, potMet:som(potjes), potZonder:som(zonder),
+      spaar:deel('spaar'), res:deel('res'), bel:deel('bel'), ontt, binnen, onttSom:ontt.reduce((a,t)=>a-t.amount,0), binnenSom:binnen.reduce((a,t)=>a-t.amount,0), opzij, betaal, VIbekend:VI.totaal!=null,
+      opzijBoek, xBoek, negInk, ov:(()=>{ try{ return overschotInkomen(ym)||0; }catch(_){ return 0; } })(), paarRest, resBoek};
   };
   const R=ms.map(maand), Rc=R[R.length-1];
   /* de lopende maand: geboekt plus wat de app nog verwacht */
@@ -28087,14 +28146,25 @@ function diagSalarisVerdeling(){
   L.push(`  zonder potje: ${kol(r=>r.potZonder)}`);
   if(vk) L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.potVerwacht)} (maandVooruit: potjes verwacht ${e0(V.varEindR)} + zonder potje ${e0(V.zonderStand.geboekt+V.zonderStand.verwacht)} min geboekt ${e0(Rc.pot)})`);
   L.push(`  TOTAAL POTJES: ${kol(r=>tot(r,'pot'))}`);
-  L.push(`  buiten vast en potjes (geen norm, persoonlijk zonder potje, uit een reservering betaald): ${kol(r=>r.buiten)}`);
+  L.push(`  buiten vast en potjes: ${kol(r=>r.buiten)}`);
+  L.push(`      waarvan geen norm (een categorie zonder norm, ook de telling van je contant geld): ${kol(r=>r.bDeel.geennorm)}`);
+  L.push(`      waarvan persoonlijke overboeking zonder potje: ${kol(r=>r.bDeel.persoonlijk)}`);
+  L.push(`      waarvan uit een reservering betaald: ${kol(r=>r.bDeel.uitres)}`);
+  L.push(`      waarvan contant opgenomen (opname min storting, geen eigen overboeking, v419): ${kol(r=>r.bDeel.kas)}`);
+  L.push(`      waarvan overboeking aan een ander (geen eigen IBAN en niet je eigen naam, v419): ${kol(r=>r.bDeel.persOverb)}`);
+  L.push('  WISSELT VAN GROEP (v419): in de app staat dit op "Eigen rekening / overboeking", in blok 20 telt het als uitgave');
+  { let n=0; for(const r of R) if(r.wissel.length){ n++;
+      L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.wissel.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(w=>`${w.t.date.slice(8,10)}-${w.t.date.slice(5,7)} ${c2(w.t.amount)} ${titleCase(cleanMerch(w.t.name)||w.t.name||'?')} -> ${w.g==='kas'?'uitgave in contant':'persoonlijke overboeking'}`).join(', ')}`); }
+    if(!n) L.push('      geen'); }
   /* 4. opzij */
   L.push('', '4. OPZIJ (vermogensInleg: netto naar je spaarrekening, je reserveringen en je beleggingen)');
   L.push(`  naar Plan en sparen (spaarrekening, netto): ${kol(r=>r.spaar)}`);
   L.push(`  naar je reserveringen (netto, niet onder nul): ${kol(r=>r.res)}`);
   L.push(`  beleggen: ${kol(r=>r.bel)}`);
-  L.push(`  onttrekkingen (afschrijvingen van je spaar- en reserveringsrekening, zitten al in het netto): ${kol(r=>r.onttSom)}`);
+  L.push(`  onttrekkingen (van je spaar- of reserveringsrekening naar een betaalrekening, zitten al in het netto): ${kol(r=>r.onttSom)}`);
   for(const r of R) if(r.ontt.length) L.push(`      ${MN(r.ym)}: ${r.ontt.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
+  L.push(`  tussen je spaar- en reserveringsrekeningen (geen onttrekking, v419): ${kol(r=>r.binnenSom)}`);
+  for(const r of R) if(r.binnen.length) L.push(`      ${MN(r.ym)}: ${r.binnen.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
   L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.opzijVerwacht)} (nog te sparen uit safeToSpend + inleg in Plan die nog moet)`);
   L.push(`  NETTO OPZIJ: ${kol(r=>tot(r,'opzij'))}${R.some(r=>!r.VIbekend)?' (een maand zonder spaar- of reserveringsrekening en zonder beleggingsboeking telt als 0: niet gemeten)':''}`);
   /* 5. rest en 6. percentages */
@@ -28110,9 +28180,17 @@ function diagSalarisVerdeling(){
   L.push('  (de rest uit punt 5 rekent alleen met het salaris; hier staat ernaast wat er gemeten op je betaalrekeningen bleef, de rekeningen buiten je spaar- en reserveringsrekening)');
   for(const r of R.slice(0,-1)){ const links=r.vast+r.pot+r.buiten+r.opzij+r.betaal, rechts=r.salaris+r.overige, d=links-rechts;
     L.push(`  ${MN(r.ym)}: ${e0(r.vast)} + ${e0(r.pot)} + ${e0(r.buiten)} + ${e0(r.opzij)} + ${e0(r.betaal)} = ${e0(links)} tegen ${e0(r.salaris)} + ${e0(r.overige)} = ${e0(rechts)}: ${Math.abs(d)<0.5?'klopt':'VERSCHILT '+(d>0?'+':'')+e0(d)}`);
-    if(Math.abs(d)>=0.5){ /* waar het verschil kan zitten: een eigen overboeking op een betaalrekening zonder tegenkant in je gegevens */
-      const tx=txOfMonth(r.ym), los=tx.filter(t=>!opzijRek(t.acc) && (CATS[catOf(t)]||{}).type==='internal' && !tx.some(u=>u!==t && u.acc!==t.acc && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date)-new Date(t.date))<=3*864e5));
-      if(los.length) L.push(`      eigen overboekingen zonder tegenkant in je gegevens (samen ${e0(los.reduce((a,t)=>a+t.amount,0))}): ${los.slice().sort((a,b)=>Math.abs(b.amount)-Math.abs(a.amount)).slice(0,5).map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`); } }
+    if(Math.abs(d)>=0.5){ /* v419: HET VERSCHIL BIJ NAAM. Elke term is een bedrag dat links wel en rechts niet telt (of andersom), uit
+         dezelfde boekingen; samen zijn ze per constructie het verschil, en wat er overblijft staat als rest. */
+      const it=[];
+      for(const x of r.zonderKant) it.push({v:x.t.amount, n:`${x.t.date.slice(8,10)}-${x.t.date.slice(5,7)} ${c2(x.t.amount)} ${titleCase(cleanMerch(x.t.name)||x.t.name||'?')} (${(CATS[catOf(x.t)]||{}).name||catOf(x.t)} zonder tegenkant in je gegevens${x.eigen?', eigen: '+x.eigen:''})`});
+      const op=r.opzij-r.opzijBoek+r.xBoek; if(Math.abs(op)>=0.005) it.push({v:op, n:`netto opzij ${e0(r.opzij)} tegen de boekingen erachter ${c2(r.opzijBoek-r.xBoek)}${r.resBoek<-0.005?` (je reserveringen gingen netto ${c2(r.resBoek)}, en die telt punt 4 als 0)`:''}${Math.abs(op)<1?' (afronding)':''}`});
+      for(const t of r.negInk) it.push({v:t.amount, n:`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')} (inkomen met een min: telt rechts als 0)`});
+      if(Math.abs(r.ov)>=0.005) it.push({v:-r.ov, n:`${c2(r.ov)} contant ontvangen bij een lening (inkomen zonder boeking)`});
+      if(Math.abs(r.paarRest)>=0.005) it.push({v:r.paarRest, n:`centen in de gepaarde eigen overboekingen`});
+      const verkl=it.reduce((a,x)=>a+x.v,0), rest=d-verkl;
+      L.push(`      het verschil bij naam (samen ${c2(verkl)}${Math.abs(rest)>=0.005?`, rest zonder naam ${c2(rest)}`:', sluit'}):`);
+      for(const x of it.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v))) L.push(`        ${x.n}`); } }
   /* 7. de lopende maand in groepen, uit maandVooruit() */
   L.push('', `7. ${MN(cur).toUpperCase()} IN GROEPEN: budget | verwacht | onder/boven (maandVooruit, de getallen van Grip)`);
   if(!vk) L.push('  geen drie afgeronde maanden: maandVooruit() is onbekend');
@@ -28136,7 +28214,7 @@ function diagSalarisVerdeling(){
       {n:'rest zonder naam', b:0, v:+V.zonderRest||0}];
     for(const x of g) if(Math.abs(x.b)>=0.005 || Math.abs(x.v)>=0.005) L.push(`  ${x.n}: budget ${c2(x.b)} | verwacht ${c2(x.v)} | ${x.v-x.b>0.005?'boven '+c2(x.v-x.b):x.v-x.b<-0.005?'onder '+c2(x.b-x.v):'gelijk'}`);
     const sb=g.reduce((a,x)=>a+x.b,0), sv=g.reduce((a,x)=>a+x.v,0);
-    L.push(`  SOM: budget ${c2(sb)} = afgerond ${e0(sb)} tegen V.budget ${V.budget}: ${e0(sb)===V.budget?'klopt':'VERSCHILT '+(e0(sb)-V.budget)} | verwacht ${c2(sv)} = afgerond ${e0(sv)} tegen V.projectie ${V.projectie}: ${e0(sv)===V.projectie?'klopt':`VERSCHILT ${e0(sv)-V.projectie} (V.projectie rondt geboekt, vast en rest elk apart af)`}`);
+    L.push(`  SOM: budget ${c2(sb)} = afgerond ${e0(sb)} tegen V.budget ${V.budget}: ${e0(sb)===V.budget?'klopt':'VERSCHILT '+(e0(sb)-V.budget)} | verwacht ${c2(sv)} = afgerond ${e0(sv)} tegen V.projectie ${V.projectie}: ${e0(sv)===V.projectie?'klopt':`VERSCHILT ${e0(sv)-V.projectie}`}`);
     if(bBuiten.length) L.push(`  potjes buiten de norm (geen uitgavencategorie of geen norm): ${bBuiten.map(x=>`${(CATS[x.k]||{}).name||x.k} ${c2(x.b)}`).join(', ')}`);
     /* wat er in blok 19 bij geen enkel potje staat: verwacht min wat de potjes met een bedrag dragen */
     const inPot=(V.potjes||[]).reduce((a,x)=>a+(+x.eindR||0),0)+V.potKlein+(V.vastePotjes||[]).filter(x=>!x.zonderPotje).reduce((a,x)=>a+(+x.eindR||0),0);
