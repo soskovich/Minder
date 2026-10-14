@@ -8531,7 +8531,7 @@ function gripLetOpItems(RO, SIG, BV){
      SET.uitResAntw[key]; geen stille omzetting. */
   try{ const M=postStatusMap();
     for(const key of uitResOpen()){ const P=M[key]||postStatus(key), kk=esc(key).replace(/'/g,"\\'");
-      L.push({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, naam:`${P.naam||titleCase(cleanMerch(key)||key)}: gestopt, of betaal je hem uit een reservering?`, sub:'telt nu niet in nog te betalen', dot:'let op', act:`openUitResVraag('${kk}')`}); } }catch(_){}
+      L.push({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, naam:`${P.naam||titleCase(cleanMerch(key)||key)}: gestopt, of betaal je hem uit een reservering?`, dot:'let op', act:`openUitResVraag('${kk}')`}); } }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
