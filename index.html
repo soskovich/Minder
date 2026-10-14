@@ -3821,6 +3821,27 @@ function verwachtInMaand(key, ym){
    hij weer actief is; hij blijft gestopt tot je kiest. Geen enkele post krijgt een status uit de code. Los van
    SET.fixDueExcl ("uitgesloten" van nog te betalen, v231/v329): uitsluiten is niet altijd gestopt. */
 const POST_TOL={maand:7, kwartaal:14, jaar:30, vier:7};
+const POST_OUD_MAANDEN=6;   // v414: een verlopen post met een laatste betaling ouder dan dit staat in de bundel "oude posten"
+/* v414: de verlopen posten met een laatste betaling langer dan POST_OUD_MAANDEN geleden, grootste bedrag eerst. Een lezer
+   voor Let op (een regel) en een voor de sheet. Niet stil: zonder keuze blijven ze verlopen, niet meegeteld (blok 19). */
+function postOudLijst(){ const M=postStatusMap(), open=new Set(uitResOpen()); return Object.values(M).filter(P=>P.status==='verlopen' && P.oud6 && !open.has(P.key))
+  .sort((a,b)=>(b.bedrag-a.bedrag) || (a.naam<b.naam?-1:1)); }
+function openOudePosten(){
+  const L=postOudLijst(); if(!L.length){ closeSheet(); return; }
+  const kk=k=>esc(k).replace(/'/g,"\\'");
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="oudePosten">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${L.length} oude post${L.length===1?'':'en'} al lang niet betaald</div>
+    <div class="small muted" style="margin:2px 0 8px;line-height:1.5">De laatste betaling is langer dan ${POST_OUD_MAANDEN} maanden geleden. Tot je kiest tellen ze niet mee.</div>
+    <button class="btn sec" data-oudallegestopt onclick="oudePostenAlleGestopt()">Alle gestopt</button>
+    ${L.map(P=>`<div class="row" data-oudepost="${esc(P.key)}" style="padding:9px 0;border-top:1px solid var(--line);gap:8px;align-items:center;margin-top:8px">
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(P.naam||P.key)}</div><div class="small muted">${euro0(P.bedrag||0)} ${esc(P.cadansTxt||'')} \u00b7 laatste betaling ${P.laatste?dagKort(P.laatste)+' '+P.laatste.slice(0,4):'onbekend'}</div></div>
+      <span class="chip" data-oudzet="gestopt" onclick="oudePostZet('${kk(P.key)}','gestopt')">gestopt</span><span class="chip" data-oudzet="actief" onclick="oudePostZet('${kk(P.key)}','actief')">nog actief</span></div>`).join('')}</div>`;
+  showSheetBg();
+}
+function oudePostZet(key, status){ postZet(key, status, 'oud'); }
+function oudePostenAlleGestopt(){ const L=postOudLijst(); if(!L.length) return; SET.postStatus=SET.postStatus||{};
+  for(const P of L) SET.postStatus[P.key]={status:'gestopt', op:vandaagYMD(), laatste:P.laatste||''};
+  save(); try{ render(); }catch(_){} closeSheet(); toast(`${ICON('check')} ${L.length} oude post${L.length===1?'':'en'} gestopt`); }
 /* v413: de cadans in woorden, voor de regel in Let op ("EUR 31 per kwartaal"). */
 function postCadansTxt(s){ if(!s) return ''; if(s.cadans==='4w') return 'per 4 weken'; if(s.cadans==='maand') return 'per maand';
   const iv=+s.intervalM||1; return ({1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'})[iv]||`per ${iv} maanden`; }
@@ -3834,7 +3855,8 @@ function postStatusVan(s, vandaag){
   const grens=vn?new Date(vn.getFullYear(), vn.getMonth(), vn.getDate()+tol):null;
   const verlopen=!!grens && vandaag.getTime()>grens.getTime();
   const basis={key:s.key, naam:titleCase(cleanMerch(s.name)||s.name||'')||String(s.key||''), laatste, verwachtNa:vn?ymdVan(vn):'', tol,
-    bedrag:Math.round(+s.amount||0), cadansTxt:postCadansTxt(s)};
+    bedrag:Math.round(+s.amount||0), cadansTxt:postCadansTxt(s),
+    oud6:!!laatste && laatste<ymdVan(new Date(vandaag.getFullYear(), vandaag.getMonth()-POST_OUD_MAANDEN, vandaag.getDate()))};
   if(E && E.status==='gestopt') return Object.assign(basis, {status:'gestopt', door:'jij', op:E.op||'', weerBetaald:!!laatste && laatste>String(E.laatste||E.op||'')});
   if(verlopen && !(E && E.status==='actief' && E.laatste===laatste)) return Object.assign(basis, {status:'verlopen'});
   return Object.assign(basis, {status:'actief', bevestigd:!!(E && E.status==='actief')});
@@ -3858,7 +3880,7 @@ function postZet(key, status, terug){
   save(); try{ render(); }catch(_){}
   const nm=s?titleCase(cleanMerch(s.name)||s.name||''):'Post';
   toast(status==='gestopt'?`${ICON('check')} ${esc(nm)} gestopt · telt niet meer mee`:`${ICON('check')} ${esc(nm)} actief · telt weer mee`);
-  if(terug==='vaste') openVasteLasten(); else if(terug && terug.indexOf('ph:')===0) openPotHerzien(terug.slice(3)); else closeSheet();
+  if(terug==='vaste') openVasteLasten(); else if(terug==='oud') openOudePosten(); else if(terug && terug.indexOf('ph:')===0) openPotHerzien(terug.slice(3)); else closeSheet();
 }
 /* De sheet van een post: de status, de laatste betaling, en de handeling die past. Openen schrijft niets. */
 function openPostStatus(key, terug){
@@ -7102,6 +7124,7 @@ function uitgeslotenInterval(key, x){
 function uitgeslotenPotjes(){
   const ym=thisYM(); const BN=SET.budgetsNext||{}; const out=[];
   const bronnen=new Set(resLijst().map(x=>x&&x.bron).filter(Boolean));
+  let open=new Set(); try{ open=new Set(uitResOpen()); }catch(_){}
   for(const r of terugPotjes(ym).rijen){
     if(!r.excl.length || !(r.rest>0)) continue;
     if(BN[r.k]!=null && +BN[r.k] < r.bud) continue;
@@ -7110,6 +7133,7 @@ function uitgeslotenPotjes(){
       const houdt=Math.round(Math.min(+x.amount||0, rest)); if(houdt<=0) continue;
       rest-=houdt;
       if(bronnen.has(x.key)) continue;
+      if(open.has(x.key)) continue;   // v414: een signaal per post: zolang de vraag gestopt of uit reservering openstaat niet hier
       const iv=uitgeslotenInterval(x.key, x), perMaand=Math.round((+x.amount||0)/iv);
       out.push({key:x.key, k:r.k, bud:r.bud, houdt, intervalM:iv, bedrag:Math.round(+x.amount||0), perMaand, naam:x.name, voorstel:Math.max(r.bud-perMaand,0)});
     }
@@ -8521,17 +8545,25 @@ function gripLetOpItems(RO, SIG, BV){
       sub:`of is ${opsomming(x.posten.map(p=>p.naam))} gestopt? › · ${maandReeksTekst(x.ms, x.bedragen)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
   /* v412: EEN VERLOPEN POST VRAAGT OF HIJ GESTOPT IS, en een gestopte post die weer betaald wordt of hij weer actief is.
      Tot je antwoordt telt een verlopen post niet mee (postTelt()). */
-  try{ const M=postStatusMap(); for(const key in M){ const P=M[key], kk=esc(key).replace(/'/g,"\\'");
-    /* v413: de regel draagt het laatste bedrag en de cadans, en sorteert op dat bedrag mee (groep a, `bedrag`). */
-    const wat=`${P.naam||key} \u00b7 ${euro0(P.bedrag||0)} ${P.cadansTxt||''}`.replace(/\s+$/,''), dag=P.laatste?dagKort(P.laatste):'onbekend';
-    if(P.status==='verlopen') L.push({soort:'verlopen', groep:'a', bedrag:P.bedrag||0, key, naam:`${wat} \u00b7 niet betaald sinds ${dag} \u00b7 gestopt?`, sub:'verlopen, telt niet mee tot je antwoordt', dot:'let op', act:`openPostStatus('${kk}')`});
-    else if(P.status==='gestopt' && P.weerBetaald) L.push({soort:'weerbetaald', groep:'a', bedrag:P.bedrag||0, key, naam:`${wat} \u00b7 weer betaald op ${dag} \u00b7 actief zetten?`, sub:'gestopt door jou', dot:'let op', act:`openPostStatus('${kk}')`}); } }catch(_){}
+  try{ const M=postStatusMap(), uitOpen=new Set(uitResOpen()); for(const key in M){ const P=M[key], kk=esc(key).replace(/'/g,"\\'");
+    /* v414: een post met een open vraag gestopt of uit reservering staat alleen als die vraag (een signaal per post) */
+    /* v413/v414: de regel is naam en vraag vooraan, details erna ("<post> gestopt? · EUR 31 per kwartaal · niet betaald sinds
+       15 jul"), en sorteert op het laatste bedrag mee (groep a, `bedrag`). `delen` houdt de vraag zichtbaar als de regel op de
+       kaart wordt afgekapt (gripLetOpRij()). Een verlopen post met een laatste betaling ouder dan POST_OUD_MAANDEN staat niet
+       los: die gaan samen in een regel (hieronder). */
+    const det=`${euro0(P.bedrag||0)} ${P.cadansTxt||''}`.replace(/\s+$/,''), dag=P.laatste?dagKort(P.laatste):'onbekend', post=P.naam||key;
+    if(P.status==='verlopen' && !P.oud6 && !uitOpen.has(key)) L.push(postRegel({soort:'verlopen', groep:'a', bedrag:P.bedrag||0, key, sub:'verlopen, telt niet mee tot je antwoordt', dot:'let op', act:`openPostStatus('${kk}')`}, post, ' gestopt?', `${det} \u00b7 niet betaald sinds ${dag}`));
+    else if(P.status==='gestopt' && P.weerBetaald) L.push(postRegel({soort:'weerbetaald', groep:'a', bedrag:P.bedrag||0, key, sub:'gestopt door jou', dot:'let op', act:`openPostStatus('${kk}')`}, post, ' weer actief?', `${det} \u00b7 weer betaald op ${dag}`)); }
+    /* v414: oude verlopen posten (laatste betaling langer dan POST_OUD_MAANDEN geleden) zijn EEN regel met een lijst erachter */
+    const oud=postOudLijst(); if(oud.length) L.push({soort:'oudeposten', groep:'a', bedrag:0, naam:`${oud.length} oude post${oud.length===1?'':'en'} al lang niet betaald`, dot:'let op', act:'openOudePosten()'});
+  }catch(_){}
   /* v413: EEN POST MET DE OUDE VLAG "OPGEZEGD" (SET.fixDueExcl) KRIJGT EEN KEER DE VRAAG wat hij is: gestopt, of betaald
      uit een reservering. Tot het antwoord blijft de werking zoals hij was (niet in nog te betalen). Het antwoord staat in
      SET.uitResAntw[key]; geen stille omzetting. */
   try{ const M=postStatusMap();
     for(const key of uitResOpen()){ const P=M[key]||postStatus(key), kk=esc(key).replace(/'/g,"\\'");
-      L.push({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, naam:`${P.naam||titleCase(cleanMerch(key)||key)}: gestopt, of betaal je hem uit een reservering?`, dot:'let op', act:`openUitResVraag('${kk}')`}); } }catch(_){}
+      const det=P.bedrag?`${euro0(P.bedrag)} ${P.cadansTxt||''}`.replace(/\s+$/,''):'';
+      L.push(postRegel({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, dot:'let op', act:`openUitResVraag('${kk}')`}, P.naam||titleCase(cleanMerch(key)||key), ': gestopt of uit reservering?', det)); } }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -8557,8 +8589,15 @@ const GRIP_LETOP_MAX=2;
 /* v410: OP ZIEN (kort) staan naam en bewijs elk op EEN regel met een ellipsis en de volle tekst in de title (beslissing van de
    gebruiker: de ruimte voor de koopknop komt uit de Let op-kaart, niet uit de knop). De lijst achter "nog N" breekt af. */
 const LETOP_KORT='white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+/* v414: een regel over een post: naam en vraag vooraan, details erna. `naam` is de volle tekst (de lijst en de title);
+   `delen` laat de kaart de details eerst afkappen, dan de naam, en de vraag nooit. */
+function postRegel(x, post, vraag, rest){ return Object.assign(x, {naam:`${post}${vraag}${rest?' \u00b7 '+rest:''}`, delen:{post, vraag, rest}}); }
 function gripLetOpRij(x, kort){
   const ks=kort?';'+LETOP_KORT:'', kt=t=>kort?` title="${esc(t)}"`:'';
+  if(kort && x.delen){ const d=x.delen, el='white-space:pre;overflow:hidden;text-overflow:ellipsis;min-width:0';
+    return `<div class="row" data-letop="${esc(x.soort)}" data-letopkort style="gap:9px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
+    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small" style="display:flex;min-width:0;white-space:nowrap" title="${esc(x.naam)}"><span data-letoppost style="${el};flex:0 1 auto">${esc(d.post)}</span><span data-letopvraag style="white-space:pre;flex:0 0 auto">${esc(d.vraag)}</span>${d.rest?`<span data-letoprest style="${el};flex:0 1000 auto">${esc(' \u00b7 '+d.rest)}</span>`:''}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px${ks}"${kt(x.sub)}>${esc(x.sub)}</div>`:''}</div>
+    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`; }
   return `<div class="row" data-letop="${esc(x.soort)}"${kort?' data-letopkort':''} style="gap:9px;align-items:flex-start;padding:${kort?'6px':'7px'} 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
     ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small" style="${kort?LETOP_KORT:''}"${kt(x.naam)}>${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px${ks}"${kt(x.sub)}>${esc(x.sub)}</div>`:''}</div>
     ${x.geenPijl?'':'<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span>'}</div>`;

@@ -16,6 +16,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v414` · een signaal per post.** Een open vraag gestopt of uit reservering verdringt de regel van `v329` en de
+  verlopen-regel voor dezelfde post. Valkuil: de v329-specs bouwen op een stand met de vlag; die stand draagt nu het antwoord
+  "uit reservering", anders staat er alleen de vraag. Oude verlopen posten (laatste betaling ouder dan 6 maanden) staan samen in
+  een regel met een lijst; "alle gestopt" schrijft per post de laatste betaling mee, zodat een nieuwe betaling weer vraagt.
 - **`v413` · een verlopen post verdwijnt niet vanzelf.** `recurringSchedule(metOud)`: een vaste post die langer dan 1,6 keer
   zijn interval plus 7 dagen stil is draagt `oud:true` in plaats van te verdwijnen. Alleen `metOud` (status, Let op, blok 19,
   Vaste lasten) ziet hem, en "nog actief" bij die laatste betaling haalt hem terug in de gewone lijst. Valkuil: de gewone

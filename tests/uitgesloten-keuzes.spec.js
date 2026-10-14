@@ -96,7 +96,8 @@ test('g "potje verlagen" is per post: het voorstel is het potje min wat deze pos
 test('i twee uitgesloten posten in een potje: elk een eigen regel, en samen niet meer dan er nog in zit', async ({page})=>{
   await bootStand(page);
   const r=await page.evaluate(()=>{ SET.budgets.vervoer=715;
-    SET.fixDueExcl[recurKey(TX.find(t=>t.name==='Ontvangsten Hiltermann L'))]={sinds:'2026-09-30'}; save();
+    const hk=recurKey(TX.find(t=>t.name==='Ontvangsten Hiltermann L')); SET.fixDueExcl[hk]={sinds:'2026-09-30'};
+    SET.uitResAntw[hk]={keuze:'reservering', op:'2026-09-30'}; save();   // v414: beantwoord, anders staat alleen de vraag (een signaal per post)
     const rij=terugPotjes(thisYM()).rijen.find(x=>x.k==='vervoer');
     const U=uitgeslotenPotjes().filter(x=>x.k==='vervoer');
     return {rest:rij.rest, excl:rij.excl.map(x=>({key:x.key, a:x.amount})), U:U.map(u=>({key:u.key,houdt:u.houdt}))}; });

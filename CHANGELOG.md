@@ -1415,3 +1415,12 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v413.spec.js` (8 tests, 17 sabotages, alle rood); gemigreerd: `grip-v412` (twee Let op-teksten met bedrag en cadans), `bonus-en-opzeggen` (label, de lijst lezers van `SET.fixDueExcl` met `uitResOpen` en `uitResAntwZet`, de filter in `scoreNotifs`), `vaste-lasten` (uit reservering in plaats van opgezegd, `recurringSchedule(!!metOud)`), `standkaart-sluit`, `uitgesloten-keuzes` en `uitgesloten-reservering-bevestig` (de regel "uit" kan door de nieuwe vraag onder "nog N" zakken; de helper zoekt dan in de lijst).
 - `sw.js` naar `minder-v413`.
 
+## v414 · beslissingen C op v413
+- **Punt 1, een signaal per post**: `uitgeslotenPotjes()` slaat een post met een open vraag over (`uitResOpen()`), en de verlopen-regel ook; na het antwoord geldt de normale regel.
+- **Punt 2, de vorm**: `postRegel(x, post, vraag, rest)`; "<post> gestopt? · €X per <cadans> · niet betaald sinds <dag>", "<post> weer actief? · €X per <cadans> · weer betaald op <dag>", "<post>: gestopt of uit reservering? · €X per <cadans>". Op de kaart drie spans (`[data-letoppost]`, `[data-letopvraag]`, `[data-letoprest]`): de details krimpen eerst, de vraag nooit.
+- **Punt 3**: de subregel onder de vraag bleef weg (sinds v413).
+- **Punt 4, oude posten**: `POST_OUD_MAANDEN` (6), `P.oud6`, `postOudLijst()`, de regel "n oude posten al lang niet betaald" (`soort:'oudeposten'`) en de sheet `openOudePosten()` met per post gestopt / nog actief (`oudePostZet()`, terug naar de lijst) en "alle gestopt" (`oudePostenAlleGestopt()`). Gemeten op zes nagebouwde standen: 0 oude posten.
+- **Niet gebouwd**: "v412 – te krap alleen als de post het verschil maakt" en "Potje herzien: 'gestopt' als eigen keuze"; de tekst van die twee prompts is in deze sessie niet aangekomen.
+- **Specs**: nieuw `grip-v414.spec.js` (13 tests, 14 sabotages, alle rood); gemigreerd: `grip-v412` en `grip-v413` (de nieuwe vorm), `grip-v413` 5 (de vraag over een andere post), `standkaart-sluit.fixture` (de vlaggen beantwoord met uit reservering), `uitgesloten-keuzes` i (idem voor de extra post).
+- `sw.js` naar `minder-v414`.
+

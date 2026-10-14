@@ -34,7 +34,7 @@ test.describe('4 · een verlopen post blijft staan', () => {
     expect(r.gewoon).toBe(false);
     expect([r.st, r.telt, r.fix, r.due]).toEqual(['verlopen', false, false, false]);
     expect(r.diag).toEqual(['  Oude Sportschool | Sport & gezondheid | per maand | 40 | verlopen, niet meegeteld (verwacht 2026-08-13, tolerantie 7 dagen) | 2026-07-13 | -']);
-    expect((await letOp(page)).filter(x => x.key === key).map(x => [x.soort, x.naam])).toEqual([['verlopen', 'Oude Sportschool · €40 per maand · niet betaald sinds 13 jul · gestopt?']]);
+    expect((await letOp(page)).filter(x => x.key === key).map(x => [x.soort, x.naam])).toEqual([['verlopen', 'Oude Sportschool gestopt? · €40 per maand · niet betaald sinds 13 jul']]);
     const vl = await page.evaluate(() => { openVasteLasten(); const o = document.querySelector('[data-vastoud]'); return { kop: o && o.innerText, tekst: document.querySelector('#sheet').innerText }; });
     expect(vl.kop).toMatch(/langer niet betaald/i);
     expect(vl.tekst).toContain('Oude Sportschool');
@@ -59,7 +59,7 @@ test.describe('3 · bedrag en cadans in Let op, en sorteren op dat bedrag', () =
     const groot = await post(page, 'Groot Abonnement', 120, 'abonnement', ['2026-05-04', '2026-06-04', '2026-07-04']);
     const L = await letOp(page);
     const v = L.filter(x => x.soort === 'verlopen');
-    expect(v.map(x => [x.naam, x.bedrag])).toEqual([['Groot Abonnement · €120 per maand · niet betaald sinds 4 jul · gestopt?', 120], ['Klein Abonnement · €9 per maand · niet betaald sinds 2 jul · gestopt?', 9]]);
+    expect(v.map(x => [x.naam, x.bedrag])).toEqual([['Groot Abonnement gestopt? · €120 per maand · niet betaald sinds 4 jul', 120], ['Klein Abonnement gestopt? · €9 per maand · niet betaald sinds 2 jul', 9]]);
     /* de volgorde in de hele lijst: groep a op bedrag, dus een regel van EUR 120 staat voor elke groep-a-regel met minder */
     const a = L.filter(x => x.groep === 'a');
     for (let i = 1; i < a.length; i++) expect(a[i - 1].bedrag || 0).toBeGreaterThanOrEqual(a[i].bedrag || 0);
@@ -83,7 +83,7 @@ test.describe('2 · opgezegd heet uit reservering, en de vraag per post', () => 
     const key = await page.evaluate(() => { const k = recurringSchedule().find(s => /PREMIUM/i.test(s.name)).key; SET.fixDueExcl = { [k]: { sinds: '2026-09-01' } }; save(); return k; });
     const voor = await page.evaluate(() => JSON.stringify([SET.fixDueExcl, SET.uitResAntw || null, SET.postStatus || null]));
     const L = (await letOp(page)).filter(x => x.soort === 'uitresvraag');
-    expect(L.map(x => [x.key, x.naam])).toEqual([[key, 'Huurwoningen Premium: gestopt, of betaal je hem uit een reservering?']]);
+    expect(L.map(x => [x.key, x.naam])).toEqual([[key, 'Huurwoningen Premium: gestopt of uit reservering? · €31 per kwartaal']]);
     await page.evaluate(() => { go('maand'); renderMaand(); });
     await page.evaluate((key) => openUitResVraag(key), key);
     const knoppen = await page.evaluate(() => [...document.querySelectorAll('[data-uitresantw]')].map(b => ({ k: b.dataset.uitresantw, cls: b.className })));
@@ -124,13 +124,15 @@ test.describe('5 · geen lege plek in de regels', () => {
     await page.evaluate((key) => { postZet(key, 'gestopt');
       const t = { id: 'v413weer', date: '2026-10-08', amount: -31, acc: Object.keys(ACCMETA)[0], name: 'Huurwoningen Premium', desc: 'SEPA INCASSO HUURWONINGEN PREMIUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'abonnement'; save(); }, prem);
-    await page.evaluate(() => { const k = recurringSchedule(true).find(s => s.name === 'Oude Sportschool').key; SET.fixDueExcl = { [k]: { sinds: '2026-08-01' } }; save(); });
+    /* v414: de vraag gaat over een andere post dan de verlopen, want met een open vraag staat een post alleen als die vraag */
+    const ander = await post(page, 'Ander Abonnement', 15, 'abonnement', ['2026-08-02', '2026-09-02', '2026-10-02']);
+    await page.evaluate((k) => { SET.fixDueExcl = { [k]: { sinds: '2026-08-01' } }; save(); }, ander);
     const L = (await letOp(page)).filter(x => ['verlopen', 'weerbetaald', 'uitresvraag'].includes(x.soort));
     expect(L.map(x => x.soort).sort()).toEqual(['uitresvraag', 'verlopen', 'weerbetaald']);
     for (const x of L) {
       expect(x.naam).not.toMatch(LEEG);
       expect(x.naam).toMatch(/^[A-Z][A-Za-z]+ [A-Za-z]+/);   // de naam van de post staat vooraan
-      if (x.soort !== 'uitresvraag') expect(x.naam).toMatch(/(sinds|op) \d{1,2} [a-z]{3} · /);
+      if (x.soort !== 'uitresvraag') expect(x.naam).toMatch(/(sinds|op) \d{1,2} [a-z]{3}$/);   // v414: de dag staat achteraan
     }
     /* een post zonder naam valt terug op zijn sleutel, en een onbekende dag heet "onbekend" */
     const t = await page.evaluate(() => { const P = postStatusVan({ key: 'ZONDER NAAM', name: '', amount: 12, intervalM: 1, lastDate: '' }, new Date(2026, 9, 10)); return P.naam; });

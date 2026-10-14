@@ -57,6 +57,9 @@ async function bootStand(page, datum='2026-10-03'){   // v329: een andere dag vo
     for(const t of TX){ const c=CATMAP[t.name]; if(c) OVR[t.id]=c; }
     SET.budgets=Object.assign({},POTJES); SET.budgetMonth=thisYM();
     SET.fixDueExcl={}; for(const n of UIT) SET.fixDueExcl[recurKey(TX.find(t=>t.name===n))]={sinds:'2026-09-30'};
+    /* v414: zolang de vraag gestopt of uit reservering openstaat, staat de regel van v329 niet in Let op (een signaal per
+       post). Deze stand gaat over die regel, dus de vraag is beantwoord met "uit reservering": dan geldt de normale regel. */
+    SET.uitResAntw={}; for(const k in SET.fixDueExcl) SET.uitResAntw[k]={keuze:'reservering', op:'2026-09-30'};
     save();
   },{CATMAP,POTJES,UIT});
 }
