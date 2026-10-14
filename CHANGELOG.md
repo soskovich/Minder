@@ -1378,3 +1378,13 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v409.spec.js` (21) en `grip-v409-stand.js`; 15 sabotages, alle rood. Gemigreerd: grip-eigen-budget, grip-kring, grip-kring-deel2, grip-kiezen-v391 (Huur 558; in overig staat Huur nu met -71, het deel onder het voorstel deze maand), grip-v406 (de historie voor alle drie de maanden), grip-v408 ("(huidig budget)", shopping augustus is Bol, drie trend-voorstellen).
 - **Gemeten** op 390x844: Zien zeven kolommen, knop 771px tegen menubalk 772px; Let op open 7 regels, 461px, zonder scroll.
 - `sw.js` naar `minder-v409`.
+
+## v410 · beslissingen op v409
+- **Nodig, een definitie** (aparte commit): `potNodig()` is de duurste maand van de komende 12 met de periodieke posten; `teRuimLijst()` en `potKrapLijst()` lezen hem allebei. Te krap vraagt dat die maand een periodieke post draagt. Op `grip-v409-stand`: Online shopping 150 → 194 (voorstel 200), Abonnementen 38 → 51 (voorstel 60). Blok 19 draagt per potje "nodig X (mnd jaar)".
+- **4-wekelijks**: `vierStap()` rekent met 28 dagen, en vanaf 4 gemeten afstanden met de gemeten mediaan; blok 19 zegt welke.
+- **Patroonregel**: "<namen> zitten in patroon n", met alle potjes van het patroon, eerst die met een signaal.
+- **Maandafkortingen**: overal `MNAMES` ("mrt", geen "maa").
+- **Fit 390x844**: Let op-kaart op een regel per naam en bewijs (ellipsis, title), brug-labels buiten `BRUG_KORT` op een regel. Knop 752px, menubalk 772px (20px). Bijvangst: de lijst achter "nog N" kreeg via `map(gripLetOpRij)` de index als `kort`.
+- **Specs**: nieuw `grip-v410.spec.js`; gemigreerd `grip-v409` (voorstel 40 → 60, patroonnamen, blok 19, fit ≥ 16px), `grip-v408` D5 (patroonnaam), `grip-v406` C (afgekapt is scrollWidth, niet de ellipsis-stijl).
+- `sw.js` naar `minder-v410`.
+

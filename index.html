@@ -3010,6 +3010,12 @@ function recurringSchedule(){
 }
 const VAST_CLUSTER_DAGEN=7, VAST_4W={min:26, max:29}, VAST_MAAND={min:30, max:32};
 const VAST_4W_DAGEN=28;   // v409: 13 termijnen per jaar, vooruit gerekend (teRuimTermijnen())
+const VAST_4W_MIN_AFSTANDEN=4;   // v410: vanaf zoveel gemeten afstanden rekent hij met de gemeten mediaan
+/* v410: DE STAP VAN EEN 4-WEKELIJKSE POST. Met minstens VAST_4W_MIN_AFSTANDEN gemeten afstanden (betalingen na het
+   samenvoegen binnen VAST_CLUSTER_DAGEN, min een) is de gemeten mediaan de stap; daaronder VAST_4W_DAGEN. Een lezer:
+   teRuimTermijnen(), en blok 19 drukt af welke van de twee het werd. */
+function vierStap(s){ const n=Math.max(((s&&s.amts)||[]).length-1, 0);
+  return n>=VAST_4W_MIN_AFSTANDEN && +s.afstand>0 ? {stap:+s.afstand, bron:'gemeten', n} : {stap:VAST_4W_DAGEN, bron:'vast', n}; }
 /* v384: de cadans van een vaste last uit de afstand tussen betalingen. Geeft null als de afstand in geen van de twee
    vormen valt (dan houdt het schema de vorm van voor v384), {stil:true} als de post niet meer loopt, en anders het
    item met `verwacht` (de termijnen die in de lopende kalendermaand nog komen, een of twee) en `komend` (de volgende
@@ -7645,7 +7651,7 @@ function valtOpUitzKaart(){
     <div class="vl-cap">Je uitzonderingen · ${U.per.length} maanden</div>
     <div class="vl-groot">${euro0(U.gem)}<small>gemiddeld per maand</small></div>
     <div class="vl-trend">${U.per.map(x=>`<i style="height:${max>0?Math.max(Math.round(x.bedrag/max*100),4):4}%"></i>`).join('')}</div>
-    <div class="vl-mlab">${U.per.map(x=>`<span>${esc(ymFull(x.m).slice(0,3))} ${euro0(x.bedrag)}</span>`).join('')}</div>
+    <div class="vl-mlab">${U.per.map(x=>`<span>${esc(MNAMES[+x.m.slice(5,7)-1])} ${euro0(x.bedrag)}</span>`).join('')}</div>
     <div class="small" style="margin-top:10px;line-height:1.5" data-uitzteller="${U.n}/${U.M}">${U.n} van de ${U.M} overschrijdingen noemde je een uitzondering. Elke maand kwam er minstens één.</div>
     <button class="btn sec" style="margin-top:10px" onclick="valtOpUitzLaten()">Zo laten</button>
   </div>`;
@@ -7735,7 +7741,7 @@ function valtOpLogBlok(){
     const ms=LM.maanden.slice(-VALTOP_TREND_MAX); const som=ms.map(m=>valtOpMaandStand(m).boven);
     const max=Math.max(...som,0);
     return `<div class="vl-trend" data-trend="${ms.length}">${som.map(b=>`<i style="height:${max>0?Math.max(Math.round(b/max*100),4):4}%"></i>`).join('')}</div>
-      <div class="vl-mlab">${ms.map((m,i)=>`<span>${esc(ymFull(m).slice(0,3))} ${euro0(som[i])}</span>`).join('')}</div>`; };
+      <div class="vl-mlab">${ms.map((m,i)=>`<span>${esc(MNAMES[+m.slice(5,7)-1])} ${euro0(som[i])}</span>`).join('')}</div>`; };
   const tegels=()=>{
     const ms=LM.maanden.slice(-VALTOP_TREND_MAX); const per={};
     for(const m of ms) for(const x of valtOpMaandStand(m).rijen){
@@ -8318,14 +8324,18 @@ function gripLetOpItems(RO, SIG, BV){
      (3) Wat je deze maand liet staan (potLaten()) vraagt hier niets meer, in geen enkele vorm. */
   let VV=null; try{ VV=maandVooruit(); }catch(_){}
   const trK=new Set(); try{ if(VV && !VV.onbekend) for(const x of teRuim(VV)) trK.add(x.k); }catch(_){}
-  const patK={}; try{ gripPatronen().forEach((p,i)=>{ for(const g of (p.sig||[])) if(g.soort==='potje' && g.k && !patK[g.k]) patK[g.k]={pid:p.id, nr:i+1}; }); }catch(_){}
+  const patK={}; try{ gripPatronen().forEach((p,i)=>{ const alle=[...new Set((p.sig||[]).filter(g=>g.soort==='potje' && g.k).map(g=>g.k))];
+    for(const k of alle) if(!patK[k]) patK[k]={pid:p.id, nr:i+1, alle}; }); }catch(_){}
   /* v409: POTJES IN HETZELFDE PATROON STAAN IN EEN REGEL: "n potjes zitten in patroon k · <namen>" (een potje alleen houdt
      "<potje> · zit in patroon k"). De regel staat op de plek van het eerste potje en groeit met de volgende. */
   const patGedaan=new Set(), patRegel={};
-  const patNaam=r=>r.namen.length===1?`${r.namen[0]} · zit in patroon ${r.nr}`:`${r.namen.length} potjes zitten in patroon ${r.nr} · ${r.namen.join(', ')}`;
+  /* v410: DE REGEL NOEMT ALLE POTJES VAN HET PATROON (beslissing van de gebruiker), eerst die met een signaal (in de volgorde
+     waarin ze hier binnenkomen), dan de andere uit het patroon: "<namen> zitten in patroon n" (een potje: "zit"). */
+  const patNaam=r=>{ const rest=(r.alle||[]).filter(k=>!r.keys.includes(k)).map(k=>(CATS[k]||{}).name||k);
+    const namen=r.namen.concat(rest); return `${opsomming(namen)} ${namen.length===1?'zit':'zitten'} in patroon ${r.nr}`; };
   const patRij=(k, naam)=>{ if(patGedaan.has(k)) return; patGedaan.add(k); const P=patK[k];
     const r=patRegel[P.pid]; if(r){ r.namen.push(naam); r.keys.push(k); r.naam=patNaam(r); return; }
-    const n={soort:'patroon', key:k, keys:[k], namen:[naam], nr:P.nr, sub:'', dot:'let op', act:`gripNaarBegrijpen('${esc(P.pid)}')`}; n.naam=patNaam(n);
+    const n={soort:'patroon', key:k, keys:[k], namen:[naam], alle:P.alle, nr:P.nr, sub:'', dot:'let op', act:`gripNaarBegrijpen('${esc(P.pid)}')`}; n.naam=patNaam(n);
     patRegel[P.pid]=n; L.push(n); };
   for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
@@ -8424,16 +8434,20 @@ function gripLetOpItems(RO, SIG, BV){
 /* v340: "Let op" toont HOOGUIT GRIP_LETOP_MAX regels en daaronder "nog N ›" naar een lijst met de rest.
    Een kaart die met de signalen meegroeit duwt Deze maand en de tijdlijn onder de vouw. */
 const GRIP_LETOP_MAX=2;
-function gripLetOpRij(x){
-  return `<div class="row" data-letop="${esc(x.soort)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
-    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(x.sub)}</div>`:''}</div>
+/* v410: OP ZIEN (kort) staan naam en bewijs elk op EEN regel met een ellipsis en de volle tekst in de title (beslissing van de
+   gebruiker: de ruimte voor de koopknop komt uit de Let op-kaart, niet uit de knop). De lijst achter "nog N" breekt af. */
+const LETOP_KORT='white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+function gripLetOpRij(x, kort){
+  const ks=kort?';'+LETOP_KORT:'', kt=t=>kort?` title="${esc(t)}"`:'';
+  return `<div class="row" data-letop="${esc(x.soort)}"${kort?' data-letopkort':''} style="gap:9px;align-items:flex-start;padding:${kort?'6px':'7px'} 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
+    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small" style="${kort?LETOP_KORT:''}"${kt(x.naam)}>${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px${ks}"${kt(x.sub)}>${esc(x.sub)}</div>`:''}</div>
     ${x.geenPijl?'':'<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span>'}</div>`;
 }
 function gripLetOpKaart(L){
   window._gripLetOpL=L||[];
   if(!L.length) return '';
   const rest=L.length-GRIP_LETOP_MAX;
-  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.slice(0,GRIP_LETOP_MAX).map(gripLetOpRij).join('')}${rest>0?`<div class="small" data-letopnog="${rest}" style="padding:7px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="openGripLetOpLijst()">nog ${rest} \u203a</div>`:''}</div>`;
+  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.slice(0,GRIP_LETOP_MAX).map(x=>gripLetOpRij(x, true)).join('')}${rest>0?`<div class="small" data-letopnog="${rest}" style="padding:7px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="openGripLetOpLijst()">nog ${rest} \u203a</div>`:''}</div>`;
 }
 /* De lijst met de rest leest de regels van de laatste render van Grip (renderMaand() rekent bij elke
    wijziging opnieuw) en sluit als er niets meer achter de eerste twee staat. */
@@ -8441,7 +8455,7 @@ function openGripLetOpLijst(){ renderGripLetOpLijst(); showSheetBg(); }
 function renderGripLetOpLijst(){
   const rest=(window._gripLetOpL||[]).slice(GRIP_LETOP_MAX);
   if(!rest.length){ if(document.getElementById('gripLetOpLijst')) closeSheet(); return; }
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLetOpLijst"><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Let op</div>${rest.map(gripLetOpRij).join('')}</div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLetOpLijst"><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Let op</div>${rest.map(x=>gripLetOpRij(x)).join('')}</div>`;
 }
 function openGripLetOp(soort, key){ window._gripLetOp={soort, key:key||''}; renderGripLetOp(); showSheetBg(); }
 /* v359: de sheet achter de lek-regel: wat er is (spiegel), wat het betekent (gevolg), en de bestaande route
@@ -8908,7 +8922,7 @@ function dezeMaandBrug(V){
      vaste lasten op de kaart, nu de regel eronder weg is. */
   if(heeftVast || R['~vast']) stappen.push({soort:'vast', label:'vaste lasten', waarde:R['~vast']||0});
   if(R['~zonder']) stappen.push({soort:'zonder', label:'zonder potje', waarde:R['~zonder']});
-  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
+  stappen.push({soort:'eind', label:MNAMES[+V.m.slice(5,7)-1], waarde:V.projectie});
   /* De ondergrens van de as: alleen als alle standen boven nul liggen en de stappen klein zijn tegen het
      budget, anders zijn ze niet te zien. Een rond getal (een halve macht van tien) onder de laagste stand. */
   let run=V.budget; const lv=[V.budget, V.projectie];
@@ -9824,8 +9838,8 @@ function teRuimTermijnen(s, ym){
   /* v409: EEN 4-WEKELIJKSE POST KOMT 13 KEER PER JAAR, dus er is in twaalf maanden altijd een maand met twee. De gemeten
      afstand (mediaan van de betaaldagen) is daar niet de lat: een weekend of een feestdag schuift een betaling een dag op,
      en met 29 dagen komt de tweede termijn in een maand pas na jaren. Vooruit rekent hij daarom met VAST_4W_DAGEN (28). */
-  if(s.cadans==='4w' && +s.afstand>0){ let n=0; const d=new Date(nd);
-    for(let g=0; g<40; g++){ const i=d.getFullYear()*12+d.getMonth(); if(i>idx) break; if(i===idx) n++; d.setDate(d.getDate()+VAST_4W_DAGEN); }
+  if(s.cadans==='4w' && +s.afstand>0){ let n=0; const d=new Date(nd), st=vierStap(s).stap;
+    for(let g=0; g<40; g++){ const i=d.getFullYear()*12+d.getMonth(); if(i>idx) break; if(i===idx) n++; d.setDate(d.getDate()+st); }
     return n; }
   const iv=+s.intervalM||1, n0=nd.getFullYear()*12+nd.getMonth();
   if(idx<n0) return 0;
@@ -10076,8 +10090,12 @@ function gripTabsHtml(){
    die de app maakt komt dat vrijwel niet voor (het overblijfsel na de optelling gaat al naar de kant van zijn teken), dus
    hij staat als eigen functie en wordt rechtstreeks getoetst (meetles p). */
 function brugTekenVast(R){ if(R['~ovB']<0){ R['~ovO']=(R['~ovO']||0)+R['~ovB']; R['~ovB']=0; } if(R['~ovO']>0){ R['~ovB']=(R['~ovB']||0)+R['~ovO']; R['~ovO']=0; } return R; }
+/* v410: een naam die niet in BRUG_KORT staat (een eigen categorie, een lange naam) staat op een regel met een ellipsis
+   en de volle naam in de title: zo kan de langste potjenaam de brug niet hoger maken (fit op 390x844). Alleen de vaste
+   korte labels mogen op hun zachte afbreekstreepje over twee regels. */
 function brugKort(k, naam){ return BRUG_KORT[k] || String(naam||k).split(/\s*&\s*/)[0]; }
 const BRUG_KORT={uiteten:'Uit eten', boodschappen:'Bood­schappen', verzekering:'Verzeke­ringen', abonnement:'Abonne­menten', bankkosten:'Bank­kosten', belasting:'Belasting', vakantie:'Vakantie', goededoel:'Goede doelen', persoonlijk:'Persoonlijk', studie:'Studie­schuld', shopping:'Shopping', zorg:'Zorg'};
+const BRUG_KORT_SET=new Set(Object.values(BRUG_KORT));
 function gripZienBrug(V, TR){
   if(!V || V.onbekend || !(V.budget>0)) return null;
   TR=TR||teRuim(V);
@@ -20623,7 +20641,7 @@ function brugGrafiek(Br){
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>${c.s.noot?brugNoot(c, y, PH, yt):''}
         ${kolV&&(kolV[i].lo!==c.lo||kolV[i].hi!==c.hi)?`<i data-voor style="position:absolute;left:12%;right:12%;top:${y(kolV[i].hi).toFixed(1)}px;height:${Math.max(y(kolV[i].lo)-y(kolV[i].hi),2).toFixed(1)}px;border:1px dashed var(--mut2);border-radius:3px"></i>`:''}${c.s.deel!=null?brugDelen(c, y, lr, kleur(c.s)):`<i style="position:absolute;${lr};top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.soort==='teruim'?'var(--bar)':kleur(c.s)};border-radius:3px"${c.s.soort==='teruim'?' data-brugniet':''}></i>`}${lijn}
       </div>
-      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.korteLabels?'hyphens:manual;overflow-wrap:normal':Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel||Br.korteLabels?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>${c.s.label2?`<div data-brugeen2 style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;${Br.korteLabels?'':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis'}" title="${esc(c.s.titel||c.s.label2)}">${esc(c.s.label2)}</div>`:''}
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;${Br.korteLabels?(BRUG_KORT_SET.has(c.s.label)?'hyphens:manual;overflow-wrap:normal':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis'):Br.eenRegel?'white-space:nowrap;overflow:hidden;text-overflow:ellipsis':'overflow-wrap:anywhere'}"${Br.eenRegel||Br.korteLabels?` data-brugeen title="${esc(c.s.titel||c.s.label)}"`:''}>${esc(c.s.label)}</div>${c.s.label2?`<div data-brugeen2 style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;${Br.korteLabels?'':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis'}" title="${esc(c.s.titel||c.s.label2)}">${esc(c.s.label2)}</div>`:''}
     </div>`;}).join('')}</div>`;
 }
 /* v402: EEN STAP IN TWEE DELEN (c.s.deel): het eerste deel dicht (geboekt), de rest licht (nog verwacht), in dezelfde
@@ -27588,7 +27606,7 @@ function diagTeRuim(){
       :`nodig ${x.nodig} is wel hooguit de helft, maar potje min voorstel ${x.voorstel} is ${x.bud-x.voorstel}, minder dan ${RUIMER_DREMPEL.euro}`));
     L.push(`  ${x.naam}: ${x.bud} | ${eind} | ${ymFull(x.maand)} ${x.nodig}${x.reden?' ('+x.reden+')':''} | ${x.ruim?'JA':'nee'} | ${waarom}`);
     const posten=sched.filter(s=>s.cat===x.k && (+s.intervalM||1)>1);
-    for(const s of posten){ const mnd=[]; for(let i=1;i<12;i++){ const ym=valtOpYmPlus(V.m,i); const n=teRuimTermijnen(s, ym); if(n) mnd.push(ymFull(ym).slice(0,3)+(n>1?' x'+n:'')); }
+    for(const s of posten){ const mnd=[]; for(let i=1;i<12;i++){ const ym=valtOpYmPlus(V.m,i); const n=teRuimTermijnen(s, ym); if(n) mnd.push(MNAMES[+ym.slice(5,7)-1]+(n>1?' x'+n:'')); }
       L.push(`      post ${titleCase(cleanMerch(s.name)||s.name||'')} ${Math.round(+s.amount||0)} per ${s.intervalM} mnd: ${mnd.join(', ')||'niet in de komende 11 maanden'}`); }
     /* v392: een gemengd potje staat met zijn vaste en zijn variabele deel als aparte regels, met de toets per deel. */
     if(va && vs && !vs.geen){
@@ -27633,7 +27651,7 @@ function diagEenSignaal(V){
   let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && ((+s.intervalM||1)>1 || s.cadans==='4w')); }catch(_){}
   for(const s of R){ const vier=s.cadans==='4w', mnd=[];
     for(let i=0;i<12;i++){ const ym=valtOpYmPlus(V.m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(`${MNAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}${n>1?' 2x':''}`); }
-    L.push(`  ${titleCase(cleanMerch(s.name)||s.name||'')} | ${(CATS[s.cat]||{}).name||s.cat||'-'} | ${vier?`4-wekelijks (gemeten afstand ${s.afstand} dagen, vooruit ${VAST_4W_DAGEN})`:`elke ${s.intervalM} maanden`} | ${Math.round(+s.amount||0)} | ${vier?(mnd.length?'dubbel in '+mnd.join(', '):'geen dubbele maand'):mnd.join(', ')||'-'}`); }
+    L.push(`  ${titleCase(cleanMerch(s.name)||s.name||'')} | ${(CATS[s.cat]||{}).name||s.cat||'-'} | ${vier?(()=>{ const vs=vierStap(s); return `4-wekelijks (gemeten afstand ${s.afstand} dagen over ${vs.n} afstand${vs.n===1?'':'en'}, vooruit ${vs.stap} = ${vs.bron==='gemeten'?'gemeten mediaan':'vast '+VAST_4W_DAGEN+' (minder dan '+VAST_4W_MIN_AFSTANDEN+' afstanden)'})`; })():`elke ${s.intervalM} maanden`} | ${Math.round(+s.amount||0)} | ${vier?(mnd.length?'dubbel in '+mnd.join(', '):'geen dubbele maand'):mnd.join(', ')||'-'}`); }
   if(!R.length) L.push('  geen periodieke posten');
   return L;
 }

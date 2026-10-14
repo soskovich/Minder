@@ -16,6 +16,20 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v410` · een definitie van "nodig".** De duurste maand van de komende twaalf met de periodieke posten in hun maand
+  (`potNodig()`), voor te ruim EN te krap. Tot `v410` las te krap `potjeMaandVloer()` (het gemiddelde van drie maanden zonder
+  periodieke posten, plus de posten), en te ruim het duurste variabele deel; dezelfde vraag ("hoeveel heeft dit potje nodig")
+  gaf twee antwoorden (Abonnementen 38 tegen 51, Online shopping 150 tegen 194). Valkuil: maand 0 is het verwachte eind en de
+  vaste posten van deze maand zitten daar al in; ze worden er niet bij opgeteld maar wel genoemd, anders kan te krap een post
+  van deze maand nooit aanwijzen (dat gebeurde bij Huurwoningen Premium in oktober).
+- **`v410` · 4-wekelijks rekent met 28 dagen, en vanaf 4 gemeten afstanden met de gemeten mediaan** (`vierStap()`). Met twee of
+  drie afstanden is een mediaan van 29 een weekend; met vier is hij een meting. Blok 19 zegt welke van de twee het werd.
+- **`v410` · de patroonregel noemt het hele patroon**, eerst de potjes met een signaal. Valkuil: `Array.map(gripLetOpRij)` geeft
+  de index als tweede argument mee; met een `kort`-parameter werd de lijst achter "nog N" daardoor stil afgekapt. Altijd
+  `map(x=>f(x))` als f een tweede parameter heeft.
+- **`v410` · de ruimte onder de koopknop komt uit Let op en de brug-labels, niet uit de knop**: op de kaart staan naam en bewijs
+  op een regel met ellipsis, in de lijst achter "nog N" breken ze af; een brug-label buiten de vaste korte namen staat op een
+  regel. 20px op 390x844, ook met de langste potjenaam.
 - **`v409` · een 4-wekelijkse post is 13 termijnen per jaar.** Vooruit rekent hij met 28 dagen, niet met de gemeten afstand.
   Valkuil: Shurgard had een mediaan van 29 dagen (weekenden), en dan kwam de maand met twee termijnen pas na jaren: te ruim
   rekende Huur met EUR 71 in plaats van EUR 142.

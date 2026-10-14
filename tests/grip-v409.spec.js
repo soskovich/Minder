@@ -80,13 +80,13 @@ test.describe('3 · een bekende periodieke post in zijn maand is geen "boven bud
     const L = await letop(page), a = L.filter(x => x.key === 'abonnement');
     expect(a.length).toBe(1);
     expect(a[0].soort).toBe('krap');
-    expect(a[0].naam).toBe('Abonnementen te krap voor Huurwoningen Premium (€31 in okt · jan · apr · jul) · voorstel €40');
+    expect(a[0].naam).toBe('Abonnementen te krap voor Huurwoningen Premium (€31 in okt · jan · apr · jul) · voorstel €60');   // v410: nodig is potNodig() (51 in oktober), was 38
     expect(a[0].act).toBe("openPotHerzien('abonnement')");
     await page.evaluate(() => openPotHerzien('abonnement'));
     await expect(page.locator('#potHerzienSheet [data-phkrap]')).toContainText('te krap voor Huurwoningen Premium');
-    await expect(page.locator('[data-phoptie="a"]')).toContainText('Naar het voorstel · €40');
+    await expect(page.locator('[data-phoptie="a"]')).toContainText('Naar het voorstel · €60');
     const r = await page.evaluate(() => { potHerzienKies('a'); window._ph.bron = 'budget'; renderPotHerzien(); potHerzienBevestig(); return SET.budgets.abonnement; });
-    expect(r).toBe(40);
+    expect(r).toBe(60);
     expect((await letop(page)).some(x => x.key === 'abonnement')).toBe(false);
   });
   test('een signaal per potje: is het ook 2 van 3 boven, dan alleen die regel en geen "te krap"', async ({ page }) => {
@@ -98,9 +98,9 @@ test.describe('3 · een bekende periodieke post in zijn maand is geen "boven bud
   });
   test('te krap met de uitschieter-drempel: een paar euro tekort in de duurste maand is geen signaal', async ({ page }) => {
     await S.boot(page);
-    const r = await page.evaluate(() => { SET.budgets.abonnement = 36; save(); const v = potjeMaandVloer('abonnement', ['2026-07', '2026-08', '2026-09'], '2026-10');
-      return { vloer: v.vloer, krap: potKrapLijst().map(x => x.k) }; });
-    expect(r.vloer).toBeGreaterThan(36);   // invoermeting: de duurste maand is wel hoger dan het potje
+    const r = await page.evaluate(() => { SET.budgets.abonnement = 45; save(); const v = potNodig('abonnement', maandVooruit());
+      return { vloer: v.nodig, krap: potKrapLijst().map(x => x.k) }; });
+    expect(r.vloer).toBeGreaterThan(45);   // invoermeting: de duurste maand is wel hoger dan het potje (v410: potNodig, 51)
     expect(r.krap).not.toContain('abonnement');
   });
   test('een post die al in je reserveringen staat, maakt het potje niet te krap', async ({ page }) => {
@@ -126,14 +126,14 @@ test.describe('4 · potjes in hetzelfde patroon staan in een regel', () => {
     const L = await letop(page), pr = L.filter(x => x.soort === 'patroon');
     const in1 = pr.filter(x => /patroon 1\b/.test(x.naam));
     expect(in1.length).toBe(1);
-    // de potjes die anders een eigen regel hadden (een signaal deze maand of n van 3 boven); Boodschappen heeft er geen
-    expect(in1[0].naam).toBe('2 potjes zitten in patroon 1 · Uit eten & café, Vices');
+    // v410: alle potjes van het patroon, eerst die met een signaal (Uit eten, Vices), dan Boodschappen
+    expect(in1[0].naam).toBe('Uit eten & café, Vices en Boodschappen zitten in patroon 1');
     expect(in1[0].act).toBe("gripNaarBegrijpen('spaargeld')");
   });
   test('een potje alleen in zijn patroon houdt "<potje> · zit in patroon n"', async ({ page }) => {
     await S.boot(page);
     const pr = (await letop(page)).filter(x => x.soort === 'patroon');
-    expect(pr.map(x => x.naam)).toEqual(['Uit eten & café · zit in patroon 1', 'Vices · zit in patroon 2']);
+    expect(pr.map(x => x.naam)).toEqual(['Uit eten & café zit in patroon 1', 'Vices zit in patroon 2']);
   });
 });
 
@@ -161,14 +161,14 @@ test.describe('6 · blok 19: het budget per maand en de cadans van de periodieke
     await S.boot(page);
     const d = await page.evaluate(() => diagEenSignaal(maandVooruit()));
     const tekst = d.join('\n');
-    expect(tekst).toContain('  Huur: jul 760/700* · aug 760/700* · sep 137/700 -66 Shurgard Nl | huidig budget voor alle drie');
+    expect(tekst).toContain('  Huur: jul 760/700* · aug 760/700* · sep 137/700 -66 Shurgard Nl | nodig 142 (sep 2027) | huidig budget voor alle drie');
     expect(tekst).toContain('  Abonnementen: jul 31/5 -31 Huurwoningen Premium · aug 20/5* · sep 0/5 |');
-    expect(tekst).toContain('te krap, voorstel 40');
-    expect(tekst).toContain('  Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen, vooruit 28) | 71 | dubbel in sep 2027 2x');
+    expect(tekst).toContain('te krap, voorstel 60');
+    expect(tekst).toContain('  Shurgard Nl | Huur | 4-wekelijks (gemeten afstand 29 dagen over 2 afstanden, vooruit 28 = vast 28 (minder dan 4 afstanden)) | 71 | dubbel in sep 2027 2x');
     expect(tekst).toContain('  Huurwoningen Premium | Abonnementen | elke 3 maanden | 31 | okt 2026, jan 2027, apr 2027, jul 2027');
     await page.evaluate(() => { SET.budgetHist = { '2026-07': { huur: 420 }, '2026-08': { huur: 420 }, '2026-09': { huur: 750 } }; save(); });
     const d2 = (await page.evaluate(() => diagEenSignaal(maandVooruit()))).join('\n');
-    expect(d2).toContain('  Huur: jul 760/420* · aug 760/420* · sep 137/750 -66 Shurgard Nl | bewaarde potjes per maand');
+    expect(d2).toContain('  Huur: jul 760/420* · aug 760/420* · sep 137/750 -66 Shurgard Nl | nodig 142 (sep 2027) | bewaarde potjes per maand');
     console.log(d.join('\n'));
   });
 });
@@ -182,7 +182,7 @@ test.describe('fit op 390x844', () => {
         const knop = document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav = document.querySelector('.nav').getBoundingClientRect().top;
         return { knop, nav, kol: document.querySelectorAll('#gripBrug [data-brugstap]').length, sw: document.documentElement.scrollWidth }; });
       console.log(`zien 390 (${naam}): ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-      expect(r.knop).toBeLessThanOrEqual(r.nav); expect(r.sw).toBeLessThanOrEqual(390);
+      expect(r.nav - r.knop).toBeGreaterThanOrEqual(16); expect(r.sw).toBeLessThanOrEqual(390);   // v410: minimaal 16px tussen koopknop en menubalk
       const s = await page.evaluate(() => { openGripLetOpLijst(); const sh = document.querySelector('#sheet');
         return { h: sh.getBoundingClientRect().height, sh: sh.scrollHeight, ch: sh.clientHeight, vh: innerHeight, sw: document.documentElement.scrollWidth, n: sh.querySelectorAll('[data-letop]').length }; });
       console.log(`let op open 390 (${naam}): ${s.n} regels, sheet ${Math.round(s.h)}px van ${s.vh}, scroll ${s.sh}/${s.ch}`);

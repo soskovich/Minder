@@ -155,7 +155,7 @@ test.describe('D5 · een potje in een patroon staat in Let op als verwijzing', (
       const rijen = L.filter(x => x.key === k);
       expect(rijen.length, k).toBe(1);
       expect(rijen[0].soort).toBe('patroon');
-      expect(rijen[0].naam).toMatch(new RegExp(` · zit in patroon ${i + 1}$`));
+      expect(rijen[0].naam).toMatch(new RegExp(` zit in patroon ${i + 1}$`));   // v410: "<namen> zit(ten) in patroon n"
       expect(rijen[0].act).toBe(`gripNaarBegrijpen('${P[i].id}')`);
       expect(rijen[0].act).not.toContain('openPotHerzien');
     }

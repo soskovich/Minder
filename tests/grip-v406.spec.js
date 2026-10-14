@@ -161,7 +161,7 @@ test.describe('C · de brug op Zien', () => {
     const tr = B.st.filter(s => s.soort === 'teruim');
     expect(tr.map(s => [s.label, s.label2])).toEqual([['2 potjes', 'niet gebruikt']]);
     await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
-    const r = await page.evaluate(() => ({ af: [...document.querySelectorAll('#gripBrug [data-brugeen], #gripBrug [data-brugeen2]')].filter(e => e.scrollWidth > e.clientWidth + 1 || getComputedStyle(e).textOverflow === 'ellipsis').map(e => e.innerText),
+    const r = await page.evaluate(() => ({ af: [...document.querySelectorAll('#gripBrug [data-brugeen], #gripBrug [data-brugeen2]')].filter(e => e.scrollWidth > e.clientWidth + 1)   /* v410: een label buiten BRUG_KORT staat op een regel met ellipsis-stijl; afgekapt is het pas als de tekst er niet in past */.map(e => e.innerText),
       labels: [...document.querySelectorAll('#gripBrug [data-brugeen]')].map(e => e.innerText.replace(/­|\n/g, '')), licht: (document.querySelector('[data-zienlicht]') || {}).innerText }));
     expect(r.af).toEqual([]);
     expect(r.labels).toEqual(['budget', 'Vices', 'Boodschappen', 'z. potje', '2 potjes', expect.stringMatching(/^\d+ onder$/), 'verwacht']);   // v408: "n onder", nooit "overig"
