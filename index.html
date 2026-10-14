@@ -8368,13 +8368,24 @@ function potLaten(k, ym){ ym=ym||thisYM();
    termijn van een 4-wekelijkse post, in die maand afschreef (potPeriodiek()) gaat eraf voordat de maand getoetst wordt.
    Past het potje er niet omheen, dan zegt potKrapLijst() dat, met een voorstel. */
 function potMaanden(k, m){ m=m||thisYM(); const ms=[3,2,1].map(i=>valtOpYmPlus(m,-i));
-  const bedragen=ms.map(mm=>{ let v=0; try{ v=+(catSpendMap(mm)||{})[k]||0; }catch(_){} return Math.round(Math.max(v,0)); });
+  /* v417: `totaal` is wat er uitging (catSpendMap), `bedragen` de afgeronde maanden van de berekening (potVarMaanden(), dezelfde
+     als potNodig()), en `vast` de herkende vaste lasten van die maand buiten de periodieke posten. Getoond worden bedragen
+     plus vast; boven, de gewone maand, de breuk en het gemiddelde rekenen met totaal (wat er uitging), zoals tot v417. */
+  const totaal=ms.map(mm=>{ let v=0; try{ v=+(catSpendMap(mm)||{})[k]||0; }catch(_){} return Math.round(Math.max(v,0)); });
+  let VM=null; try{ VM=potVarMaanden(m); }catch(_){}
+  const bedragen=ms.map(mm=>{ const i=VM?VM.P.indexOf(mm):-1; return i<0?0:Math.round(Math.max(+VM.perMaand[i][k]||0,0)); });
   let MP=[]; try{ MP=ms.map(mm=>maandPotjes(mm)); }catch(_){}
   const huidig=!(MP.length===ms.length && MP.every(p=>p && p.bron==='bewaard'));
   const budgets=ms.map((mm,i)=>Math.round(+((huidig?SET.budgets:MP[i].B)||{})[k]||0));
   const R=periodiekePosten(k, true), per=ms.map(mm=>potPeriodiek(k, mm, R));
-  const boven=ms.map((_,i)=>{ const b=bedragen[i]-Math.round(per[i].bedrag); return budgets[i]>0 && b>budgets[i] && uitschieterAfw(b-budgets[i], budgets[i]); });
-  return {ms, bedragen, budgets, boven, huidig, periodiek:per}; }
+  const boven=ms.map((_,i)=>{ const b=totaal[i]-Math.round(per[i].bedrag); return budgets[i]>0 && b>budgets[i] && uitschieterAfw(b-budgets[i], budgets[i]); });
+  const vast=ms.map((_,i)=>Math.max(totaal[i]-bedragen[i]-Math.round(per[i].bedrag),0));
+  return {ms, bedragen, vast, totaal, budgets, boven, huidig, periodiek:per}; }
+/* v417: de signaalrij: de afgeronde maanden van de berekening, met de herkende vaste lasten erachter als die er zijn. */
+function potReeksTekst(x){ const t=maandReeksTekst(x.ms, x.bedragen), v=x.vast||[];
+  if(!v.some(a=>a>0)) return t;
+  const nz=v.filter(a=>a>0);
+  return `${t} · vast ${nz.length===v.length && nz.every(a=>a===nz[0])?`${euro0(nz[0])} per maand`:maandReeksTekst(x.ms, v)}`; }
 /* De bekende periodieke posten van een categorie: een interval boven een maand, of 4-wekelijks (v384). */
 /* v412: standaard alleen de posten die meetellen (postTelt()); `alles` ook een gestopte of verlopen post, voor de
    afgeronde maanden (potMaanden(): daar is hij wel betaald). */
@@ -8419,21 +8430,21 @@ function potKrapLijst(m, V){ m=m||thisYM(); const B=SET.budgets||{}, uit=[];
       .filter(p=>p.maanden.length && gewoon+p.bedrag>bud && uitschieterAfw(gewoon+p.bedrag-bud, bud));
     if(!posten.length) continue;
     uit.push({k, naam:CATS[k].name, bud, krap:true, posten, gewoon, vloer:N.nodig, vloerMaand:N.maand, varMax:N.varMax, voorstel:N.voorstel,
-      ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, huidig:P.huidig, boven:P.boven, n:P.boven.filter(Boolean).length}); }
+      ms:P.ms, bedragen:P.bedragen, vast:P.vast, totaal:P.totaal, budgets:P.budgets, huidig:P.huidig, boven:P.boven, n:P.boven.filter(Boolean).length}); }
   return uit.sort((a,b)=>((b.voorstel-b.bud)-(a.voorstel-a.bud)) || (a.naam<b.naam?-1:1)); }
 /* v416: de mediaan van een reeks getallen (bij een even aantal het gemiddelde van de middelste twee). */
 function mediaan(a){ const b=(a||[]).map(Number).filter(v=>isFinite(v)).sort((p,q)=>p-q); if(!b.length) return 0; const h=b.length>>1; return b.length%2?b[h]:(b[h-1]+b[h])/2; }
 /* v416: de gewone maand van een potje: de mediaan over de drie afgeronde maanden van wat er uitging min de periodieke posten
    van die maand (potPeriodiek(), via potMaanden()). */
-function potKrapGewoon(P){ return Math.round(mediaan(P.bedragen.map((b,i)=>Math.max(b-Math.round((P.periodiek[i]||{}).bedrag||0),0)))); }
+function potKrapGewoon(P){ return Math.round(mediaan((P.totaal||P.bedragen).map((b,i)=>Math.max(b-Math.round((P.periodiek[i]||{}).bedrag||0),0)))); }
 function potKrapPostTekst(p){ return `${p.naam} (${euro0(p.bedrag)}${p.vier?' 2×':''} in ${p.maanden.map(ym=>MNAMES[+ym.slice(5,7)-1]).join(' · ')})`; }
 function potBovenLijst(m, metLaten){
   m=m||thisYM(); const B=SET.budgets||{}, uit=[];
   for(const k of Object.keys(B)){ const bud=+B[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k) || (!metLaten && potLaten(k, m))) continue;
     const P=potMaanden(k, m), n=P.boven.filter(Boolean).length;
     if(n<BOVEN_MIN_MAANDEN) continue;
-    const gem=P.bedragen.reduce((a,x)=>a+x,0)/P.ms.length;
-    uit.push({k, naam:CATS[k].name, ms:P.ms, bedragen:P.bedragen, budgets:P.budgets, boven:P.boven, huidig:P.huidig, periodiek:P.periodiek, n, bud:Math.round(bud), gem, voorstel:Math.max(Math.ceil(gem/5)*5, Math.round(bud)+5), meer:Math.round(gem-bud)}); }
+    const gem=P.totaal.reduce((a,x)=>a+x,0)/P.ms.length;
+    uit.push({k, naam:CATS[k].name, ms:P.ms, bedragen:P.bedragen, vast:P.vast, totaal:P.totaal, budgets:P.budgets, boven:P.boven, huidig:P.huidig, periodiek:P.periodiek, n, bud:Math.round(bud), gem, voorstel:Math.max(Math.ceil(gem/5)*5, Math.round(bud)+5), meer:Math.round(gem-bud)}); }
   return uit.sort((a,b)=>(b.meer-a.meer) || (a.naam<b.naam?-1:1));
 }
 /* v408: EEN BREUK. Een potje dat nu te ruim is (vooruitkijkend, teRuimLijst()) en terugkijkend boven zijn budget eindigde
@@ -8442,7 +8453,7 @@ function potBovenLijst(m, metLaten){
    BREUK_DEEL van het gemiddelde van de drie afgeronde maanden. "was" is dat gemiddelde, "nu" de lage maand. */
 const BREUK_DEEL=0.5;
 function potBreuk(P, eind){
-  const b=P.bedragen, voor=(b[0]+b[1])/2;
+  const b=P.totaal||P.bedragen, voor=(b[0]+b[1])/2;
   if(voor>0 && b[2]<voor*BREUK_DEEL) return {was:Math.round(voor), nu:b[2], ym:P.ms[2], verwacht:false};
   const drie=(b[0]+b[1]+b[2])/3;
   if(eind!=null && drie>0 && eind<drie*BREUK_DEEL) return {was:Math.round(drie), nu:Math.round(eind), ym:null, verwacht:true};
@@ -8570,12 +8581,12 @@ function gripLetOpItems(RO, SIG, BV){
     if(patK[x.k]){ patRij(x.k, x.naam); continue; }
     if(trK.has(x.k)){ const Bk=potBreuk(x, potEind(VV, x.k)); if(!Bk) continue;   // te ruim zonder breuk: Zien zegt het
       L.push({soort:'veranderd', groep:'a', bedrag:Math.abs(Bk.was-Bk.nu), key:x.k, naam:`${x.naam} veranderd · was ${euro0(Bk.was)}/mnd, nu ${euro0(Bk.nu)}`,
-        sub:`${maandReeksTekst(x.ms, x.bedragen)}${Bk.verwacht?` · ${MNAMES[+thisYM().slice(5,7)-1]} verwacht ${euro0(Bk.nu)}`:''} · ${potBudgetTekst(x)}`, dot:'let op', act:`openTeRuim('${esc(x.k)}')`}); continue; }
-    L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${maandReeksTekst(x.ms, x.bedragen)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
+        sub:`${potReeksTekst(x)}${Bk.verwacht?` · ${MNAMES[+thisYM().slice(5,7)-1]} verwacht ${euro0(Bk.nu)}`:''} · ${potBudgetTekst(x)}`, dot:'let op', act:`openTeRuim('${esc(x.k)}')`}); continue; }
+    L.push({soort:'boven', groep:'a', bedrag:x.meer, key:x.k, naam:`${x.naam} · ${x.n} van ${x.ms.length} mnd boven budget`, sub:`${potReeksTekst(x)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
   /* v409: te krap voor een periodieke post, een signaal per potje: niet als het al boven, te ruim, laten of in een patroon staat */
   try{ const pk=new Set(PBL.map(x=>x.k)); for(const x of potKrapLijst()){ if(pk.has(x.k) || trK.has(x.k) || patK[x.k]) continue;
     L.push({soort:'krap', groep:'a', bedrag:x.voorstel-x.bud, key:x.k, naam:`${x.naam} te krap voor ${x.posten.map(potKrapPostTekst).join(', ')} · voorstel ${euro0(x.voorstel)}`,
-      sub:`of is ${opsomming(x.posten.map(p=>p.naam))} gestopt? › · ${maandReeksTekst(x.ms, x.bedragen)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
+      sub:`of is ${opsomming(x.posten.map(p=>p.naam))} gestopt? › · ${potReeksTekst(x)} · ${potBudgetTekst(x)}`, dot:'let op', act:`openPotHerzien('${esc(x.k)}')`}); } }catch(_){}
   /* v412: EEN VERLOPEN POST VRAAGT OF HIJ GESTOPT IS, en een gestopte post die weer betaald wordt of hij weer actief is.
      Tot je antwoordt telt een verlopen post niet mee (postTelt()). */
   try{ const M=postStatusMap(), uitOpen=new Set(uitResOpen()); for(const key in M){ const P=M[key], kk=esc(key).replace(/'/g,"\\'");
@@ -8995,6 +9006,19 @@ function maandSplitsing(m, L){
     vastePotjes.push({k, naam:CATS[k].name, bud:0, potje:0, uit:Math.round(u), vast:Math.round(o), eind:Math.round(e), eindR:e, overR:e, terug:true, geen:false, zonderPotje:true, namen:openNamen[k]||[]}); }
   return {m, vastePotjes, potBasis, vastExtra, geenExtra, uitOpen, open, fBet};
 }
+/* v417: DE AFGERONDE MAANDEN VAN EEN POTJE, EEN FUNCTIE (gevraagd door de gebruiker). Per maand (de meest recente eerst) wat er
+   per categorie uitging in de snede van piekInScope(): netto, zonder herkende vaste lasten (isFixed) en zonder een potje dat jij
+   op vast zette. maandVooruit() (dus potNodig()) en potMaanden() (de signaalrij in Let op, de herzien-sheet en blok 19) lezen
+   hem allebei. GEMELD op het toestel: de signaalrij las catSpendMap() en zei Kinderen 4 · 82 · 183 tegen 4 · 35 · 136 in de
+   berekening; het verschil (47 in augustus en september) is een herkende vaste last, en die staat nu apart ("vast"). */
+const _potVarMemo={gen:-1, m:{}};
+function potVarMaanden(m){
+  m=m||thisYM(); if(_potVarMemo.gen!==_dataGen){ _potVarMemo.gen=_dataGen; _potVarMemo.m={}; }
+  if(_potVarMemo.m[m]) return _potVarMemo.m[m];
+  const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
+  const perMaand=P.map(p=>{ const pm={}; for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const c=catOf(t); if(potHeelVast(c)) continue; pm[c]=(pm[c]||0)+uitgaveNorm(t); } return pm; });
+  return (_potVarMemo.m[m]={P, perMaand});
+}
 function maandVooruit(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
   const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
@@ -9008,11 +9032,10 @@ function maandVooruit(){
      op vast zette (potHeelVast: een eigen categorie met aard vast, of je keuze in SET.potAard) is helemaal vast
      en telt geen gemiddelde. */
   const heelVast=c=>potHeelVast(c);
-  const restCat={}, totP=[], tot0={}, perMaand=[];
-  for(const p of P){ let s=0; const pm={}; perMaand.push(pm);
+  const restCat={}, totP=[], tot0={}, perMaand=potVarMaanden(m).perMaand;   // v417: een bron voor de afgeronde maanden
+  for(const p of P){ let s=0;
     for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const d=+String(t.date).slice(8,10), c=catOf(t), v=uitgaveNorm(t);
       if(heelVast(c)) continue;
-      pm[c]=(pm[c]||0)+v;
       if(d>el){ restCat[c]=(restCat[c]||0)+v/VOORUIT_MAANDEN; s+=v; } else tot0[c]=(tot0[c]||0)+v/VOORUIT_MAANDEN; }
     totP.push(s); }
   const T=totals(m), L=(function(){ try{ return monthLiquidity(); }catch(_){ return {fixDue:0, fixDueItems:[]}; } })();
@@ -9075,9 +9098,14 @@ function maandVooruit(){
      stap op Zien leest precies dat getal. Wat er buiten geboekt en verwacht in zit staat bij naam (zonderLosPosten). */
   const varEindR=potjes.reduce((a,x)=>a+x.eindR,0)+potKlein, vasteEindR=vastePotjes.reduce((a,x)=>a+(+x.eindR||0),0);
   const fixDueExact=(L.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje).reduce((a,x)=>a+(+x.amount||0),0);   // L.fixDue is afgerond
-  const zonderExact=(+T.spendNorm||0)+fixDueExact+vastExtra+geenExtra-(SP.uitOpen||0)+Math.max(restTot,0)-varEindR-vasteEindR;
-  const losP=zonderLosPosten(L, m), zonderLos=zonderExact-Z.geboekt-Z.verwacht;
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:Math.round(zonderExact), zonderExact, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losP.reduce((a,x)=>a+x.bedrag,0), inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  const zonderBreed=(+T.spendNorm||0)+fixDueExact+vastExtra+geenExtra-(SP.uitOpen||0)+Math.max(restTot,0)-varEindR-vasteEindR;
+  /* v417: EEN BRON VOOR "ZONDER POTJE", EEN KEER AFGEROND NA HET OPTELLEN (gevraagd door de gebruiker). Zonder potje is wat er
+     bij naam in staat: geboekt + verwacht + de vaste lasten zonder categorie (zonderLosPosten). Wat er van het verschil zonder
+     naam overblijft (centen) is geen zonder potje en valt in de brug in overig. V.zonder = round(zonderExact) is het ene getal
+     dat de stap op Zien, de sheet, de opbouw en blok 19 lezen. */
+  const losP=zonderLosPosten(L, m), losSom=losP.reduce((a,x)=>a+x.bedrag,0);
+  const zonderExact=Z.geboekt+Z.verwacht+losSom, zonderLos=zonderBreed-Z.geboekt-Z.verwacht;
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, variabel, vaste, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -10028,6 +10056,9 @@ function renderLogMaand(){
    er deze maand al uit is. Te ruim is het potje min het voorstel. Een uitgesloten post telt mee: hij komt
    nog (v328). */
 function teRuimTermijnen(s, ym){
+  /* v417: EEN POST DIE NIET MEETELT (gestopt door jou, of verlopen: postTelt()) HEEFT GEEN TERMIJNEN in de komende maanden.
+     De ene plek, zodat potNodig(), te krap, het te-ruim-rapport en blok 19 hem niet meer in een maand zetten. */
+  if(s && s.key && !postTelt(s.key)) return 0;
   const nd=s.nextDate instanceof Date?s.nextDate:(s.nextDate?new Date(s.nextDate):null);
   if(!nd || isNaN(nd)) return 0;
   const ymIdx=x=>{ const [y,m]=String(x).split('-').map(Number); return y*12+m-1; };
@@ -10392,7 +10423,9 @@ function gripZienBrug(V, TR){
   /* v415: EEN SAMENGEVOEGDE STAP VAN MINDER DAN BRUG_KLEIN (10) KRIJGT GEEN EIGEN KOLOM: hij schuift bij de dichtstbijzijnde
      stap aan dezelfde kant (boven bij boven, onder bij onder), en de som blijft gelijk. Zonder zo'n stap blijft hij staan. */
   for(const ov of [ovB, ovO]){ const w=ov.waarde; if(!w || Math.abs(w)>=BRUG_KLEIN) continue;
-    const mid=stappen.slice(1).filter(st=>st.waarde && Math.sign(st.waarde)===Math.sign(w));
+    /* v417: nooit bij "z. potje": dat is een getal (V.zonder) met een eigen bron, en een opgeschoven euro maakte het 206
+       naast 168 geboekt + 37 verwacht (GEMELD op het toestel). Zonder andere stap aan die kant blijft overig staan. */
+    const mid=stappen.slice(1).filter(st=>st.waarde && st.soort!=='zonder' && Math.sign(st.waarde)===Math.sign(w));
     if(!mid.length) continue; const doel=mid[mid.length-1];   // de dichtstbijzijnde: de laatste ervoor, want overig staat achteraan
     doel.waarde+=w; doel.bij=(doel.bij||0)+w; doel.titel=`${doel.titel||doel.label} \u00b7 ${w>0?'+':'−'}${euro0(Math.abs(w))} uit ${ov.label}`; if(ov.noot){ doel.noot=ov.noot; ov.noot=null; } ov.waarde=0; ov.opgeschoven=w; }
   if(ovB.waarde) stappen.push(ovB);
@@ -10731,7 +10764,7 @@ function renderPotHerzien(){
   const N=potHerzienNieuw(S, x);
   const radio=on=>`<span style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${on?'var(--teal)':'var(--bar)'};${on?'background:var(--teal);':''}flex-shrink:0;margin-top:2px"></span>`;
   const opt=(k,t,sub,extra)=>{ const on=S.optie===k; return `<div data-phoptie="${esc(k)}" data-gekozen="${on?1:0}" role="button" onclick="potHerzienKies('${esc(k).replace(/'/g,"\\'")}')" style="padding:7px 0;border-top:1px solid var(--line);cursor:pointer"><div class="row" style="gap:8px;align-items:flex-start">${radio(on)}<span style="flex:1;min-width:0"><span style="font-weight:700;display:block">${t}</span><span class="small muted">${sub}</span></span></div>${on&&extra?extra:''}</div>`; };
-  const hist=x.ms.map((m,i)=>`<span data-phhist="${m}">${esc(MNAMES[+m.slice(5,7)-1])} ${euro0(x.bedragen[i])}</span>`).join(' · ');
+  const hist=x.ms.map((m,i)=>`<span data-phhist="${m}">${esc(MNAMES[+m.slice(5,7)-1])} ${euro0(x.bedragen[i])}</span>`).join(' · ')+((x.vast||[]).some(a=>a>0)?` <span data-phvast>${esc(potReeksTekst(x).slice(maandReeksTekst(x.ms, x.bedragen).length))}</span>`:'');
   const invoer=`<div style="display:flex;gap:6px;align-items:center;margin:4px 0 0 24px" onclick="event.stopPropagation()"><span>€</span><input data-phbedrag type="text" inputmode="decimal" value="${S.bedrag!=null?numUit(S.bedrag):''}" placeholder="${x.voorstel}" style="width:90px;padding:5px 8px" oninput="window._ph.bedrag=this.value.trim()===''?null:Math.round(numIn(this.value));window._ph.bron=null;window._ph.bestem=null;potHerzienHerteken()"></div>`;
   const chip=(id,l,on,fn)=>`<span class="chip${on?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" ${fn}>${l}</span>`;
   let keuze='', gevolg='';
@@ -27875,7 +27908,7 @@ function diagTeRuim(){
       :(x.nodig>x.bud*RUIMER_DREMPEL.deel?`nodig ${x.nodig} is meer dan de helft van ${x.bud}`
       :`nodig ${x.nodig} is wel hooguit de helft, maar potje min voorstel ${x.voorstel} is ${x.bud-x.voorstel}, minder dan ${RUIMER_DREMPEL.euro}`));
     L.push(`  ${x.naam}: ${x.bud} | ${eind} | ${ymFull(x.maand)} ${x.nodig}${x.reden?' ('+x.reden+')':''} | ${x.ruim?'JA':'nee'} | ${waarom}`);
-    const posten=sched.filter(s=>s.cat===x.k && (+s.intervalM||1)>1);
+    const posten=sched.filter(s=>s.cat===x.k && (+s.intervalM||1)>1 && postTelt(s.key));   // v417: een gestopte post staat hier niet
     for(const s of posten){ const mnd=[]; for(let i=1;i<12;i++){ const ym=valtOpYmPlus(V.m,i); const n=teRuimTermijnen(s, ym); if(n) mnd.push(MNAMES[+ym.slice(5,7)-1]+(n>1?' x'+n:'')); }
       L.push(`      post ${titleCase(cleanMerch(s.name)||s.name||'')} ${Math.round(+s.amount||0)} per ${s.intervalM} mnd: ${mnd.join(', ')||'niet in de komende 11 maanden'}`); }
     /* v392: een gemengd potje staat met zijn vaste en zijn variabele deel als aparte regels, met de toets per deel. */
@@ -27903,7 +27936,7 @@ function diagTeRuim(){
    die maand, of de maand boven telt met de uitschieter-drempel, te ruim ja/nee, de breuk, en welke regel Let op toont.
    Alleen lezen (v244). */
 function diagEenSignaal(V){
-  const L=['--- een signaal per potje (v408/v409): potje | maanden (uitgaven / budget van die maand, - periodiek, * = boven met de drempel) | nodig (v410: potNodig, duurste maand van de komende 12; v411: = maand: de delen) | budgetbron | te ruim | breuk | Let op'];
+  const L=['--- een signaal per potje (v408/v409): potje | maanden (v417: afgeronde maanden zoals potNodig, +N vast = herkende vaste lasten / budget van die maand, - periodiek, * = boven met de drempel) | nodig (v410: potNodig, duurste maand van de komende 12; v411: = maand: de delen) | budgetbron | te ruim | breuk | Let op'];
   const krap={}; try{ for(const x of potKrapLijst(thisYM(), V)) krap[x.k]=x; }catch(_){}
   let krapSkip=new Set(); try{ krapSkip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron)); }catch(_){}
   const tr=new Set(); try{ for(const x of teRuim(V)) tr.add(x.k); }catch(_){}
@@ -27911,7 +27944,7 @@ function diagEenSignaal(V){
   for(const k of Object.keys(SET.budgets||{})){ const bud=+SET.budgets[k]||0; if(!(bud>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
     const P=potMaanden(k), n=P.boven.filter(Boolean).length, kr=krap[k]; if(!n && !tr.has(k) && !patK[k] && !kr && !P.periodiek.some(x=>x.bedrag>0)) continue;
     /* v409: per maand het budget dat gebruikt is (de maanden staan op volgorde, ms is al oud naar nieuw) */
-    const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` -${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
+    const mt=P.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${P.bedragen[i]}${P.vast[i]?`+${P.vast[i]} vast`:''}/${P.budgets[i]}${P.periodiek[i].bedrag>0?` -${Math.round(P.periodiek[i].bedrag)} ${P.periodiek[i].posten.map(x=>x.naam).join('+')}`:''}${P.boven[i]?'*':''}`).join(' · ');
     const Bk=potBreuk(P, potEind(V, k));
     const wat=potLaten(k)?'niets (laten staan deze maand)':patK[k]?`verwijzing naar patroon ${patK[k]}`:tr.has(k)?(n>=BOVEN_MIN_MAANDEN?(Bk?'veranderd':'niets (te ruim, geen breuk: Zien zegt het)'):'niets (te ruim: Zien zegt het)'):n>=BOVEN_MIN_MAANDEN?`${n} van 3 mnd boven budget`:kr?`te krap, voorstel ${kr.voorstel} (duurste maand ${MNAMES[+kr.vloerMaand.slice(5,7)-1]} ${kr.vloerMaand.slice(0,4)}: ${Math.round(kr.vloer)})`:'niets (minder dan 2 van 3)';
     let Nd=null; try{ Nd=potNodig(k, V, krapSkip); }catch(_){}
@@ -27927,7 +27960,7 @@ function diagPeriodiekePosten(m){
     if(per) for(let i=0;i<12;i++){ const ym=valtOpYmPlus(m,i), n=teRuimTermijnen(s, ym); if(vier?n>1:n>0) mnd.push(`${MNAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}${n>1?' 2x':''}`); }
     const cad=vier?(()=>{ const vs=vierStap(s); return `4-wekelijks (gemeten afstand ${s.afstand} dagen over ${vs.n} afstand${vs.n===1?'':'en'}, vooruit ${vs.stap} = ${vs.bron==='gemeten'?'gemeten mediaan':'vast '+VAST_4W_DAGEN+' (minder dan '+VAST_4W_MIN_AFSTANDEN+' afstanden)'})`; })():s.cadans==='maand'?'per maand':`elke ${s.intervalM||1} maand${(+s.intervalM||1)>1?'en':''}`;
     const st=(POST_STATUS_TXT[P.status]||P.status)+(P.status==='gestopt'&&P.weerBetaald?' (weer betaald)':'')+(P.status==='verlopen'?` (verwacht ${P.verwachtNa}, tolerantie ${P.tol} dagen)`:'');
-    L.push(`  ${titleCase(cleanMerch(s.name)||s.name||'')} | ${(CATS[s.cat]||{}).name||s.cat||'-'} | ${cad} | ${Math.round(+s.amount||0)} | ${st} | ${P.laatste||String(s.lastDate||'').slice(0,10)||'-'} | ${!per?'-':vier?(mnd.length?'dubbel in '+mnd.join(', '):'geen dubbele maand'):mnd.join(', ')||'-'}`); }
+    L.push(`  ${titleCase(cleanMerch(s.name)||s.name||'')} | ${(CATS[s.cat]||{}).name||s.cat||'-'} | ${cad} | ${Math.round(+s.amount||0)} | ${st} | ${P.laatste||String(s.lastDate||'').slice(0,10)||'-'} | ${!per||!postTelt(s.key)?'-':vier?(mnd.length?'dubbel in '+mnd.join(', '):'geen dubbele maand'):mnd.join(', ')||'-'}`); }
   if(!R.length) L.push('  geen periodieke posten');
   return L;
 }
@@ -27954,11 +27987,11 @@ function diagZonderPotje(V){
   L.push(`  stap z. potje op Zien: ${st?`${st.waarde} = ${st.geboekt} geboekt + ${st.verwacht} verwacht${st.in?` (in "${st.in}", geen eigen kolom)`:''}`:'geen'}`);
   const c2=x=>Math.round((+x||0)*100)/100;
   /* v404: een afronding, op het eind: V.zonder is de onafgeronde som afgerond, en de stap op Zien leest hetzelfde getal. */
-  L.push(`  V.zonder ${V.zonder} = afgerond(${c2(V.zonderExact)}) = geboekt ${c2(Z.geboekt)} + verwacht ${c2(Z.verwacht)} + rest ${c2(V.zonderLos)}${st?` · stap op Zien ${st.waarde}: ${st.waarde===V.zonder?'gelijk':'VERSCHILT'}`:''}`);
+  L.push(`  V.zonder ${V.zonder} = afgerond(${c2(V.zonderExact)}) = geboekt ${c2(Z.geboekt)} + verwacht ${c2(Z.verwacht)}${V.zonderLosPosten&&V.zonderLosPosten.length?` + rest bij naam ${c2(V.zonderExact-Z.geboekt-Z.verwacht)}`:''}${st?` · stap op Zien ${st.waarde}: ${st.waarde===V.zonder?'gelijk':'VERSCHILT'}`:''}`);
   const LP=V.zonderLosPosten||[];
   if(LP.length){ L.push(`  REST BIJ NAAM (v404, staat in de stap zonder potje en in zijn sheet): datum | partij | bedrag | categorie`);
     for(const x of LP) L.push(`  ${x.datum||'?'} | ${titleCase(cleanMerch(x.naam)||x.naam)} | ${c2(x.bedrag)} | ${x.cat?((CATS[x.cat]||{}).name||x.cat)+((CATS[x.cat]||{}).type==='expense'?' (zonder norm)':' (geen uitgave)'):'geen categorie'} | verwachte vaste last`); }
-  L.push(`  rest zonder naam: ${c2(V.zonderRest)}${Math.abs(+V.zonderRest||0)<0.005?' (niets)':' (centen uit afronding per boeking, of een vaste last die onder nul eindigt)'}`);
+  L.push(`  rest zonder naam: ${c2(V.zonderRest)}${Math.abs(+V.zonderRest||0)<0.005?' (niets)':' (telt niet als zonder potje; staat in de brug in overig, v417)'}`);
   let n=0; for(const [id,x] of EIGEN_AUTO){ const t=TX.find(z=>z.id===id); if(t && String(t.date).slice(0,7)===V.m && CATS[x.rc] && CATS[x.rc].type==='expense') n++; }
   L.push(`  deze maand als eigen overboeking herkend en dus NIET hierin (v401): ${n}`);
   return L;

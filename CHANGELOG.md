@@ -1443,8 +1443,11 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `grip-v416.spec.js` (16 tests, 15 sabotages, alle rood). Gemigreerd: `grip-v409` (Abonnementen: gewone maand 20 boven budget 5, dus boven en geen te krap; blok 19 "variabel gewoon"), `grip-v410` (shopping nodig 160 in nov; de Coolblue-test zegt nu dat te krap aan de gewone maand plus de post hangt), `grip-v411` (ondergrenzen 160 en 40, blok 19-teksten), `grip-v412` (B5 nodig 31 vanaf nov; knoppen via de gestopt-optie in plaats van de link).
 - `sw.js` naar `minder-v416`.
 
-## v417 · boven budget met een periodieke post
+## v417 · boven met post, zonder potje, signaalrij, gestopt
 - **Punt 1**: Abonnementen blijft "boven budget" (geen wijziging aan `potBovenLijst()` of `potKrapLijst()`). `potHerzienMetPost()` in `potHerzienStand()`: bij een boven-potje met een periodieke post is het voorstel `max(potNodig().voorstel, gemiddelde)`, met de regel "inclusief <post> €X in <maand jaar>" (`[data-phinclusief]`). Zonder periodieke post ongewijzigd.
-- **Punt 2 (E7)**: niets gebouwd; wacht op blok 19 van het toestel.
-- **Specs**: nieuw `grip-v417.spec.js` (6 tests, 6 sabotages, alle rood). Geen bestaande test gemigreerd.
+- **Punt 2 (E7)**: geen fout (Huur budget 189, nodig 142); niets gebouwd.
+- **Punt 3**: `V.zonder` = round(geboekt + verwacht + zonderLosPosten); `zonderBreed` houdt de oude som; de rest zonder naam valt in overig. `gripZienBrug()`: een kleine "n boven" schuift niet meer aan bij "z. potje" (de oorzaak van 206 tegen 205).
+- **Punt 4**: `potVarMaanden()` (memo op `_dataGen`), gelezen door `maandVooruit()` en `potMaanden()`; `potMaanden()` geeft `bedragen`, `vast`, `totaal`; `potReeksTekst()` in Let op en de herzien-sheet; blok 19 "+N vast".
+- **Punt 5**: `teRuimTermijnen()` geeft 0 voor een post die niet meetelt; het te-ruim-rapport en blok 19 tonen hem niet in een maand.
+- **Specs**: nieuw `grip-v417.spec.js`.
 - `sw.js` naar `minder-v417`.

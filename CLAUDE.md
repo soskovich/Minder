@@ -130,7 +130,7 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
-- **EEN POTJE DAT BOVEN BUDGET IS MET EEN PERIODIEKE POST: HET VOORSTEL IS POTNODIG()** (`v417`, beslissing van de gebruiker op
+- **EEN POTJE DAT BOVEN BUDGET IS MET EEN PERIODIEKE POST: HET VOORSTEL IS POTNODIG(); ZONDER POTJE IS EEN GETAL; DE SIGNAALRIJ IS DE BEREKENING; GESTOPT HEEFT GEEN MAANDEN** (`v417`, beslissing van de gebruiker op
   `v416`). Abonnementen blijft "boven budget" (A1 van `v416`): ligt de gewone maand al boven het budget, dan is het potje structureel
   te klein en noemt Let op de post niet als oorzaak. In de herzien-sheet (`potHerzienStand()`, `potHerzienMetPost()`) telt het
   voorstel van zo'n potje wel de post mee: het voorstel van `potNodig()` (gewone maand plus de post in de maand waarin hij valt),
@@ -138,7 +138,21 @@ genoemde versietag.)*
   (`[data-phinclusief]`, `maandJaar()`); zonder periodieke post blijft "gemiddeld over de 3 maanden, afgerond op 5". Een te krap
   potje (`x.krap`) loopt hier niet langs. GEMETEN op `grip-v409-stand` met Spotify EUR 20 ook in juli en september (gewone maand 20,
   budget 5): nodig 52 in oktober 2026 (variabel verwacht 21 op 10 oktober + Huurwoningen 31; op het toestel 20 + 31 = 51), voorstel
-  60, het oude gemiddelde 35. E7 (Huur uit de grijze stap) wacht op blok 19 van het toestel; niets gebouwd. Spec `grip-v417.spec.js`.
+  60, het oude gemiddelde 35. E7 (Huur uit de grijze stap) is GEEN FOUT (blok 19 van het toestel: budget 189, nodig 142, meer
+  dan de helft, dus niet te ruim); niets gebouwd.
+  ZONDER POTJE IS EEN GETAL (`v417`, punt 3): `V.zonder = round(geboekt + verwacht + zonderLosPosten)`, een keer afgerond na het
+  optellen in `maandVooruit()`; de stap op Zien, de sheet (`zonderPotjeDelen()`), de opbouw en blok 19 lezen dat getal. Wat er van
+  het verschil zonder naam overblijft (`zonderBreed`, `zonderRest`) is geen zonder potje en valt in de brug in overig. GEMELD
+  206 (168 + 37) tegen 205: een "n boven" onder BRUG_KLEIN schoof aan bij de laatste stap aan dezelfde kant, en dat was "z.
+  potje"; die stap is nu uitgesloten als ontvanger.
+  DE SIGNAALRIJ IS DE BEREKENING (punt 4): `potVarMaanden(m)` is de ene bron voor de afgeronde maanden (piekInScope, netto,
+  zonder herkende vaste lasten), gelezen door `maandVooruit()` (dus `potNodig()`) en `potMaanden()`. `potMaanden()` geeft
+  `bedragen` (die maanden, getoond), `vast` (herkende vaste lasten buiten de periodieke posten) en `totaal` (catSpendMap); boven,
+  de gewone maand, de breuk en het gemiddelde rekenen met `totaal` zoals voorheen. De rij is `potReeksTekst()`: "jul €171 · aug
+  €94 · sep €96 · vast €47 per maand"; blok 19 "jul 171+47 vast/20". GEMELD Kinderen 4/82/183 tegen 4/35/136: het verschil is
+  een herkende vaste last van 47 (afgeleid, niet op het toestel gemeten).
+  GESTOPT IS GESTOPT (punt 5): `teRuimTermijnen()` geeft 0 voor een post die niet meetelt (`postTelt()`), dus geen maanden in de
+  komende 12, niet in `potNodig()`, niet als post in het te-ruim-rapport, en "-" in blok 19. Spec `grip-v417.spec.js`.
 - **TE KRAP ALLEEN ALS DE POST HET VERSCHIL MAAKT, POTNODIG() LEGT DE POST OP DE GEWONE MAAND, EN GESTOPT IS EEN KEUZE IN DE
   HERZIEN-SHEET** (`v416`, gevraagd door de gebruiker). TE KRAP (`potKrapLijst()`): de gewone maand (`potKrapGewoon()`, de
   `mediaan()` van de drie afgeronde maanden min hun periodieke posten) past binnen het budget, en gewone maand plus de post gaat

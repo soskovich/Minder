@@ -20,6 +20,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   niet, dus de post is niet de oorzaak), maar een voorstel zonder de post laat de maand met de post opnieuw boven eindigen.
   Valkuil: het gemiddelde van drie maanden smeert een kwartaalpost uit (Abonnementen 35 tegen nodig 52 in oktober). Nooit onder
   dat gemiddelde, en de regel eronder noemt de post, het bedrag en de maand.
+- **`v417` · zonder potje, de signaalrij en gestopt: een bron per getal.** Zonder potje is geboekt + verwacht (+ vaste lasten bij
+  naam), een keer afgerond; een aanschuivende euro mag die stap niet raken. Valkuil: afronden per deel of een samengevoegde stap
+  erbij tellen geeft 206 naast 168 + 37. De signaalrij leest dezelfde afgeronde maanden als potNodig() (`potVarMaanden()`), met de
+  herkende vaste lasten apart; valkuil: twee bronnen (catSpendMap tegen piekInScope) lopen uiteen op elke herkende incasso. Een
+  gestopte post heeft geen termijnen (`teRuimTermijnen()` toetst `postTelt()`); valkuil: een filter per lezer vergeet er altijd een.
 - **`v416` · te krap alleen als de post het verschil maakt.** De gewone maand is de mediaan zonder periodieke posten; past die
   niet, dan is het boven en geen te krap. Valkuil: tegen de duurste maand gemeten krijgt een potje dat gewoon net past (84 tegen
   95) een signaal voor een post van EUR 15. Hetzelfde in `potNodig()`: een post optellen bij de hoogste maand uit de historie
