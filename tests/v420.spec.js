@@ -51,7 +51,7 @@ test.describe('v420', () => {
     U = sectie(await lees(page), 'UITGELEEND');
     expect(U).toContain('  30-07 Renate Galdeij | 300.00 | 100.00 (15-09 100.00 zelfde tegenpartij) | 200.00 | 0.00 · sluit');
     expect(U.find(x => x.startsWith('  vragen in Zien'))).toBe('  vragen in Zien (Kloppen mijn gegevens?): 1');
-    const Q = await page.evaluate(() => { openGegevensVragen(); return document.querySelector('#gegevensSheet').innerText; });
+    const Q = await page.evaluate(() => { openGegevensVragen('alle'); return document.querySelector('#gegevensSheet').innerText; });
     expect(Q).toContain('Is €405,99 van Hr J Jansen een terugbetaling van je lening?');
     /* Western Union streept alleen weg als jij het bevestigt */
     expect(await page.evaluate(() => loans().find(l => l.naam === 'Western Union').open)).toBe(405.99);
@@ -69,7 +69,7 @@ test.describe('v420', () => {
     expect(await page.evaluate(() => gegevensVragen().filter(q => q.soort === 'lening').length)).toBe(0);
     await zet(page, [{ date: '2026-09-20', amount: 405.99, name: 'Hr J Jansen' }]);
     expect(await regel()).toBe(true);
-    await page.evaluate(() => { openGegevensVragen(); document.querySelector('[data-leningnee]').click(); });
+    await page.evaluate(() => { openGegevensVragen('alle'); document.querySelector('[data-leningnee]').click(); });
     expect(await page.evaluate(() => loanVragen().length)).toBe(0);
     expect(await page.evaluate(() => loans()[0].open)).toBe(405.99);
   });

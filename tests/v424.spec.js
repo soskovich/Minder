@@ -45,14 +45,14 @@ test.describe('v424', () => {
 
   test('6. de boeking van 18-09 staat als vraag in Zien, met de antwoorden voor een gemeente', async ({ page }) => {
     await boot(page);
-    const Q = await page.evaluate(ids => { openGegevensVragen(); return [...document.querySelectorAll('[data-gegevensvraag="benoem"]')].filter(e => ids.includes(e.dataset.tx)).map(e => ({ tx: e.dataset.tx, laag: e.dataset.benoemlaag, kop: e.querySelector('div').innerText, opties: [...e.querySelectorAll('[data-benoemoptie]')].map(o => o.innerText) })); }, [G484, G120]);
+    const Q = await page.evaluate(ids => { openGegevensVragen('alle'); return [...document.querySelectorAll('[data-gegevensvraag="benoem"]')].filter(e => ids.includes(e.dataset.tx)).map(e => ({ tx: e.dataset.tx, laag: e.dataset.benoemlaag, kop: e.querySelector('div').innerText, opties: [...e.querySelectorAll('[data-benoemoptie]')].map(o => o.innerText) })); }, [G484, G120]);
     expect(Q).toEqual([
-      { tx: G120, laag: 'b', kop: '€120,00 aan Gemeente Utrecht · 3 okt · wat was dit?', opties: ['Boete of wegslepen · klopt', 'Gemeentebelasting', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] },
-      { tx: G484, laag: 'c', kop: '€484,00 aan Gemeente Utrecht · 18 sep · wat was dit?', opties: ['Gemeentebelasting', 'Boete of wegslepen', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] }]);
+      { tx: G484, laag: 'c', kop: '€484,00 aan Gemeente Utrecht · 18 sep · wat was dit?', opties: ['Gemeentebelasting', 'Boete of wegslepen', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] },
+      { tx: G120, laag: 'b', kop: '€120,00 aan Gemeente Utrecht · 3 okt · wat was dit?', opties: ['Boete of wegslepen · klopt', 'Gemeentebelasting', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] }]);   /* v425: op bedrag */
     expect(await page.locator(`[data-tx="${G120}"] [data-benoemvoorstel]`).innerText()).toBe('voorstel: Boete of wegslepen · uit de omschrijving: "naheffing"');
     /* openen schrijft niets; de eerste tik ook niet */
     await page.locator(`[data-tx="${G484}"] [data-benoemoptie="Boete of wegslepen"]`).click();
-    expect(await page.evaluate(() => SET.benoemd || null)).toBeNull();
+    expect(await page.evaluate(() => SET.kennis || null)).toBeNull();
     expect(await page.locator(`[data-tx="${G484}"] [data-benoemgekozen]`).innerText()).toBe('Boete of wegslepen · eenmalig of komt het terug?');
     await page.locator(`[data-tx="${G484}"] [data-benoemaard="eenmalig"]`).click();
     expect(await stand(page, G484)).toEqual({ laag: 'antw', label: 'Boete of wegslepen', bron: 'jij', aard: 'eenmalig', voorstel: null });
@@ -76,7 +76,7 @@ test.describe('v424', () => {
     expect(await page.evaluate(t => gripTerugblik(thisYM()).eenmalig.map(B => B.t.id).includes(t), G120)).toBe(false);
     expect(await page.evaluate(t => { const d = document.createElement('div'); d.innerHTML = gripTerugblikHtml(); return !!d.querySelector(`[data-terugbenoem="${t}"]`); }, G120)).toBe(false);
     const kies = () => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = gripKiezenHtml(); document.body.appendChild(d); return [...d.querySelectorAll('[data-kiesbenoem]')].map(e => e.innerText.replace(/\s+/g, ' ').trim()); });
-    expect(await kies()).toEqual(['↻ Boete of wegslepen komt terug · reservering? Gemeente Utrecht · €120 op 3 okt · door jou bevestigd · voorstel €120 per jaar geen reservering ›']);
+    expect(await kies()).toEqual(['↻ Boete of wegslepen komt terug · reservering? Gemeente Utrecht · €120 op 3 okt · voorstel, door jou bevestigd · voorstel €120 per jaar geen reservering ›']);
     await page.evaluate(() => benoemResVoorstel(benoemTerugVoorstellen()[0].key));
     expect(await page.evaluate(() => ['rNaam', 'rBedrag', 'rMaand'].map(i => document.getElementById(i).value))).toEqual(['Boete of wegslepen (Gemeente Utrecht)', '120', '2027-10']);
     await page.evaluate(() => saveReservering(''));
@@ -97,13 +97,13 @@ test.describe('v424', () => {
     expect(nieuw).toEqual([{ laag: 'antw', label: 'Boete of wegslepen', opnieuw: false }, { laag: 'c', label: null, opnieuw: true }]);
     /* een ander kenmerk (de naheffing) is een eigen sleutel en blijft een vraag */
     expect((await stand(page, G120)).laag).toBe('b');
-    const sub = await page.evaluate(() => { openGegevensVragen(); return document.querySelector(`[data-tx="${TX.find(t => t.date === '2026-10-06' && t.amount === -800).id}"] .small`).innerText; });
+    const sub = await page.evaluate(() => { openGegevensVragen('alle'); return document.querySelector(`[data-tx="${TX.find(t => t.date === '2026-10-06' && t.amount === -800).id}"] .small`).innerText; });
     expect(sub).toBe('eerder benoemd als Boete of wegslepen bij €484,00; dit bedrag wijkt meer dan 50% af');
   });
 
   test('4/5. Anders en Weet ik niet; Begrijpen en Zien tonen de bron, en zonder antwoord nooit een naam', async ({ page }) => {
     await boot(page);
-    await page.evaluate(t => { openGegevensVragen(); benoemKies(t, '__anders'); }, G484);
+    await page.evaluate(t => { openGegevensVragen('alle'); benoemKies(t, '__anders'); }, G484);
     await page.locator(`#benoemAnders_${G484}`).fill('Verhuisvergunning');
     await page.locator(`[data-tx="${G484}"] [data-benoemanderszet]`).click();
     await page.locator(`[data-tx="${G484}"] [data-benoemaard="eenmalig"]`).click();

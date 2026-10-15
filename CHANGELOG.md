@@ -1516,3 +1516,25 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **De boeking van 18-09 Gemeente EUR 484** staat zonder hint als vraag in Zien (laag c), met de gemeente-antwoorden; nagebouwd in de spec (de boekingen van het toestel staan alleen daar).
 - **Fit**: de regel "Kloppen mijn gegevens?" staat met een Let op-kaart rechts in de kop daarvan (`gegevensRegel(true)`); als eigen regel bovenaan Zien kostte hij 40px en zakte de koopknop op 390x844 24px onder de menubalk (de fit-specs van v406 tot v416 vielen erop). Zonder Let op blijft hij een eigen regel.
 - **Specs**: nieuw `v424.spec.js` (6 tests). `sw.js` naar `minder-v424`.
+
+## v425: wat Minder alleen van jou kan weten: vragen, onthouden, terugzien
+- **Een opslag voor betekenis** (`SET.kennis`, `kennisLijst()`): per antwoord partij, wat, eenmalig of terugkerend, datum en bron
+  ("uit de omschrijving", "voorstel, door jou bevestigd", "door jou"). `SET.benoemd` van v424 gaat erin op bij het laden
+  (`kennisMigreer()`). Holding, leningen, de status van een post, vast per partij en "klopt, eenmalig" blijven op hun eigen plek en
+  worden meegelezen. De boekingssheet toont "Wat het is" met bron (`kennisBlok()`); elke bron-regel opent het scherm.
+- **Nieuwe vragen onder "Kloppen mijn gegevens?"**: overboeking aan een ander vanaf EUR 100 (Lening zet hem in Uitgeleend),
+  onbekende bijschrijving vanaf EUR 100 (terugbetaling met de lening of Tikkie en Bevestig, teruggave met het potje en Bevestig,
+  gift/verkoop/extra inkomen als overig inkomen, eigen bedrijf opent de holding-voorvertoning), een keer "vast inkomen?" bij 2
+  maanden, nieuwe vaste last (tekst en potje), vervanger na "Ja, laatste", woning (Ja/Nee), eerste Tikkie per persoon, contant
+  opnemen vanaf EUR 100 binnen 3 dagen. Elke vraag heeft "Anders…" waar het past en "Weet ik niet".
+- **Rust**: hooguit 3 open vragen in Zien op bedrag, "nog N wachten", "Later" een week, na 2x pas als jij hem opent.
+- **Wat Minder van jou weet** (`openKennis()`): per soort, met bron en datum, Wijzigen en Vergeten met het gevolg vooraf
+  ("okt-uitgaven +EUR 300"); ingang in Instellingen > Herkenning, onder de vragen en via elke bron-regel.
+- **De antwoorden van de gebruiker** overgenomen zonder te vragen (`kennisZaai()`): Nikki voetbalcontributie in Kinderen, Ml Macnack
+  woonhuur (gestopt), Zorg EUR 159 eenmalig, Gemeente EUR 484 boete of wegslepen eenmalig; holding, Pam, Ma, A. Buiten en Health
+  Club stonden er al en worden meegelezen.
+- **Blok 20**: KENNIS (alle antwoorden met bron en datum), OPEN VRAGEN (vraag, bedrag, datum, hoe vaak later, in Zien of wacht),
+  CONTANT NAAR (per maand, volgens jou), en de woning met "door jou" of "voorstel".
+- **Specs**: nieuw `v425.spec.js` (11 tests); `v420`, `v422`, `v423` en `v424` openen de vragen met `'alle'`, en v424 leest de
+  bron "voorstel, door jou bevestigd" en de volgorde op bedrag. `sw.js` naar `minder-v425`.
+

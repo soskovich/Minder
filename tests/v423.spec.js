@@ -45,7 +45,7 @@ test.describe('v423', () => {
     expect(U[i + 3]).toContain('nog open nu €0,00 · van voor v423 is niet vastgelegd welke knop het restant van €5,99 veranderde');
     expect(U.find(r => r.startsWith('  TOTAAL'))).toBe('  TOTAAL NOG OPEN: 0.00 · TOTAAL NIET MEER TERUG: 0.00 · leningen met een verschil zonder verklaring: 2');
     /* Zien: de vraag met de woorden van de gebruiker */
-    const Q = await page.evaluate(() => { openGegevensVragen(); return [...document.querySelectorAll('[data-gegevensvraag="restant"]')].map(e => e.querySelector('div').innerText); });
+    const Q = await page.evaluate(() => { openGegevensVragen('alle'); return [...document.querySelectorAll('[data-gegevensvraag="restant"]')].map(e => e.querySelector('div').innerText); });
     expect(Q).toEqual(['Is €45,00 van A. Buiten nog open of niet meer terug?', 'Is €5,99 van Ma nog open of niet meer terug?']);
     expect(await page.locator('[data-gegevensregel]').count()).toBeGreaterThan(0);
   });
@@ -54,7 +54,7 @@ test.describe('v423', () => {
     await boot(page);
     const voor = await page.evaluate(() => { const R = {}; for (const m of ['2026-08', '2026-09']) R[m] = { spend: totals(m).spend, n: TX.length }; return R; });
     const C0 = sectie(await lees(page), 'CONTROLE'), B0 = (await lees(page)).find(r => r.startsWith('  buiten vast en potjes:'));
-    await page.evaluate(() => { openGegevensVragen(); document.querySelector('[data-lening="lma"] [data-restniet]').click(); });
+    await page.evaluate(() => { openGegevensVragen('alle'); document.querySelector('[data-lening="lma"] [data-restniet]').click(); });
     expect(await stand(page, 'lma')).toEqual({ bedrag: 405.99, terug: 400, open: 0, niet: 5.99, verschil: 0, sluit: true });
     const V = await page.evaluate(() => TX.filter(t => String(t.bankRef || '').startsWith('nietterug|lma')).map(t => ({ d: t.date, a: t.amount, c: catOf(t), acc: t.acc })));
     expect(V).toEqual([{ d: '2026-08-15', a: -5.99, c: 'persoonlijk', acc: '' }, { d: '2026-08-15', a: 5.99, c: 'uitgeleend', acc: '' }]);
@@ -87,7 +87,7 @@ test.describe('v423', () => {
 
   test('1. nog open en al terugbetaald sluiten ook; de log zegt welke knop en welke dag', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { openGegevensVragen(); document.querySelector('[data-lening="lbuiten"] [data-restopen]').click(); });
+    await page.evaluate(() => { openGegevensVragen('alle'); document.querySelector('[data-lening="lbuiten"] [data-restopen]').click(); });
     expect(await stand(page, 'lbuiten')).toEqual({ bedrag: 45, terug: 0, open: 45, niet: 0, verschil: 0, sluit: true });
     await page.evaluate(() => loanRestZet('lma', 'terug'));
     expect(await stand(page, 'lma')).toEqual({ bedrag: 405.99, terug: 405.99, open: 0, niet: 0, verschil: 0, sluit: true });

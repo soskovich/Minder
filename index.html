@@ -963,7 +963,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(); if(a||b) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -1107,12 +1107,16 @@ function applyOwnAccounts(){
   const tikIn=[];   // v422: ontvangen Tikkies zonder eigen categorie: de categorie van je laatste betaalde Tikkie
   EIGEN_AUTO=new Map();
   const HK=_SIM419?new Set():holdingKeys(), HM={}; for(const k of HK) HM[k]=holdingMaandbetaling(k);   // v421
+  /* v425: wat jij een vaste last of een Tikkie-persoon gaf (SET.kennis), ook voor een volgende boeking van die partij */
+  let KV={}, KT={}; if(!_SIM419){ try{ KV=kennisVastPotjes(); KT=kennisTikkieCats(); }catch(_){} }
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
     /* v421: van je holding is de terugkerende maandbetaling inkomen en al het andere Holding: geen inkomen en geen uitgave */
     if(HK.size && HK.has(recurKey(t))){ t.autoCat=HM[recurKey(t)].ids.has(t.id)?'inkomen':'holding'; continue; }
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
+    if(t.amount<0 && KV[recurKey(t)] && !isTikkie(t)){ t.autoCat=KV[recurKey(t)]; continue; }   // v425
+    if(t.amount<0 && isTikkie(t) && KT[tikkiePersoon(t).toLowerCase()]){ t.autoCat=KT[tikkiePersoon(t).toLowerCase()]; continue; }   // v425
     if(!_SIM419 && isTikkie(t)){ const E=eigenBewijs(t, C); if(E.r || eigenNaamIn(t)){ t.autoCat='intern'; continue; }   // v422
       const uit=(CATS[rc]||{}).type==='expense'; t.autoCat=uit?rc:'overig'; if(t.amount>0 && !uit) tikIn.push(t); continue; }
     const E=eigenBewijs(t, C); let intern=!!E.r;
@@ -9140,7 +9144,7 @@ function openEenmalig(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.fi
   if(!x){ closeSheet(); return; } const ok=SET.eenmaligOk||{}, tx=(x.tx||[]).filter(t=>!ok[t.id]), kk=esc(k).replace(/'/g,"\\'");
   $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligSheet" data-eenmalig="${esc(k)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} ${euro0(eenmaligOpen(x))} zonder potje</div>
-    ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}${(()=>{ const b=benoemTekst(t); return b?` \u00b7 <span data-benoembron>${esc(b)}</span>`:''; })()}</div>`).join('')}
+    ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}${(()=>{ const b=benoemTekst(t); return b?` \u00b7 <span data-benoembron role="button" style="cursor:pointer" onclick="event.stopPropagation();openKennis()">${esc(b)}</span>`:''; })()}</div>`).join('')}
     <div class="small" data-eenmaliguitleg style="line-height:1.5;margin-top:8px">Eenmalige uitgave zonder potje. Klopt dat, dan hoef je niets te doen.</div>
     <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-eenmaligklopt style="width:auto;padding:9px 14px" onclick="eenmaligKlopt('${kk}')">Klopt, eenmalig</button>
       <button class="btn sec" data-eenmaligcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${kk}','${esc(thisYM())}')">Categorie wijzigen</button></div>
@@ -10760,7 +10764,7 @@ function renderZonderPotje(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const D=V&&!V.onbekend&&V.zonderStand?zonderPotjeDelen(V):null; if(!D){ closeSheet(); return; }
   const m=V.m;
-  const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd${(x.tx||[]).filter(benoemKandidaat).map(t=>`<div class="small" data-benoemzien="${esc(t.id)}" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(dagKort(t.date))} ${euro0(-t.amount)} · <span data-benoembron>${esc(benoemTekst(t))}</span></div>`).join('')}</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd${(x.tx||[]).filter(benoemKandidaat).map(t=>`<div class="small" data-benoemzien="${esc(t.id)}" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(dagKort(t.date))} ${euro0(-t.amount)} · <span data-benoembron role="button" style="cursor:pointer" onclick="event.stopPropagation();openKennis()">${esc(benoemTekst(t))}</span></div>`).join('')}</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   const losRij=x=>{ const t=zonderLosBoeking(x.key), cat=x.cat&&CATS[x.cat]?CATS[x.cat]:null;
     const wat=cat?`vaste last in ${esc(cat.name)}, ${cat.type==='expense'?'een categorie zonder norm':'geen uitgavencategorie'}`:'vaste last zonder categorie';
     return `<div class="row" data-zonderlos="${esc(x.key)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)${t?';cursor:pointer':''}"${t?` onclick="closeSheet();openSheet('${esc(t.id)}')"`:''}><div style="flex:1;min-width:0"><div class="small">${esc(titleCase(cleanMerch(x.naam)||x.naam))}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${wat}${x.datum?` · verwacht ${dagKort(x.datum)}`:''}${t?' · categorie geven':''}</div></div><span class="small" style="font-weight:700;white-space:nowrap" data-zonderlosv="${x.v}">${euro0(x.v)}</span>${t?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`; };
@@ -11316,7 +11320,7 @@ function gripOordeelZet(pid, klopt, reden){
    (benoemTekst()), of "nog niet benoemd" met de ingang naar de vraag in Zien. Geen patroon: alleen wat er is. */
 function benoemBegrijpenBlok(){ const m=thisYM(); let E=[]; try{ E=[valtOpYmPlus(m,-1), m].flatMap(benoemMaand); }catch(_){ return ''; }
   if(!E.length) return '';
-  return `<div class="card" data-begrijpenbenoem><div class="hlabel" style="margin:0 0 6px">Grote uitgaven zonder potje</div>${E.map(B=>`<div class="row" data-benoemrij="${esc(B.t.id)}" style="gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)${B.label?'':';cursor:pointer'}"${B.label?'':' onclick="openGegevensVragen()"'}><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(B.label?B.label:B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron)+(B.aard?' · '+(B.aard==='eenmalig'?'eenmalig':'komt terug'):''):'wat was dit? ›')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; }
+  return `<div class="card" data-begrijpenbenoem><div class="hlabel" style="margin:0 0 6px">Grote uitgaven zonder potje</div>${E.map(B=>`<div class="row" data-benoemrij="${esc(B.t.id)}" style="gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)${B.label?'':';cursor:pointer'}"${B.label?'':' onclick="openGegevensVragen()"'}><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(B.label?B.label:B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron role="button" onclick="event.stopPropagation();${B.label?'openKennis()':'openGegevensVragen()'}" style="cursor:pointer;display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron)+(B.aard?' · '+(B.aard==='eenmalig'?'eenmalig':'komt terug'):''):'wat was dit? ›')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; }
 function gripBegrijpenHtml(){ return gripBegrijpenKern()+benoemBegrijpenBlok(); }
 function gripBegrijpenKern(){
   const P=gripPatronen();
@@ -11693,7 +11697,7 @@ function gripTerugblikHtml(){
       ${T.items.map(rij).join('')}${inst}</div>
     ${Tp?`<div class="small" data-terugvergelijk style="margin-top:8px">${esc(Mn(Tp.ym))} ${gripScoreTekst(Tp)} · ${esc(ymFull(m))} ${esc(tus)}</div>`:''}
     ${(()=>{ const E=[valtOpYmPlus(m,-1), m].flatMap(ym=>ym===m?T.eenmalig:gripTerugblik(ym).eenmalig); if(!E.length) return '';
-      return `<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label||B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron style="display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron):'nog niet benoemd')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}
+      return `<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label||B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron role="button" onclick="event.stopPropagation();openKennis()" style="cursor:pointer;display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron):'nog niet benoemd')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
     <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
 }
@@ -22999,7 +23003,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
+    ${kennisBlok(t)}${onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).filter(([k])=>k===cur||!potGearchiveerd(k)).map(([k,c])=>`
@@ -23904,18 +23908,21 @@ function eigenAutoMeldingCheck(){
    naar "overboeking aan een ander" wisselen (een keer, ter bevestiging, wisselOpen()) en een bijschrijving die misschien een
    terugbetaling van je lening is (loanVragen()). Een regel, de vragen in een sheet; zonder vraag staat er niets. */
 function gegevensVragen(){ const out=[];
-  const W=wisselOpen(); if(W.length) out.push({soort:'wissel', n:W.length, som:W.reduce((a,t)=>a-t.amount,0)});
-  for(const v of loanVragen()) out.push(Object.assign({soort:'lening'}, v));
-  for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant'}, v));   // v423
-  for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop'}, v));   // v422
-  for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag}));   // v424
+  const W=wisselOpen(); if(W.length){ const som=W.reduce((a,t)=>a-t.amount,0); out.push({soort:'wissel', n:W.length, som, qkey:'wissel', bedrag:Math.abs(som)}); }
+  for(const v of loanVragen()) out.push(Object.assign({soort:'lening', qkey:'lening|'+v.t.id, bedrag:Math.abs(v.t.amount), datum:v.t.date}, v));
+  for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant', qkey:'restant|'+v.l.id}, v));   // v423
+  for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop', qkey:'poststop|'+v.key, datum:v.dag}, v));   // v422
+  for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
+  /* v425: wat Minder alleen van jou kan weten */
+  const bron=[kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
+  for(const f of bron){ try{ out.push(...f()); }catch(_){} }
   return out; }
 /* v422: GESTOPT, MAAR DAARNA NOG BETAALD (besluit van de gebruiker op v421, in plaats van de migratie van v421). Per post die jij
    op gestopt zette en die daarna nog een betaling kreeg: "Was dat de laatste betaling?" Ja is opgezegd, loopt af met die
    betaling als laatste; Nee is nog actief. Er verandert niets tot je kiest; tot dan blijft hij gestopt. */
 function postNaStopVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){ return []; }
   return Object.values(M).filter(P=>P.status==='gestopt' && P.weerBetaald && P.laatste).sort((a,b)=>(a.naam<b.naam?-1:1)).map(P=>({key:P.key, naam:P.naam||P.key, dag:P.laatste, bedrag:P.bedrag||0})); }
-function postNaStopJa(key, dag){ postZet(key, 'afloop', '', dag); }
+function postNaStopJa(key, dag){ postZet(key, 'afloop', '', dag); try{ if((SET.postStatus||{})[key]){ SET.postStatus[key].vervangerVraag=true; save(); render(); } }catch(_){} }   // v425: daarna "komt er een vervanger?"
 function postNaStopNee(key){ postZet(key, 'actief'); }
 /* v424: ONBEKENDE GROTE UITGAVEN BENOEMEN, ALLEEN MET BRON (gevraagd door de gebruiker). Een uitgave van BENOEM_MIN (100) of meer
    zonder potje of in een categorie zonder norm krijgt een van drie lagen:
@@ -23933,7 +23940,7 @@ const BENOEM_SOORTEN={
   gemeente:{re:/\bGEMEENTE\b/i, opties:['Gemeentebelasting','Boete of wegslepen','Leges of vergunning'],
     hints:[[/NAHEFFING|PARKEER|WEGSLEEP/i,'Boete of wegslepen'],[/\bOZB\b|AFVAL|RIOOL/i,'Gemeentebelasting'],[/LEGES|VERGUNNING/i,'Leges of vergunning']]},
   overig:{re:null, opties:['Boete','Belasting','Aankoop','Reparatie of onderhoud'], hints:[]} };
-const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'door jou bevestigd', jij:'door jou'};
+const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'voorstel, door jou bevestigd', jij:'door jou'};   // v425: 'voorstel, door jou bevestigd'
 function benoemPartij(t){ return titleCase(cleanMerch(t&&t.name)||(t&&t.name)||'onbekend'); }
 function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SOORTEN.gemeente.re.test(s)?'gemeente':'overig'; }
 function benoemKandidaat(t){
@@ -23950,7 +23957,7 @@ function benoemStand(t){
   if(!benoemKandidaat(t)) return null;
   const s=`${t.name||''} ${t.desc||''}`, partij=benoemPartij(t), bedrag=-t.amount;
   for(const [re,label] of BENOEM_ZEKER) if(re.test(s)) return {t, laag:'a', partij, bedrag, label, bron:'omschrijving', aard:null};
-  const key=benoemKey(t), h=benoemHint(t), A=(SET.benoemd||{})[key];
+  const key=benoemKey(t), h=benoemHint(t), A=kennisGet('benoem|'+key);   // v425: in SET.kennis
   if(A){ const P=(A.tx||{})[t.id]; if(P) return {t, laag:'antw', key, partij, bedrag, label:P.label, bron:P.bron, aard:P.aard, weetniet:!P.label};
     const b=+A.bedrag||0; if(b>0 && Math.abs(bedrag-b)<=BENOEM_AFWIJK*b) return {t, laag:'antw', key, partij, bedrag, label:A.label, bron:A.bron, aard:A.aard, weetniet:!A.label, over:true};
     return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t), opnieuw:{bedrag:b, label:A.label}}; }
@@ -23968,22 +23975,22 @@ function benoemMaand(ym){ const o=[]; for(const t of txOfMonth(ym)){ const B=ben
 function benoemKies(id, label){ window._benoemKeuze=window._benoemKeuze||{};
   if(label==='__anders'){ window._benoemKeuze[id]={anders:true}; }
   else window._benoemKeuze[id]={label: label==='__weetniet'?null:label};
-  openGegevensVragen(); }
+  openGegevensVragen(window._gegevensFocus||''); }
 function benoemAnders(id){ const el=document.getElementById('benoemAnders_'+id); const v=String((el&&el.value)||'').trim(); if(!v){ toast('Vul in wat het was'); return; }
-  window._benoemKeuze=window._benoemKeuze||{}; window._benoemKeuze[id]={label:v}; openGegevensVragen(); }
+  window._benoemKeuze=window._benoemKeuze||{}; window._benoemKeuze[id]={label:v}; openGegevensVragen(window._gegevensFocus||''); }
 function benoemAard(id, aard){
   const t=TX.find(x=>x.id===id), B=t?benoemStand(t):null, K=(window._benoemKeuze||{})[id];
   if(!B || !K || K.anders || (aard!=='eenmalig' && aard!=='terug')) return;
   const bron=K.label && B.laag==='b' && K.label===B.voorstel?'bevestigd':'jij';
-  const herstel=setSnap(['benoemd']); SET.benoemd=SET.benoemd||{};
-  const oud=SET.benoemd[B.key]||{}, tx=Object.assign({}, oud.tx||{});
+  const herstel=setSnap(['kennis']);
+  const oud=kennisGet('benoem|'+B.key)||{}, tx=Object.assign({}, oud.tx||{});
   tx[id]={label:K.label, bron, aard};
-  SET.benoemd[B.key]={label:K.label, bron, aard, bedrag:Math.round(B.bedrag*100)/100, op:vandaagYMD(), tx};
+  kennisZet('benoem|'+B.key, {soort:'benoem', partij:B.partij, kenmerk:B.kenmerk||'', wat:K.label, label:K.label, bron, aard, bedrag:Math.round(B.bedrag*100)/100, tx});
   delete window._benoemKeuze[id];
   save(); keuzeKlaar(`${B.partij}: ${K.label||'nog niet benoemd'} · ${aard==='eenmalig'?'eenmalig':'komt terug'}`, herstel); }
 /* Kiezen: een benoemde uitgave die terugkomt, zonder reservering die erbij hoort, krijgt een voorstel voor een reservering. */
 function benoemTerugVoorstellen(){ const R=resLijst(), o=[];
-  for(const [key,A] of Object.entries(SET.benoemd||{})){ if(A.aard!=='terug' || A.geenRes) continue;
+  for(const [kk,A] of Object.entries(SET.kennis||{})){ if(!A || A.soort!=='benoem' || A.aard!=='terug' || A.geenRes) continue; const key=kk.slice(7);
     if(R.some(r=>r.bron==='benoem:'+key)) continue;
     const ids=Object.keys(A.tx||{}), t=TX.filter(x=>ids.includes(x.id)).sort((a,b)=>a.date<b.date?1:-1)[0]; if(!t) continue;
     o.push({key, A, t, partij:benoemPartij(t), naam:A.label||benoemPartij(t)}); }
@@ -23994,7 +24001,7 @@ function benoemResVoorstel(key){ const x=benoemTerugVoorstellen().find(v=>v.key=
   const vm=valtOpYmPlus(x.t.date.slice(0,7),12);
   set('rNaam', `${x.naam} (${x.partij})`); set('rBedrag', String(Math.round(-x.t.amount))); set('rMaand', vm);
   try{ resIntervalPick(12); }catch(_){} }
-function benoemGeenRes(key){ const herstel=setSnap(['benoemd']); if(!(SET.benoemd||{})[key]) return; SET.benoemd[key].geenRes=vandaagYMD(); save(); keuzeKlaar('Geen reservering', herstel); }
+function benoemGeenRes(key){ const herstel=setSnap(['kennis']); const A=kennisGet('benoem|'+key); if(!A) return; A.geenRes=vandaagYMD(); save(); keuzeKlaar('Geen reservering', herstel); }
 function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{})[t.id];
   const S=BENOEM_SOORTEN[q.psoort]||BENOEM_SOORTEN.overig, kk=s=>esc(s).replace(/'/g,"\\'");
   const kop=`<div style="font-weight:600">${euro(-t.amount)} aan ${esc(q.partij)} · ${esc(dagKort(t.date))} · wat was dit?</div>`;
@@ -24007,14 +24014,364 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
   else { const opts=S.opties.slice(); if(q.voorstel){ const i=opts.indexOf(q.voorstel); if(i>0){ opts.splice(i,1); opts.unshift(q.voorstel); } }
     body=`<div class="chips" style="margin-top:6px">${opts.map(o=>`<span class="chip" data-benoemoptie="${esc(o)}" onclick="benoemKies('${id}','${kk(o)}')">${esc(o)}${o===q.voorstel?' · klopt':''}</span>`).join('')}<span class="chip" data-benoemoptie="__anders" onclick="benoemKies('${id}','__anders')">Anders…</span><span class="chip" data-benoemoptie="__weetniet" onclick="benoemKies('${id}','__weetniet')">Weet ik niet</span></div>`; }
   return `<div data-gegevensvraag="benoem" data-benoemlaag="${q.laag}" data-tx="${id}" style="padding:9px 0;border-top:1px solid var(--line)">${kop}${sub}${body}</div>`; }
+/* v425: WAT MINDER ALLEEN VAN JOU KAN WETEN: VRAGEN, ONTHOUDEN, TERUGZIEN (gevraagd door de gebruiker). De app ziet bedragen,
+   data en namen, maar niet wat iets is, voor wie, of of je het terugverwacht. Die betekenis komt van jou, en de regels zijn:
+   nooit stil aannemen, een vraag per partij, alleen bij bedragen die ertoe doen, en het antwoord wordt onthouden met zijn bron.
+   EEN OPSLAG VOOR BETEKENIS: SET.kennis[sleutel]={soort, partij, kenmerk, wat, aard, bron, op, tx, ...}. De soorten: benoem (v424,
+   uit SET.benoemd overgenomen), uit (overboeking aan een ander), in (onbekende bijschrijving), vastink (vast inkomen), vast (nieuwe
+   vaste last), vervanger, woning, tikkie (per persoon) en contant. De bron is een van KENNIS_BRON. Wat al een eigen plek had
+   (je holding, je leningen, een gestopte of opgezegde post, vast per partij, "klopt, eenmalig") blijft daar staan, want daar zit
+   het gevolg; kennisLijst() leest die plekken met bron "door jou" en is de ENE lezer voor alle schermen en blok 20.
+   EEN ANTWOORD DRAAGT ZIJN GEVOLG (E.effect: de categorie die het zette, de vlag onregelmatig, de lening), zodat Vergeten precies
+   dat terugzet en de post weer "nog niet benoemd" heet. */
+const KENNIS_BRON=BENOEM_BRON;   // v425: een woordenlijst voor de bron, ook voor v424
+const KENNIS_MIN=100, KENNIS_VAST_MIN=10, KENNIS_TIKKIE_MIN=10, KENNIS_CONTANT_DAGEN=3, KENNIS_VERVANGER_MAANDEN=2;
+const KENNIS_MAX_OPEN=3, KENNIS_LATER_DAGEN=7, KENNIS_LATER_MAX=2, KENNIS_VAST_NIEUW_DAGEN=120, KENNIS_VAST_START_DAGEN=60;
+const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['contant','Contant']];
+const KENNIS_UIT=[['lening','Lening, verwacht terug'],['uitgave','Uitgave'],['gift','Gift']];
+const KENNIS_IN=[['terug','Terugbetaling'],['teruggave','Teruggave'],['gift','Gift'],['verkoop','Verkoop'],['extra','Extra inkomen'],['bedrijf','Van mijn eigen bedrijf']];
+const KENNIS_IN_SUB={terug:'van een lening of Tikkie', teruggave:'belasting, verzekering, winkel', extra:'bonus, vakantiegeld'};
+const KENNIS_CONTANT=['Uitgaan of eten','Boodschappen','Kinderen','Vices'];
+function kennisGet(k){ return (SET.kennis||{})[k]||null; }
+function kennisZet(k, E){ SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E); return SET.kennis[k]; }
+function kennisTekst(E){ return E? `${E.wat||'nog niet benoemd'} \u00b7 ${KENNIS_BRON[E.bron]||E.bron||'door jou'}` : ''; }
+/* De bron als link naar "Wat Minder van jou weet": een tik op een bron-regel opent het scherm. */
+function kennisBronLink(txt){ return `<span data-kennisbron role="button" style="cursor:pointer;text-decoration:underline dotted" onclick="event.stopPropagation();openKennis()">${esc(txt)}</span>`; }
+/* Het herstel voor een antwoord: SET en OVR zoals ze waren (een antwoord kan beide raken). */
+function kennisSnap(){ const s=JSON.parse(JSON.stringify(SET)), o=JSON.parse(JSON.stringify(OVR));
+  return ()=>{ for(const k of Object.keys(SET)) if(!(k in s)) delete SET[k]; Object.assign(SET, JSON.parse(JSON.stringify(s)));
+    for(const k of Object.keys(OVR)) delete OVR[k]; Object.assign(OVR, o); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){} }; }
+function kennisNaamVan(key){ const t=TX.find(u=>recurKey(u)===key); return t?benoemPartij(t):String(key); }
+function kennisCatVan(naam){ return Object.keys(CATS).find(k=>String(CATS[k].name).toLowerCase()===String(naam).toLowerCase())||null; }
+function kennisCats(){ return Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k) && k!=='persoonlijk'); }
+function kennisPotjes(){ const B=SET.budgets||{}; return Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !geenNorm(k) && +B[k]>0 && !potGearchiveerd(k)); }
+function kennisRecent(t, dagen){ const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()-(dagen||BENOEM_DAGEN)); return t.date>=ymdVan(d); }
+/* v424 naar v425: SET.benoemd gaat op in SET.kennis (soort benoem); een keer, bij het laden. */
+function kennisMigreer(){ if(!SET.benoemd) return false; SET.kennis=SET.kennis||{};
+  for(const [key,A] of Object.entries(SET.benoemd)){ const [p,km]=key.split('|'); if(!SET.kennis['benoem|'+key]) SET.kennis['benoem|'+key]=Object.assign({soort:'benoem', partij:p, kenmerk:km||'', wat:A.label}, A); }
+  delete SET.benoemd; return true; }
+/* De antwoorden die je al gaf (bericht van de gebruiker bij v425), een keer per antwoord en alleen als de boeking of de partij er
+   is. Wat al een eigen plek had (holding, leningen, Health Club) staat daar en wordt niet nog eens geschreven. */
+function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false;
+  const zet=(n,k,E)=>{ if(Z[n]) return; if(!kennisGet(k)) kennisZet(k, Object.assign({op:vandaagYMD(), zaad:n}, E)); Z[n]=vandaagYMD(); gedaan=true; };
+  const nik=TX.find(t=>t.amount<0 && /^NIKKI\b/.test(recurKey(t)));
+  if(nik) zet('nikki', 'vast|'+recurKey(nik), {soort:'vast', partij:benoemPartij(nik), wat:'Voetbalcontributie', potje:kennisCatVan('Kinderen')||catOf(nik), tx:[]});
+  const mac=TX.find(t=>t.amount<0 && /MACNACK/.test(recurKey(t)));
+  if(mac) zet('macnack', 'woning|'+recurKey(mac), {soort:'woning', partij:benoemPartij(mac), wat:'Woonhuur (gestopt)', ja:true, tx:[]});
+  const zrg=TX.find(t=>t.amount===-159 && catOf(t)==='zorg');
+  if(zrg) zet('zorg159', benoemKandidaat(zrg)?'benoem|'+benoemKey(zrg):'eenmalig|'+zrg.id, {soort:benoemKandidaat(zrg)?'benoem':'eenmalig', partij:benoemPartij(zrg), wat:'Zorgkosten', label:'Zorgkosten', aard:'eenmalig', bedrag:159, tx:benoemKandidaat(zrg)?{[zrg.id]:{label:'Zorgkosten', bron:'jij', aard:'eenmalig'}}:[zrg.id]});
+  const gem=TX.find(t=>t.amount===-484 && /GEMEENTE/.test(String(t.name||'').toUpperCase()));
+  if(gem && benoemKandidaat(gem)) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
+  return gedaan; }
+
+/* ---- a. OVERBOEKING AAN EEN ANDER vanaf KENNIS_MIN ---- */
+function kennisUitVragen(){ const per={};
+  for(const t of telbareTx()){ if(t.pending || !t.acc || !(t.amount<=-KENNIS_MIN) || !kennisRecent(t) || catOf(t)!=='persoonlijk' || isTikkie(t) || loanFor(t.id)) continue;
+    const p=benoemPartij(t), k='uit|'+p.toLowerCase(), E=kennisGet(k);
+    if(E && E.wat!=='Lening, verwacht terug') continue;               // een antwoord geldt voor de partij; een lening is per keer
+    if(E && (E.tx||[]).includes(t.id)) continue;
+    if(!per[k] || t.date<per[k].t.date) per[k]={soort:'uit', qkey:k, t, partij:p, bedrag:-t.amount, datum:t.date}; }
+  return Object.values(per); }
+function kennisUitZet(id, keuze, tekst){ const t=TX.find(x=>x.id===id); if(!t) return; const p=benoemPartij(t), k='uit|'+p.toLowerCase();
+  const herstel=kennisSnap(), L=Object.fromEntries(KENNIS_UIT), wat=keuze==='anders'?String(tekst||'').trim():keuze==='weetniet'?'':L[keuze];
+  if(keuze==='anders' && !wat){ toast('Vul in wat het was'); return; }
+  const oud=kennisGet(k), tx=[...new Set([...((oud&&oud.tx)||[]), id])];
+  const E=kennisZet(k, {soort:'uit', partij:p, wat:wat||null, keuze, bedrag:-t.amount, tx, effect:Object.assign({}, oud&&oud.effect)});
+  if(keuze==='lening'){ E.effect.loan=(E.effect.loan||[]).concat([id]); markLoan(id, 'uit', 'lening'); }
+  else save();
+  keuzeKlaar(`${p}: ${wat||'weet ik niet'}`, herstel); }
+
+/* ---- b. ONBEKENDE BIJSCHRIJVING vanaf KENNIS_MIN ---- */
+function kennisSalarisKeys(){ const S=new Set(); try{ for(const k of holdingKeys()) S.add(k); }catch(_){}
+  try{ const sl=salarisBetalingLaatst(valtOpYmPlus(thisYM(),1)); if(sl) S.add(recurKey(sl)); }catch(_){}
+  try{ for(const ym of [thisYM(), valtOpYmPlus(thisYM(),-1), valtOpYmPlus(thisYM(),-2)]){ const sl=salarisBetalingLaatst(ym); if(sl) S.add(recurKey(sl)); } }catch(_){}
+  return S; }
+function kennisInKandidaat(t, SK){ if(!t || t.pending || !t.acc || !(t.amount>=KENNIS_MIN) || OVR[t.id]) return false;
+  const c=catOf(t); if(!CATS[c] || CATS[c].type==='internal') return false;
+  if(SK.has(recurKey(t)) || onregelmatigBedrag(t)>0) return false;
+  return true; }
+function kennisInVragen(){ const SK=kennisSalarisKeys(), per={}, lv=new Set(); try{ for(const v of loanVragen()) lv.add(v.t.id); }catch(_){}
+  const alle=telbareTx().filter(t=>kennisInKandidaat(t, SK) && !lv.has(t.id));
+  const maanden={}; for(const t of alle){ const p=benoemPartij(t).toLowerCase(); (maanden[p]=maanden[p]||new Set()).add(t.date.slice(0,7)); }
+  for(const t of alle){ if(!kennisRecent(t)) continue; const p=benoemPartij(t), pl=p.toLowerCase(), E=kennisGet('in|'+pl);
+    if(E && (E.tx||[]).includes(t.id)) continue;
+    const V=kennisGet('vastink|'+pl);
+    if(V && V.ja) continue;                                             // vast inkomen: al je bijschrijvingen van die partij zijn inkomen
+    if(!V && maanden[pl].size>=2){ const k='vastink|'+pl; if(!per[k]) per[k]={soort:'vastink', qkey:k, t, partij:p, bedrag:t.amount, datum:t.date, maanden:[...maanden[pl]].sort()}; continue; }
+    const k='in|'+pl; if(!per[k] || t.date<per[k].t.date) per[k]={soort:'in', qkey:k, t, partij:p, bedrag:t.amount, datum:t.date}; }
+  return Object.values(per); }
+/* De tweede stap van een bijschrijving: wat er dan gebeurt staat er eerst (de lening, de Tikkie of het potje), en pas Bevestig schrijft. */
+function kennisInKies(id, keuze){ window._kennisKeuze=window._kennisKeuze||{};
+  if(keuze==='bedrijf'){ openHoldingVraag(id); return; }
+  if(keuze==='gift'||keuze==='verkoop'||keuze==='extra'||keuze==='weetniet'){ kennisInZet(id, keuze); return; }
+  window._kennisKeuze[id]={keuze}; openGegevensVragen(window._gegevensFocus||''); }
+function kennisInDoel(id, doel){ window._kennisKeuze=window._kennisKeuze||{}; const K=window._kennisKeuze[id]||{}; K.doel=doel; window._kennisKeuze[id]=K; openGegevensVragen(window._gegevensFocus||''); }
+function kennisInZet(id, keuze, doel, tekst){ const t=TX.find(x=>x.id===id); if(!t) return; const p=benoemPartij(t), k='in|'+p.toLowerCase();
+  const L=Object.fromEntries(KENNIS_IN); let wat=keuze==='anders'?String(tekst||'').trim():keuze==='weetniet'?'':L[keuze];
+  if(keuze==='anders' && !wat){ toast('Vul in wat het was'); return; }
+  const herstel=kennisSnap(), oud=kennisGet(k), effect=Object.assign({}, oud&&oud.effect);
+  effect.ovr=Object.assign({}, effect.ovr); effect.onr=Object.assign({}, effect.onr);
+  if(keuze==='gift'||keuze==='verkoop'||keuze==='extra'){ effect.ovr[id]=OVR[id]||null; if((CATS[catOf(t)]||{}).type!=='income') OVR[id]='inkomen';
+    effect.onr[id]=(SET.onregelmatig||{})[id]||null; SET.onregelmatig=SET.onregelmatig||{}; SET.onregelmatig[id]=t.amount; }
+  if(keuze==='teruggave'){ if(!doel || !CATS[doel]) return; effect.ovr[id]=OVR[id]||null; OVR[id]=doel; wat+=` (${CATS[doel].name})`; }
+  if(keuze==='terug'){ if(!doel) return;
+    if(doel==='tikkie'){ const c=kennisTikkieCat(t); effect.ovr[id]=OVR[id]||null; if(c) OVR[id]=c; wat='Terugbetaling van een Tikkie'; }
+    else { const l=loans().find(x=>x.id===doel); if(!l) return; wat=`Terugbetaling van de lening aan ${l.naam}`; effect.loanTerug=Object.assign({}, effect.loanTerug, {[id]:l.id});
+      kennisZet(k, {soort:'in', partij:p, wat, keuze, bedrag:t.amount, tx:[...new Set([...((oud&&oud.tx)||[]), id])], effect});
+      loanRepay(l.id, Math.min(t.amount, Math.max(+l.open||0,0)), id); keuzeKlaar(`${p}: ${wat}`, herstel); return; } }
+  kennisZet(k, {soort:'in', partij:p, wat:wat||null, keuze, bedrag:t.amount, tx:[...new Set([...((oud&&oud.tx)||[]), id])], effect});
+  delete (window._kennisKeuze||{})[id];
+  try{ applyOwnAccounts(); }catch(_){} save(); keuzeKlaar(`${p}: ${wat||'weet ik niet'}`, herstel); }
+function kennisVastInkomen(pl, ja){ const herstel=kennisSnap(), k='vastink|'+pl, SK=kennisSalarisKeys();
+  const tx=telbareTx().filter(t=>kennisInKandidaat(t, SK) && benoemPartij(t).toLowerCase()===pl), effect={ovr:{}};
+  if(ja) for(const t of tx){ effect.ovr[t.id]=OVR[t.id]||null; if((CATS[catOf(t)]||{}).type!=='income') OVR[t.id]='inkomen'; }
+  kennisZet(k, {soort:'vastink', partij:tx[0]?benoemPartij(tx[0]):pl, wat:ja?'Vast inkomen':'Geen vast inkomen', ja:!!ja, tx:tx.map(t=>t.id), effect});
+  try{ applyOwnAccounts(); }catch(_){} save(); keuzeKlaar(`${tx[0]?benoemPartij(tx[0]):pl}: ${ja?'vast inkomen':'geen vast inkomen'}`, herstel); }
+
+/* ---- c. NIEUWE VASTE LAST (de eerste herkende herhaling) en d. EEN VERVANGER ---- */
+function kennisVastVragen(){ const o=[]; let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){ return o; }
+  const grens=(()=>{ const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()-KENNIS_VAST_NIEUW_DAGEN); return ymdVan(d); })();
+  /* NIEUW is pas nieuw als je gegevens van ervoor er zijn: een post die bij het begin van je import al liep is niet nieuw */
+  const start=TX.reduce((a,t)=>(!a||t.date<a)?t.date:a, ''), na=(()=>{ const d=new Date(String(start||vandaagYMD())+'T12:00:00'); d.setDate(d.getDate()+KENNIS_VAST_START_DAGEN); return ymdVan(d); })();
+  for(const s of R){ if(!(+s.amount>=KENNIS_VAST_MIN) || kennisGet('vast|'+s.key) || (SET.fixOvrM||{})[s.key]) continue;
+    const bet=TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===s.key).sort((a,b)=>a.date<b.date?-1:1);
+    if(bet.length<2 || bet[0].date<grens || bet[0].date<na) continue;
+    const st=(SET.postStatus||{})[s.key]; if(st && st.status!=='actief') continue;
+    o.push({soort:'vast', qkey:'vast|'+s.key, key:s.key, partij:titleCase(cleanMerch(s.name)||s.name||s.key), bedrag:+s.amount||0, datum:bet[bet.length-1].date, cat:catOf(bet[bet.length-1]), cad:s.cadans==='4w'?'4 weken':s.cadans==='maand'||s.intervalM===1?'maand':(INTERVAL_TXT[s.intervalM]||`${s.intervalM} maanden`).replace(/^per /,''), eerste:bet[0].date}); }
+  return o; }
+function kennisVastWat(key){ const el=document.getElementById('kennisVast_'+key.replace(/[^A-Za-z0-9]/g,'_')); const v=String((el&&el.value)||'').trim(); if(!v){ toast('Vul in wat het is'); return; }
+  window._kennisKeuze=window._kennisKeuze||{}; window._kennisKeuze['vast|'+key]={wat:v}; openGegevensVragen(window._gegevensFocus||''); }
+function kennisVastZet(key, potje){ const K=(window._kennisKeuze||{})['vast|'+key]; const q=kennisVastVragen().find(x=>x.key===key); if(!K || !q || !CATS[potje]) return;
+  const herstel=kennisSnap();
+  kennisZet('vast|'+key, {soort:'vast', partij:q.partij, wat:K.wat, potje, aard:'terug', bedrag:q.bedrag, tx:[]});
+  delete window._kennisKeuze['vast|'+key];
+  try{ applyOwnAccounts(); }catch(_){} save(); keuzeKlaar(`${q.partij}: ${K.wat} · ${CATS[potje].name}`, herstel); }
+/* de potjes die jij een vaste last gaf: applyOwnAccounts() leest ze, zodat ook een volgende betaling in dat potje landt */
+function kennisVastPotjes(){ const M={}; for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='vast' && E.potje && CATS[E.potje]) M[k.slice(5)]=E.potje; return M; }
+function kennisVervangerVragen(){ const o=[];
+  for(const [key,E] of Object.entries(SET.postStatus||{})){ if(!E || !E.vervangerVraag || E.status!=='afloop') continue;
+    const V=kennisGet('vervanger|'+key), P=postStatus(key), nm=P.naam||titleCase(key.toLowerCase());
+    if(!V){ o.push({soort:'vervanger', qkey:'vervanger|'+key, key, partij:nm, bedrag:+P.bedrag||0, datum:E.op||''}); continue; }
+    if(V.ja && !V.wie && V.tot>=thisYM()){ const nieuw=kennisVastVragen().concat(Object.entries(SET.kennis||{}).filter(([k,X])=>X.soort==='vast').map(([k,X])=>({key:k.slice(5), partij:X.partij, cat:X.potje, eerste:'9999', bedrag:X.bedrag})))
+        .find(x=>x.cat===V.potje && x.key!==key && !(V.nee||[]).includes(x.key) && (()=>{ const b=TX.filter(t=>t.amount<0 && recurKey(t)===x.key).map(t=>t.date).sort()[0]; return b && b>=V.op; })());
+      if(nieuw) o.push({soort:'vervangerwie', qkey:'vervangerwie|'+key, key, nieuw:nieuw.key, partij:nm, nieuwNaam:nieuw.partij, bedrag:+nieuw.bedrag||0, datum:V.op}); } }
+  return o; }
+function kennisVervangerZet(key, ja){ const herstel=kennisSnap(), P=postStatus(key); let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
+  kennisZet('vervanger|'+key, {soort:'vervanger', partij:P.naam||key, wat:ja?'Komt een vervanger':'Geen vervanger', ja:!!ja, potje:s?s.cat:null, tot:valtOpYmPlus(thisYM(), KENNIS_VERVANGER_MAANDEN), tx:[]});
+  save(); keuzeKlaar(`${P.naam||key}: ${ja?'er komt een vervanger':'geen vervanger'}`, herstel); }
+function kennisVervangerWie(key, nieuw, ja){ const E=kennisGet('vervanger|'+key); if(!E) return; const herstel=kennisSnap();
+  if(ja){ E.wie=nieuw; E.wat=`Vervangen door ${titleCase(nieuw.toLowerCase())}`; } else E.nee=(E.nee||[]).concat([nieuw]);
+  save(); keuzeKlaar(ja?E.wat:'Niet de vervanger', herstel); }
+
+/* ---- e. WONING: jij wijst hem aan; de grootste vaste post in Huur is alleen een voorstel ---- */
+function kennisWoningKey(){ for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='woning' && E.ja) return k.slice(7); return null; }
+function kennisWoningVoorstel(){ let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed' && s.cat==='huur' && +s.amount>=KENNIS_MIN); }catch(_){}
+  R=R.filter(s=>!kennisGet('woning|'+s.key)).sort((a,b)=>b.amount-a.amount); return R[0]||null; }
+function kennisWoningVragen(){ if(kennisWoningKey()) return []; const s=kennisWoningVoorstel(); if(!s) return [];
+  return [{soort:'woning', qkey:'woning|'+s.key, key:s.key, partij:titleCase(cleanMerch(s.name)||s.name||s.key), bedrag:+s.amount||0, datum:String(s.lastDate||'').slice(0,10)}]; }
+function kennisWoningZet(key, ja){ const q=kennisWoningVragen().find(x=>x.key===key); const herstel=kennisSnap();
+  kennisZet('woning|'+key, {soort:'woning', partij:q?q.partij:key, wat:ja?'Woonhuur of hypotheek':'Niet je woning', ja:!!ja, tx:[]});
+  save(); keuzeKlaar(`${q?q.partij:key}: ${ja?'je woning':'niet je woning'}`, herstel); }
+
+/* ---- f. EERSTE UITGAANDE TIKKIE PER PERSOON ---- */
+function tikkiePersoon(t){ const n=benoemPartij(t); if(!/tikkie/i.test(n)) return n;
+  const m=String(t.desc||'').match(/\b(?:VAN|NAAR|AAN)\s+([A-Za-z][A-Za-z .'-]{1,30}?)(?:\s*,|\s+NL\d|\s+IBAN|$)/i);
+  return m?titleCase(m[1].trim().toLowerCase()):'Tikkie'; }
+function kennisTikkieCat(t){ const uit=TX.filter(d=>d.amount<0 && isTikkie(d) && (CATS[catOf(d)]||{}).type==='expense' && d.date<=t.date).sort((a,b)=>a.date<b.date?1:-1)[0]; return uit?catOf(uit):null; }
+/* de categorie die jij een persoon gaf; applyOwnAccounts() leest hem voor elke Tikkie aan die persoon */
+function kennisTikkieCats(){ const M={}; for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='tikkie' && E.cat && CATS[E.cat]) M[k.slice(7)]=E.cat; return M; }
+function kennisTikkieVragen(){ const per={};
+  for(const t of telbareTx()){ if(t.pending || !(t.amount<=-KENNIS_TIKKIE_MIN) || !isTikkie(t) || !kennisRecent(t) || loanFor(t.id)) continue;
+    const p=tikkiePersoon(t), k='tikkie|'+p.toLowerCase(), E=kennisGet(k);
+    if(E && E.keuze!=='lening') continue;
+    if(E && (E.tx||[]).includes(t.id)) continue;
+    if(!per[k] || t.date<per[k].t.date) per[k]={soort:'tikkie', qkey:k, t, partij:p, bedrag:-t.amount, datum:t.date, herhaal:!!E}; }
+  return Object.values(per); }
+function kennisTikkieKies(id, keuze){ if(keuze==='deel'){ window._kennisKeuze=window._kennisKeuze||{}; window._kennisKeuze[id]={keuze}; openGegevensVragen(window._gegevensFocus||''); return; } kennisTikkieZet(id, keuze); }
+function kennisTikkieZet(id, keuze, cat, tekst){ const t=TX.find(x=>x.id===id); if(!t) return; const p=tikkiePersoon(t), k='tikkie|'+p.toLowerCase();
+  if(keuze==='deel' && !CATS[cat]) return; if(keuze==='anders' && !String(tekst||'').trim()){ toast('Vul in wat het was'); return; }
+  const herstel=kennisSnap(), oud=kennisGet(k), effect=Object.assign({}, oud&&oud.effect);
+  const wat=keuze==='deel'?`Jouw deel van gedeelde kosten (${CATS[cat].name})`:keuze==='lening'?'Lening':keuze==='nee'?'Geen lening':String(tekst).trim();
+  kennisZet(k, {soort:'tikkie', partij:p, wat, keuze:keuze==='nee'?'anders':keuze, cat:keuze==='deel'?cat:null, bedrag:-t.amount, tx:[...new Set([...((oud&&oud.tx)||[]), id])], effect});
+  delete (window._kennisKeuze||{})[id];
+  if(keuze==='lening'){ kennisGet(k).effect.loan=(effect.loan||[]).concat([id]); markLoan(id, 'uit', 'lening'); }
+  else { try{ applyOwnAccounts(); }catch(_){} save(); }
+  keuzeKlaar(`${p}: ${wat}`, herstel); }
+
+/* ---- g. CONTANT OPNEMEN vanaf KENNIS_MIN: een tik, binnen KENNIS_CONTANT_DAGEN dagen; het verandert geen boekingen ---- */
+function kennisContantVragen(){ const o=[];
+  for(const t of telbareTx()){ if(t.pending || !(t.amount<=-KENNIS_MIN) || !isOpnameTx(t) || kennisGet('contant|'+t.id) || !kennisRecent(t, KENNIS_CONTANT_DAGEN)) continue;
+    o.push({soort:'contant', qkey:'contant|'+t.id, t, partij:benoemPartij(t), bedrag:-t.amount, datum:t.date}); }
+  return o; }
+function kennisContantZet(id, wat){ const t=TX.find(x=>x.id===id); if(!t) return; const herstel=kennisSnap();
+  kennisZet('contant|'+id, {soort:'contant', partij:benoemPartij(t), wat:wat||null, bedrag:-t.amount, datum:t.date, tx:[id]});
+  save(); keuzeKlaar(`Contant ${euro0(-t.amount)}: ${wat||'weet ik niet'}`, herstel); }
+/* per maand waar het contante geld volgens jou heen ging (blok 20, en de vergelijking per potje) */
+function kennisContantMaand(ym){ const M={}; for(const E of Object.values(SET.kennis||{})) if(E && E.soort==='contant' && String(E.datum||'').slice(0,7)===ym){ const w=E.wat||'weet ik niet'; M[w]=(M[w]||0)+(+E.bedrag||0); } return M; }
+
+/* ---- RUST: hooguit KENNIS_MAX_OPEN open vragen, op bedrag; "Later" schuift een week op, na twee keer pas weer als jij hem opent ---- */
+function kennisLaterStand(qkey){ const L=(SET.kennisLater||{})[qkey]; if(!L) return {wacht:false, n:0};
+  return {n:+L.n||0, tot:L.tot||'', wacht:(+L.n||0)>=KENNIS_LATER_MAX || String(L.tot||'')>vandaagYMD()}; }
+function kennisLater(qkey){ SET.kennisLater=SET.kennisLater||{}; const L=SET.kennisLater[qkey]||{n:0};
+  const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()+KENNIS_LATER_DAGEN);
+  SET.kennisLater[qkey]={n:(+L.n||0)+1, tot:ymdVan(d), op:vandaagYMD()}; save();
+  try{ render(); }catch(_){} if(gegevensOpen().length) openGegevensVragen(); else closeSheet(); }
+/* de vragen die nu in Zien staan: niet op later, op bedrag, hooguit KENNIS_MAX_OPEN */
+function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.qkey).wacht).sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)); }
+
+/* ---- DE ENE LEZER: alles wat Minder van jou weet, met bron en datum ---- */
+function kennisLijst(){ const o=[];
+  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', contant:()=>'contant'};
+  for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
+    const g=(groep[E.soort]||(()=>'eenmalig'))(E);
+    const wat=E.soort==='benoem'?`${E.label||E.wat||'nog niet benoemd'}${E.aard?' \u00b7 '+(E.aard==='eenmalig'?'eenmalig':'komt terug'):''}`
+      :E.soort==='vast'?`${E.wat} \u00b7 ${(CATS[E.potje]||{}).name||E.potje}`:E.soort==='contant'?`${E.wat||'weet ik niet'} (${euro0(E.bedrag)} contant ${dagKort(E.datum)})`:(E.wat||'weet ik niet');
+    o.push({id:'k:'+k, groep:g, partij:E.partij||'', wat, bron:E.bron||'jij', op:E.op||'', bedrag:+E.bedrag||0, soort:E.soort, kennis:k}); }
+  for(const [k,E] of Object.entries(SET.holdingPartij||{})) o.push({id:'h:'+k, groep:'inkomen', partij:E.naam||k, wat:'Je holding (eigen bedrijf)', bron:'jij', op:E.op||'', soort:'holding', key:k});
+  for(const l of loans()) o.push({id:'l:'+l.id, groep:'leningen', partij:l.naam||'', wat:`${l.richting==='in'?'Geleend':'Uitgeleend'} ${loanC2(+l.bedrag||0)} \u00b7 nog open ${loanC2(+l.open||0)}`, bron:'jij', op:((l.log||[])[0]||{}).dag||l.datum||'', soort:'lening', key:l.id});
+  for(const [k,E] of Object.entries(SET.postStatus||{})){ if(!E || E.status==='actief') continue; let P={}; try{ P=postStatus(k); }catch(_){}
+    o.push({id:'p:'+k, groep:'vast', partij:P.naam||kennisNaamVan(k), wat:E.status==='afloop'?'Opgezegd, loopt af':'Gestopt', bron:'jij', op:E.op||'', soort:'post', key:k}); }
+  for(const [k,v] of Object.entries(SET.fixOvrM||{})){ if(v!=='fixed' || kennisGet('vast|'+k)) continue;   /* met een antwoord (wat het is) staat hij daar */ o.push({id:'f:'+k, groep:'vast', partij:kennisNaamVan(k), wat:'Vast per maand', bron:'jij', op:'', soort:'vastm', key:k}); }
+  for(const [id,v] of Object.entries(SET.eenmaligOk||{})){ const t=TX.find(x=>x.id===id); if(!t) continue;
+    o.push({id:'e:'+id, groep:'eenmalig', partij:benoemPartij(t), wat:`Klopt, eenmalig (${euro0(-t.amount)} op ${dagKort(t.date)})`, bron:'jij', op:typeof v==='string'?v:'', soort:'eenmaligok', key:id}); }
+  return o; }
+/* de kennis bij een boeking (de boekingssheet): de antwoorden die die boeking of zijn partij raken */
+function kennisVoorTx(t){ if(!t) return []; const o=[], p=benoemPartij(t).toLowerCase(), rk=recurKey(t);
+  for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue; const tx=Array.isArray(E.tx)?E.tx:Object.keys(E.tx||{});
+    if(tx.includes(t.id) || (E.soort==='vast'&&k==='vast|'+rk) || (E.soort==='woning'&&k==='woning|'+rk) || (E.soort==='vastink'&&k==='vastink|'+p) || (E.soort==='tikkie'&&isTikkie(t)&&k==='tikkie|'+tikkiePersoon(t).toLowerCase())) o.push(E); }
+  return o; }
+function kennisBlok(t){ const K=kennisVoorTx(t); if(!K.length) return '';
+  return K.map(E=>`<div class="row" data-kennisblok style="padding:8px 0;gap:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openKennis()"><span class="small" style="flex:1">Wat het is: <b>${esc(E.label||E.wat||'nog niet benoemd')}</b><span style="display:block;color:var(--mut2)">${esc(KENNIS_BRON[E.bron]||'door jou')}${E.op?' \u00b7 '+esc(dagKort(E.op))+' '+String(E.op).slice(0,4):''}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>`).join(''); }
+
+/* ---- VERGETEN: terug naar "nog niet benoemd", met het gevolg vooraf ---- */
+function kennisVergeetKern(id){ const [s, ...r]=id.split(':'), k=r.join(':');
+  if(s==='k'){ const E=kennisGet(k); if(!E) return; const F=E.effect||{};
+    for(const [tid,v] of Object.entries(F.ovr||{})){ if(v) OVR[tid]=v; else delete OVR[tid]; }
+    for(const [tid,v] of Object.entries(F.onr||{})){ SET.onregelmatig=SET.onregelmatig||{}; if(v) SET.onregelmatig[tid]=v; else delete SET.onregelmatig[tid]; }
+    for(const tid of F.loan||[]){ const l=loanFor(tid); if(l){ try{ loanNietTerugWeg(l.id); }catch(_){} SET.loans=loans().filter(x=>x.id!==l.id); } delete OVR[tid]; }
+    for(const [tid,lid] of Object.entries(F.loanTerug||{})){ const l=loans().find(x=>x.id===lid); if(l){ const b=(l.terugBedrag||{})[tid]||0; l.open=Math.round(((+l.open||0)+b)*100)/100; l.terugTx=(l.terugTx||[]).filter(x=>x!==tid); if(l.terugBedrag) delete l.terugBedrag[tid]; } delete OVR[tid]; }
+    delete SET.kennis[k]; if(SET.kennisLater) delete SET.kennisLater[k]; return; }
+  if(s==='h'){ const E=(SET.holdingPartij||{})[k]; if(!E) return; for(const [tid,c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c; delete SET.holdingPartij[k]; return; }
+  if(s==='l'){ const l=loans().find(x=>x.id===k); if(!l) return; try{ loanNietTerugWeg(l.id); }catch(_){} for(const tid of [l.txId, ...(l.terugTx||[])]) if(tid) delete OVR[tid]; SET.loans=loans().filter(x=>x.id!==k); return; }
+  if(s==='p'){ if(SET.postStatus) delete SET.postStatus[k]; return; }
+  if(s==='f'){ if(SET.fixOvrM) delete SET.fixOvrM[k]; return; }
+  if(s==='e'){ if(SET.eenmaligOk) delete SET.eenmaligOk[k]; return; } }
+/* de boekingen die een kennisregel raakt, voor het gevolg per maand */
+function kennisTxVan(id){ const [s, ...r]=id.split(':'), k=r.join(':');
+  if(s==='k'){ const E=kennisGet(k)||{}; let ids=Array.isArray(E.tx)?E.tx.slice():Object.keys(E.tx||{}); const F=E.effect||{}; ids=ids.concat(Object.keys(F.ovr||{}), F.loan||[], Object.keys(F.loanTerug||{}));
+    if(E.soort==='vast') ids=ids.concat(TX.filter(t=>recurKey(t)===k.slice(5)).map(t=>t.id));
+    if(E.soort==='tikkie') ids=ids.concat(TX.filter(t=>isTikkie(t) && tikkiePersoon(t).toLowerCase()===k.slice(7)).map(t=>t.id));
+    if(E.soort==='benoem'){ const p=k.slice(7).split('|')[0]; ids=ids.concat(TX.filter(t=>benoemPartij(t).toLowerCase()===p).map(t=>t.id)); }
+    return [...new Set(ids)]; }
+  if(s==='h') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
+  if(s==='l'){ const l=loans().find(x=>x.id===k)||{}; return [l.txId, ...(l.terugTx||[])].filter(Boolean); }
+  if(s==='p'||s==='f') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
+  if(s==='e') return [k]; return []; }
+/* het gevolg van Vergeten, in het geheugen doorgerekend en teruggezet zonder save(): per maand de uitgaven en het inkomen */
+function kennisVergeetGevolg(id){ const ids=new Set(kennisTxVan(id)); const mnd=[...new Set(TX.filter(t=>ids.has(t.id)).map(t=>t.date.slice(0,7)))].sort();
+  const meet=()=>mnd.map(m=>{ const T=totals(m); return {m, uit:T.spendNorm, ink:T.income}; });
+  const s=JSON.stringify(SET), o=JSON.stringify(OVR), tx=JSON.stringify(TX);
+  let voor=[], na=[];
+  try{ voor=meet(); kennisVergeetKern(id); applyOwnAccounts(); _dataGen++; try{ telbaarVergeten(); }catch(_){} na=meet(); }
+  finally{ const S0=JSON.parse(s); for(const k of Object.keys(SET)) if(!(k in S0)) delete SET[k]; Object.assign(SET, S0);
+    const O0=JSON.parse(o); for(const k of Object.keys(OVR)) delete OVR[k]; Object.assign(OVR, O0);
+    TX=JSON.parse(tx); applyOwnAccounts(); _dataGen++; try{ telbaarVergeten(); }catch(_){} }
+  const r=[]; for(let i=0;i<mnd.length;i++){ const du=Math.round(na[i].uit-voor[i].uit), di=Math.round(na[i].ink-voor[i].ink), nm=MNAMES[+mnd[i].slice(5,7)-1]||mnd[i];
+    if(du) r.push(`${nm}-uitgaven ${du>0?'+':'-'}${euro0(Math.abs(du))}`); if(di) r.push(`${nm}-inkomen ${di>0?'+':'-'}${euro0(Math.abs(di))}`); }
+  return r; }
+function kennisVergeet(id){ const herstel=kennisSnap(), x=kennisLijst().find(e=>e.id===id); kennisVergeetKern(id);
+  try{ applyOwnAccounts(); }catch(_){} save(); keuzeKlaar(`${x?x.partij+': ':''}vergeten, weer nog niet benoemd`, herstel); }
+/* Wijzigen: een antwoord op een vraag gaat terug en de vraag staat meteen open; wat een eigen scherm heeft, opent dat */
+function kennisWijzig(id){ const [s, ...r]=id.split(':'), k=r.join(':');
+  if(s==='k'){ kennisVergeetKern(id); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){}
+    const q=gegevensVragen().find(v=>v.qkey===k || (k.startsWith('benoem|') && v.soort==='benoem' && 'benoem|'+v.key===k));
+    if(q) openGegevensVragen(q.qkey); else openKennis(); return; }
+  if(s==='h'){ const t=TX.find(u=>recurKey(u)===k); if(t) openSheet(t.id); return; }
+  if(s==='l'){ openLoan(k); return; }
+  if(s==='p'||s==='f'){ openPostStatus(k); return; }
+  if(s==='e'){ openSheet(k); } }
+function openKennisVergeet(id){ const x=kennisLijst().find(e=>e.id===id); if(!x){ openKennis(); return; }
+  let G=[]; try{ G=kennisVergeetGevolg(id); }catch(_){}
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="kennisVergeetSheet"><div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.partij)} vergeten?</div>
+    <div class="small" style="margin:6px 0 4px;line-height:1.5">Nu: ${esc(x.wat)} \u00b7 ${esc(KENNIS_BRON[x.bron]||x.bron)}. Na vergeten staat het weer op "nog niet benoemd" en kan de vraag terugkomen.</div>
+    <div class="small" data-kennisgevolg style="margin:6px 0 12px;line-height:1.5">${G.length?'Wat er verandert: '+G.map(esc).join(' \u00b7 '):'Er verandert geen bedrag in je maanden.'}</div>
+    <div class="row" style="gap:8px"><button class="btn" data-kennisvergeetzet onclick="kennisVergeet('${esc(id).replace(/'/g,"\\'")}')">Vergeten</button><button class="btn sec" onclick="openKennis()">Terug</button></div></div>`;
+  showSheetBg(); }
+/* HET SCHERM "WAT MINDER VAN JOU WEET": per soort, met bron, datum, Wijzigen en Vergeten; onderaan de vragen die wachten */
+function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
+  const rij=x=>`<div data-kennisrij="${esc(x.id)}" style="padding:8px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-weight:600">${esc(x.partij||'?')}</span><span class="small">${esc(x.wat)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(KENNIS_BRON[x.bron]||x.bron)}${x.op?' \u00b7 '+esc(dagKort(x.op))+' '+String(x.op).slice(0,4):''}</span></span>
+    <span class="small" data-kenniswijzig style="color:var(--teal);font-weight:700;cursor:pointer" onclick="kennisWijzig('${kk(x.id)}')">Wijzigen</span><span class="small" data-kennisvergeet style="color:var(--mut2);cursor:pointer;margin-left:10px" onclick="openKennisVergeet('${kk(x.id)}')">Vergeten</span></div></div>`;
+  const blok=KENNIS_GROEPEN.map(([g,n])=>{ const R=L.filter(x=>x.groep===g); return `<div data-kennisgroep="${g}" style="margin-top:12px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">${esc(n)}</div>${R.length?R.map(rij).join(''):'<div class="small muted" style="padding:6px 0">nog niets</div>'}</div>`; }).join('');
+  const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0));
+  const wacht=Q.length?`<div data-kennisvragen style="margin-top:14px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Vragen (${Q.length})</div>${Q.map(q=>{ const S=kennisLaterStand(q.qkey);
+      return `<div class="row small" data-kenniswacht="${esc(q.qkey)}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGegevensVragen('${kk(q.qkey)}')"><span style="flex:1;min-width:0">${esc(gegevensVraagKort(q))}<span style="display:block;color:var(--mut2)">${S.n?`${S.n}x later${S.wacht&&S.n>=KENNIS_LATER_MAX?' · komt pas terug als jij hem opent':S.wacht?' · tot '+esc(dagKort(S.tot)):''}`:'staat open'}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>`; }).join('')}</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="kennisSheet"><div style="font-weight:800;font-size:var(--fs-lg)">Wat Minder van jou weet</div>
+    <div class="small muted" style="margin:4px 0 2px;line-height:1.45">Wat de app niet zelf kan zien: wat iets is, voor wie, en of het terugkomt. Elk antwoord met zijn bron.</div>${blok}${wacht}</div>`;
+  showSheetBg(); }
+/* een vraag in een regel (het scherm hierboven en blok 20) */
+function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).slice(0,10)):'';
+  const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
+    poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
+    vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
+    woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${q.partij} via Tikkie: wat was dit?`, contant:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
+  return (T[q.soort]?T[q.soort]():q.soort)+d; }
+/* de rij van een nieuwe vraag in "Kloppen mijn gegevens?" */
+function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q.t?kk(q.t.id):'', K=(window._kennisKeuze||{})[q.t?q.t.id:q.qkey];
+  const knop=(a,l,attr,sec)=>`<button class="btn${sec===false?'':' sec'}" style="flex:1" ${attr} onclick="${a}">${esc(l)}</button>`;
+  const chip=(a,l,attr)=>`<span class="chip" ${attr} onclick="${a}">${esc(l)}</span>`;
+  const anders=(fn)=>`<div class="row" style="gap:8px;margin-top:6px"><input id="kennisAnders_${esc(q.qkey).replace(/[^A-Za-z0-9]/g,'_')}" type="text" placeholder="Anders: wat was het?" style="flex:1;min-width:0"><button class="btn sec" style="width:auto;padding:9px 14px" data-kennisanders onclick="${fn}(document.getElementById('kennisAnders_${esc(q.qkey).replace(/[^A-Za-z0-9]/g,'_')}').value)">Opslaan</button></div>`;
+  let kop='', sub='', body='';
+  if(q.soort==='uit'){ kop=`${euro(q.bedrag)} aan ${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 wat was dit?`; sub='een overboeking aan een ander; bij een lening staat hij in Uitgeleend';
+    body=`<div class="chips" style="margin-top:6px">${KENNIS_UIT.map(([k,l])=>chip(`kennisUitZet('${id}','${k}')`, l, `data-kennisoptie="${k}"`)).join('')}${chip(`kennisUitZet('${id}','weetniet')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>${anders(`(v=>kennisUitZet('${id}','anders',v))`)}`; }
+  if(q.soort==='in'){ kop=`${euro(q.bedrag)} van ${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 wat was dit?`; sub='niet je salaris en niet van een eigen rekening';
+    if(K && K.keuze==='terug'){ const L=loans().filter(l=>l.richting!=='in' && +l.open>0);
+      body=`<div class="small" data-kennisstap style="margin-top:6px">Terugbetaling van welke lening of Tikkie?</div><div class="chips" style="margin-top:6px">${L.map(l=>chip(`kennisInDoel('${id}','${kk(l.id)}')`, `${l.naam} (nog ${euro0(l.open)})`, `data-kennisdoel="${esc(l.id)}"`)).join('')}${chip(`kennisInDoel('${id}','tikkie')`,'Een Tikkie','data-kennisdoel="tikkie"')}</div>`;
+      if(K.doel){ const l=loans().find(x=>x.id===K.doel), c=kennisTikkieCat(q.t);
+        const gv=K.doel==='tikkie'?`Verlaagt je uitgave in ${esc((CATS[c]||{}).name||'Overig')} met ${euro(q.bedrag)}.`:l?`Lening aan ${esc(l.naam)}: nog open ${loanC2(+l.open||0)} wordt ${loanC2(Math.max((+l.open||0)-Math.min(q.bedrag,+l.open||0),0))}.`:'';
+        body+=`<div class="small" data-kennisgevolg style="margin-top:6px">${gv}</div><div class="row" style="gap:8px;margin-top:6px">${knop(`kennisInZet('${id}','terug','${kk(K.doel)}')`,'Bevestig','data-kennisbevestig',false)}</div>`; } }
+    else if(K && K.keuze==='teruggave'){ const P=kennisPotjes();
+      body=`<div class="small" data-kennisstap style="margin-top:6px">Bij welk potje hoort de teruggave?</div><div class="chips" style="margin-top:6px">${P.map(k=>chip(`kennisInDoel('${id}','${k}')`, CATS[k].name, `data-kennisdoel="${k}"`)).join('')}</div>`;
+      if(K.doel) body+=`<div class="small" data-kennisgevolg style="margin-top:6px">Verlaagt je uitgave in ${esc(CATS[K.doel].name)} in ${esc(maandNaamKort(q.datum.slice(0,7)))} met ${euro(q.bedrag)}.</div><div class="row" style="gap:8px;margin-top:6px">${knop(`kennisInZet('${id}','teruggave','${K.doel}')`,'Bevestig','data-kennisbevestig',false)}</div>`; }
+    else body=`<div class="chips" style="margin-top:6px">${KENNIS_IN.map(([k,l])=>chip(`kennisInKies('${id}','${k}')`, l+(KENNIS_IN_SUB[k]?` (${KENNIS_IN_SUB[k]})`:''), `data-kennisoptie="${k}"`)).join('')}${chip(`kennisInKies('${id}','weetniet')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>${anders(`(v=>kennisInZet('${id}','anders',null,v))`)}
+      <div class="small muted" style="margin-top:4px">gift, verkoop en extra inkomen tellen als overig inkomen, niet als salaris</div>`; }
+  if(q.soort==='vastink'){ const pl=kk(q.partij.toLowerCase()); kop=`${esc(q.partij)} betaalde je in ${q.maanden.length} maanden \u00b7 is dit een vast inkomen?`; sub=q.maanden.map(m=>MNAMES[+m.slice(5,7)-1]).join(' \u00b7 ')+' \u00b7 ja: alle bijschrijvingen van die partij zijn inkomen';
+    body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisVastInkomen('${pl}',true)`,'Ja','data-kennisvastink="ja"')}${knop(`kennisVastInkomen('${pl}',false)`,'Nee','data-kennisvastink="nee"')}</div>`; }
+  if(q.soort==='vast'){ const sk=kk(q.key), vk='kennisVast_'+String(q.key).replace(/[^A-Za-z0-9]/g,'_'), KV=(window._kennisKeuze||{})['vast|'+q.key];
+    kop=`${euro(q.bedrag)} per ${esc(q.cad)} aan ${esc(q.partij)} \u00b7 wat is dit?`; sub=`nieuwe vaste last, eerste betaling ${esc(dagKort(q.eerste))}`;
+    if(!KV) body=`<div class="row" style="gap:8px;margin-top:6px"><input id="${vk}" type="text" placeholder="bijv. voetbalcontributie" style="flex:1;min-width:0"><button class="btn sec" style="width:auto;padding:9px 14px" data-kennisvastwat onclick="kennisVastWat('${sk}')">Verder</button></div>`;
+    else { const P=kennisCats(), vs=P.includes(q.cat)?q.cat:null;
+      body=`<div class="small" data-kennisstap style="margin-top:6px">${esc(KV.wat)} \u00b7 ${vs?`voorstel potje <b>${esc(CATS[vs].name)}</b>`:'in welk potje?'}</div><div class="chips" style="margin-top:6px">${(vs?[vs].concat(P.filter(k=>k!==vs)):P).map(k=>chip(`kennisVastZet('${sk}','${k}')`, CATS[k].name+(k===vs?' \u00b7 klopt':''), `data-kennispotje="${k}"`)).join('')}</div>`; } }
+  if(q.soort==='vervanger'){ const sk=kk(q.key); kop=`${esc(q.partij)} is opgezegd \u00b7 komt er een vervanger?`; sub=`ja: de app verwacht in de komende ${KENNIS_VERVANGER_MAANDEN} maanden een nieuwe vaste last in hetzelfde potje en vraagt dan of het die is`;
+    body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisVervangerZet('${sk}',true)`,'Ja','data-kennisvervanger="ja"')}${knop(`kennisVervangerZet('${sk}',false)`,'Nee','data-kennisvervanger="nee"')}</div>`; }
+  if(q.soort==='vervangerwie'){ const sk=kk(q.key), nk=kk(q.nieuw); kop=`Is ${esc(q.nieuwNaam)} de vervanger van ${esc(q.partij)}?`; sub=`${euro(q.bedrag)} \u00b7 nieuw in hetzelfde potje`;
+    body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisVervangerWie('${sk}','${nk}',true)`,'Ja','data-kennisvervangerwie="ja"')}${knop(`kennisVervangerWie('${sk}','${nk}',false)`,'Nee','data-kennisvervangerwie="nee"')}</div>`; }
+  if(q.soort==='woning'){ const sk=kk(q.key); kop=`Is ${esc(q.partij)} je woonhuur of hypotheek?`; sub=`voorstel: de grootste vaste post in ${esc((CATS.huur||{}).name||'Huur')} (${euro0(q.bedrag)}); de app raadt niet zelf`;
+    body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisWoningZet('${sk}',true)`,'Ja','data-kenniswoning="ja"')}${knop(`kennisWoningZet('${sk}',false)`,'Nee','data-kenniswoning="nee"')}</div>`; }
+  if(q.soort==='tikkie'){ kop=q.herhaal?`${euro(q.bedrag)} aan ${esc(q.partij)} via Tikkie \u00b7 ook een lening, net als eerder?`:`${euro(q.bedrag)} aan ${esc(q.partij)} via Tikkie \u00b7 ${esc(dagKort(q.datum))} \u00b7 was dit…`; sub='het antwoord geldt voor volgende Tikkies aan dezelfde persoon';
+    if(q.herhaal) body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisTikkieZet('${id}','lening')`,'Ja, lening','data-kennisoptie="lening"')}${knop(`kennisTikkieZet('${id}','nee')`,'Nee','data-kennisoptie="nee"')}</div>`;
+    else if(K && K.keuze==='deel'){ const C=kennisCats();
+      body=`<div class="small" data-kennisstap style="margin-top:6px">Jouw deel van gedeelde kosten \u00b7 welke categorie?</div><div class="chips" style="margin-top:6px">${C.map(k=>chip(`kennisTikkieZet('${id}','deel','${k}')`, CATS[k].name, `data-kenniscat="${k}"`)).join('')}</div>`; }
+    else body=`<div class="chips" style="margin-top:6px">${chip(`kennisTikkieKies('${id}','deel')`,'Jouw deel van gedeelde kosten','data-kennisoptie="deel"')}${chip(`kennisTikkieKies('${id}','lening')`,'Lening','data-kennisoptie="lening"')}</div>${anders(`(v=>kennisTikkieZet('${id}','anders',null,v))`)}`; }
+  if(q.soort==='contant'){ kop=`Waar ging de ${euro0(q.bedrag)} contant vooral naar?`; sub=`${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 een tik; het verandert geen boekingen`;
+    body=`<div class="chips" style="margin-top:6px">${KENNIS_CONTANT.map(w=>chip(`kennisContantZet('${id}','${kk(w)}')`, w, `data-kennisoptie="${esc(w)}"`)).join('')}${chip(`kennisContantZet('${id}','Anders')`,'Anders','data-kennisoptie="Anders"')}${chip(`kennisContantZet('${id}','')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>`; }
+  return `<div data-gegevensvraag="${q.soort}" data-qkey="${esc(q.qkey)}"${q.t?` data-tx="${esc(q.t.id)}"`:''} style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${kop}</div><div class="small muted" style="margin-top:2px">${sub}</div>${body}</div>`; }
+
 /* v424: met een Let op-kaart staat de regel rechts in de kop van die kaart (kort=true), zodat Zien er niet hoger van wordt (de
    fit-eis van v410); zonder Let op-kaart staat hij als eigen regel bovenaan Zien, zoals sinds v420. */
-function gegevensRegel(kort){ const Q=gegevensVragen(); if(!Q.length) return '';
+function gegevensRegel(kort){ const Q=gegevensOpen().slice(0, KENNIS_MAX_OPEN); if(!Q.length) return '';   // v425: hooguit KENNIS_MAX_OPEN tegelijk
   if(kort) return `<span class="small" data-gegevensregel role="button" style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="openGegevensVragen()">Kloppen mijn gegevens? \u00b7 ${Q.length} \u203a</span>`;
   return `<div class="row small" data-gegevensregel role="button" style="gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openGegevensVragen()"><span style="flex:1;min-width:0;font-weight:600">Kloppen mijn gegevens? \u00b7 ${Q.length===1?'1 vraag':Q.length+' vragen'}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">›</span></div>`; }
-function openGegevensVragen(){
-  const Q=gegevensVragen(); if(!Q.length){ closeSheet(); return; }
-  const rij=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
+/* v425: RUST. Zonder focus de KENNIS_MAX_OPEN grootste open vragen (niet op later), met "nog N wachten" naar het scherm "Wat
+   Minder van jou weet"; met een qkey precies die vraag (ook een die op later staat: jij opent hem zelf); met 'alle' elke open vraag.
+   Onder elke vraag "Later": een week op, en na KENNIS_LATER_MAX keer komt hij pas terug als jij hem opent. */
+function openGegevensVragen(focus){
+  focus=typeof focus==='string'?focus:''; window._gegevensFocus=focus;
+  const alleQ=gegevensVragen(), open=gegevensOpen();
+  const Q=focus==='alle'?open:focus?alleQ.filter(q=>q.qkey===focus):open.slice(0, KENNIS_MAX_OPEN);
+  if(!Q.length){ if(focus && focus!=='alle'){ window._gegevensFocus=''; return openGegevensVragen(); } closeSheet(); return; }
+  const wacht=focus?0:alleQ.length-Q.length;
+  const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
+    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','contant'].includes(q.soort)) return kennisVraagRij(q);   // v425
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='poststop'){ const kk=esc(q.key).replace(/'/g,"\\'");
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
@@ -24029,8 +24386,12 @@ function openGegevensVragen(){
     return `<div data-gegevensvraag="lening" data-tx="${esc(t.id)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Is ${euro(t.amount)} van ${esc(wie)} een terugbetaling van je lening?</div>
       <div class="small muted" style="margin-top:2px">${esc(dagKort(t.date))} \u00b7 lening aan ${esc(q.l.naam)} ${euro(+q.l.bedrag||0)}, nog open ${euro(+q.l.open||0)}</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn" style="flex:1" data-leningja onclick="loanVraagJa('${esc(t.id)}','${esc(q.l.id)}')">Ja</button><button class="btn sec" style="flex:1" data-leningnee onclick="loanVraagNee('${esc(t.id)}')">Nee</button></div></div>`; };
+  const rij=q=>{ const S=kennisLaterStand(q.qkey), kq=esc(q.qkey).replace(/'/g,"\\'");
+    return `<div data-vraagwrap="${esc(q.qkey)}">${rij0(q)}<div class="small" data-later role="button" style="margin:2px 0 4px;color:var(--mut2);cursor:pointer" onclick="kennisLater('${kq}')">Later${S.n?` \u00b7 al ${S.n}x`:''}</div></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gegevensSheet"><div style="font-weight:800;font-size:var(--fs-lg)">Kloppen mijn gegevens?</div>
-    <div class="small muted" style="margin:4px 0 6px;line-height:1.45">Wat de app niet zelf beslist. Er verandert niets tot je kiest.</div>${Q.map(rij).join('')}</div>`;
+    <div class="small muted" style="margin:4px 0 6px;line-height:1.45">Wat de app niet zelf beslist. Er verandert niets tot je kiest.</div>${Q.map(rij).join('')}
+    ${wacht>0?`<div class="small" data-gegevenswacht role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openKennis()">nog ${wacht} ${wacht===1?'vraag wacht':'vragen wachten'} ›</div>`:''}
+    <div class="small" data-kennisingang role="button" style="margin-top:8px;color:var(--mut2);cursor:pointer" onclick="openKennis()">Wat Minder van jou weet ›</div></div>`;
   showSheetBg(); }
 function openWisselVraag(){
   const W=wisselOpen(); if(!W.length){ openGegevensVragen(); return; }
@@ -28926,9 +29287,12 @@ function diagSalarisVerdeling(){
   /* v420: UITGAVEN ZONDER WONING EN STUDIESCHULD (gevraagd door de gebruiker): vast + potjes + buiten, min de woning (de grootste
      vaste post in Huur over deze maanden) en min Studieschuld. De namen komen uit je gegevens en staan in de kop. */
   { const wk={}; for(const r of R) for(const k in r.woning) wk[k]=(wk[k]||0)+r.woning[k];
-    const wkey=Object.keys(wk).sort((a,b)=>wk[b]-wk[a])[0];
-    const wr=R.find(r=>r.wNaam[wkey]), wnaam=wkey?titleCase(cleanMerch(wr.wNaam[wkey].name)||wr.wNaam[wkey].name||wkey):'geen woonpost herkend';
-    L.push('', `UITGAVEN ZONDER WONING EN STUDIESCHULD (v420): vast + potjes + buiten - ${wnaam} (woning: de partij met het meeste vaste geld in ${(CATS.huur||{}).name||'Huur'}) - ${(CATS.studie||{}).name||'Studieschuld'}`);
+    /* v425: de woning is wat JIJ aanwees (SET.kennis, soort woning); zonder antwoord is de grootste vaste post in Huur alleen een voorstel */
+    const wjij=kennisWoningKey(), wgok=Object.keys(wk).filter(k=>!(kennisGet('woning|'+k)||{}).soort).sort((a,b)=>wk[b]-wk[a])[0];
+    const wkey=wjij||wgok;
+    const wr=R.find(r=>r.wNaam[wkey]), wnaam=wkey?(wr?titleCase(cleanMerch(wr.wNaam[wkey].name)||wr.wNaam[wkey].name||wkey):((kennisGet('woning|'+wkey)||{}).partij||wkey)):'geen woonpost herkend';
+    const wbron=wjij?`woning: ${KENNIS_BRON.jij}, ${dagKort((kennisGet('woning|'+wjij)||{}).op||'')}`:`woning: voorstel, de partij met het meeste vaste geld in ${(CATS.huur||{}).name||'Huur'}; nog niet door jou bevestigd`;
+    L.push('', `UITGAVEN ZONDER WONING EN STUDIESCHULD (v420): vast + potjes + buiten - ${wnaam} (${wbron}) - ${(CATS.studie||{}).name||'Studieschuld'}`);
     /* v421: de lopende maand is geboekt plus verwacht, net als punt 7 (de verwachte woning en studieschuld gaan er ook af); de
        versie met alleen geboekt staat ernaast. */
     const fdi=(Lq&&Lq.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje);
@@ -28936,6 +29300,21 @@ function diagSalarisVerdeling(){
     const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-(wkey?(r.woning[wkey]||0):0)-r.studie;
     L.push(`  ${kol(r=>zonder(r, r===Rc))} (* = lopend: geboekt plus verwacht, zoals punt 7) · ${MN(cur)}* alleen geboekt ${e0(zonder(Rc,false))}`);
     L.push(`  waarvan woning: ${kol(r=>wkey?(r.woning[wkey]||0):0)} · studieschuld: ${kol(r=>r.studie)}`); }
+  /* v425: KENNIS: alles wat Minder van jou weet, uit de ene lezer kennisLijst(), met bron en datum. OPEN VRAGEN: de wachtrij in
+     "Kloppen mijn gegevens?" op bedrag, met hoe vaak "later". CONTANT NAAR: waar je contante geld volgens jou heen ging (een tik,
+     het verandert geen boekingen). Alleen uitleg. */
+  { const KL=kennisLijst();
+    L.push('', `KENNIS (v425): ${KL.length} ${KL.length===1?'antwoord':'antwoorden'} · soort | partij | wat | bron | datum`);
+    if(!KL.length) L.push('  geen');
+    for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)) L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
+    const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)), O=new Set(gegevensOpen().slice(0, KENNIS_MAX_OPEN).map(q=>q.qkey));
+    L.push('', `OPEN VRAGEN (v425): ${Q.length} · hooguit ${KENNIS_MAX_OPEN} tegelijk in Zien, op bedrag · vraag | bedrag | datum | later | stand`);
+    if(!Q.length) L.push('  geen');
+    for(const q of Q){ const S=kennisLaterStand(q.qkey), d=String(q.datum||'').slice(0,10);
+      L.push(`  ${gegevensVraagKort(Object.assign({}, q, {datum:''}))} | ${c2(+q.bedrag||0)} | ${d?d.slice(8,10)+'-'+d.slice(5,7)+'-'+d.slice(0,4):'-'} | ${S.n}x | ${O.has(q.qkey)?'in Zien':S.wacht?(S.n>=KENNIS_LATER_MAX?'wacht tot jij hem opent':'later, tot '+S.tot):'wacht (meer dan '+KENNIS_MAX_OPEN+' open)'}`); }
+    L.push('', 'CONTANT NAAR (v425): per maand, volgens jou · wat | bedrag');
+    let cn=0; for(const r of R){ const M=kennisContantMaand(r.ym); for(const [w,b] of Object.entries(M)){ L.push(`  ${MN(r.ym)} | ${w} | ${c2(b)}`); cn++; } }
+    if(!cn) L.push('  geen antwoord'); }
   /* v424: GROTE UITGAVEN ZONDER POTJE OF ZONDER NORM (vanaf BENOEM_MIN), met hun naam en de bron, of "nog niet benoemd". Over de
      maanden van dit blok; alleen uitleg, er verandert niets. */
   { const E=R.flatMap(r=>benoemMaand(r.ym));
@@ -29073,6 +29452,7 @@ function setTransacties(){
   const vlWeg=vl.filter(s=>s.opgezegd).length, R=Array.isArray(SET.rules)?SET.rules:[];
   return `
     <div class="small muted" style="margin-bottom:10px">Hoe Minder je boekingen indeelt.</div>
+    <div class="toggle" data-kennisinstelling style="cursor:pointer" onclick="openKennis()"><div><div style="font-weight:600">${ICON('user')} Wat Minder van jou weet</div><div class="small muted">${(()=>{ let n=0; try{ n=kennisLijst().length; }catch(_){} return n?`${n} ${n===1?'antwoord':'antwoorden'}, met bron`:'nog niets'; })()}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
     <div class="toggle" style="cursor:pointer" onclick="openVasteLasten()"><div><div style="font-weight:600">${ICON('repeat')} Vaste lasten</div><div class="small muted">${vl.length?`${vl.length} herkend${vlWeg?`, ${vlWeg} uit reservering`:''} · incasso's en periodieke overboekingen`:'nog niets herkend'}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
     <div style="padding:10px 0;border-bottom:1px solid var(--line)" data-regels="${R.length}"><div style="font-weight:600">Je regels</div>
       ${R.length?R.map(r=>`<div class="small muted" style="margin-top:3px">${esc(r.kw)} → ${CATS[r.cat]?esc(CATS[r.cat].name):esc(r.cat)}</div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}

@@ -54,7 +54,7 @@ test.describe('v422', () => {
     const regel = await page.locator('[data-gegevensregel]').innerText();
     expect(regel).toContain('Kloppen mijn gegevens?');
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await page.evaluate(() => openGegevensVragen());
+    await page.evaluate(() => openGegevensVragen('alle'));
     const v = page.locator('[data-gegevensvraag="poststop"]');
     expect(await v.innerText()).toContain('Health Club · gestopt, maar betaald op 8 okt. Was dat de laatste betaling?');
     expect(await v.locator('[data-poststopja]').innerText()).toBe('Ja, laatste');
@@ -70,7 +70,7 @@ test.describe('v422', () => {
   test('2. Nee, loopt nog: de post is weer actief en wordt weer verwacht; en de vraag staat niet ook in Let op', async ({ page }) => {
     await S.boot(page);
     expect(await page.evaluate(() => gripLetOpItems().filter(x => x.soort === 'weerbetaald').length)).toBe(0);
-    await page.evaluate(() => { openGegevensVragen(); document.querySelector('[data-poststopnee]').click(); });
+    await page.evaluate(() => { openGegevensVragen('alle'); document.querySelector('[data-poststopnee]').click(); });
     expect(await page.evaluate(() => [postStatus('HEALTH CLUB').status, postTelt('HEALTH CLUB')])).toEqual(['actief', true]);
   });
 

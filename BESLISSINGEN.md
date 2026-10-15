@@ -16,6 +16,15 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v425` · betekenis komt van jou, staat in een opslag, en draagt zijn bron en zijn gevolg.** De app ziet bedragen, data en
+  namen, niet wat iets is, voor wie, of of het terugkomt. Elk antwoord staat in `SET.kennis` met bron (uit de omschrijving /
+  voorstel, door jou bevestigd / door jou) en met het gevolg dat het zette (`effect`), zodat Vergeten precies dat terugzet. Wat al
+  een eigen plek had (holding, leningen, gestopt of opgezegd, vast per partij, "klopt, eenmalig") is NIET gekopieerd: daar zit het
+  gevolg, en een tweede kopie zou een tweede waarheid zijn; de lezer (`kennisLijst()`) leest die plekken mee. Valkuil: een vraag
+  per soort bijschrijving zonder rust overspoelt Zien (gemeten op de nagebouwde stand: 13 vragen tegelijk), dus hooguit drie op
+  bedrag, "Later" een week, na twee keer pas als jij hem opent. Tweede valkuil: de woning raden op de grootste vaste post in Huur is
+  een gok; die gok is nu een voorstel dat jij bevestigt, en blok 20 zegt welke van de twee het is. Derde: een gift telt als overig
+  inkomen en niet als salaris (onregelmatig), anders tilt een eenmalig bedrag je norm op.
 - **`v424` · een grote uitgave zonder potje krijgt alleen een naam met een bron.** Vanaf EUR 100, zonder potje of zonder norm:
   zeker uit de naam (bron "uit de omschrijving"), een voorstel bij een hint in de omschrijving (jij bevestigt: "door jou
   bevestigd"), of een vraag (jij kiest: "door jou"). Het antwoord geldt per tegenpartij + kenmerk, en een bedrag dat meer dan 50%
