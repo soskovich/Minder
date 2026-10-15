@@ -1514,4 +1514,5 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Gevolgen**: Terugblik "Eenmalig, telt niet als gedrag" (vorige en deze maand, `gripTerugblik().eenmalig`), buiten de score. Komt terug geeft in Kiezen "<naam> komt terug · reservering?" (`benoemTerugVoorstellen()`, `benoemResVoorstel()` vult de bestaande editor met naam, bedrag en een jaar later; opslaan zet `bron:'benoem:<key>'`; "geen reservering" laat het zwijgen).
 - **Bron overal** (`benoemTekst()`): Zien (sheet zonder potje, sheet eenmalig), Begrijpen (`benoemBegrijpenBlok()`, "Grote uitgaven zonder potje"), Terugblik en blok 20 ("BENOEMDE UITGAVEN (v424)" en de regels per soort). Zonder antwoord "<partij> · nog niet benoemd": geen verzonnen naam.
 - **De boeking van 18-09 Gemeente EUR 484** staat zonder hint als vraag in Zien (laag c), met de gemeente-antwoorden; nagebouwd in de spec (de boekingen van het toestel staan alleen daar).
-- **Specs**: nieuw `v424.spec.js` (5 tests). `sw.js` naar `minder-v424`.
+- **Fit**: de regel "Kloppen mijn gegevens?" staat met een Let op-kaart rechts in de kop daarvan (`gegevensRegel(true)`); als eigen regel bovenaan Zien kostte hij 40px en zakte de koopknop op 390x844 24px onder de menubalk (de fit-specs van v406 tot v416 vielen erop). Zonder Let op blijft hij een eigen regel.
+- **Specs**: nieuw `v424.spec.js` (6 tests). `sw.js` naar `minder-v424`.

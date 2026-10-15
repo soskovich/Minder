@@ -8895,11 +8895,11 @@ function gripLetOpRij(x, kort){
     ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small" style="${kort?LETOP_KORT:''}"${kt(x.naam)}>${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px${ks}"${kt(x.sub)}>${esc(x.sub)}</div>`:''}</div>
     ${x.geenPijl?'':'<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span>'}</div>`;
 }
-function gripLetOpKaart(L){
+function gripLetOpKaart(L, kop){
   window._gripLetOpL=L||[];
   if(!L.length) return '';
   const rest=L.length-GRIP_LETOP_MAX;
-  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.slice(0,GRIP_LETOP_MAX).map(x=>gripLetOpRij(x, true)).join('')}${rest>0?`<div class="small" data-letopnog="${rest}" style="padding:7px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="openGripLetOpLijst()">nog ${rest} \u203a</div>`:''}</div>`;
+  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="row" style="justify-content:space-between;gap:8px;align-items:baseline"><div class="hlabel" style="margin:0 0 2px">Let op</div>${kop||''}</div>${L.slice(0,GRIP_LETOP_MAX).map(x=>gripLetOpRij(x, true)).join('')}${rest>0?`<div class="small" data-letopnog="${rest}" style="padding:7px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="openGripLetOpLijst()">nog ${rest} \u203a</div>`:''}</div>`;
 }
 /* De lijst met de rest leest de regels van de laatste render van Grip (renderMaand() rekent bij elke
    wijziging opnieuw) en sluit als er niets meer achter de eerste twee staat. */
@@ -11181,8 +11181,10 @@ function renderMaand(){
        ander signaal dan een potje boven zijn grens of de lek-regel. */
     const leeg=!RO.some(r=>!r.structureel && ['dekking','buffer','doel'].includes(r.key)) && !beleggenZichtbaar() && !L.some(x=>x.soort!=='sig'&&x.soort!=='lek'&&x.soort!=='lekcat'&&x.soort!=='zonderpot'&&x.soort!=='eenmalig'&&x.soort!=='boven'&&x.soort!=='veranderd'&&x.soort!=='patroon'&&x.soort!=='krap');   // v409: te krap ook; v408: veranderd en de verwijzing naar een patroon zijn potje-signalen; v406: eenmalig en boven ook niet; v402: zonder potje zegt niets over wat er is ingesteld, net als het lek
     let eam=''; try{ eigenAutoMeldingCheck(); eam=eigenAutoMeldingRegel(); }catch(_){}
-    try{ eam+=gegevensRegel(); }catch(_){}   // v420: Kloppen mijn gegevens?
-    inhoud=eam+gripZien(V)+gripLetOpKaart(gripLetOpZonderPatroon(L))
+    const LZ=gripLetOpZonderPatroon(L);
+    try{ if(!LZ.length) eam+=gegevensRegel(); }catch(_){}   // v420: Kloppen mijn gegevens? (v424: met Let op in de kop daarvan)
+    let gk=''; try{ if(LZ.length) gk=gegevensRegel(true); }catch(_){}
+    inhoud=eam+gripZien(V)+gripLetOpKaart(LZ, gk)
       +(leeg?`<div class="card"><div class="small muted">Er is nog te weinig ingesteld. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen ›</span></div></div>`:'');
     /* v395: "Waarom? Bekijk wat erachter zit" is weg (gevraagd door de gebruiker): de tab Begrijpen is de ingang. */
   } else if(tab==='begrijpen'){
@@ -24005,7 +24007,10 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
   else { const opts=S.opties.slice(); if(q.voorstel){ const i=opts.indexOf(q.voorstel); if(i>0){ opts.splice(i,1); opts.unshift(q.voorstel); } }
     body=`<div class="chips" style="margin-top:6px">${opts.map(o=>`<span class="chip" data-benoemoptie="${esc(o)}" onclick="benoemKies('${id}','${kk(o)}')">${esc(o)}${o===q.voorstel?' · klopt':''}</span>`).join('')}<span class="chip" data-benoemoptie="__anders" onclick="benoemKies('${id}','__anders')">Anders…</span><span class="chip" data-benoemoptie="__weetniet" onclick="benoemKies('${id}','__weetniet')">Weet ik niet</span></div>`; }
   return `<div data-gegevensvraag="benoem" data-benoemlaag="${q.laag}" data-tx="${id}" style="padding:9px 0;border-top:1px solid var(--line)">${kop}${sub}${body}</div>`; }
-function gegevensRegel(){ const Q=gegevensVragen(); if(!Q.length) return '';
+/* v424: met een Let op-kaart staat de regel rechts in de kop van die kaart (kort=true), zodat Zien er niet hoger van wordt (de
+   fit-eis van v410); zonder Let op-kaart staat hij als eigen regel bovenaan Zien, zoals sinds v420. */
+function gegevensRegel(kort){ const Q=gegevensVragen(); if(!Q.length) return '';
+  if(kort) return `<span class="small" data-gegevensregel role="button" style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="openGegevensVragen()">Kloppen mijn gegevens? \u00b7 ${Q.length} \u203a</span>`;
   return `<div class="row small" data-gegevensregel role="button" style="gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openGegevensVragen()"><span style="flex:1;min-width:0;font-weight:600">Kloppen mijn gegevens? \u00b7 ${Q.length===1?'1 vraag':Q.length+' vragen'}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">›</span></div>`; }
 function openGegevensVragen(){
   const Q=gegevensVragen(); if(!Q.length){ closeSheet(); return; }

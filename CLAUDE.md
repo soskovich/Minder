@@ -139,8 +139,10 @@ genoemde versietag.)*
   een bedrag dat meer dan `BENOEM_AFWIJK` (50%) afwijkt vraagt opnieuw. Bron in `BENOEM_BRON` (uit de omschrijving / door jou
   bevestigd / door jou), getoond via `benoemTekst()` in Zien, Begrijpen (`benoemBegrijpenBlok()`), Terugblik
   (`[data-terugeenmalig]` "Eenmalig, telt niet als gedrag", buiten de score) en blok 20 ("BENOEMDE UITGAVEN"). Komt terug: in
-  Kiezen een voorstel voor een reservering (`benoemTerugVoorstellen()`, `benoemResVoorstel()`, bron `benoem:<key>`). Spec
-  `v424.spec.js`.
+  Kiezen een voorstel voor een reservering (`benoemTerugVoorstellen()`, `benoemResVoorstel()`, bron `benoem:<key>`). DE REGEL
+  "KLOPPEN MIJN GEGEVENS?" STAAT MET EEN LET OP-KAART RECHTS IN DE KOP DAARVAN (`gegevensRegel(true)`, `gripLetOpKaart(L, kop)`):
+  als eigen regel kostte hij 40px en brak hij de fit-eis van `v410` (gemeten -24px tussen koopknop en menubalk); zonder Let op
+  staat hij als eigen regel bovenaan Zien. Spec `v424.spec.js`.
 - **v423: EEN LENING SLUIT: BEDRAG = TERUGBETAALD + NOG OPEN + NIET MEER TERUG VERWACHT, EN EEN VERSCHIL IS EEN VRAAG** (`v423`,
   gevraagd door de gebruiker). `loanStand(l)` is de ENE narekening (leningsheet `loanStandBlok()`, Zien `loanRestVragen()`, blok 20).
   Terugbetaald = bevestigde boekingen (`terugBedrag`, anders de aflossing van een ontvangst met meer, anders het hele bedrag), contante

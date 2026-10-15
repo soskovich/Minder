@@ -117,4 +117,15 @@ test.describe('v424', () => {
     await page.evaluate(() => keuzeOngedaan());
     expect((await stand(page, G120)).laag).toBe('b');
   });
+
+  test('fit: met een Let op-kaart staat "Kloppen mijn gegevens?" in de kop daarvan, zonder Zien hoger te maken', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await boot(page);
+    await page.evaluate(() => { go('maand'); window._gripTab = 'zien'; renderMaand(); });
+    const r = await page.evaluate(() => { const g = document.querySelector('[data-gegevensregel]'), lo = document.getElementById('gripLetOp');
+      return { inKop: !!(lo && g && lo.contains(g)), n: document.querySelectorAll('[data-gegevensregel]').length, tekst: g && g.innerText }; });
+    expect(r).toEqual({ inKop: true, n: 1, tekst: expect.stringMatching(/^Kloppen mijn gegevens\? · \d+ ›$/) });
+    await page.locator('#gripLetOp [data-gegevensregel]').click();
+    expect(await page.locator('#gegevensSheet').count()).toBe(1);
+  });
 });
