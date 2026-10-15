@@ -16,7 +16,7 @@ test.describe('v421', () => {
     expect(await cat(page, '2026-06-04', -100)).toBe('inkomen');   // zonder keuze: inkomen met een min
     const sheet = await page.evaluate(() => { const t = TX.find(t => t.date === '2026-07-31' && /ERNST/.test(t.desc)); openSheet(t.id);
       const r = document.querySelector('[data-holdingrij]'); r.click(); return document.querySelector('#holdingSheet').innerText; });
-    expect(sheet).toContain('€3.463,86, in 6 maanden');
+    expect(sheet).toContain('€3.463,86, in 4 maanden');   // v422: mei en augustus vallen buiten de marge en tellen als grootste bijschrijving
     expect(sheet).toContain('8 andere boekingen gaan naar Holding');
     expect(sheet).toContain('Je eigen categorie op 1 boeking vervalt');
     expect(await page.evaluate(() => SET.holdingPartij)).toBeFalsy();   // openen schrijft niets
@@ -33,7 +33,7 @@ test.describe('v421', () => {
   test('1. blok 20: holding netto per maand met de boekingen, en de controle klopt in elke afgeronde maand', async ({ page }) => {
     await S.boot(page);
     const L = await lees(page), H = sectie(L, 'HOLDING');
-    expect(H.find(x => x.startsWith('  terugkerende maandbetaling'))).toBe('  terugkerende maandbetaling: mediaan 3463.86 in 6 maanden, telt als inkomen (punt 1)');
+    expect(H.find(x => x.startsWith('  terugkerende maandbetaling'))).toBe('  terugkerende maandbetaling: mediaan 3463.86 in 4 maanden, telt als inkomen (punt 1)');
     expect(H.find(x => x.startsWith('  netto:'))).toBe('  netto: apr 0 · mei -50 · jun -326 · jul 5000 · aug -3500 · sep 2492 · okt* 0');
     expect(H).toContain('      jun: 03-06 -200.00, 04-06 -100.00, 10-06 -26.00');
     const C = sectie(L, 'CONTROLE');
@@ -82,23 +82,24 @@ test.describe('v421', () => {
   });
 
   test('4. opgezegd, loopt af: Health Club met de laatste betaling van 08-10 is geen "weer betaald"; een betaling daarna wel', async ({ page }) => {
-    await S.boot(page, { migreer: false });
+    await S.boot(page);
     expect(await page.evaluate(() => postStatus('HEALTH CLUB').weerBetaald)).toBe(true);
     expect((await lees(page)).find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toBe('  GESTOPT EN DAARNA NOG BETAALD (v421): Health Club (gestopt op 20 sep, daarna betaald op 8 okt)');
-    await page.evaluate(() => { SET.postStatus['SHURGARD NL'] = { status: 'gestopt', op: '2026-08-10', laatste: '2026-08-03' }; afloopMigreer(); _dataGen++; });
-    expect(await page.evaluate(() => SET.postStatus['SHURGARD NL'].status)).toBe('gestopt');   // twee betalingen na het stoppen: jij beslist
+    await page.evaluate(() => { SET.postStatus['SHURGARD NL'] = { status: 'gestopt', op: '2026-08-10', laatste: '2026-08-03' }; _dataGen++; });
     expect((await lees(page)).find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toContain('Shurgard Nl (gestopt op 10 aug, daarna betaald op 1 sep, 30 sep)');
     await page.evaluate(() => { delete SET.postStatus['SHURGARD NL']; _dataGen++; });
+    /* v422: niets stil; jij antwoordt op de vraag in Zien ("Was dat de laatste betaling?") */
+    expect(await page.evaluate(() => SET.postStatus['HEALTH CLUB'].status)).toBe('gestopt');
+    await page.evaluate(() => postNaStopJa('HEALTH CLUB', '2026-10-08'));
     expect(await page.evaluate(() => SET.postStatus['HEALTH CLUB'])).toMatchObject({ status: 'afloop', tot: '2026-10-08' });
     expect(await page.evaluate(() => postStatus('HEALTH CLUB'))).toMatchObject({ status: 'gestopt', afloop: true, weerBetaald: false });
     let L = await lees(page);
     expect(L.find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toBe('  GESTOPT EN DAARNA NOG BETAALD (v421): geen');
     expect(L.find(x => x.startsWith('  OPGEZEGD, LOOPT AF'))).toBe('  OPGEZEGD, LOOPT AF (v421): Health Club (laatste betaling 8 okt)');
-    expect(await page.evaluate(() => afloopMigreer())).toBe(false);   // een keer
     /* nog een betaling na de laatste: dan meldt blok 20 hem wel */
     await page.evaluate(MAIN => { const t = { date: '2026-10-09', amount: -39, name: 'Health Club', desc: 'SEPA INCASSO HEALTH CLUB', typ: '', ref: '', src: 'csv', accName: '', refNums: [], acc: MAIN }; categorize(t); TX.push(t); applyOwnAccounts(); save(); }, S.MAIN);
     L = await lees(page);
-    expect(L.find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toBe('  GESTOPT EN DAARNA NOG BETAALD (v421): Health Club (opgezegd, laatste betaling 8 okt op 20 sep, daarna betaald op 9 okt)');
+    expect(L.find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toBe('  GESTOPT EN DAARNA NOG BETAALD (v421): Health Club (opgezegd, laatste betaling 8 okt op 10 okt, daarna betaald op 9 okt)');   // v422: je antwoord op 10 okt
   });
 
   test('4. de keuze in de sheet: opgezegd, loopt af telt mee tot de laatste betaling, daarna is hij gestopt', async ({ page }) => {
@@ -128,11 +129,11 @@ test.describe('v421', () => {
     const voor = await page.evaluate(() => ({ ls: localStorage.getItem('minder_set') + localStorage.getItem('minder_tx'), cats: TX.map(t => catOf(t)).join(), ovr: JSON.stringify(OVR) }));
     await page.evaluate(() => { window._setIt = 0; const o = localStorage.setItem.bind(localStorage); localStorage.setItem = (k, v) => { window._setIt++; return o(k, v); }; });
     const L = await lees(page), i = L.findIndex(x => x.startsWith('  VERSCHUIVING DOOR DE REGELS'));
-    expect(L[i + 1]).toBe('      potjes (variabel) verwacht: v419 1468.67 -> nu 1403.67 (-65.00)');
-    expect(L[i + 4]).toBe('      verwacht totaal: v419 2774 -> nu 2709 (-65)');
+    /* v422: de Tikkie is weer een uitgave, dus oktober wijkt niet meer af van v419 */
+    expect(L[i + 1]).toBe('      potjes (variabel) verwacht: v419 1468.67 -> nu 1468.67 (+0.00)');
+    expect(L[i + 4]).toBe('      verwacht totaal: v419 2774 -> nu 2774 (+0)');
     const rij = L.slice(i, i + 20);
-    expect(rij).toContain('        sep 20-09 -60.00 Tikkie: potjes (variabel) [Overig] -> buiten vast en potjes [Persoonlijke overboeking]');
-    expect(rij).toContain('        okt 03-10 -45.00 Tikkie: potjes (variabel) [Overig] -> buiten vast en potjes [Persoonlijke overboeking]');
+    expect(rij.join('\n')).not.toContain('Tikkie');
     expect(rij).toContain('        jul 31-07 5000.00 Ernst Management Holding: inkomen [Inkomen] -> holding [Holding]');
     expect(await page.evaluate(() => window._setIt)).toBe(0);
     const na = await page.evaluate(() => ({ ls: localStorage.getItem('minder_set') + localStorage.getItem('minder_tx'), cats: TX.map(t => catOf(t)).join(), ovr: JSON.stringify(OVR) }));

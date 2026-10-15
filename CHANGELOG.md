@@ -1490,4 +1490,10 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Punt 8**: bij een boeking zonder tegenkant de rekening, en een tegenhanger op dezelfde dag en DEZELFDE rekening wordt zo genoemd (de paarzoeker eist een andere rekening).
 - **Specs**: nieuw `v421.spec.js` met fixture `v421-stand.js`. Gemigreerd: `v420` (holding via de partijkeuze, LET OP bij de controle) en `blok20` (salaris per bron, rekening per kant).
 - `sw.js` naar `minder-v421`.
-
+- **v422 · holding als salarisbron, geen stille omzetting, Tikkie is een uitgave, preview per boeking** (`minder-v422`, besluiten van de gebruiker op v421).
+- **Punt 1**: `holdingMaandbetaling()` neemt in een maand waarin de holding je salarisbron is (`holdingSalarisMaand()`, `holdingSalarisBronnen()`) een bijschrijving in de marge en anders de grootste; `extra` (boven de mediaan) en `buiten` (maanden met een andere bron) staan in blok 20. Testgegevens: mei 5637,28 (extra 2173,42) en aug 4007,21 (extra 543,35) salaris; 31-07 +5000, 26-08 +1500 en 07-09 +2491,71 Holding.
+- **Punt 2**: `afloopMigreer()` weg, `afloopTerug()` zet een `migr:'v421'` een keer terug op gestopt (`SET.afloop422`). Nieuwe vraag in "Kloppen mijn gegevens?" (`postNaStopVragen()`, Ja, laatste / Nee, loopt nog) voor elke gestopte post met een betaling daarna; de Let op-regel `weerbetaald` is vervallen.
+- **Punt 3**: Tikkie uit `ANDER_KW`; `isTikkie()` in `applyOwnAccounts()`: betaald een uitgave (regelcategorie of Overig), ontvangen de categorie van de laatste betaalde Tikkie, eigen naam intern; `loanAutoAfletter()` slaat een Tikkie over. Blok 20: "TERUG NAAR UITGAVE" onder WISSELT VAN GROEP; de verschuiving van oktober is 0 (was -65).
+- **Punt 4**: `openHoldingVraag()` toont per boeking met een eigen categorie datum, categorie en bedrag (`[data-holdingovr]`).
+- **Specs**: nieuw `v422.spec.js` (9 tests). Gemigreerd: `v421` (4 maanden in de marge, de vraag in plaats van de migratie, geen Tikkie-verschuiving), `blok20-v419` (de Tikkie van Renate is een uitgave), `grip-v412`, `grip-v413`, `grip-v414` (weer betaald in Kloppen mijn gegevens?). Fixture `v421-stand.js`: mei en augustus buiten de marge (`o.marge` zet ze terug), geen migratie meer.
+- `sw.js` naar `minder-v422`.

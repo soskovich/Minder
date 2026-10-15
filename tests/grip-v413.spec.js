@@ -128,7 +128,8 @@ test.describe('5 · geen lege plek in de regels', () => {
     const ander = await post(page, 'Ander Abonnement', 15, 'abonnement', ['2026-08-02', '2026-09-02', '2026-10-02']);
     await page.evaluate((k) => { SET.fixDueExcl = { [k]: { sinds: '2026-08-01' } }; save(); }, ander);
     const L = (await letOp(page)).filter(x => ['verlopen', 'weerbetaald', 'uitresvraag'].includes(x.soort));
-    expect(L.map(x => x.soort).sort()).toEqual(['uitresvraag', 'verlopen', 'weerbetaald']);
+    expect(L.map(x => x.soort).sort()).toEqual(['uitresvraag', 'verlopen']);   // v422: weer betaald staat in Kloppen mijn gegevens?
+    expect(await page.evaluate(() => gegevensVragen().filter(q => q.soort === 'poststop').map(q => q.naam + ' ' + q.dag))).toEqual(['Huurwoningen Premium 2026-10-08']);
     for (const x of L) {
       expect(x.naam).not.toMatch(LEEG);
       expect(x.naam).toMatch(/^[A-Z][A-Za-z]+ [A-Za-z]+/);   // de naam van de post staat vooraan

@@ -76,19 +76,21 @@ test.describe('A1/A3 · een gestopte kwartaalpost telt niet mee', () => {
     await expect(page.locator('[data-poststatusrij="gestopt"]')).toHaveCount(0);   // terug op Vaste lasten
     await expect(page.locator('[data-poststatusrij="actief"]').first()).toBeVisible();
   });
-  test('weer betaald na gestopt: Let op vraagt of hij actief is, en hij blijft gestopt tot je kiest', async ({ page }) => {
+  test('weer betaald na gestopt: Kloppen mijn gegevens vraagt of het de laatste betaling was, en hij blijft gestopt tot je kiest', async ({ page }) => {
     await S.boot(page);
     const key = await keyVan(page);
     await page.evaluate((key) => { postZet(key, 'gestopt'); }, key);
-    expect((await letOp(page)).filter(x => x.soort === 'weerbetaald')).toEqual([]);
+    const vr = () => page.evaluate(() => gegevensVragen().filter(q => q.soort === 'poststop').map(q => `${q.naam} ${q.dag}`));
+    expect(await vr()).toEqual([]);
     await page.evaluate(({ MAIN }) => { const t = { id: 'v412weer', date: '2026-10-08', amount: -31, acc: MAIN, name: 'Huurwoningen Premium', desc: 'SEPA INCASSO HUURWONINGEN PREMIUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'abonnement'; save(); }, { MAIN: S.MAIN });
-    const w = (await letOp(page)).filter(x => x.soort === 'weerbetaald');
-    expect(w.map(x => x.naam)).toEqual(['Huurwoningen Premium weer actief? · €31 per kwartaal · weer betaald op 8 okt']);   // v414: naam en vraag vooraan, details erna
+    /* v422: de vraag staat in "Kloppen mijn gegevens?" en niet meer in Let op (een vraag op een plek) */
+    expect(await vr()).toEqual(['Huurwoningen Premium 2026-10-08']);
+    expect((await letOp(page)).filter(x => x.soort === 'weerbetaald')).toEqual([]);
     expect(await page.evaluate((key) => postStatus(key).status, key)).toBe('gestopt');
     /* "blijft gestopt" laat de vraag vallen; een volgende betaling vraagt het opnieuw */
     await page.evaluate((key) => postZet(key, 'gestopt'), key);
-    expect((await letOp(page)).filter(x => x.soort === 'weerbetaald')).toEqual([]);
+    expect(await vr()).toEqual([]);
     expect(await page.evaluate((key) => postStatus(key).status, key)).toBe('gestopt');
   });
 });

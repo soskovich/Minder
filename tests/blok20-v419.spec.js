@@ -35,9 +35,11 @@ test.describe('v419: blok 20 sluit', () => {
     const aug = W.find(x => x.startsWith('      aug:'));
     /* v420: Western Union en de Tikkie zet de app zelf om (nieuw, dus niet in de lijst die op bevestiging wacht); Sandra Sumter
        staat door een eigen keuze op eigen rekening en telt alleen in blok 20 als overboeking aan een ander */
-    expect(aug).toBe('      aug: 03-08 -100.00 Western Union -> persoonlijke overboeking (omgezet), 05-08 -40.00 Renate Galdeij -> persoonlijke overboeking (omgezet), 06-08 -60.00 Sandra Sumter -> persoonlijke overboeking');
+    /* v422: een Tikkie is weer een uitgave (Overig) en staat bij "terug naar uitgave", niet meer als overboeking aan een ander */
+    expect(aug).toBe('      aug: 03-08 -100.00 Western Union -> persoonlijke overboeking (omgezet), 06-08 -60.00 Sandra Sumter -> persoonlijke overboeking');
+    expect(W).toContain('        05-08 -40.00 Renate Galdeij -> potjes (variabel) [Overig]');
     expect(L.find(x => x.startsWith('      waarvan overboeking aan een ander'))).toContain('aug 60');
-    expect(L.find(x => x.startsWith('      waarvan persoonlijke overboeking zonder potje'))).toContain('aug 140');
+    expect(L.find(x => x.startsWith('      waarvan persoonlijke overboeking zonder potje'))).toContain('aug 100');   // v422: zonder de Tikkie
     /* de 300 aan jezelf heeft geen tegenkant: het verschil, bij naam, en het sluit */
     const C = sectie(L, 'CONTROLE'), r = C.find(x => x.startsWith('  aug:'));
     expect(r).toMatch(/VERSCHILT -300$/);

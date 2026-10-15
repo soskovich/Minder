@@ -45,7 +45,8 @@ test.describe('2 · naam en vraag vooraan, en het vraagteken blijft staan', () =
       const k = recurringSchedule(true).find(s => s.name === 'Oude Sportschool').key; SET.fixDueExcl = { [k]: { sinds: '2026-08-01' } }; save(); }, prem);
     const L = await letOp(page);
     expect(L.filter(x => x.soort === 'verlopen').map(x => x.naam)).toEqual([]);   // met een open vraag over dezelfde post: niet dubbel
-    expect(L.filter(x => x.soort === 'weerbetaald').map(x => x.naam)).toEqual(['Huurwoningen Premium weer actief? · €31 per kwartaal · weer betaald op 8 okt']);
+    expect(L.filter(x => x.soort === 'weerbetaald').map(x => x.naam)).toEqual([]);   // v422: de vraag staat in Kloppen mijn gegevens?
+    expect(await page.evaluate(() => gegevensVragen().filter(q => q.soort === 'poststop').map(q => q.naam))).toEqual(['Huurwoningen Premium']);
     expect(L.filter(x => x.soort === 'uitresvraag').map(x => x.naam)).toEqual(['Oude Sportschool: gestopt of uit reservering? · €40 per maand']);
     await page.evaluate(() => { SET.fixDueExcl = {}; save(); });
     expect((await letOp(page)).filter(x => x.soort === 'verlopen').map(x => x.naam)).toEqual(['Oude Sportschool gestopt? · €40 per maand · niet betaald sinds 13 jul']);

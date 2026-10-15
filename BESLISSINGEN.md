@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v422` · de holding als salarisbron per maand, niets stil omgezet, en een Tikkie is een uitgave.** In een maand waarin de
+  holding je salarisbron is telt een bijschrijving in de marge als salaris, en is er geen, de grootste van die maand; het deel boven
+  de mediaan is "extra in salaris" en blijft inkomen. Valkuil (die van `v421`): de marge van 10% liet mei en augustus vallen, en
+  een salaris dat hoger uitvalt ging naar Holding. In een maand met een andere salarisbron (een nieuwe werkgever, ook vanaf zijn
+  eerste betaling) is niets van de holding salaris. De migratie van `v421` (Health Club op "opgezegd, loopt af") is teruggedraaid:
+  dat was een keuze die de app maakte; de vraag "Was dat de laatste betaling?" staat in Zien onder "Kloppen mijn gegevens?" en
+  niet meer in Let op. Een Tikkie is wat je een ander betaalt voor iets samen: een uitgave in zijn categorie of Overig, en een
+  ontvangen Tikkie verlaagt die. Valkuil (die van `v420`): Tikkie als "overboeking aan een ander" haalde echte uitgaven uit je
+  potjes (oktober potjes verwacht -65). Een lening is alleen wat jij markeert; een Tikkie wordt niet automatisch weggestreept.
+  "Dit is mijn holding" toont per boeking welke eigen categorie vervalt.
 - **`v421` · de holding is een partij die jij aanwijst, en het salaris is per maand de grootste terugkerende bron.** "Dit is mijn
   holding" in de boekingssheet, een keer per partij: de terugkerende maandbetaling (bijschrijvingen binnen 10% van elkaar in
   minstens 2 maanden, per maand de dichtste bij de mediaan) blijft inkomen, al het andere van die partij is Holding. Valkuil (die
