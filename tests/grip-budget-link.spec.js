@@ -1,18 +1,19 @@
 /* v364: DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR (keuze a van de gebruiker). "Budget aanpassen ›"
    staat rechts in de kop van Deze maand en opent de editor op de lopende maand, ook als Inzichten op een andere
    maand staat. De tik opent niet ook de sheet van de kop. Plan krijgt geen ingang. Fixture: deze-maand-stand.js.
-   v387: de kaart Deze maand is weg; de link staat op Zien, rechts onder de bridge, en is nog steeds de enige. */
+   v387: de kaart Deze maand is weg; de link staat op Zien, rechts onder de bridge, en is nog steeds de enige.
+   v428: de link verhuist naar Kiezen (Al gekozen deze maand), want alleen Kiezen verandert iets. Nog steeds de enige. */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
-const naarGrip = async (page) => { await page.evaluate(() => go('maand')); await page.waitForSelector('#gripZien [data-budgetlink]'); };
+const naarGrip = async (page) => { await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); }); await page.waitForSelector('#gripAlGekozen [data-budgetlink]'); };
 
 for (const w of [360, 390]) {
-  test(`${w}px: de link staat zichtbaar onder de bridge, zonder overloop`, async ({ page }) => {
+  test(`${w}px: de link staat zichtbaar in Kiezen, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
     await boot(page); await naarGrip(page);
     const r = await page.evaluate(() => {
-      const k = document.querySelector('#gripZien'), l = k.querySelector('[data-budgetlink]');
+      const k = document.querySelector('#gripAlGekozen'), l = k.querySelector('[data-budgetlink]'); l.scrollIntoView({ block: 'center' });
       const kb = k.getBoundingClientRect(), lb = l.getBoundingClientRect();
       return { tekst: l.innerText, zicht: getComputedStyle(l).visibility, lb: [lb.left, lb.right, lb.top, lb.bottom], kb: [kb.left, kb.right],
         docW: document.documentElement.scrollWidth, winW: innerWidth, kaartOver: k.scrollWidth - k.clientWidth };
@@ -31,7 +32,7 @@ test('de link opent de editor op de lopende maand, ook als Inzichten op een ande
   await boot(page); await naarGrip(page);
   const voor = await page.evaluate(() => { curMonth = months().find((x) => x !== thisYM()); return { cur: curMonth, nu: thisYM(), set: JSON.stringify(SET) }; });
   expect(voor.cur).not.toBe(voor.nu);   // de invoer draagt het geval: zonder link zou de editor de maand van Inzichten nemen
-  await page.evaluate(() => document.querySelector('#gripZien [data-budgetlink]').click());
+  await page.evaluate(() => document.querySelector('#gripAlGekozen [data-budgetlink]').click());
   const r = await page.evaluate(() => ({ m: window._budgetSheet, head: !!document.getElementById('budgetSheetHead'),
     vooruit: !!document.getElementById('gripVooruit'), set: JSON.stringify(SET) }));
   expect(r.m).toBe(voor.nu);
@@ -50,5 +51,5 @@ test('alleen Grip: Plan en Inzichten dragen de link niet', async ({ page }) => {
       t: [...document.querySelectorAll('.screen.active, section.active')].map((e) => e.innerText).join(' ').includes('Budget aanpassen') }))).toEqual({ l: 0, t: false });
   }
   const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
-  expect(src.split('data-budgetlink').length - 1).toBe(1);   // een plek in de bron: GRIP_BUDGETLINK op Zien
+  expect(src.split('data-budgetlink').length - 1).toBe(1);   // een plek in de bron: GRIP_BUDGETLINK op Kiezen
 });

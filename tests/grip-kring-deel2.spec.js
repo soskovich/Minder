@@ -17,7 +17,7 @@ test.describe('v388 begrijpen', () => {
     expect(P[0].naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(P[0].sig).toEqual(['onttrekking:', 'potje:uiteten']);
     expect(P[0].bewijs).toBe('2× uit je spaarrekening (6, 9 okt)');
-    await tab(page, 'begrijpen');
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));   // v428: de patroonboom staat in de drill van het symptoom
     expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
     expect(await page.locator('[data-patsig="onttrekking"]').innerText()).toContain('€700');
   });
@@ -28,8 +28,8 @@ test.describe('v388 begrijpen', () => {
   });
   test('"niet" vraagt een reden zonder voorkeuze, de reden wordt bewaard, en hij weegt mee in de maand erna', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await tab(page, 'begrijpen');
-    await page.click('[data-begrijpen] button:has-text("niet")');
+    await tab(page, 'kiezen');   // v428: klopt/niet staat bij de keuze in Kiezen
+    await page.click('[data-kiesoordeel="spaargeld"] button:has-text("niet")');
     expect(await page.locator('[data-patreden]').count()).toBe(4);
     expect(await page.locator('[data-patreden].on').count()).toBe(0);
     expect(await page.evaluate(() => (SET.gripOordeel || {})['2026-10'])).toBeUndefined();   // openen schrijft niets
@@ -45,10 +45,11 @@ test.describe('v388 begrijpen', () => {
     await grip(page, { opnames: OPNAMES });
     await page.evaluate(() => { SET.gripOordeel = { '2026-09': { spaargeld: { klopt: false, reden: 'impuls', op: '2026-09-20' } } }; save(); renderMaand(); });
     expect(await page.evaluate(() => gripPatronen()[0].naam)).toBe('Impulsaankopen');
-    await tab(page, 'begrijpen'); await page.click('[data-begrijpen] button:has-text("klopt")');
+    await tab(page, 'kiezen'); await page.click('[data-kiesoordeel="spaargeld"] button:has-text("klopt")');
     const p = await page.evaluate(() => gripPatronen()[0]);
     expect(p.naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(p.vorigeReden).toBeUndefined();
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));
     expect(await tekst(page, '[data-patnaam]')).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
   });
@@ -64,7 +65,7 @@ test.describe('v388 begrijpen', () => {
   test('klopt rondt Begrijpen af met een ✓ zodra elk patroon een oordeel heeft', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     expect(await page.locator('[data-griptab="begrijpen"][data-afgerond]').count()).toBe(0);
-    await tab(page, 'begrijpen'); await page.click('[data-begrijpen] button:has-text("klopt")');
+    await tab(page, 'kiezen'); await page.click('[data-kiesoordeel="spaargeld"] button:has-text("klopt")');
     expect(await page.locator('[data-griptab="begrijpen"][data-afgerond]').count()).toBe(1);
   });
 });
@@ -74,8 +75,8 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     await grip(page, { opnames: OPNAMES });
     expect(await page.locator('[data-griptab="kiezen"] [data-stapopen]').count()).toBe(1);
     await tab(page, 'kiezen');
-    expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('nu');
-    expect(await tekst(page, '[data-kiesvoortgang]')).toBe('0 van 1');
+    expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('open');   // v428: Te kiezen telt wat open staat
+    expect(await page.locator('[data-kiesvoortgang]').getAttribute('data-tekiezen')).toBe(String(await page.evaluate(() => gripCyc().kies.length)));
   });
   test('de sheet: niets voorgekozen, ≈ per optie, bevestigen pas na een keuze en de meetlat', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -99,9 +100,9 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     expect(k).toMatchObject({ optie: 'grens', schuift: false });
     expect(k.lat.map(r => r.soort)).toEqual(['onttrekking', 'potmax']);
     await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
-    expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('gekozen');
-    expect(await tekst(page, '[data-kiesvoortgang]')).toBe('1 van 1');
-    expect(await page.locator('[data-griptab="kiezen"] [data-stapopen]').count()).toBe(0);
+    expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('gekozen');   // v428: onder Al gekozen deze maand
+    expect(await page.locator('#gripTeKiezen [data-kiesrij="spaargeld"]').count()).toBe(0);
+    expect(await page.locator('[data-griptab="kiezen"] [data-stapopen]').count()).toBe(await page.evaluate(() => gripCyc().kies.length > 0 ? 1 : 0));   // v428: de stip is N keuzes open
     expect(await page.locator('[data-griptab="kiezen"][data-afgerond]').count()).toBe(1);
     await page.evaluate(() => go('logboek'));
     expect(await tekst(page, '[data-loggripkeuze]')).toContain('Niets meer uit je spaargeld');
@@ -132,7 +133,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   test('een uitgevoerde melding uit Zien staat in Kiezen met wat hij deed', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); gripKiesTab('kiezen'); });
-    expect(await tekst(page, '[data-uitgevoerd="huur"]')).toBe('Melding uit Zien: Huur verlaagd naar €142 · €558 naar Plan · sparen');   // v398: met de bestemming
+    expect(await tekst(page, '#gripAlGekozen [data-uitgevoerd="huur"]')).toMatch(/Huur · budget €142[\s\S]*€558 naar Plan · sparen/);   // v428: onder Al gekozen deze maand   // v398: met de bestemming
   });
   test('volgorde: van de app of zelf, en spaargeld blijft eerst', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -157,12 +158,13 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     await grip(page, { opnames: OPNAMES });
     await page.evaluate(() => { const t = { id: 'xue', date: '2026-10-08', amount: -60, acc: 'NL01MAIN0000001111', name: 'Cafe Extra', desc: 'BEA, BETAALPAS CAFE EXTRA', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'uiteten'; save(); });
     expect(await page.evaluate(() => (valtOpSignals(thisYM()) || []).some((s) => s.potjeId === 'uiteten'))).toBe(true);
-    await tab(page, 'begrijpen');
-    await page.click('[data-patsig="potje"][data-patsigk="uiteten"]');
+    /* v428: Begrijpen verandert niets; de handelingen van het potje staan als eigen keuze in Kiezen (sig:<id>) en openen
+       de signaalkaart die er al was. De onttrekkingen staan als tak in de drill van het symptoom. */
+    await tab(page, 'kiezen');
+    await page.click('#gripTeKiezen [data-kies="sig:2026-10|uiteten"]');
     expect(await page.locator('#gripLetOpSheet .valtop-open').count()).toBe(1);
-    await page.evaluate(() => closeSheet());
-    await page.click('[data-patsig="onttrekking"]');
-    expect(await page.locator('#gripMeterSheet [data-meteruit]').count()).toBe(2);   // de twee onttrekkingen
+    await page.evaluate(() => { closeSheet(); gripNaarSymptoom('pat:spaargeld'); });
+    expect(await page.locator('#gripSymptoom [data-patsig="onttrekking"]').count()).toBe(1);
   });
   test('Let op draagt geen potje meer dat al signaal van een patroon is', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });

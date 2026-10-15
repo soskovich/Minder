@@ -1,4 +1,6 @@
 /* v410: DE BESLISSINGEN NA v409. Op grip-v409-stand (10 oktober 2026). */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v409-stand');
 const { kaalUit } = require('./bron-kaal');
@@ -98,27 +100,33 @@ test.describe('5 · overal dezelfde maandafkortingen', () => {
   });
 });
 
+/* v428: de fit-eis geldt op elke tab: de koopknop staat vast (sticky) minstens 16px boven de menubalk, ook onderaan
+   gescrold, en niets loopt horizontaal over. De brug staat in Begrijpen (groepbrug, hooguit DEZEMAAND_KOL kolommen). */
+async function fitAlleTabs(page) {
+  const out = {};
+  for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) {
+    out[t] = await page.evaluate((t) => { go('maand'); gripKiesTab(t); const m = (x) => { window.scrollTo(0, x); return document.querySelector('.nav').getBoundingClientRect().top - document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom; };
+      const boven = m(0), onder = m(1e6); window.scrollTo(0, 0);
+      return { boven, onder, kol: document.querySelectorAll('#gripGroepBrug [data-brugstap]').length, sw: document.documentElement.scrollWidth }; }, t);
+  }
+  return out;
+}
 test.describe('6 · fit op 390x844: minstens 16px tussen koopknop en menubalk', () => {
   for (const [naam, o, lang] of [['zonder onttrekking', {}, false], ['met onttrekking', { opnames: [['2026-10-06', 300]] }, false], ['langste potjenamen', { opnames: [['2026-10-06', 300]] }, true]]) {
     test(naam, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await S.boot(page, o);
       if (lang) await page.evaluate(() => { for (const c of Object.values(CATS)) if (c.type === 'expense') c.name = c.name + ' en een hele lange toevoeging erbij'; });
-      const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');
-        const knop = document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav = document.querySelector('.nav').getBoundingClientRect().top;
-        return { knop, nav, kol: document.querySelectorAll('#gripBrug [data-brugstap]').length, sw: document.documentElement.scrollWidth,
-          kort: [...document.querySelectorAll('#gripLetOp [data-letopkort] .small')].every(e => getComputedStyle(e).whiteSpace === 'nowrap') }; });
-      console.log(`v410 fit 390 (${naam}): ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px, ruimte ${Math.round(r.nav - r.knop)}px`);
-      expect(r.kol).toBe(7);
-      expect(r.nav - r.knop).toBeGreaterThanOrEqual(16);
-      expect(r.kort).toBe(true);
-      expect(r.sw).toBeLessThanOrEqual(390);
+      const r = await fitAlleTabs(page);
+      console.log(`v410 fit 390 (${naam}): ${JSON.stringify(r)}`);
+      for (const t of Object.keys(r)) { expect(r[t].boven, t).toBeGreaterThanOrEqual(16); expect(r[t].onder, t).toBeGreaterThanOrEqual(16); expect(r[t].sw, t).toBeLessThanOrEqual(390); }
+      expect(r.begrijpen.kol).toBeLessThanOrEqual(7);
     });
   }
   test('de lijst achter "nog N" breekt af (geen ellipsis daar)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await S.boot(page);
-    const n = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); openGripLetOpLijst(); return document.querySelectorAll('#gripLetOpLijst [data-letopkort]').length; });
+    const n = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); gripKiesTab('kiezen'); return document.querySelectorAll('#gripTeKiezen [data-letopkort]').length; });
     expect(n).toBe(0);
   });
 });

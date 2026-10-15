@@ -9,6 +9,8 @@
 // v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' en de oordeelzin zijn vervallen. Een
 //    structureel signaal staat nu als regel [data-letop=str] onder "Let op", met de stip in zijn eigen
 //    status; de regels dekking, buffer en doel zijn tegels.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { kaalUit } = require('./bron-kaal');
 
@@ -52,8 +54,8 @@ async function boot(page, payload) {
 }
 const str = (page) => page.evaluate(() => maandStructureel().map((r) => ({ key: r.key, t: r.sig && r.sig.t, status: r.status })));
 const letOp = (page) => page.evaluate(async () => {
-  go('maand'); await new Promise((r) => setTimeout(r, 120));
-  return [...document.querySelectorAll('#gripLetOp [data-letop="str"]')]
+  go('maand'); await new Promise((r) => setTimeout(r, 120));   // v428: het structurele feit staat op Zien onder Signalen, met de stip
+  return [...document.querySelectorAll('#gripSignalen [data-signaal^="lo:str:"]')]
     .map((r) => ({ tekst: r.innerText.replace(/\s+/g, ' '), html: r.innerHTML }));
 });
 
@@ -62,7 +64,7 @@ test.describe('a · beide kaarten putten uit dezelfde lijst', () => {
      lezen allebei RO, de lijst MET de structurele signalen en met acceptatie en afspraak erop. */
   test('de tegels en Let op lezen allebei RO', async ({ page }) => {
     await boot(page);
-    const src = await kaalUit(page, 'renderMaand');
+    const src = await kaalUit(page, 'renderMaand', 'gripCyclus');   // v428: gripCyclus leest de lijst
     expect(src).toContain('RO=maandMetAfspraak(maandMetAccept(R).concat(STR))');
     expect(await kaalUit(page, 'renderGripMeter')).toContain('maandMetAfspraak(maandMetAccept(maandRegels()))');   // v387: de regels in de sheet van de Beleggen-meter
     expect(src).toContain('gripLetOpItems(RO, SIG, BV)');
@@ -83,7 +85,7 @@ test.describe('a · beide kaarten putten uit dezelfde lijst', () => {
     for (const opt of [{ rente: true }, { overstreak: true }, { rente: true, overstreak: true }]) {
       await boot(page, seed(opt));
       const r = await page.evaluate(async () => {
-        go('maand'); await new Promise((x) => setTimeout(x, 120));
+        go('maand'); gripKiesTab('kiezen'); await new Promise((x) => setTimeout(x, 120));
         const R = maandRegels(), STR = maandStructureel(), RO = R.concat(STR);
         const tekst = $('#s-maand').innerText;
         /* v406: Let op toont hooguit twee regels, de rest staat onder "nog n" (openGripLetOpLijst); ook daar is hij gezien */
@@ -137,7 +139,7 @@ test.describe('c · de ingang en het oordeel wijzen naar dezelfde regel', () => 
     test(`${naam}: zelfde zwaarste regel`, async ({ page }) => {
       await boot(page, seed(opt));
       const r = await page.evaluate(async () => {
-        go('maand'); await new Promise((x) => setTimeout(x, 120));
+        go('maand'); gripKiesTab('kiezen'); await new Promise((x) => setTimeout(x, 120));
         const R = maandRegels(), STR = maandStructureel(), RO = R.concat(STR);
         const z = coMaandZwaarste(RO);
         const ing = $('#s-maand').innerHTML.match(/coStart\('maand','[^']*','([^']*)'\)/);
@@ -178,9 +180,9 @@ test.describe('d · niets moedigt aan of scoort', () => {
       await boot(page, seed(opt));
       /* v406: een structurele regel kan achter "nog N ›" staan, dus de lijst van Let op telt mee (v407: de tekst van
          overstreak zei daar "op rij", en zonder die lijst bleef dat onzichtbaar voor deze test). */
-      const t = await page.evaluate(async () => { go('maand');
+      const t = await page.evaluate(async () => { go('maand'); gripKiesTab('kiezen');
         await new Promise((x) => setTimeout(x, 120)); let s = $('#s-maand').innerText;
-        if ((window._gripLetOpL || []).length > GRIP_LETOP_MAX) { openGripLetOpLijst(); s += '\n' + $('#gripLetOpLijst').innerText; closeSheet(); }
+        gripKiesTab('zien'); s += '\n' + $('#s-maand').innerText;   // v428: Let op is geen kaart meer; Zien en Kiezen samen
         return s; });
       if (opt.overstreak) expect(t).toContain('Maanden boven je grens');   // invoermeting: het signaal staat in wat de test leest
       expect(t).not.toMatch(/goed bezig|knap|gefeliciteerd|op rij|streak|(?<!open )punten/i);   // v337: 'Afsluiten met open punten' is de knop die de gebruiker vroeg, geen score

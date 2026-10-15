@@ -30,16 +30,15 @@ test.describe('v387 structuur', () => {
     // v393 (keuze van de gebruiker): de eis geldt MET een potje onder de drempel (Vices +EUR 5 staat als noot bij overig)
     // en met de regel "Eerlijk budget lager" onder de meters; de labels van de bridge staan op een regel.
     // v394: de melding "N potjes te ruim" is weg; de regel onder de meter is de enige ingang.
-    const r = await page.evaluate(() => { const lab = [...document.querySelectorAll('#gripBrug [data-brugeen]')];
-      return { noot: document.querySelectorAll('#gripBrug [data-brugnoot]').length, eerlijk: document.querySelectorAll('#gripMeters ~ [data-nietgebruikt]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
-        lab: Math.max(...lab.map(e => e.getBoundingClientRect().height)), brug: document.querySelector('#gripBrug').getBoundingClientRect().height,
-        knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
-    console.log(`zien: bridge ${Math.round(r.brug)}px, hoogste label ${Math.round(r.lab)}px, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-    expect(r.noot).toBe(1);
+    /* v428: de brug staat niet meer op Zien maar in Begrijpen ("Waar zit de EUR X?"), dus de noot van v393 staat niet op
+       Grip; de regel onder de meters blijft, en de koopknop staat vast minstens 16px boven de menubalk. */
+    const r = await page.evaluate(() => ({ brug: document.querySelectorAll('#gripInhoud [data-brugstap]').length,
+      eerlijk: document.querySelectorAll('#gripMeters ~ [data-nietgebruikt]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
+      knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }));
+    expect(r.brug).toBe(0);
     expect(r.eerlijk).toBe(1);
     expect(r.melding).toBe(0);
-    expect(r.lab).toBeLessThan(13);   // een regel van 9px
-    expect(r.knop).toBeLessThanOrEqual(r.nav);
+    expect(r.knop).toBeLessThanOrEqual(r.nav - 16);
     expect(r.sw).toBeLessThanOrEqual(390);
   });
   test('een tab die je verliet is afgerond; Terugblik pas na afsluiten van de maand (v390)', async ({ page }) => {
@@ -130,13 +129,16 @@ test.describe('v387 te ruim begroot', () => {
      van het maandbudget naar verwacht. */
   test('te ruim is geen ruimte: een grijze stap "niet gebruikt", geen uitschieter en geen patroon', async ({ page }) => {
     await grip(page);
-    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);   // v392: Huur en het variabele deel van Vervoer
+    /* v428: de brug op Grip ("Waar zit de EUR X?", Begrijpen) loopt per groep; te ruim staat in de sheet per groep
+       (vast en potjes, "niet gebruikt ›"). De oude Zien-brug (gripZienBrug) blijft de rekensom van de keuze-sheet. */
+    await page.evaluate(() => { gripKiesTab('begrijpen'); openGripGroepen(); });
+    expect(await page.locator('#gripGroepen [data-groepteruim]').count()).toBe(2);   // v392: Huur (vast) en het variabele deel van Vervoer (potjes)
     const r = await page.evaluate(() => { const V = maandVooruit(); const Br = gripZienBrug(V);
       return { som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, Br.stappen[0].waarde), tr: Br.stappen.filter(s => s.soort === 'teruim').reduce((a, s) => a + s.waarde, 0), eind: Math.round(V.projectie), uit: uitschieters(V).map(x => x.k), pat: (insPatronen() || []).map(p => p.k) }; });
     expect(r.tr).toBe(-948);
     expect(r.som).toBe(r.eind);
     expect(r.uit).not.toContain('huur'); expect(r.pat).not.toContain('huur');
-    expect(await page.locator('#gripBrug [data-gearceerd]').count()).toBe(0);
+    expect(await page.locator('#gripGroepBrug [data-gearceerd]').count()).toBe(0);
   });
   test('het gevolg staat er voor bevestigen, en kiezen schrijft niets (v398: met een bestemming)', async ({ page }) => {
     await grip(page);
@@ -156,7 +158,8 @@ test.describe('v387 te ruim begroot', () => {
     await grip(page);
     await page.evaluate(() => openTeRuim('huur')); await page.click('[data-teruimoptie="c"]'); await page.click('[data-teruimbevestig]');
     expect(await page.evaluate(() => ({ b: SET.budgets.huur, zelf: teRuimZelf('huur'), ruim: gripMeterBudget().ruim }))).toEqual({ b: 700, zelf: true, ruim: 948 });
-    expect(await page.locator('#gripBrug [data-brugstap="teruim"]').count()).toBe(2);
+    await page.evaluate(() => { closeSheet(); gripKiesTab('begrijpen'); openGripGroepen(); });
+    expect(await page.locator('#gripGroepen [data-groepteruim]').count()).toBe(2);   // v428: in de sheet per groep
   });
   test('een vast potje zonder betaling is nooit te ruim', async ({ page }) => {
     await grip(page);

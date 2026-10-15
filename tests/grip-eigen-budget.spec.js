@@ -5,14 +5,19 @@
 // Fixture: grip-kring-stand (10 okt 2026): budget 3325, verwacht 1711; Huur 700 (nodig 71, 629 niet gebruikt), Vervoer &
 // auto variabel deel 390 niet gebruikt; uitschieter Uit eten +67, Vices +5 onder de drempel.
 // GETALLEN VAN DE FIXTURE, NIET VAN HET TOESTEL (3375 / 2815 zijn van het toestel en staan hier nergens).
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const K = require('./grip-kring-stand');
 
-const grip = async (page, w = 390) => { await page.setViewportSize({ width: w, height: 844 }); await K.boot(page); await page.evaluate(() => go('maand')); };
-const brug = page => page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V), M = gripMeterBudget(V);
+const grip = async (page, w = 390) => { await page.setViewportSize({ width: w, height: 844 }); await K.boot(page); await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); }); };
+/* v428: de brug op Grip is de groepbrug in Begrijpen ("Waar zit de EUR X?"); gripZienBrug() blijft de rekensom van de
+   keuze-sheet (vóór en ná) en wordt hier als data gelezen. De kop is [data-groepkop]. */
+const brug = page => page.evaluate(() => { gripKiesTab('begrijpen'); const V = maandVooruit(), B = gripZienBrug(V), M = gripMeterBudget(V), G = gripGroepBrug(V);
   return { st: B.stappen.map(s => ({ soort: s.soort, k: s.k, label: s.label, label2: s.label2, waarde: s.waarde })), verschil: B.verschil, budget: B.budget,
     proj: Math.round(V.projectie), bud: Math.round(V.budget), M: { verschil: M.verschil, pct: M.pct, verwacht: M.verwacht, budget: M.budget },
-    kop: document.querySelector('[data-zienkop]').innerText, kopV: +document.querySelector('[data-zienkop]').dataset.zienverschil }; });
+    G: { st: G.stappen.map(x => ({ soort: x.soort, k: x.k, label: x.label, waarde: x.waarde })), verschil: G.verschil },
+    kop: document.querySelector('[data-groepkop]').innerText.split(' · ')[0], kopV: +document.querySelector('[data-groepkop]').dataset.groepverschil }; });
 const huurSheet = async (page, optie, bedrag) => {
   await page.evaluate(() => openTeRuim('huur'));
   if (optie) await page.click(`[data-teruimoptie="${optie}"]`);
@@ -40,6 +45,8 @@ test.describe('A · meten aan het eigen maandbudget', () => {
     expect(som).toBe(r.proj);
     expect(r.verschil).toBe(r.proj - r.bud); expect(r.kopV).toBe(r.verschil); expect(r.M.verschil).toBe(r.verschil);
     expect(r.kop).toBe(`€${Math.abs(r.verschil).toLocaleString('nl-NL')} onder budget`);
+    expect(r.G.st.slice(1, -1).reduce((a, x) => a + x.waarde, r.G.st[0].waarde)).toBe(r.proj);   // v428: de groepbrug sluit ook
+    expect(r.G.verschil).toBe(r.verschil);
   });
   test('boven budget: de kop zegt "boven budget" met hetzelfde getal als de som', async ({ page }) => {
     await grip(page);
@@ -55,19 +62,20 @@ test.describe('A · meten aan het eigen maandbudget', () => {
     const r = await brug(page);
     const tr = r.st.filter(s => s.soort === 'teruim');
     expect(tr.map(s => [s.k, s.label, s.label2, s.waarde])).toEqual([['huur', 'Huur', 'niet gebruikt', -558], ['vervoer', 'Vervoer', 'niet gebruikt', -390]]);   // v406: korte vaste naam
-    const d = await page.evaluate(() => ({ grijs: [...document.querySelectorAll('#gripBrug [data-brugstap="teruim"] [data-brugniet]')].map(i => i.style.background),
-      gearceerd: document.querySelectorAll('#gripBrug [data-gearceerd], #gripBrug [data-eerlijklijn], #gripBrug [data-haaktekst]').length,
-      as: document.querySelector('[data-zienas]').innerText.trim(), tekst: document.querySelector('#gripInhoud').innerText + document.querySelector('#gripMeters').innerText }));
-    expect(d.grijs).toEqual(['var(--bar)', 'var(--bar)']);
+    /* v428: op Grip staat te ruim in de sheet per groep ("niet gebruikt ›" bij vast en bij potjes), zonder arcering */
+    const d = await page.evaluate(() => { openGripGroepen(); return { n: document.querySelectorAll('#gripGroepen [data-groepteruim]').length,
+      gearceerd: document.querySelectorAll('#gripGroepBrug [data-gearceerd], #gripGroepBrug [data-eerlijklijn], #gripGroepBrug [data-haaktekst]').length,
+      tekst: document.querySelector('#gripInhoud').innerText + document.querySelector('#gripMeters').innerText + document.querySelector('#gripGroepen').innerText }; });
+    expect(d.n).toBe(2);
     expect(d.gearceerd).toBe(0);
-    expect(d.as).toBe('');   // geen "as begint bij"
     expect(d.tekst).not.toMatch(/eerlijk/i);
   });
-  test('een tik op de grijze stap opent de sheet op dat potje, en schrijft niets', async ({ page }) => {
+  test('een tik op "niet gebruikt" bij vast opent de sheet op dat potje, en schrijft niets (v428: in de sheet per groep)', async ({ page }) => {
     await grip(page);
+    await page.evaluate(() => { gripKiesTab('begrijpen'); openGripGroepen(); });
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await page.waitForTimeout(350); await page.locator('#gripBrug [data-brugstap="teruim"]').nth(1).click();
-    expect(await page.locator('#teRuimSheet').getAttribute('data-teruimpotje')).toBe('vervoer');
+    await page.locator('#gripGroepen [data-groep="vast"] [data-groepteruim]').click();
+    expect(await page.locator('#teRuimSheet').getAttribute('data-teruimpotje')).toBe('huur');
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
   test('"eerlijk budget" staat in geen enkele sheet van de meter of de bridge', async ({ page }) => {
@@ -81,12 +89,14 @@ test.describe('A · meten aan het eigen maandbudget', () => {
     await grip(page);
     const r = await page.evaluate(() => { const D = gripOverigDelen(maandVooruit()); return { onder: D.onder, boven: D.boven }; });
     /* v408: geen twee keer "overig": de labels zijn "n boven" en "n onder", met n het aantal potjes van die kant */
-    const lab = await page.evaluate(() => [...document.querySelectorAll('#gripBrug [data-brugstap="overig"] [data-brugeen]')].map(e => e.innerText.replace(/\s+/g, ' ')));
     const B = await page.evaluate(() => gripZienBrug(maandVooruit()).stappen.filter(s => s.soort === 'overig').map(s => [s.k, s.label, s.zonderIn || 0]));
     for (const [k, l, z] of B) expect(l).toBe(k === 'boven' ? `${r.boven + (z ? 1 : 0)} boven` : `${r.onder} onder`);
-    expect(lab.join('|')).not.toContain('overig');
-    expect(await page.locator('#gripBrug [data-brugstap="overig"] [data-brugeen2]').count()).toBe(0);
-    expect(await page.locator('#gripBrug [data-brugnoot]').innerText()).toBe('+€5');
+    /* v428: in de groepbrug op Grip staat elk potje dat boven eindigt los, en de rest heet "n onder"; geen "overig", geen noot */
+    await page.evaluate(() => gripKiesTab('begrijpen'));
+    const lab = await page.evaluate(() => [...document.querySelectorAll('#gripGroepBrug [data-brugstap="overig"][data-brugk="onder"] [data-brugeen]')].map(e => e.innerText.replace(/\s+/g, ' ')));
+    const n = await page.evaluate(() => gripGroepBrug(maandVooruit()).nOnder);
+    expect(lab).toEqual([`${n} onder`]);
+    expect(await page.locator('#gripGroepBrug [data-brugnoot]').count()).toBe(0);
   });
 });
 
@@ -253,15 +263,16 @@ test.describe('B · de te-ruim-sheet', () => {
   });
 });
 
-test('Zien past op 390x844 boven de menubalk, labels op een regel en zonder overloop', async ({ page }) => {
+test('Begrijpen: de groepbrug past op 390px, kolommen minstens 40px, koopknop boven de menubalk (v428)', async ({ page }) => {
   await grip(page);
-  const r = await page.evaluate(() => ({ kol: document.querySelectorAll('#gripBrug [data-brugstap]').length,
-    breed: [...document.querySelectorAll('#gripBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width),
+  await page.evaluate(() => gripKiesTab('begrijpen'));
+  const r = await page.evaluate(() => ({ kol: document.querySelectorAll('#gripGroepBrug [data-brugstap]').length,
+    breed: [...document.querySelectorAll('#gripGroepBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width),
     knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }));
-  console.log(`zien 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-  expect(r.kol).toBe(6);   // v415: overig boven was +€5, minder dan BRUG_KLEIN, en schoof bij Uit eten aan; budget, Uit eten, Huur, Vervoer, overig onder, verwacht
+  console.log(`begrijpen 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
+  expect(r.kol).toBeLessThanOrEqual(7);
   for (const b of r.breed) expect(b).toBeGreaterThanOrEqual(40);
-  expect(r.knop).toBeLessThanOrEqual(r.nav);
+  expect(r.knop).toBeLessThanOrEqual(r.nav - 16);
   expect(r.sw).toBeLessThanOrEqual(390);
 });
 
@@ -271,11 +282,12 @@ test('Zien past op 390x844 boven de menubalk, labels op een regel en zonder over
 test.describe('C · signalen met bewijs', () => {
   const DM = require('./deze-maand-stand');
   /* v406: Let op toont er hooguit twee, met eerst wat je kunt doen; de rest staat achter "nog n", en die telt hier mee */
-  const letop = page => page.evaluate(() => { go('maand'); renderMaand(); const L = document.querySelector('#gripLetOp');
-    let tekst = L ? L.innerText : '', soorten = L ? [...L.querySelectorAll('[data-letop]')].map(e => e.dataset.letop) : [];
-    if (L && L.querySelector('[data-letopnog]')) { openGripLetOpLijst(); const S = document.querySelector('#gripLetOpLijst');
-      if (S) { tekst += '\n' + S.innerText; soorten = soorten.concat([...S.querySelectorAll('[data-letop]')].map(e => e.dataset.letop)); } closeSheet(); }
-    return { tekst, soorten }; });
+  /* v428: Let op is geen kaart meer. Het feit met zijn bewijs staat in de drill van het symptoom (Begrijpen, via Signalen op
+     Zien), de handeling onder Te kiezen. De helper leest beide; de soorten komen uit de lijst van Let op (gripCyc().L). */
+  const letop = page => page.evaluate(() => { go('maand'); const C = gripCyc(); let tekst = '';
+    for (const s of C.sym.filter(x => x.bron === 'letop')) { gripNaarSymptoom(s.id); tekst += '\n' + document.querySelector('#gripSymptoom').innerText; }
+    gripKiesTab('kiezen'); tekst += '\n' + document.querySelector('#gripTeKiezen').innerText;
+    return { tekst, soorten: C.L.map(x => x.soort) }; });
   test('met bewijs: een regel, en het bewijs staat erin', async ({ page }) => {
     await DM.boot(page);
     const B = await page.evaluate(() => terugkeerBewijs('Restaurant Lona'));
@@ -308,7 +320,7 @@ test.describe('C · signalen met bewijs', () => {
     /* v406: eenmalig in de categorie: EEN regel met "eenmalig · categorie klopt?", geen lek-regel ernaast */
     expect(r.soorten.filter(s => s.startsWith('lek') || s === 'eenmalig')).toEqual(['eenmalig']);
     const cat = await page.evaluate(() => CATS[catOf(TX.find(x => x.name === 'Apotheek Centrum'))].name);
-    expect(r.tekst).toMatch(new RegExp(`${cat.replace(/[&]/g, '\\&')} €150 zonder potje · \\d van 3 mnd\\neenmalig · categorie klopt\\? ›`));
+    expect(r.tekst).toMatch(new RegExp(`${cat.replace(/[&]/g, '\\&')} €150 zonder potje · \\d van 3 mnd\\neenmalig · categorie klopt\\?`));
     expect(r.tekst).not.toContain('hoort bij een vaste categorie');
     expect(L.lek.hyp).toBe(`${cat} €150 zonder potje.`);
     await page.evaluate(() => openGripLetOp('lek'));

@@ -3,6 +3,8 @@
      incasso's in een potje") niet voor die post in Let op; na het antwoord geldt weer de normale regel.
    2 naam en vraag vooraan, details erna; op de kaart blijft het vraagteken zichtbaar als de regel wordt afgekapt.
    4 verlopen posten met een laatste betaling ouder dan zes maanden staan samen in een regel met een lijst erachter. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v409-stand');
 const { bootStand } = require('./standkaart-sluit.fixture');
@@ -57,19 +59,19 @@ test.describe('2 · naam en vraag vooraan, en het vraagteken blijft staan', () =
       await S.boot(page);
       const naam = lang ? 'Stichting Voor Het Beheer Van Derdengelden Van Een Heel Lange Partij' : 'Oude Sportschool Amsterdam Noord';
       await post(page, naam, 900, 'sport', ['2026-05-13', '2026-06-13', '2026-07-13']);
-      const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');
-        const row = document.querySelector('#gripLetOp [data-letop="verlopen"]'); if (!row) return null;
-        const box = row.querySelector('[data-letopvraag]').parentElement.getBoundingClientRect(), v = row.querySelector('[data-letopvraag]'), vr = v.getBoundingClientRect(),
-          p = row.querySelector('[data-letoppost]'), rest = row.querySelector('[data-letoprest]');
-        return { tekst: v.textContent, links: vr.left, rechts: vr.right, boxL: box.left, boxR: box.right, vrij: v.scrollWidth <= v.clientWidth + 1,
-          postAf: p.scrollWidth > p.clientWidth + 1, restAf: rest.scrollWidth > rest.clientWidth + 1, hoog: row.getBoundingClientRect().height }; });
+      /* v428: de korte vorm van de Let op-kaart (naam en vraag op een regel met ellipsis) is met de kaart vervallen. Op Zien
+         staat het feit onder Signalen, in Kiezen de keuze; beide breken af en kappen niets af, dus de vraag staat er altijd. */
+      const r = await page.evaluate(() => { go('maand');
+        const sig = [...document.querySelectorAll('#gripSignalen [data-signaal^="lo:verlopen:"]')].map(e => ({ t: e.innerText, af: e.scrollWidth > e.clientWidth + 1 }));
+        gripKiesTab('kiezen'); const row = document.querySelector('#gripTeKiezen [data-letop="verlopen"]'); if (!row) return null;
+        const n = row.querySelector('span > span');
+        return { sig, tekst: row.innerText, af: row.scrollWidth > row.clientWidth + 1, naamAf: n.scrollWidth > n.clientWidth + 1, sw: document.documentElement.scrollWidth }; });
       expect(r).not.toBeNull();
-      expect(r.tekst).toBe(' gestopt?');
-      expect(r.vrij).toBe(true);
-      expect(r.links).toBeGreaterThanOrEqual(r.boxL - 0.5);
-      expect(r.rechts).toBeLessThanOrEqual(r.boxR + 0.5);
-      expect(r.restAf).toBe(true);           // de details worden eerst afgekapt
-      expect(r.postAf).toBe(lang);           // de naam pas als hij zelf te lang is
+      expect(r.sig.length).toBe(1);
+      expect(r.sig[0].t).toContain('gestopt?'); expect(r.sig[0].af).toBe(false);
+      expect(r.tekst).toContain('gestopt?');
+      expect(r.af).toBe(false); expect(r.naamAf).toBe(false);
+      expect(r.sw).toBeLessThanOrEqual(390);
     });
   }
 });
@@ -89,7 +91,7 @@ test.describe('4 · oude verlopen posten in een regel', () => {
     expect(voor.st).toEqual(['verlopen', 'verlopen']);
     expect(voor.telt).toEqual([false, false]);
     expect(voor.diag).toEqual(['verlopen, niet meegeteld (verwacht 2026-04-05, tolerantie 7 dagen)', 'verlopen, niet meegeteld (verwacht 2026-06-23, tolerantie 14 dagen)']);
-    await page.evaluate(() => { go('maand'); renderMaand(); openOudePosten(); });
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); renderMaand(); openOudePosten(); });
     const lijst = await page.evaluate(() => [...document.querySelectorAll('#oudePosten [data-oudepost]')].map(e => e.innerText.replace(/\s+/g, ' ')));
     expect(lijst).toEqual(['Oude Opslag €90 per kwartaal · laatste betaling 23 mrt 2026 gestopt nog actief', 'Oude Krant €25 per maand · laatste betaling 5 mrt 2026 gestopt nog actief']);
     expect(await page.evaluate(() => JSON.stringify(SET.postStatus || {}))).toBe(voor.set);   // openen schrijft niets

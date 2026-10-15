@@ -7,6 +7,8 @@
    - Een maandelijkse incasso op Onvoorzien (geen norm) die deze maand nog komt: een vaste last die bij geen vaste last of
      potje hoort, dus de rest die blok 19 tot v404 alleen als getal noemde.
    GECONSTRUEERD EN NIET GEMETEN: de stand van het toestel staat alleen daar. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const K = require('./grip-kring-stand');
 
@@ -99,9 +101,7 @@ test('e: Let op: Kinderen 3 van 3 en Vakantie 2 van 3, met potje maken en het ge
   const kind = Math.round(KIND.reduce((a, [, v]) => a - v, 0) / 3), vak = Math.round((410.45 + 188.35) / 3);   // onafhankelijk nagerekend
   expect(L.find(x => x.naam === 'Kinderen zonder potje · 3 van 3 mnd')).toEqual({ naam: 'Kinderen zonder potje · 3 van 3 mnd', sub: `potje maken · voorstel €${kind} per maand · jul €120 · aug €95 · sep €110`, act: `openZonderKeuze('e_kinderen')` });   // v406: met het bewijs; v415: de keuze met geen potje nodig
   expect(L.find(x => x.naam === 'Vakantie & reizen zonder potje · 2 van 3 mnd')).toEqual({ naam: 'Vakantie & reizen zonder potje · 2 van 3 mnd', sub: `reservering in Plan €${Math.round((410.45 + 188.35) / 12)}/mnd of potje maken · jul €0 · aug €410 · sep €188`, act: `openZonderKeuze('vakantie')` });   // v406: 2 van 3 mnd is piek, eerst een reservering
-  const zicht = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); renderMaand(); const kaart = (document.querySelector('#gripLetOp') || {}).innerText || '';
-    let lijst = ''; if (document.querySelector('[data-letopnog]')) { openGripLetOpLijst(); lijst = (document.querySelector('#gripLetOpLijst') || {}).innerText || ''; closeSheet(); }
-    return { kaart, lijst }; });
+  const zicht = { kaart: await require('./beslis-sheet').letOpTekst(page), lijst: '' };   // v428: drill van het symptoom en Te kiezen
   for (const r of [`Kinderen zonder potje · 3 van 3 mnd\npotje maken · voorstel €${kind} per maand`, `Vakantie & reizen zonder potje · 2 van 3 mnd\nreservering in Plan`])
     expect(zicht.kaart + '\n' + zicht.lijst).toContain(r);   // op Grip te zien, in de kaart of achter "nog N"
   const f = await page.evaluate(k => { openPotForm('e_kinderen', k); const v = document.querySelector('[data-potvoorstel]');

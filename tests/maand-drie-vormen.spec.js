@@ -5,6 +5,8 @@
 // De derde vorm is bewust anders ontworpen: accepteren heeft een eigen opslag (SET.maandAccept),
 // omdat de terugblik hoort in de maand waarin het gat valt en dat maanden later kan zijn dan de
 // afspraaklus kijkt.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { regelTegels, openRegelUI } = require('./beslis-sheet');
 const { seed, open } = require('./budget-fixture');
@@ -119,7 +121,7 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
     await open(page, drieTekorten());
     // v387: de tegels zijn weg; de kleur is de status van de regel in de sheet van de Beleggen-meter
     const kleuren = async () => Object.fromEntries(Object.entries(await regelTegels(page)).map(([k, v]) => [k, v.kleur]));
-    await page.evaluate(() => { go('maand'); renderMaand(); });
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); renderMaand(); });
     expect((await kleuren()).buffer, 'voor het accepteren is de buffer een beslissing').toBe('rood');
     await page.evaluate(() => { maandAcceptZet('buffer'); renderMaand(); });
     /* v340: de kaarten 'Vraagt aandacht' en 'Vraagt een beslissing' zijn tegels geworden; de regel
@@ -136,7 +138,7 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
   test('Grip telt hem niet meer als tekort', async ({ page }) => {
     await open(page, drieTekorten());
     const rood = async () => { await page.evaluate(() => renderMaand()); return Object.values(await regelTegels(page)).filter((v) => v.kleur === 'rood').length; };
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     const a = await rood();
     await page.evaluate(() => maandAcceptZet('buffer'));
     const b = await rood();
@@ -167,7 +169,9 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
     /* v387: de tegels zijn weg; de Beleggen-meter (gripMeterBeleggen()) leest beleggenKlaar() op de onbewerkte regels,
        renderMaand() geeft Let op de gewogen lijst. */
     const bron = await kaalUit(page, 'renderMaand');
-    expect(bron).toContain('maandMetAccept(R).concat(STR)');
+    /* v428: renderMaand() weegt de regels alleen nog voor de terugval op Zien; beleggenKlaar() krijgt ze daar niet */
+    expect(bron).toContain('maandMetAccept(maandRegels()).concat(maandStructureel())');
+    expect(bron).not.toMatch(/beleggenKlaar\(\s*(RO|maandMetAccept)/);
     const meter = await kaalUit(page, 'gripMeterBeleggen');
     expect(meter).toContain('beleggenKlaar(maandRegels())');
     expect(meter).not.toMatch(/beleggenKlaar\(\s*(RO|maandMetAccept)/);
@@ -222,14 +226,14 @@ test.describe('c - de acceptatie kent een einde', () => {
     const r = await page.evaluate(() => {
       maandAcceptZet('doel');
       SET.maandAccept.doel.tot = thisYM(); save();   // de maand is er
-      go('maand');
+      go('maand'); gripKiesTab('kiezen');
       /* v340: de terugblik is een regel onder "Let op" en de kaart staat in de sheet erachter. */
-      const rij = !!document.querySelector('#gripLetOp [data-letop="accept"]');
+      const rij = !!document.querySelector('#gripMee [data-letop="accept"]');
       openGripLetOp('accept');
       const met = (document.getElementById('gripLetOpSheet') || {}).innerText || '';
       maandAcceptSluit('doel');
       return { rij, met, sheetWeg: !$('#sheetBg').classList.contains('show'),
-        rijWeg: !document.querySelector('#gripLetOp [data-letop="accept"]'),
+        rijWeg: !document.querySelector('#gripMee [data-letop="accept"]'),
         zonder: $('#s-maand').innerText, weg: !(SET.maandAccept || {}).doel };
     });
     expect(r.rij).toBe(true);
@@ -297,7 +301,7 @@ test.describe('e - layout', () => {
     test(`Maand met een geaccepteerde regel past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
       await open(page, drieTekorten());
-      await page.evaluate(() => { maandAcceptZet('buffer'); go('maand'); });
+      await page.evaluate(() => { maandAcceptZet('buffer'); go('maand'); gripKiesTab('kiezen'); });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
   }

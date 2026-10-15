@@ -12,6 +12,8 @@
 // Kritiek en onveranderd: dit gesprek mag de maandafspraak nooit raken, want
 // coachThisMonthAfspraak() laat er één per maand toe en coAfspraakOpen() wist de bestaande eerst.
 // De service worker staat globaal uit via playwright.config.js.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, MAIN } = require('./budget-fixture');
 
@@ -57,9 +59,9 @@ function alleenSignaal() {
    chevron en de handelingen worden daarna in die sheet gelezen. */
 async function ins(page, payload) {
   await open(page, payload || metLekEnSignaal());
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
   await page.waitForSelector('#s-maand .card');
-  await page.evaluate(() => { const r = document.querySelector('#s-maand #gripLetOp [data-letop="sig"]'); if (r) r.click(); });
+  await page.evaluate(() => { const r = document.querySelector('#s-maand #gripTeKiezen [data-letop="sig"]'); if (r) r.click(); });
 }
 const chevron = (page) => page.locator('#gripLetOpSheet .valtop-open [onclick*="coStart"]');
 const wachtKeuze = (page) => page.waitForFunction(
@@ -105,7 +107,7 @@ test.describe('a · de ingang op Grip', () => {
      er twee draagt, dat alleen Grip er een draagt, en dat Home, Plan en Transacties er geen krijgen. */
   test('a4 · hooguit een ingang, en alleen op Grip', async ({ page }) => {
     await ins(page, metLekEnSignaal());
-    await page.evaluate(() => { go('ins'); go('maand'); });
+    await page.evaluate(() => { go('ins'); go('maand'); gripKiesTab('kiezen'); });
     for (const scherm of ['vooruit', 'dash', 'tx', 'ins']) {
       expect(await page.evaluate((s) => (document.querySelector('#s-' + s) || {}).innerHTML || '', scherm))
         .not.toContain("coStart('lek'");

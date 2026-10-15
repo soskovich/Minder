@@ -1,4 +1,6 @@
 /* v409: CADANS, HISTORISCH BUDGET, PERIODIEKE POSTEN EN LET OP. Op grip-v409-stand (10 oktober 2026). */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v409-stand');
 
@@ -177,20 +179,27 @@ test.describe('6 · blok 19: het budget per maand en de cadans van de periodieke
   });
 });
 
+/* v428: de fit-eis geldt op elke tab: de koopknop staat vast (sticky) minstens 16px boven de menubalk, ook onderaan
+   gescrold, en niets loopt horizontaal over. De brug staat in Begrijpen (groepbrug, hooguit DEZEMAAND_KOL kolommen). */
+async function fitAlleTabs(page) {
+  const out = {};
+  for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) {
+    out[t] = await page.evaluate((t) => { go('maand'); gripKiesTab(t); const m = (x) => { window.scrollTo(0, x); return document.querySelector('.nav').getBoundingClientRect().top - document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom; };
+      const boven = m(0), onder = m(1e6); window.scrollTo(0, 0);
+      return { boven, onder, kol: document.querySelectorAll('#gripGroepBrug [data-brugstap]').length, sw: document.documentElement.scrollWidth }; }, t);
+  }
+  return out;
+}
 test.describe('fit op 390x844', () => {
   for (const [naam, o] of [['zonder onttrekking', {}], ['met onttrekking', { opnames: [['2026-10-06', 300]] }]]) {
-    test(`Zien en Let op (open) passen, ${naam}`, async ({ page }) => {
+    test(`elke tab past, ${naam} (v428)`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await S.boot(page, o);
-      const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');
-        const knop = document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav = document.querySelector('.nav').getBoundingClientRect().top;
-        return { knop, nav, kol: document.querySelectorAll('#gripBrug [data-brugstap]').length, sw: document.documentElement.scrollWidth }; });
-      console.log(`zien 390 (${naam}): ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
-      expect(r.nav - r.knop).toBeGreaterThanOrEqual(16); expect(r.sw).toBeLessThanOrEqual(390);   // v410: minimaal 16px tussen koopknop en menubalk
-      const s = await page.evaluate(() => { openGripLetOpLijst(); const sh = document.querySelector('#sheet');
-        return { h: sh.getBoundingClientRect().height, sh: sh.scrollHeight, ch: sh.clientHeight, vh: innerHeight, sw: document.documentElement.scrollWidth, n: sh.querySelectorAll('[data-letop]').length }; });
-      console.log(`let op open 390 (${naam}): ${s.n} regels, sheet ${Math.round(s.h)}px van ${s.vh}, scroll ${s.sh}/${s.ch}`);
-      expect(s.n).toBeGreaterThan(0); expect(s.sh).toBeLessThanOrEqual(s.ch + 1); expect(s.sw).toBeLessThanOrEqual(390);
+      const r = await fitAlleTabs(page);
+      console.log(`fit 390 (${naam}): ${JSON.stringify(r)}`);
+      for (const t of Object.keys(r)) { expect(r[t].boven, t).toBeGreaterThanOrEqual(16); expect(r[t].onder, t).toBeGreaterThanOrEqual(16); expect(r[t].sw, t).toBeLessThanOrEqual(390); }
+      expect(r.begrijpen.kol).toBeLessThanOrEqual(7);
+      expect(await page.evaluate(() => { gripKiesTab('kiezen'); return document.querySelectorAll('#gripTeKiezen [data-kies]').length; })).toBeGreaterThan(0);
     });
   }
 });

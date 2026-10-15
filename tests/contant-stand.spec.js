@@ -17,6 +17,8 @@
 // constructie niet uit te voeren is. Ook coachLeak() (contant €400 i.p.v. vervoer €85),
 // coFirstPotCat(), coachRuleOptions(), openPotjePick() en setBudget() wijzen hem dan aan.
 // De service worker staat globaal uit via playwright.config.js.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { pinDag } = require('./vaste-dag');
 
@@ -323,11 +325,11 @@ test.describe('wanneer de app vraagt te tellen', () => {
      los op Grip staat. */
   test('de kaart staat achter Let op op Grip en draagt spiegel, gevolg en keuze', async ({ page }) => {
     await boot(page, {});
-    await page.evaluate(() => { go('maand'); renderMaand(); });
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); renderMaand(); });
     const r = await page.evaluate(() => {
       const grip = document.querySelector('#s-maand');
       const opGrip = /contantTellen\(\)/.test(grip.innerHTML);
-      const regel = document.querySelector('#s-maand #gripLetOp [data-letop="contant"]');
+      const regel = document.querySelector('#s-maand #gripTeKiezen [data-letop="contant"]');
       if (regel) regel.click();
       const el = document.querySelector('#gripLetOpSheet');
       return { regel: !!regel, opGrip, tekst: el ? el.innerText : '', tik: !!el && /contantTellen\(\)/.test(el.innerHTML) };

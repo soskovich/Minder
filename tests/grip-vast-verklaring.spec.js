@@ -59,9 +59,9 @@ test('d. de bridge-stap opent deze sheet, en op 360 en 390px geen overloop', asy
   await start(page);
   for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: 640 });
-    await page.evaluate(() => { closeSheet(); go('maand'); renderMaand(); });
-    await page.evaluate(() => document.querySelector('#gripBrug [data-brugstap="overig"]').click());   // v387: de vaste lasten zijn een deel van overig op Zien
-    await page.evaluate(() => document.querySelector('[data-overigdeel="vast"]').click());
+    await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('begrijpen'); });
+    await page.evaluate(() => document.querySelector('#gripGroepBrug [data-brugstap="overig"][data-brugk="vast"]').click());   // v428: de stap vast in de groepbrug opent de sheet per groep
+    await page.evaluate(() => document.querySelector('#gripGroepen [data-groep="vast"]').click());
     await page.waitForSelector('#gripVast');
     const m = await page.evaluate(() => { const g = document.getElementById('gripVast'), s = document.getElementById('sheet'), sb = s.getBoundingClientRect();
       const uit = [...g.querySelectorAll('*')].filter((e) => { const q = e.getBoundingClientRect(); return q.width && (q.right > sb.right + 0.5); }).length;

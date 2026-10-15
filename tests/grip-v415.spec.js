@@ -22,7 +22,7 @@ const uitgave = (page, rijen) => page.evaluate(({ MAIN, rijen }) => {
     categorize(t); TX.push(t); OVR[t.id] = c; }
   save(); }, { MAIN: S.MAIN, rijen });
 const open = (page) => page.evaluate(() => document.getElementById('sheetBg').classList.contains('show'));
-const letOpDom = (page) => page.evaluate(() => (window._gripLetOpL || []).map(x => x.soort + '|' + (x.key || '')));
+const letOpDom = (page) => page.evaluate(() => gripCyc().L.map(x => x.soort + '|' + (x.key || '')));
 
 test.describe('1 · na een keuze sluit de sheet en rekent Let op meteen opnieuw', () => {
   test('verlopen post: tik in Let op, gestopt: sheet weg, regel weg, toast met ongedaan maken, en ongedaan zet hem terug', async ({ page }) => {

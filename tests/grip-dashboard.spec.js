@@ -7,6 +7,8 @@
    v387: GRIP IS EEN REGELKRING (meters, tabs, Zien). De tegels, de kaart Deze maand en de link onderaan zijn weg; de
    regels staan in de sheet van de Beleggen-meter, de afspraken op Kiezen en het logboek op Terugblik. Wat deze spec
    over de regels, de vooruitblik, de pop-up en het logboek vasthoudt, blijft; wat alleen over de tegels ging is weg. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { boot, seed, RES, MAIN } = require('./bezit-koppeling.fixture');
 const { pinDatum } = require('./vaste-dag');
@@ -40,7 +42,7 @@ const OKT = [
 
 test('a. de stand op 4 oktober: de regels en hun status, en de Beleggen-meter wacht op de reserveringen', async ({ page }) => {
   await stand(page);
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const st = await page.evaluate(() => { const R = maandMetAfspraak(maandMetAccept(maandRegels())); return Object.fromEntries(R.map((r) => [r.key, r.status])); });
   expect(st).toMatchObject({ dekking: 'let op', buffer: 'ok', doel: 'ok' });
   await page.click('[data-meter="beleggen"]');
@@ -51,7 +53,7 @@ test('a. de stand op 4 oktober: de regels en hun status, en de Beleggen-meter wa
 
 test('b. meters, tabs en Zien: wat van Grip verdween staat er niet meer', async ({ page }) => {
   await stand(page);
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const g = await grip(page);
   expect(g.blokken).toEqual(['gripMeters', 'gripTabs', 'gripInhoud', 'gripKoopcheck']);
   for (const weg of ['Vraagt een beslissing', 'Vraagt aandacht', 'Staat goed', 'Voorwaarden voor beleggen', 'afsluiten', 'Wat je met overschrijdingen deed', 'Er is niets dat vastloopt', 'Vanaf november'])
@@ -66,7 +68,7 @@ test('b. meters, tabs en Zien: wat van Grip verdween staat er niet meer', async 
 
 test('d. een regel in de sheet van de Beleggen-meter opent de bestaande sheet met uitleg, afspraak en handeling', async ({ page }) => {
   await stand(page);
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   await page.waitForTimeout(400);
   await page.click('[data-meter="beleggen"]');
   await page.click('[data-meterwv="dekking"]');
@@ -82,8 +84,8 @@ test('d. een regel in de sheet van de Beleggen-meter opent de bestaande sheet me
 const NETFLIX = ['2026-06', '2026-07', '2026-08', '2026-09'].map((m, i) => ({ id: 'n' + i, date: m + '-12', amount: -15.99, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL' }));
 test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de waterval', async ({ page }) => {
   await stand(page, null, { extraTx: NETFLIX });
-  await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
-  const r = await page.evaluate(() => { const V = maandVooruit(); const z = document.getElementById('gripZien').dataset.zien;
+  await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); gripKiesTab('kiezen'); });
+  const r = await page.evaluate(() => { const V = maandVooruit(); gripKiesTab('begrijpen'); const z = document.getElementById('gripGroepKaart').dataset.groepbrug;   // v428: de brug staat in Begrijpen
     gripKiesTab('kiezen'); const kz = document.querySelectorAll('#gripInhoud [data-afspraak]').length; go('logboek'); const k = document.querySelector('#logAfspraken');   // v390: de afspraken staan in het logboek
     return { kz, V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, zien: +z, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-logafspraak]').length }; });
   expect(r.V.projectie).toBe(r.V.uit + r.V.vast + r.V.rest);
@@ -103,11 +105,11 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   // v349: de kaart draagt de uitkomst met het verschil met je budget, en de bridge eronder (deze-maand-bridge.spec.js)
   // v354: de kaart draagt het stuurgetal, variabel tegen je potjes; de totale uitkomst staat in de sheet
   // v357: de kop is weer de uitkomst tegen het budget, en de bridge loopt van het budget naar die uitkomst
-  expect(r.zien).toBe(r.V.projectie);   // v387: Zien draagt de uitkomst
+  expect(r.zien).toBe(r.V.projectie);   // v387: Zien draagt de uitkomst; v428: de groepbrug in Begrijpen
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   expect(r.kz).toBe(0);
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
   await page.evaluate(() => openGripVooruit());
   // v352: de sheet draagt geen tweede bridge meer, alleen de band als regel (grip-deze-maand-sheet.spec.js)
   const w = await page.evaluate(() => { const g = document.getElementById('gripVooruit');
@@ -119,7 +121,7 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
 
 test('f. zonder drie afgeronde maanden geen vooruitblik, en dat staat er', async ({ page }) => {
   await stand(page);
-  await page.evaluate(() => { TX = TX.filter((t) => t.date >= '2026-08-01'); save(); closeSheet(); go('maand'); });
+  await page.evaluate(() => { TX = TX.filter((t) => t.date >= '2026-08-01'); save(); closeSheet(); go('maand'); gripKiesTab('begrijpen'); });   // v428: de brug staat in Begrijpen
   const r = await page.evaluate(() => ({ V: maandVooruit().onbekend, t: document.getElementById('gripInhoud').innerText.replace(/\s+/g, ' ') }));
   expect(r.V).toBe(true);
   expect(r.t).toContain('laatste 3 afgeronde maanden');
@@ -130,7 +132,7 @@ test('f. zonder drie afgeronde maanden geen vooruitblik, en dat staat er', async
    en het potje dat stopt in de lijst potjes van volgende maand (de voetlink van de lijst van deze maand). */
 test('g. zonder tijdlijn staan de boete en het potje dat stopt nog in hun eigen lijst', async ({ page }) => {
   await stand(page, { budgetsNext: { abonnement: 0 } });
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   expect(await page.locator('#gripTijdlijn').count()).toBe(0);
   await page.evaluate(() => openReserveringen());
   expect(await page.locator('#sheet').innerText()).toMatch(/Boetes cjib/i);
@@ -150,7 +152,7 @@ test('h. de pop-up verschijnt op 1 november, niet opnieuw na Later op dezelfde d
   expect(await popupOpen(page)).toBe(false);
   await heropen(page, '2026-11-01');
   expect(await popupOpen(page)).toBe(false);
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
   expect(await popupOpen(page)).toBe(false);
   await heropen(page, '2026-11-02');
   expect(await popupOpen(page)).toBe(true);
@@ -166,7 +168,7 @@ test('i. na afsluiten verschijnt de pop-up nooit meer voor oktober, en oktober s
     expect(await popupOpen(page)).toBe(false);
     // ook geen stille poging: de sheet zou zichzelf sluiten, dus wat telt is dat er niets wordt geschreven
     expect(await page.evaluate(() => SET.afsluitPopup.dag)).toBe('2026-11-01');
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     expect(await popupOpen(page)).toBe(false);
   }
   await page.evaluate(() => go('logboek'));
@@ -178,9 +180,9 @@ test('i. na afsluiten verschijnt de pop-up nooit meer voor oktober, en oktober s
 test('j. de eerste keer dat Grip ooit opent geeft geen pop-up, ook niet bij een tweede bezoek die dag', async ({ page }) => {
   await stand(page, { maandGelezen: undefined });
   expect(await popupOpen(page)).toBe(false);
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
   expect(await popupOpen(page)).toBe(false);
-  await page.evaluate(() => { go('dash'); go('maand'); });
+  await page.evaluate(() => { go('dash'); go('maand'); gripKiesTab('kiezen'); });
   expect(await popupOpen(page)).toBe(false);
   expect(await page.evaluate(() => SET.afsluitPopup.dag)).toBe('2026-10-04');
 });
@@ -210,13 +212,13 @@ const UITSET = { budgets: { boodschappen: 500, huur: 900, abonnement: 30, uitete
 
 test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de som onderaan', async ({ page }) => {
   await stand(page, UITSET, { extraTx: UIT });
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const V = await page.evaluate(() => { const V = maandVooruit(); return { h: V.handelingen, voor: V.voor.map((x) => x.k), proj: V.projectie, met: V.metGrenzen, p: V.potjes.find((x) => x.k === 'uiteten') }; });
   expect(V.p).toMatchObject({ uit: 100, rest: 80, eind: 180, bud: 150 });
   expect(V.voor).toEqual(['uiteten']);
   expect(V.h).toEqual([expect.objectContaining({ k: 'uiteten', grens: 50, effect: 30 })]);
   expect(V.met).toBe(V.proj - 30);
-  const kaart = await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())) + ' ' + document.getElementById('gripZien').innerText.replace(/\s+/g, ' '));
+  const kaart = await page.evaluate(() => { gripKiesTab('begrijpen'); return dezeMaandZin(dezeMaandBrug(maandVooruit())) + ' ' + document.getElementById('gripInhoud').innerText.replace(/\s+/g, ' '); });
   /* v367: Uit eten eindigt EUR 30 boven een potje van EUR 150 (20 procent) en is geen uitschieter, dus de zin noemt hem
      niet; de handeling staat wel in de sheet. v387: de zin staat op Begrijpen, de bridge op Zien. */
   expect(kaart).toContain('Geen potje komt ver boven zijn bedrag uit');
@@ -232,7 +234,7 @@ test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de s
 
 test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt een afspraak onder Deze maand', async ({ page }) => {
   await stand(page, UITSET, { extraTx: UIT });
-  await page.evaluate(() => { closeSheet(); go('maand'); openGripVooruit(); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); openGripVooruit(); });
   const voor = await page.evaluate(() => JSON.stringify(SET));
   await page.evaluate(() => openGrensRest('uiteten'));
   expect(await page.evaluate(() => JSON.stringify(SET))).toBe(voor);
@@ -247,12 +249,17 @@ test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt ee
 
 test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die opent de kaart die er was', async ({ page }) => {
   await stand(page, UITSET, { extraTx: [...UIT, { id: 'u10', date: '2026-10-03', amount: -90, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }] });
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   /* v388: het potje is een signaal van het patroon "Uit eten & café boven je potje" in Begrijpen, en staat daarom niet
      meer onder Let op (verplaatsen is geen kopiëren); een tik op het signaal opent dezelfde kaart. */
   /* v408: wel een VERWIJZING naar dat patroon ("Uit eten & café · zit in patroon n ›"), zonder eigen handeling */
-  const L = await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => [e.dataset.letop, e.getAttribute('onclick')]));
-  expect(L).toEqual([['patroon', "gripNaarBegrijpen('pot:uiteten')"]]);
+  /* v428: de verwijzing naar het patroon is een feit (Signalen op Zien); in Kiezen staan het patroon en de handeling van het potje */
+  const L = await page.evaluate(() => ({ letop: [...document.querySelectorAll('#gripTeKiezen [data-letop]')].map((e) => e.dataset.letop),
+    kies: [...document.querySelectorAll('#gripTeKiezen [data-kies]')].map((e) => e.dataset.kies), sym: gripCyc().sym.map((x) => x.id) }));
+  expect(L.letop).not.toContain('patroon');
+  expect(L.kies).toContain('pat:pot:uiteten');
+  expect(L.kies.some((k) => k.startsWith('sig:'))).toBe(true);
+  expect(L.sym).toContain('pat:pot:uiteten');
   expect(await page.evaluate(() => gripPatronen().map((p) => p.id))).toContain('pot:uiteten');
   await page.evaluate(() => openGripLetOp('sig', valtOpSignals(thisYM())[0].id));
   const t = await page.evaluate(() => document.getElementById('gripLetOpSheet').innerText);
@@ -265,13 +272,13 @@ test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die ope
 
 test('p. zonder Let op-signaal staat er geen Let op', async ({ page }) => {
   await stand(page);
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   expect(await page.evaluate(() => !!document.getElementById('gripLetOp'))).toBe(false);
 });
 
 test('q. een voorwaarde die niet te beoordelen is: de Beleggen-meter telt hem niet in de noemer en zegt onbekend', async ({ page }) => {
   await stand(page, { reserveringen: [] });
-  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const M = gripMeterBeleggen();
     return { volledig: B.volledig, n: M.n, onb: M.onb.map((v) => v.key), tekst: document.querySelector('[data-meter="beleggen"]').innerText.replace(/\s+/g, ' ') }; });
   expect(r.volledig).toBe(false);
@@ -303,23 +310,8 @@ const DRIE = [
   { id: 'z1', date: '2026-10-02', amount: -140, name: 'Zalando', desc: 'BEA, BETAALPAS ZALANDO' },
   { id: 'g1', date: '2026-10-03', amount: -100, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT KOESTRAAT' },
 ];
-test('s. Let op toont twee regels en "nog 1 ›", en die opent een lijst met de rest', async ({ page }) => {
-  /* v388: een potje boven is een signaal van een patroon en geen Let op-regel meer, dus de drie regels zijn hier drie
-     signalen die geen patroon zijn: contant, een uitgesloten incasso en een terugblik. */
-  await stand(page);
-  await page.evaluate(() => { closeSheet(); go('maand'); });
-  const L = [{ soort: 'contant', naam: 'Contant tellen', sub: 'a', dot: 'let op', act: "openGripLetOp('contant')" },
-    { soort: 'uit', naam: 'Uitgesloten incasso', sub: 'b', dot: 'let op', act: "openGripLetOp('uit')" },
-    { soort: 'accept', naam: 'Wat je accepteerde', sub: 'c', dot: 'let op', act: "openGripLetOp('accept')" }];
-  const r = await page.evaluate((L) => { document.getElementById('gripInhoud').insertAdjacentHTML('beforeend', gripLetOpKaart(L)); const k = document.getElementById('gripLetOp');
-    return { rijen: [...k.querySelectorAll('[data-letop]')].map((e) => e.dataset.letop), nog: k.querySelector('[data-letopnog]') ? k.querySelector('[data-letopnog]').innerText : null }; }, L);
-  expect(r.rijen).toEqual(['contant', 'uit']);
-  expect(r.nog).toBe('nog 1 ›');
-  await page.evaluate(() => document.querySelector('[data-letopnog]').click());
-  const l = await page.evaluate(() => [...document.querySelectorAll('#gripLetOpLijst [data-letop]')].map((e) => e.dataset.letop));
-  expect(l).toEqual(['accept']);                         // de rest, en niet nog eens de eerste twee
-});
-
+/* v428: Let op is geen kaart meer en heeft geen maximum ("nog N ›" en openGripLetOpLijst zijn vervallen); test s is daarmee
+   vervallen. De volgorde van gripLetOpItems() blijft (test t), en Te kiezen toont alles (grip-v406.spec.js). */
 test('t. een tekort gaat voor een let op, en daarbinnen houdt Let op de bestaande volgorde', async ({ page }) => {
   await stand(page);
   /* geconstrueerd: een structureel signaal op tekort naast twee potjes op let op. Op deze stand staat er

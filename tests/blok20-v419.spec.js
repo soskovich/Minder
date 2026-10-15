@@ -90,9 +90,9 @@ test.describe('v419: blok 20 sluit', () => {
         save(); const V = maandVooruit(), oud = V.uit + V.vast + V.rest + V.inleg;
         if (oud !== Math.round(V.projectieExact)) { best = { V, oud }; break; } }
       if (!best) return null;
-      render(); go('maand');
-      const V = best.V, M = gripMeterBudget(V), z = document.querySelector('#gripZien');
-      return { p: V.projectie, ex: V.projectieExact, oud: best.oud, meter: M.verwacht, zien: z ? +z.getAttribute('data-zien') : null }; });
+      render(); go('maand'); gripKiesTab('begrijpen');   // v428: de brug staat in Begrijpen
+      const V = best.V, M = gripMeterBudget(V), z = document.querySelector('#gripGroepKaart');
+      return { p: V.projectie, ex: V.projectieExact, oud: best.oud, meter: M.verwacht, zien: z ? +z.getAttribute('data-groepbrug') : null }; });
     expect(r).not.toBeNull();
     expect(r.oud).not.toBe(Math.round(r.ex));
     expect(r.p).toBe(Math.round(r.ex));

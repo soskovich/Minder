@@ -3,6 +3,8 @@
    (afspraakHerzienVan()). Het schema op de logboekpagina komt uit budgetVoorMaand() en is dus wat het budget per
    maand rekent. Een potje dat later hoger gaat staat als afvinkregel in Deze maand; de wissel van de buffer voor
    beleggen staat in Let op en in de sheet achter de tegel Beleggen. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const I = require('./inzichten-stand');
 
@@ -130,45 +132,43 @@ test.describe('c · een potje dat later hoger gaat telt in de regel naar het log
 });
 
 test.describe('d · de wissel van de buffer voor beleggen', () => {
-  test('de maand ervoor als regel in Let op, en altijd in de sheet achter de tegel', async ({ page }) => {
+  test('de maand ervoor als feit onder Signalen op Zien (v428), en altijd in de sheet achter de tegel', async ({ page }) => {
     await I.boot(page, { set: { bufferNormNext: 3 } });
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); });
     const r = await page.evaluate(() => { const L = gripLetOpItems(maandRegels(), valtOpSignals(thisYM()), belegVragen ? belegVragen() : []);
-      return { L: L.map((x) => x.soort), item: L.find((x) => x.soort === 'belegwissel'), kaart: [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => e.dataset.letop), W: beleggenWissel() }; });
-    console.log('letop', JSON.stringify(r.L), JSON.stringify(r.kaart));
+      return { L: L.map((x) => x.soort), item: L.find((x) => x.soort === 'belegwissel'),
+        sig: [...document.querySelectorAll('#gripSignalen [data-signaal]')].map((e) => e.dataset.signaal), W: beleggenWissel() }; });
     expect(r.W).toEqual({ nu: 2, vlg: 3, ym: '2026-11' });
     expect(r.item.naam).toBe('Buffer voor beleggen: 3 maanden vanaf november');
     expect(r.item.sub).toBe('nu 2, volgt je ondergrens');
     expect(r.item.dot).toBe('neutraal');
-    // binnen de max-2-regel en met de bestaande rangorde: na elke regel met een status, en in de kaart als die plek er is
-    const i = r.L.indexOf('belegwissel');
-    expect(r.kaart.length).toBeLessThanOrEqual(2);
-    if (i < 2) expect(r.kaart[i]).toBe('belegwissel'); else expect(r.kaart).not.toContain('belegwissel');
+    /* v428: een feit staat onder Signalen op Zien, niet onder Te kiezen */
+    expect(r.sig.some((s) => s.startsWith('lo:belegwissel'))).toBe(true);
+    await page.evaluate(() => gripKiesTab('kiezen'));
+    await expect(page.locator('#gripTeKiezen [data-letop="belegwissel"]')).toHaveCount(0);
     await page.evaluate(() => openBeleggenVoorwaarden());
     await expect(page.locator('#sheet [data-belegwissel="3"]')).toContainText('Vanaf november toetst de bufferrij tegen 3 maanden, nu 2');
   });
-  test('met twee regels die aandacht vragen staat hij onder "nog N", in de bestaande rangorde', async ({ page }) => {
+  test('met twee regels die aandacht vragen staan die onder Te kiezen en blijft de wissel een signaal (v428: geen "nog N")', async ({ page }) => {
     await I.boot(page, { set: { bufferNormNext: 3 } });
     const r = await page.evaluate(() => {
-      /* twee potjes zonder bedrag waar boekingen in binnenkomen: twee regels met de status "let op" */
       const ks = ['huur', 'overig'].filter((k) => CATS[k] && !(+(SET.budgets || {})[k] > 0));
       SET.potOpen = {}; ks.forEach((k, i) => { const id = 'po' + i; TX.push({ id, date: '2026-10-03', amount: -40, acc: TX[0].acc, name: 'Test ' + k, desc: 'TEST ' + k, typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
         categorize(TX[TX.length - 1]); TX[TX.length - 1].id = id; OVR[id] = k; SET.potOpen[k] = { op: '2026-10-01' }; });
       save(); go('maand');
-      return { ks, kaart: [...document.querySelectorAll('#gripLetOp [data-letop]')].map((e) => e.dataset.letop), nog: (document.querySelector('[data-letopnog]') || {}).dataset,
-        L: (window._gripLetOpL || []).map((x) => x.soort) }; });
-    console.log('rang', JSON.stringify(r));
+      const sig = [...document.querySelectorAll('#gripSignalen [data-signaal]')].map((e) => e.dataset.signaal);
+      gripKiesTab('kiezen');
+      return { ks, kaart: [...document.querySelectorAll('#gripTeKiezen [data-letop]')].map((e) => e.dataset.letop), sig }; });
     expect(r.ks.length).toBe(2);   // de invoer draagt het geval
-    expect(r.kaart.length).toBe(2); expect(r.kaart).not.toContain('belegwissel');
-    expect(r.L[r.L.length - 1]).toBe('belegwissel');
-    expect(r.nog.letopnog).toBe(String(r.L.length - 2));
-    await page.evaluate(() => openGripLetOpLijst());
-    await expect(page.locator('#gripLetOpLijst [data-letop="belegwissel"]')).toHaveCount(1);
+    expect(r.kaart.filter((s) => s === 'potopen').length).toBe(2);
+    expect(r.kaart).not.toContain('belegwissel');
+    expect(r.sig.some((s) => s.startsWith('lo:belegwissel'))).toBe(true);
+    await expect(page.locator('[data-letopnog]')).toHaveCount(0);
   });
   test('met een eigen drempel is er geen wissel, in Let op en in de sheet', async ({ page }) => {
     await I.boot(page, { set: { bufferNormNext: 3, beleggenDrempel: 4 } });
-    await page.evaluate(() => { go('maand'); openBeleggenVoorwaarden(); });
-    expect(await page.locator('#gripLetOp [data-letop="belegwissel"]').count()).toBe(0);
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); openBeleggenVoorwaarden(); });
+    expect(await page.locator('#gripTeKiezen [data-letop="belegwissel"]').count()).toBe(0);
     expect(await page.locator('#sheet [data-belegwissel]').count()).toBe(0);
     expect(await page.evaluate(() => beleggenWissel())).toBeNull();
   });

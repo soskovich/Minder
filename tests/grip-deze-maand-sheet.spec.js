@@ -71,8 +71,9 @@ for (const w of [360, 390]) {
 test('d. de as van de bridge op de kaart begint bij de ondergrens zonder bedrag erbij', async ({ page }) => {
   // v355: de vaste potjes op hun incasso, zodat de bridge alleen Vices en Boodschappen draagt (550 naar 694)
   await bootBrug(page, { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500 } } });
-  const r = await page.evaluate(() => { closeSheet(); go('maand'); const a = document.querySelector('#gripBrug [data-asbasis]');
-    return { basis: a ? +a.dataset.asbasis : null, label: a ? a.innerText : null, kaart: document.getElementById('gripBrug').innerText }; });
+  /* v428: de brug op Grip is de groepbrug in Begrijpen */
+  const r = await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('begrijpen'); const a = document.querySelector('#gripGroepBrug [data-asbasis]');
+    return { basis: a ? +a.dataset.asbasis : null, label: a ? a.innerText : null, kaart: document.getElementById('gripGroepBrug').innerText }; });
   // v357: de bridge loopt weer van het budget (2.253) naar de uitkomst (2.672), dus de as begint bij 2.000
   expect(r.basis).toBe(2000);
   expect(r.label).toBe('');

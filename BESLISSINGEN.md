@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v428` · Grip als cyclus: elke tab een vraag, en alleen Kiezen verandert iets.** Gevraagd met de mockup "Grip compleet v423":
+  Zien (wat gebeurt er), Begrijpen (waarom), Kiezen (wat ga ik doen), Terugblik (heeft het gewerkt). Let op was een kaart die feiten
+  en handelingen mengde en hooguit twee regels toonde; de feiten gaan naar Signalen op Zien en de handelingen naar Te kiezen, zonder
+  maximum, met het signaal als reden. Valkuil: een element verhuizen zonder het te verliezen. Blok 21 legt per oud element vast waar
+  het nu staat en telt wat verloren ging (0), en controleert dat de brug op `V.projectie` sluit en dat "N keuzes staan open" de lengte
+  van Te kiezen is: die drie (slim-regel, stip, lijst) lezen `gripCyclus().kies`. Tweede valkuil: de status van een Let op-regel zat
+  in zijn stip; Signalen draagt die stip mee, anders verdwijnt het onderscheid tussen tekort en let op. Klopt/niet verhuist naar
+  Kiezen, want Begrijpen verandert niets. Geen nieuwe rekenlogica: salaris, groepen en vaste lasten komen uit blok 20
+  (`salarisData()`, `maandGroepen()`, `vastNieuwGestopt()`, `woningKeuze()`), uit de diagnose gelicht zodat scherm en blok een bron
+  lezen.
 - **`v427` · een vraag per boeking, en een antwoord op de boeking waar het over ging.** Gemeld op het toestel: Lausa Eriksson stond
   er twee keer (de Tikkie-vraag en "wat was dit?"), met "via Tikki via Tikkie" in de naam, en "Zorg EUR 159, eenmalig" stond op Posh
   Clinic omdat `kennisZaai()` de eerste EUR 159 in Zorg nam. Valkuil: een antwoord zaaien op bedrag en categorie raakt de verkeerde

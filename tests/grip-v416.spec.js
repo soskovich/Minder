@@ -4,6 +4,8 @@
    A2 potNodig() telt een periodieke post bij de gewone variabele maand (mediaan), niet bij de hoogste.
    B3 de herzien-sheet van een te krap potje begint met "<post> is gestopt · telt niet meer mee".
    C4 herzien, zonder potje (reservering), te ruim verlagen en het potje-formulier sluiten met een toast "ongedaan maken". */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v409-stand');
 
@@ -74,7 +76,7 @@ test.describe('B3 · gestopt als eerste keuze in de herzien-sheet', () => {
   });
   test('bevestigen zet de post op gestopt, sluit de sheet, en ongedaan maken zet hem terug', async ({ page }) => {
     await S.boot(page);
-    await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); openPotHerzien('shopping'); });
+    await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); openPotHerzien('shopping'); });
     await page.locator('[data-phoptie="g:BOL ABONNEMENT SELEC"]').click();
     expect((await page.locator('[data-phbevestig]').innerText()).trim()).toBe('Bol Abonnement Select gestopt');
     await page.locator('[data-phbevestig]').click();
@@ -133,7 +135,7 @@ test.describe('fit 390x844', () => {
   const geenOverloop = page => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
   test('Zien: koopknop minstens 16px boven de menubalk', async ({ page }) => {
     await S.boot(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');
+    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');   // v428: Grip opent op Zien
       return { knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top }; });
     console.log(`v416 fit Zien: knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
     expect(r.nav - r.knop).toBeGreaterThanOrEqual(16);
@@ -141,8 +143,8 @@ test.describe('fit 390x844', () => {
   });
   test('Let op open: de lijst past in de sheet zonder overloop', async ({ page }) => {
     await S.boot(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); openGripLetOpLijst(); const sh = document.getElementById('sheet');
-      return { sw: sh.scrollWidth, cw: sh.clientWidth, n: document.querySelectorAll('#gripLetOpLijst [data-letop]').length }; });
+    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); gripKiesTab('kiezen'); const sh = document.getElementById('sheet');
+      return { sw: sh.scrollWidth, cw: sh.clientWidth, n: document.querySelectorAll('#gripTeKiezen [data-letop]').length }; });
     console.log(`v416 fit Let op: ${r.n} regels`);
     expect(r.sw).toBeLessThanOrEqual(r.cw);
     expect(await geenOverloop(page)).toBe(true);

@@ -2,6 +2,8 @@
    Het geval van de gebruiker: EUR 100 op 29 september naar Stichting Beheer Derdengelden, gekoppeld
    aan Peaks (Kayani); de voorwaarden zijn niet gehaald door de dekking van de reserveringen (EUR 37
    tegen EUR 299). Zie bezit-koppeling.fixture.js. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { boot, MAIN, SPAAR, PENSIOEN_DESC } = require('./bezit-koppeling.fixture');
 
@@ -9,18 +11,19 @@ let T = null, ID = {};
 async function start(page, o) { ID = await boot(page, o); T = ID.peaks0929; return ID; }
 const koppel = (page, asset) => page.evaluate(([id, a]) => { zetBezitKoppel(id, a); }, [T, asset]);
 /* v340: de vraag staat niet meer onder 'Vraagt aandacht' maar als regel [data-letop="beleg"] in de kaart
-   'Let op' (#gripLetOp); een tik opent openBelegVraag(id). 'beslis' is nu de tegelrij (#gripTegels), want
+   'Let op' (#gripTeKiezen); een tik opent openBelegVraag(id). 'beslis' is nu de tegelrij (#gripTegels), want
    de kaart 'Vraagt een beslissing' bestaat niet meer. De regel draagt geen asset-id meer, dus hij wordt
    herkend aan de naam van de bezitting. */
 /* v388: beleggen vóór je fundament is een PATROON in Begrijpen op Grip; de inleg staat er als signaal
    ([data-patsig="inleg"]), en een tik opent openBelegVraag(id). Tot v387 stond hij als regel onder Let op. */
+/* v428: de handeling bij een belegging zonder voorwaarden staat onder Te kiezen (beleg:<id>), met het signaal als reden. */
 const grip = (page) => page.evaluate(() => {
-  go('maand'); renderMaand(); gripNaarSignaal('kayani');
-  const rij = document.querySelector('#s-maand [data-patsig="inleg"][data-patsigk="kayani"]');
-  const kaart = document.querySelector('#s-maand [data-begrijpen]');
+  go('maand'); gripKiesTab('kiezen');
+  const rij = document.querySelector('#gripTeKiezen [data-kies="beleg:kayani"]');
+  const kaart = document.querySelector('#gripTeKiezen');
   return { aandacht: rij && kaart ? kaart.innerText : '', beslis: '', rij: !!rij, rijTekst: rij ? rij.innerText : '' };
 });
-const belegRij = (page) => page.locator('#s-maand [data-patsig="inleg"][data-patsigk="kayani"]');
+const belegRij = (page) => page.locator('#gripTeKiezen [data-kies="beleg:kayani"]');
 
 /* ===== a) de meting: wat er was voor deze ronde ===== */
 test.describe('a · de beleggingsinleg in de spaarquote, en geen koppeling', () => {
@@ -180,7 +183,7 @@ test.describe('e · gelden de voorwaarden hiervoor, zonder standaard', () => {
   test('zolang je niets kiest is de vraag open, en kijken schrijft niets', async ({ page }) => {
     await start(page);
     await koppel(page, 'kayani');
-    const r = await page.evaluate(() => { go('maand'); renderMaand(); openAsset('kayani');
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); renderMaand(); openAsset('kayani');
       const k = document.querySelector('#sheet [data-vwkeuze]');
       const stijl = [...document.querySelectorAll('#sheet [data-vwknop]')].map((b) => getComputedStyle(b).borderColor + '|' + getComputedStyle(b).fontWeight);
       return { keuze: k && k.dataset.vwkeuze, stijl, vw: SET.assets.find((a) => a.id === 'kayani').voorwaarden,

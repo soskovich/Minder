@@ -119,7 +119,7 @@ test.describe('v420', () => {
     expect(await page.evaluate(id => wisselOpen().some(t => t.id === id), id)).toBe(true);
     const [n] = await zet(page, [{ date: '2026-09-04', amount: -50, name: 'Revolut', desc: 'REVOLUT TOPUP' }]);
     expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), n)).toBe('persoonlijk');
-    expect(await page.evaluate(() => { go('maand'); return document.querySelector('[data-gegevensregel]').innerText; })).toContain('Kloppen mijn gegevens?');
+    expect(await page.evaluate(() => { go('maand'); return document.querySelector('[data-gegevensregel]').textContent; })).toContain('Kloppen mijn gegevens?');   // v428: de kop van de eigen kaart (hoofdletters via CSS)
     const txt = await page.evaluate(() => { openWisselVraag(); return document.querySelector('#wisselSheet').innerText; });
     expect(txt).toContain('Western Union');
     await page.evaluate(() => document.querySelector('[data-wisselbevestig]').click());

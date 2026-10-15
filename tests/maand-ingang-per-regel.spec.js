@@ -251,7 +251,7 @@ test.describe('d - de oude ingang onder de kaart is weg, de andere takken niet',
     const h = await page.evaluate(() => {
       SET.coachLog = (SET.coachLog || []).concat([{ type: 'afspraak', ts: Date.now(), text: 'Ik zet 100 extra opzij' }]);
       save(); go('maand'); gripKiesTab('kiezen');
-      const rij = document.querySelector('#s-maand [data-kiezen] [data-afspraak="coach"]');
+      const rij = document.querySelector('#s-maand #gripAlGekozen [data-afspraak="coach"]');
       return { gevonden: !!coachThisMonthAfspraak(), ingang: maandCoachIngang(maandMetAccept(maandRegels())),
         tekst: rij ? rij.innerText : '', onclick: rij ? rij.getAttribute('onclick') : '' };
     });

@@ -1,15 +1,17 @@
 // v329: drie keuzes per uitgesloten incasso op Grip, zonder voorselectie.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 /* v413: de vraag per post met de vlag uit reservering (groep a) kan de regel onder "nog N" duwen; dan staat hij in de
-   lijst achter die link (openGripLetOpLijst()). */
+   lijst achter die link (gripKiesTab('kiezen')). */
 /* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de
    sheet #gripLetOpSheet. De helper opent die regel zoals een tik dat doet, leest de kaart daar, en eist
    dat hij niet meer los op Grip staat. Zonder regel is er geen kaart, en dan zijn er geen rijen. */
-const rijen = page => page.evaluate(()=>{ go('maand'); renderMaand();
+const rijen = page => page.evaluate(()=>{ go('maand'); gripKiesTab('kiezen'); renderMaand();
   if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip');
-  const regel=(document.querySelector('#gripLetOp [data-letop="uit"]')||(openGripLetOpLijst(),document.querySelector('#gripLetOpLijst [data-letop="uit"]')));
+  const regel=(document.querySelector('#gripTeKiezen [data-letop="uit"]')||(gripKiesTab('kiezen'),document.querySelector('#gripTeKiezen [data-letop="uit"]')));
   if(!regel){ if(typeof closeSheet==='function') closeSheet(); return []; }
   regel.click();
   const sh=document.querySelector('#gripLetOpSheet');
@@ -34,7 +36,7 @@ test('b renderen schrijft geen keuze, en de regel blijft staan tot je kiest', as
   /* renderMaand() doet zelf een save() (de valt-op-log), dus de toets staat op de velden die een
      keuze zou schrijven en niet op localStorage als geheel */
   const r=await page.evaluate(()=>{ const f=()=>JSON.stringify([SET.fixDueExcl,resLijst(),SET.budgets,SET.budgetsNext||{}]); const voor=f();
-    for(let i=0;i<3;i++){ go('maand'); renderMaand(); go('dash'); renderDash(); } return {voor, na:f()}; });
+    for(let i=0;i<3;i++){ go('maand'); gripKiesTab('kiezen'); renderMaand(); go('dash'); renderDash(); } return {voor, na:f()}; });
   expect(r.na).toBe(r.voor);
   expect((await rijen(page)).length).toBe(2);
 });
@@ -113,7 +115,7 @@ for (const w of [360, 390]) {
   test(`h op ${w}px loopt de kaart niet over`, async ({page})=>{
     await page.setViewportSize({width:w, height:w===360?640:844});
     await bootStand(page);
-    const r=await page.evaluate(()=>{ go('maand'); renderMaand(); openGripLetOp('uit'); const k=document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); const kr=k.getBoundingClientRect();
+    const r=await page.evaluate(()=>{ go('maand'); gripKiesTab('kiezen'); renderMaand(); openGripLetOp('uit'); const k=document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); const kr=k.getBoundingClientRect();
       return {over:[...k.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>kr.right+0.5), h:Math.round(kr.height), sw:document.documentElement.scrollWidth, vw:innerWidth}; });
     console.log(`kaart ${w}px: ${r.h}px`);
     expect(r.over).toBe(false);

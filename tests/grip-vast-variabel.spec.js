@@ -18,8 +18,9 @@ const lees = (page) => page.evaluate(() => { const V = maandVooruit(); const Br 
     vaste_: V.vastePotjes.map((x) => ({ k: x.k, bud: x.bud, uit: x.uit, vast: x.vast, eind: x.eind, geen: x.geen })) },
     stappen: Br.stappen.map((s) => ({ soort: s.soort, label: s.label, k: s.k || null, w: s.waarde })) }; });
 /* v387: de kaart Deze maand is weg; de bridge staat op Zien, en de vaste lasten zijn daar een deel van "overig". */
-const naarGrip = async (page) => { await page.evaluate(() => go('maand')); await page.waitForSelector('#gripZien'); };
-const vastOpen = async (page) => { await page.locator('#gripBrug [data-brugstap="overig"]').first().click();   /* v406: overig staat er als boven en onder; beide openen dezelfde delen */ await page.locator('[data-overigdeel="vast"]').click(); };
+/* v428: de brug op Grip is de groepbrug in Begrijpen (#gripGroepKaart, #gripGroepBrug) */
+const naarGrip = async (page) => { await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); }); await page.waitForSelector('#gripGroepKaart'); };
+const vastOpen = async (page) => { await page.evaluate(() => gripKiesTab('begrijpen')); await page.locator('#gripGroepBrug [data-brugstap="overig"][data-brugk="vast"]').click();   /* v428: de stap vast in de groepbrug opent de sheet per groep */ await page.locator('#gripGroepen [data-groep="vast"]').click(); };
 const HUURVAST = { set: { potAard: { huur: 'vast' } } };
 const huurTx = [
   { id: 'h7', date: '2026-07-12', amount: -300, name: 'Kamerverhuur', desc: 'OVERBOEKING HUUR KAMER' },
@@ -112,10 +113,11 @@ test.describe('b. geen vaste lijst', () => {
 test.describe('c. de kaart', () => {
   test('de kop is de uitkomst tegen het budget, Vervoer en de vaste lasten staan in de bridge en Huur in de zin', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripZien').getAttribute('data-zien')).toBe('2473');
-    const brug = await page.locator('#gripBrug').innerText();
+    expect(await page.locator('#gripGroepKaart').getAttribute('data-groepbrug')).toBe('2473');
+    const brug = await page.locator('#gripGroepBrug').innerText();
     expect(brug).not.toContain('Huur');
-    expect(brug).toContain('Vervoer');
+    /* v428: de groepbrug zet niet elk potje boven los; wat niet past staat in "n boven", en de sheet per groep noemt het */
+    expect(brug + await page.evaluate(() => { openGripGroepen(); const t = document.querySelector('#gripGroepen').innerText; closeSheet(); return t; })).toContain('Vervoer');
     expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).stappen.find((x) => x.soort === 'vast').waarde)).toBe(0);
     expect(await page.locator('[data-vastregel]').count()).toBe(0);
     expect(await page.evaluate(() => dezeMaandZin(dezeMaandBrug(maandVooruit())))).toContain('Huur: geen betaling verwacht deze maand · €750 telt mee als vaste last.');
@@ -132,8 +134,9 @@ test.describe('c. de kaart', () => {
   });
   test('de totale uitkomst staat op de kaart en in de sheet, als hetzelfde getal (v357)', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripZien').getAttribute('data-zien')).toBe('2473');
-    await page.locator('#gripBrug [data-brugstap="eind"]').click();
+    expect(await page.locator('#gripGroepKaart').getAttribute('data-groepbrug')).toBe('2473');
+    await page.locator('#gripGroepBrug [data-brugstap="eind"]').click();   // v428: de tik opent de sheet per groep, met de opbouw erachter
+    await page.locator('#gripGroepen [data-groepvooruit]').click();
     await page.waitForSelector('#gripVooruit');
     expect(await page.locator('#gripVooruit [data-bandregel]').innerText()).toContain('Rond €2.473');
     expect(await page.locator('#gripVooruit [data-opbouw]').innerText()).toBe('Variabel €1.022 · vaste lasten €1.451 · €328 boven je budget');
@@ -222,7 +225,7 @@ for (const w of [360, 390]) {
   test(`g. hoogtes op ${w}px, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page, HUURVAST); await naarGrip(page);
-    const kaart = await page.locator('#gripZien').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
+    const kaart = await page.locator('#gripGroepKaart').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
     await vastOpen(page); await page.waitForSelector('#gripVast');
     const sheet = await page.locator('#gripVast').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
     await page.evaluate(() => openPotAard('vices'));

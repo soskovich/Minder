@@ -2,6 +2,8 @@
    uitging: "Uit eten & café: €75 zonder potje". Tot v362 stond daar de winkel ("Restaurant Lona: €75
    zonder potje"). De winkel staat nu in de zin eronder en in de sheet. Fixture: deze-maand-stand.js
    (6 oktober, Uit eten zonder potje). */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
@@ -11,8 +13,11 @@ const { boot } = require('./deze-maand-stand');
    zijn dezelfde boekingen en is het een regel: "<categorie> EUR X zonder potje" met "<partij> komt vaker terug" eronder,
    en een tik (de sheet met potje maken of de categorie wijzigen).
    v398: het bewijs staat in de regel zelf ("Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)"), zie grip-eigen-budget. */
-const regel = (page, soort = 'lek') => page.evaluate((soort) => { go('maand'); renderMaand();
-  const r = document.querySelector(`#gripLetOp [data-letop="${soort}"]`); return r ? r.innerText : null; }, soort);
+/* v428: het feit (naam en bewijs) staat als symptoom onder Signalen op Zien en in de drill in Begrijpen; de handeling staat in
+   Kiezen onder Te kiezen met de tik naar dezelfde sheet. regel() leest het feit, zoals de Let op-regel het droeg. */
+const regel = (page, soort = 'lek') => page.evaluate((soort) => { go('maand'); const s = gripCyc().sym.find((x) => x.soort === soort);
+  if (!s) return null; gripNaarSymptoom(s.id); const d = document.querySelector('#gripSymptoom'); gripKiesTab('kiezen');
+  return d ? `${s.naam}\n${s.sub}` : null; }, soort);
 
 test.describe('lek-regel · categorie en bedrag', () => {
   /* v402: Uit eten heeft in 3 van 3 afgeronde maanden uitgaven zonder potje, dus de regel is die van een categorie die er
@@ -26,7 +31,7 @@ test.describe('lek-regel · categorie en bedrag', () => {
     expect(t.split('\n')[1]).toBe('potje maken · Restaurant Lona · 4× in 4 mnd (jul, aug, sep, okt)');   // v398: het bewijs staat in de regel
     expect(await regel(page, 'lekcat')).toBeNull();   // geen tweede regel over dezelfde boekingen
     expect(await regel(page, 'lek')).toBeNull();
-    expect(await page.evaluate(() => [...document.querySelectorAll('#gripLetOp [data-letop="zonderpot"]')].map(e => e.getAttribute('onclick'))))
+    expect(await page.evaluate(() => { gripKiesTab('kiezen'); return [...document.querySelectorAll('#gripTeKiezen [data-letop="zonderpot"]')].map(e => e.getAttribute('onclick')); }))
       .toEqual(["openGripLetOp('lek')"]);
   });
   test('met twee winkels in de categorie is het bedrag de categorie, en de sheet zegt hetzelfde', async ({ page }) => {
@@ -36,7 +41,7 @@ test.describe('lek-regel · categorie en bedrag', () => {
     expect(r.som).toBe(105);
     const t = await regel(page, 'zonderpot');
     expect(t.split('\n')[0]).toBe('Uit eten & café zonder potje · 3 van 3 mnd');   // v402: het bedrag staat in de sheet
-    await page.evaluate(() => document.querySelector('#gripLetOp [data-letop="zonderpot"]').click());
+    await page.evaluate(() => { gripKiesTab('kiezen'); document.querySelector('#gripTeKiezen [data-letop="zonderpot"]').click(); });
     const sh = page.locator('#gripLetOpSheet[data-soort="lek"]');
     await expect(sh).toContainText('Uit eten & café · €105 zonder potje');
     await expect(sh.locator('[data-lekwinkel]')).toHaveText('waarvan Restaurant Lona €75');

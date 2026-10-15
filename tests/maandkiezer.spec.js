@@ -173,7 +173,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     /* v315: maandPlanRegels() is vervallen. v340: maandVanafRegels() ook; wat vanaf volgende maand
        verandert leest de tijdlijn uit maandVanafData(). Alle bouwstenen van Grip worden gelezen. */
     const src = await kaalUit(page, 'renderMaand', 'maandIngang', 'maandCoachIngang', 'maandVanafData',
-      'gripMeters', 'renderGripMeter', 'gripZien', 'gripZienBrug', 'teRuimLijst', 'gripLetOpItems', 'gripAfsprakenHtml', 'renderMaandBeslisSheet');   // v387   // v365: gripTijdlijnData is vervallen
+      'gripMeters', 'renderGripMeter', 'gripZienHtml', 'gripCyclus', 'gripBegrijpenNieuw', 'gripKiezenNieuw', 'gripGroepBrug', 'gripTerugAfgesloten', 'gripZienBrug', 'teRuimLijst', 'gripLetOpItems', 'gripAfsprakenHtml', 'renderMaandBeslisSheet');   // v387   // v365: gripTijdlijnData is vervallen
     expect(src).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 

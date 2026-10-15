@@ -10,6 +10,8 @@
 //     De ontdubbeling die deze groep bewaakt verschuift daarmee mee: de lek-ingang stond op
 //     Inzichten en staat nu op Grip, en op precies één van de twee.
 // De service worker staat globaal uit via playwright.config.js.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { sigKaart } = require('./beslis-sheet');
 const { kaalBron, kaalUit } = require('./bron-kaal');
@@ -128,7 +130,7 @@ test.describe('b · constateren en kiezen staan elk op één scherm', () => {
 
   test('de ingang staat op Grip, en daar maar één keer', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     await page.waitForTimeout(90);
     const n = await page.evaluate(() => document.querySelectorAll('#s-maand [onclick*="coStart(\'lek\'"]').length);
     expect(n).toBeLessThanOrEqual(1);
@@ -202,7 +204,7 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     const src = await kaalUit(page, 'renderMaand', 'gripLetOpItems', 'renderGripLetOp', 'valtOpKaartOpen');
     expect(src).toMatch(/valtOpSignals\(/);
     expect(src).not.toMatch(/budgetOverCat|budgetBand|effectiveBudgets/);
-    await page.evaluate(() => { go('maand'); renderMaand(); });
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); renderMaand(); });
     await sigKaart(page, sig[0].potjeId);   // v388: via het signaal in Begrijpen, of Let op als het in geen patroon staat
     expect(await page.locator('#gripLetOpSheet .valtop-open').innerText()).toContain(sig[0].naam);
     await expect(page.locator('#s-maand .valtop-open')).toHaveCount(0);
@@ -216,11 +218,14 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     await page.evaluate(() => go('ins'));
     expect(await page.locator('#s-ins .valtop-rij').count()).toBe(0);   // v359: niet op Inzichten
     /* v340: op Grip staat het signaal als Let op-regel, en de kaart pas in de sheet erachter */
-    await page.evaluate(() => { go('maand'); renderMaand(); });
-    const regels = await page.locator('#s-maand [data-letop="sig"]').allInnerTexts();
-    /* v388: hij staat precies een keer: onder Let op, of als signaal van een patroon in Begrijpen */
+    /* v428: precies een keer per tab: als feit op Zien (onder Signalen, als symptoom of als signaal van een patroon) en als
+       keuze in Kiezen (de handeling met het signaal als reden) */
+    await page.evaluate(() => { go('maand'); });
     const inPat = await page.evaluate((k) => gripPatronen().filter((p) => p.sig.some((s) => s.k === k)).length, sig[0].potjeId);
-    expect(regels.filter((t) => t.includes(sig[0].naam)).length + inPat).toBe(1);
+    const zien = await page.evaluate(([id, inPat]) => document.querySelectorAll(inPat ? '#gripSignalen [data-signaal^="pat:"]' : `#gripSignalen [data-signaal="lo:sig:${id}"]`).length, [sig[0].id, inPat]);
+    expect(zien).toBeGreaterThanOrEqual(1);
+    const kies = await page.evaluate((id) => { gripKiesTab('kiezen'); return document.querySelectorAll(`#gripTeKiezen [data-kies="sig:${id}"], #gripTeKiezen [data-kies="lo:sig:${id}"]`).length; }, sig[0].id);
+    expect(kies).toBe(1);
     expect(await page.locator('#s-maand .valtop-kaart').count()).toBe(0);
   });
 });
@@ -291,7 +296,7 @@ test.describe('i · de terugval claimt geen leegte die er niet is', () => {
         status: 'tekort', waarde: '', eenheid: '', gevolg: '', act: '', structureel: true }];
       renderMaand();
       const t = $('#s-maand').innerText.replace(/\s+/g, ' ');
-      const rij = document.querySelector('#s-maand #gripLetOp [data-letop="str"]');
+      const rij = document.querySelector('#s-maand #gripSignalen [data-signaal="lo:str:overstreak"]');   // v428: het feit staat op Zien onder Signalen, met de stip
       const dot = rij ? getComputedStyle(rij.querySelector('span')).backgroundColor : '';
       const rood = (() => { const e = document.createElement('span'); e.style.background = 'var(--red)'; document.body.appendChild(e);
         const c = getComputedStyle(e).backgroundColor; e.remove(); return c; })();

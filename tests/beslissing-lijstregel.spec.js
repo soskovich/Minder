@@ -20,6 +20,8 @@
  * de oorzaak de NORM (3) en het bedrag het gat naar het RICHTBEDRAG (EUR 7.500), en met samenvallende
  * getallen is 'hij leest de norm' niet van 'hij leest het doel' te onderscheiden.
  */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
@@ -82,7 +84,7 @@ async function boot(page, o = {}) {
   await page.addInitScript((s) => { for (const k in s) localStorage.setItem(k, s[k]); }, seed(o));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof window.renderMaand === 'function');
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
 }
 
 const BRON = () => kaalBron(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));

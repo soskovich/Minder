@@ -115,10 +115,12 @@ test.describe('6 · beleggen', () => {
     expect(p.bv).toBe(0);   // belegVragen() eist inleg in deze maand en ziet hem niet
     expect(p.bewijs).toBe('€100 naar Peaks in sep · dekking reserveringen €37 tegen €299');
     expect(p.sub).toMatch(/^loopt: €100 vorige maand, deze maand nog niet geboekt/);
-    // een tik op het signaal opent de meter, want er is nog geen vraag over geboekte inleg
-    await tab(page, 'begrijpen');
-    await page.evaluate(() => { const i = gripPatronen().findIndex(p => p.id === 'beleggen'); window._gripPatroonI = i; renderMaand(); });
-    await page.click('[data-patsig="inleg"]');
+    /* v428: Begrijpen verandert niets en een tak opent geen sheet meer; zonder vraag over geboekte inleg is er geen keuze
+       in Kiezen, en de meter blijft de ingang. */
+    await page.evaluate(() => gripNaarSymptoom('pat:beleggen'));
+    expect(await page.locator('#gripSymptoom [data-patsig="inleg"]').count()).toBe(1);
+    expect(await page.evaluate(() => gripCyc().kies.some(k => k.id.startsWith('beleg:')))).toBe(false);
+    await page.click('[data-meter="beleggen"]');
     expect(await page.locator('#gripMeterSheet[data-meter="beleggen"]').count()).toBe(1);
   });
   test('een ingevulde periodieke inleg zonder gekoppelde boeking is geen meting (v332), en "voorwaarden gelden niet" telt niet', async ({ page }) => {
@@ -137,15 +139,17 @@ test.describe('6 · beleggen', () => {
 test.describe('7 · de patroonkaart als boom', () => {
   test('de oorzaak als knoop met het bedrag rechts, de signalen als takken, bewijs en klopt/niet blijven', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await tab(page, 'begrijpen');
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));   // v428: de boom staat in de drill van het symptoom
     expect(await tekst(page, '[data-patoorzaak]')).toMatch(/Betaalrekening op na ~12 dagen na salaris[\s\S]*€700[\s\S]*uit spaargeld/);
+    /* v428: de takken in de drill dragen geen tik en geen pijl meer (Begrijpen verandert niets), dus het bedrag is de laatste span */
     const t = await page.evaluate(() => [...document.querySelectorAll('[data-patboom] [data-patsig]')].map(r => { const b = r.querySelector('[data-boomlijn]').style; const sp = r.querySelectorAll(':scope > span');
-      return { soort: r.dataset.patsig, laatst: b.height === '50%', bedragRechts: sp[sp.length - 2].getBoundingClientRect().right > r.getBoundingClientRect().right - 40 }; }));
+      return { soort: r.dataset.patsig, laatst: b.height === '50%', bedragRechts: sp[sp.length - 1].getBoundingClientRect().right > r.getBoundingClientRect().right - 40 }; }));
     expect(t.map(x => x.soort)).toEqual(['onttrekking', 'potje']);
     expect(t.map(x => x.laatst)).toEqual([false, true]);   // de laatste tak stopt halverwege
     expect(t.every(x => x.bedragRechts)).toBe(true);
     expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
-    expect(await page.locator('[data-begrijpen] button:has-text("klopt")').count()).toBe(1);
+    await tab(page, 'kiezen');   // v428: klopt/niet staat bij de keuze in Kiezen
+    expect(await page.locator('[data-kiesoordeel="spaargeld"] button:has-text("klopt")').count()).toBe(1);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(sw).toBeLessThanOrEqual(390);
   });

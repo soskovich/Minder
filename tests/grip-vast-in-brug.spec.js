@@ -13,7 +13,9 @@ const Zes = require('./deze-maand-stand');
 const Toe = require('./vast-variabel-stand');
 const { kaalUit } = require('./bron-kaal');
 
-const grip = (page) => page.evaluate(() => { closeSheet(); go('maand'); });
+/* v428: de brug staat in Begrijpen, in groepen (#gripGroepKaart, #gripGroepBrug); een tik opent de sheet per groep, met per
+   groep de sheet die er was (vast: de sheet vaste lasten, zonder potje: geboekt en verwacht). Alleen de plek veranderde. */
+const grip = (page) => page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('begrijpen'); });
 const tik = async (page, sel) => { await page.waitForTimeout(350); await page.click(sel); await page.waitForTimeout(150); };
 const vastPost = (page) => page.evaluate(() => { const p = nogDezeMaandPosten().find((x) => /Nog te betalen · vast/.test(x.lab));
   return p ? { val: p.val, sub: p.sub } : null; });
@@ -38,7 +40,7 @@ test.describe('a. de bridge loopt van het budget naar de uitkomst, met de vaste 
   test('de regel vaste lasten is weg (v357), ook op Zien', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     expect(await page.evaluate(() => document.querySelectorAll('[data-vastregel],[data-vastgrootste],[data-variabel]').length)).toBe(0);
-    expect(await kaalUit(page, 'gripZien')).not.toContain('gripVastRegel');
+    expect(await kaalUit(page, 'gripZienHtml')).not.toContain('gripVastRegel');
     expect(await page.evaluate(() => typeof window.gripVastRegel)).toBe('undefined');
   });
 
@@ -69,8 +71,8 @@ test.describe('b. een tik op de stap', () => {
   test('vaste lasten opent de sheet vaste lasten, en openen schrijft niets', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await tik(page, '#gripBrug [data-brugstap="overig"]');   // v387: via overig
-    await page.click('[data-overigdeel="vast"]');
+    await tik(page, '#gripGroepBrug [data-brugstap="overig"][data-brugk="vast"]');   // v428: de stap vast opent per groep
+    await page.click('#gripGroepen [data-groep="vast"]');
     expect(await page.evaluate(() => !!document.getElementById('gripVast'))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
@@ -78,8 +80,8 @@ test.describe('b. een tik op de stap', () => {
   test('zonder potje opent geboekt en verwacht, met de volle lijst eronder', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     /* v408: bij ruimtegebrek zit zonder potje in "n boven"; de tik daarop toont hem, met dezelfde ingang naar zijn sheet */
-    if (await page.locator('#gripBrug [data-brugstap="zonder"]').count()) await tik(page, '#gripBrug [data-brugstap="zonder"]');
-    else { await tik(page, '#gripBrug [data-brugstap="overig"][data-brugk="boven"]'); await page.click('[data-overigzonder]'); }
+    await tik(page, '#gripGroepBrug [data-brugstap="zonder"]');   // v428: per groep, en daar zonder potje
+    await page.click('#gripGroepen [data-groep="zonder"]');
     expect(await page.evaluate(() => !!document.getElementById('zonderPotjeSheet'))).toBe(true);
     expect(await page.evaluate(() => !!document.querySelector('#zonderPotjeSheet [data-allepotjes]'))).toBe(true);
   });
@@ -122,8 +124,8 @@ test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () 
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       return { boven: uitschieters(V).map((x) => x.k), st: Br.stappen.map((s) => s.soort),
         som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, V.budget), proj: V.projectie,
-        kol: [...document.querySelectorAll('#gripZien [data-brugstap]')].map((k) => k.getBoundingClientRect().width),   // v387: de bridge van Zien
-        as: document.querySelectorAll('#gripZien [data-asbasis]').length,
+        kol: [...document.querySelectorAll('#gripGroepBrug [data-brugstap]')].map((k) => k.getBoundingClientRect().width),   // v428: de brug in Begrijpen
+        as: document.querySelectorAll('#gripGroepBrug [data-asbasis]').length,
         zin: dezeMaandZin(dezeMaandBrug(maandVooruit())) }; });
     expect(r.boven.slice().sort()).toEqual(['boodschappen', 'uiteten', 'vices']);   // invoermeting: drie potjes erboven
     expect(r.st).toEqual(['begin', 'potje', 'potje', 'rest', 'vast', 'zonder', 'eind']);
@@ -147,10 +149,10 @@ test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () 
 });
 
 for (const w of [360, 390]) {
-  test(`e. op ${w}px loopt Zien niet over, en de sheet vaste lasten ook niet`, async ({ page }) => {
+  test(`e. op ${w}px loopt de brug in Begrijpen niet over, en de sheet vaste lasten ook niet`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await Zes.boot(page); await grip(page);
-    const k = await page.evaluate(() => { const e = document.getElementById('gripZien'), r = e.getBoundingClientRect();
+    const k = await page.evaluate(() => { const e = document.getElementById('gripGroepKaart'), r = e.getBoundingClientRect();
       return { over: [...e.querySelectorAll('*')].filter((x) => x.getBoundingClientRect().right > r.right + 0.5).length }; });
     await page.evaluate(() => openGripVast());
     const s = await page.evaluate(() => ({ over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }));

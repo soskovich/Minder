@@ -40,7 +40,7 @@ function metAfspraak(af, m1Bedrag) {
 
 async function maand(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => go('maand'));
+  await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });   // v428: de terugblik staat in Kiezen onder "Mee uit vorige maand"
   await page.waitForSelector('#s-maand .card');
 }
 /* v340: de afspraaklus is geen eigen kaart bovenaan Grip meer, maar een regel onder "Let op"
@@ -238,12 +238,13 @@ test.describe('f · plaats en layout', () => {
   /* v340: de oordeelkaart en de afsluitkaart bestaan niet meer, dus 'voor het oordeel' en 'boven de
      maandafsluiting' zijn vervallen. Wat blijft: de terugblik is een regel onder "Let op", en de
      terugblikken staan daar bovenaan, voor de signalen van nu. */
-  test('de regel staat onder Let op, als eerste regel', async ({ page }) => {
+  /* v428: Let op bestaat niet meer; een terugblik op vorige maand staat in Kiezen onder "Mee uit vorige maand" (#gripMee) */
+  test('de regel staat in Kiezen onder Mee uit vorige maand, als eerste regel', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
     expect(await page.locator('#afsluitKaart').count()).toBe(0);
-    const soorten = await page.$$eval('#gripLetOp [data-letop]', (L) => L.map((e) => e.dataset.letop));
+    const soorten = await page.$$eval('#gripMee [data-letop]', (L) => L.map((e) => e.dataset.letop));
     expect(soorten[0]).toBe('afspraaklus');
-    expect(await page.locator('#gripLetOp [data-letop="afspraaklus"]').innerText()).toMatch(/je afspraak van vorige maand/i);
+    expect(await page.locator('#gripMee [data-letop="afspraaklus"]').innerText()).toMatch(/je afspraak van vorige maand/i);
   });
 
   for (const w of [360, 390]) {

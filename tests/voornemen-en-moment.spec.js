@@ -4,6 +4,8 @@
 // die die categorie vergelijkt, allebei met een gezien-vlag. De coachlus blijft; de kaart is
 // opgeheven en het moment dat hij belichaamde leeft voort als timing op Maand.
 // De service worker staat globaal uit via playwright.config.js.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
@@ -55,14 +57,16 @@ async function boot(page, o = {}) {
    een sheet; deze helper leest Grip plus de kaart achter elke terugblik-regel, in die volgorde.
    v349: de uitnodiging (maandCoachIngang) staat in de pop-up van de maandafsluiting en niet meer op
    Grip, dus de helper leest die pop-up erachter. */
-const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('maand'); });
+const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   await page.waitForSelector('#s-maand .card');
   return page.evaluate(() => {
     let t = $('#s-maand').innerText;
-    gripKiesTab('kiezen'); t += ' ' + $('#gripInhoud').innerText; gripKiesTab('zien');   // v387: de afspraken staan op Kiezen
-    for (const e of document.querySelectorAll('#gripLetOp [data-letop]')) {
-      const k = e.dataset.letop; if (!['accept', 'afspraaklus', 'voornemen'].includes(k)) continue;
+    gripKiesTab('kiezen'); t += ' ' + $('#gripInhoud').innerText;   // v387: de afspraken staan op Kiezen
+    /* v428: de terugblikken (acceptatie, afspraak, voornemen) staan in Kiezen onder Mee uit vorige maand */
+    for (const k of [...document.querySelectorAll('#gripMee [data-letop]')].map((e) => e.dataset.letop)) {
+      if (!['accept', 'afspraaklus', 'voornemen'].includes(k)) continue;
       openGripLetOp(k); t += ' ' + document.getElementById('gripLetOpSheet').innerText; closeSheet(); }
+    gripKiesTab('zien');
     openAfsluiting(valtOpYmPlus(thisYM(), -1)); t += ' ' + $('#sheet').innerText; closeSheet();
     return t.replace(/\s+/g, ' '); }); };
 
@@ -115,7 +119,7 @@ test.describe('b · het maandmoment hangt aan de datum, niet aan een vlag', () =
     await boot(page, { dag: 3 });
     const uit = [];
     for (let k = 0; k < 3; k++) {
-      await page.evaluate(() => { go('dash'); go('maand'); });
+      await page.evaluate(() => { go('dash'); go('maand'); gripKiesTab('kiezen'); });
       uit.push(await page.evaluate(() => $('#s-maand').innerText
         .replace(/Gelezen op[^\n]*/g, '').replace(/\s+/g, ' ')));
     }
@@ -127,7 +131,7 @@ test.describe('b · het maandmoment hangt aan de datum, niet aan een vlag', () =
     await boot(page, { dag: 3 });
     const r = await page.evaluate(() => {
       const voor = JSON.parse(JSON.stringify(SET));
-      go('maand'); go('maand');
+      go('maand'); go('maand');   // v428: Grip opent op Zien; van tab wisselen legt gripGezien vast en is geen moment-vlag
       const na = SET;
       const sleutels = [...new Set(Object.keys(voor).concat(Object.keys(na)))]
         .filter((k) => JSON.stringify(voor[k]) !== JSON.stringify(na[k]));
@@ -209,7 +213,8 @@ test.describe('d · een openstaand voornemen krijgt zijn terugblik precies een k
   test('na Gezien komt hij niet meer terug', async ({ page }) => {
     await boot(page, metVoornemen());
     expect(await maand(page)).toMatch(/Je voornemen van/i);
-    await page.locator('#gripLetOp [data-letop="voornemen"]').click();
+    await page.evaluate(() => gripKiesTab('kiezen'));   // v428: Mee uit vorige maand staat op Kiezen
+    await page.locator('#gripMee [data-letop="voornemen"]').click();
     await page.locator('#gripLetOpSheet >> text=Gezien').first().click();
     await page.waitForTimeout(120);
     expect(await page.evaluate(() => !!document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show'))).toBe(false);
@@ -217,7 +222,7 @@ test.describe('d · een openstaand voornemen krijgt zijn terugblik precies een k
     expect(na).not.toMatch(/Je voornemen van/i);
     expect(await page.evaluate(() => SET.voornemenReflectedFor)).toBe(VORIG);
     // en ook niet na opnieuw openen
-    await page.evaluate(() => { go('dash'); go('maand'); });
+    await page.evaluate(() => { go('dash'); go('maand'); gripKiesTab('kiezen'); });
     expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/Je voornemen van/i);
   });
 

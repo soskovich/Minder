@@ -1,5 +1,7 @@
 /* v408: EEN SIGNAAL PER POTJE, MAANDNAMEN OUD NAAR NIEUW, BOVEN BUDGET MET DE UITSCHIETER-DREMPEL, LET OP VERWIJST NAAR
    PATRONEN, STIJGENDE TREND, EN DE BRUG ZONDER TWEE KEER "OVERIG". Op grip-v408-stand (10 oktober 2026). */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v408-stand');
 
@@ -162,7 +164,7 @@ test.describe('D5 · een potje in een patroon staat in Let op als verwijzing', (
   });
   test('de tik opent Begrijpen op dat patroon', async ({ page }) => {
     await S.boot(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); const x = gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), []).find(y => y.soort === 'patroon');
+    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); const x = gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), []).find(y => y.soort === 'patroon');
       new Function(x.act)(); return { tab: window._gripTab, i: window._gripPatroonI, id: gripPatronen()[window._gripPatroonI].id, act: x.act }; });
     expect(r.tab).toBe('begrijpen');
     expect(r.act).toBe(`gripNaarBegrijpen('${r.id}')`);
@@ -239,17 +241,18 @@ test.describe('fit op 390x844', () => {
   test('Zien en Let op (open) passen boven de menubalk', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await S.boot(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand');
+    /* v428: Zien draagt geen brug meer (die staat in Begrijpen) en Let op is geen kaart; de handelingen staan in Kiezen,
+       zonder "nog N", en de koopknop staat op elke tab minstens 16px boven de menubalk. */
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen');
       const knop = document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav = document.querySelector('.nav').getBoundingClientRect().top;
-      const kol = document.querySelectorAll('#gripBrug [data-brugstap]').length, breed = [...document.querySelectorAll('#gripBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width);
-      return { knop, nav, kol, breed, sw: document.documentElement.scrollWidth, nog: !!document.querySelector('[data-letopnog]') }; });
-    console.log(`zien 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
+      const kol = document.querySelectorAll('#gripGroepBrug [data-brugstap]').length, breed = [...document.querySelectorAll('#gripGroepBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width);
+      return { knop, nav, kol, breed, sw: document.documentElement.scrollWidth }; });
+    console.log(`begrijpen 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
     expect(r.kol).toBeLessThanOrEqual(7); for (const b of r.breed) expect(b).toBeGreaterThanOrEqual(40);
-    expect(r.knop).toBeLessThanOrEqual(r.nav); expect(r.sw).toBeLessThanOrEqual(390);
-    expect(r.nog).toBe(true);
-    const s = await page.evaluate(() => { openGripLetOpLijst(); const sh = document.querySelector('#sheet'), b = sh.getBoundingClientRect();
-      return { h: b.height, sh: sh.scrollHeight, ch: sh.clientHeight, vh: innerHeight, sw: document.documentElement.scrollWidth, n: sh.querySelectorAll('[data-letop]').length }; });
-    console.log(`let op open 390: ${s.n} regels, sheet ${Math.round(s.h)}px van ${s.vh}, scroll ${s.sh}/${s.ch}`);
+    expect(r.knop).toBeLessThanOrEqual(r.nav - 16); expect(r.sw).toBeLessThanOrEqual(390);
+    const s = await page.evaluate(() => { gripKiesTab('kiezen'); return { n: document.querySelectorAll('#gripTeKiezen [data-letop]').length, nog: document.querySelectorAll('[data-letopnog]').length,
+      sh: 0, ch: 0, sw: document.documentElement.scrollWidth }; });
+    expect(s.nog).toBe(0);
     expect(s.n).toBeGreaterThan(0); expect(s.sh).toBeLessThanOrEqual(s.ch + 1); expect(s.sw).toBeLessThanOrEqual(390);
   });
 });

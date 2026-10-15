@@ -40,9 +40,9 @@ test('b: de brug-som blijft budget plus stappen is verwacht, en z. potje is gebo
   expect(S.st).toBeTruthy(); expect(S.st.waarde).toBe(S.st.geboekt + S.st.verwacht); expect(S.st.deel).toBe(S.st.geboekt);
   expect(S.st.verwacht).toBeGreaterThan(0);
   /* v408: met ruimte (Vervoer niet meer te ruim) staat zonder potje als eigen stap, in twee kleuren */
-  await page.evaluate(() => { SET.budgets.vervoer = teRuim(maandVooruit()).find(x => x.k === 'vervoer').voorstel; save(); window._gripTab = 'zien'; go('maand'); });
-  await expect(page.locator('[data-brugstap="zonder"] [data-brugdicht]')).toHaveCount(1);
-  await expect(page.locator('[data-brugstap="zonder"] [data-bruglicht]')).toHaveCount(1);
+  await page.evaluate(() => { SET.budgets.vervoer = teRuim(maandVooruit()).find(x => x.k === 'vervoer').voorstel; save(); go('maand'); gripKiesTab('begrijpen'); });   // v428: de brug staat in Begrijpen (groepbrug)
+  await expect(page.locator('#gripGroepBrug [data-brugstap="zonder"] [data-brugdicht]')).toHaveCount(1);
+  await expect(page.locator('#gripGroepBrug [data-brugstap="zonder"] [data-bruglicht]')).toHaveCount(1);
 });
 
 test('c: het geboekte deel is de som van de boekingen in blok 19', async ({ page }) => {
@@ -54,10 +54,11 @@ test('c: het geboekte deel is de som van de boekingen in blok 19', async ({ page
   expect(Math.abs(S.st.geboekt - som)).toBeLessThan(1);
   expect(Math.abs(S.Z.geboekt - som)).toBeLessThan(0.01);
   // de tik op de stap zegt dezelfde twee getallen
-  await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
-  /* v408: bij ruimtegebrek zit zonder potje in "n boven"; de tik daarop opent dezelfde sheet via zijn regel */
-  if (await page.locator('[data-brugstap="zonder"]').count()) await page.locator('[data-brugstap="zonder"]').click();
-  else { await page.locator('#gripBrug [data-brugstap="overig"][data-brugk="boven"]').click(); await page.locator('[data-overigzonder]').click(); }
+  /* v428: in de groepbrug staat zonder potje altijd als eigen stap; de tik opent de sheet per groep, en de regel zonder potje
+     opent dezelfde sheet als voorheen */
+  await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
+  await page.locator('#gripGroepBrug [data-brugstap="zonder"]').click();
+  await page.locator('#gripGroepen [data-groep="zonder"]').click();
   await expect(page.locator('#zonderPotjeSheet [data-zondergeboekt]')).toHaveAttribute('data-zondergeboekt', String(S.st.geboekt));
   await expect(page.locator('#zonderPotjeSheet [data-zonderverwacht]')).toHaveAttribute('data-zonderverwacht', String(S.st.verwacht));
   await expect(page.locator('#zonderPotjeSheet')).toContainText(`€${S.st.geboekt} geboekt`);

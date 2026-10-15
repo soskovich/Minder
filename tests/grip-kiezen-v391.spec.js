@@ -67,15 +67,16 @@ test.describe('7 en 9 · de regels in Kiezen', () => {
     await grip(page, { opnames: OPNAMES });
     await tab(page, 'kiezen');
     expect(await tekst(page, '[data-kiesrij="spaargeld"] [data-kiesbedrag]')).toBe('€700 eruit');
-    expect(await page.locator('[data-kiesrij="spaargeld"] [data-eerstbevestigen]').count()).toBe(1);
-    await page.click('[data-kiesrij="spaargeld"]');
-    expect(await page.evaluate(() => ({ tab: gripTab(), i: window._gripPatroonI, sheet: !!document.getElementById('gripKeuzeSheet') }))).toEqual({ tab: 'begrijpen', i: 0, sheet: false });
+    /* v428: zonder oordeel staat de vraag "klopt dit patroon?" in de rij zelf (data-kiesbevestig), en de rij opent niets */
+    expect(await page.locator('[data-kiesrij="spaargeld"][data-kiesbevestig] [data-kiesoordeel="spaargeld"]').count()).toBe(1);
+    await page.click('[data-kiesrij="spaargeld"] [data-kiesbedrag]');
+    expect(await page.evaluate(() => ({ tab: gripTab(), sheet: !!document.getElementById('gripKeuzeSheet') }))).toEqual({ tab: 'kiezen', sheet: false });
     // ook rechtstreeks opent de keuze niet, en bevestigen schrijft niets
     await page.evaluate(() => { openGripKeuze('spaargeld'); window._gripK = { pid: 'spaargeld', optie: 'grens', lat: [], latOk: true }; gripKeuzeZet(); });
     expect(await page.evaluate(() => (SET.gripKeuze || {})['2026-10'])).toBeUndefined();
     // na "niet" (ook een oordeel) wel
     await page.evaluate(() => { gripOordeelZet('spaargeld', false, 'impuls'); gripKiesTab('kiezen'); });
-    expect(await page.locator('[data-kiesrij="spaargeld"] [data-eerstbevestigen]').count()).toBe(0);
+    expect(await page.locator('[data-kiesrij="spaargeld"][data-kiesbevestig]').count()).toBe(0);
     await page.click('[data-kiesrij="spaargeld"]');
     expect(await page.locator('#gripKeuzeSheet').count()).toBe(1);
   });
@@ -101,7 +102,7 @@ test.describe('10 · te ruim begroot vanaf de 2e maand in Kiezen', () => {
       return { eerste: rows[0].dataset.kiesherzien, tekst: rows[0].innerText.replace(/\s+/g, ' ') }; });
     expect(r.eerste).toBe('huur');
     expect(r.tekst).toContain('Huur herzien'); expect(r.tekst).toContain('2e maand'); expect(r.tekst).toContain('€558 te ruim');
-    expect(await tekst(page, '[data-kiesvoortgang]')).toBe('0 van 1');   // telt niet als patroon
+    expect(await page.locator('[data-kiesvoortgang]').getAttribute('data-tekiezen')).toBe(String(await page.evaluate(() => gripCyc().kies.length)));   // v428: Te kiezen telt elke open keuze, herzien ook
     await page.click('[data-kiesherzien="huur"]');
     expect(await page.locator('#teRuimSheet').count()).toBe(1);
     await page.evaluate(() => { teRuimLaten('huur'); closeSheet(); renderMaand(); });

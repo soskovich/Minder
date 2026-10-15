@@ -116,8 +116,9 @@ test.describe('c · structureel op het maandscherm', () => {
        stip in de kleur van zijn status, dus een blokkade leest als rood en een observatie als amber. */
     /* v406: in Let op gaat eerst wat je kunt doen (groep a, b); een structurele regel kan dus achter "nog N ›" staan.
        De regels komen daarom uit de hele lijst (window._gripLetOpL), gerenderd met dezelfde gripLetOpRij(). */
+    /* v428: Let op is geen kaart meer; de lijst is gripCyc().L, en een structureel signaal staat als feit onder Signalen */
     const rijen = await page.evaluate(() => { go('maand');
-      return (window._gripLetOpL || []).filter((x) => x.soort === 'str').map((x) => {
+      return (gripCyc().L || []).filter((x) => x.soort === 'str').map((x) => {
         const d = document.createElement('div'); d.innerHTML = gripLetOpRij(x); return { t: x.naam + ' ' + (x.sub || ''), h: d.innerHTML }; }); });
     expect(rijen.length).toBe(str.length);
     for (let i = 0; i < str.length; i++) {
@@ -135,11 +136,12 @@ test.describe('c · structureel op het maandscherm', () => {
     await page.evaluate(() => { delete SET.maandGelezen; renderMaand(); });
     /* v340: 'Vraagt een beslissing' is vervallen. Een structureel signaal is een gewone regel onder
        "Let op", tussen de andere signalen, en krijgt geen eigen kaart of kop. */
-    const kaarten = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card .hlabel')].map((e) => e.textContent));
-    expect(kaarten.filter((k) => /^let op$/i.test(k.trim())).length).toBe(1);
-    // v406: de structurele regels staan in de lijst van Let op, zichtbaar of achter "nog N ›"
-    expect(await page.evaluate(() => (window._gripLetOpL || []).filter((x) => x.soort === 'str').length)).toBe(str.length);
-    expect(kaarten.some((k) => /signaal|patroon|melding/i.test(k))).toBe(false);
+    /* v428: Let op is geen kaart meer. Een structureel signaal staat als gewone regel onder Signalen op Zien (een feit) en
+       zijn handeling onder Te kiezen; geen eigen kaart en geen eigen kop. */
+    const kaarten = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card .hlabel')].map((e) => e.textContent.trim()));
+    expect(kaarten.filter((k) => /^let op$/i.test(k)).length).toBe(0);
+    expect(await page.locator('#gripSignalen [data-signaal^="lo:str:"]').count()).toBe(str.length);
+    expect(kaarten.filter((k) => /structureel|patroon|melding/i.test(k)).length).toBe(0);
   });
 
   /* v175: dit legde vast dat de coach-ingang R kreeg en dus de structurele signalen miste. Daardoor
@@ -152,7 +154,7 @@ test.describe('c · structureel op het maandscherm', () => {
     /* v349: de ingang staat in de pop-up van de maandafsluiting, en leest daar dezelfde lijst als RO:
        de regels met acceptatie en afspraak, plus de structurele signalen. */
     const src = await kaalUit(page, 'renderMaand');
-    expect(await kaalUit(page, 'gripZien', 'gripAfsprakenHtml')).not.toContain('maandCoachIngang(');   // v387
+    expect(await kaalUit(page, 'gripZienHtml', 'gripKiezenNieuw', 'gripAfsprakenHtml')).not.toContain('maandCoachIngang(');   // v387
     expect(await kaalUit(page, 'renderAfsluitSheet')).toContain('maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())))');
     expect(src).not.toMatch(/maandCoachIngang\(R\)/);
   });

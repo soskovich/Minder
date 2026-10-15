@@ -1,17 +1,19 @@
 // v330: 'Wordt een reservering' toont beide gevolgen voor de bevestiging, en schrijft ze samen.
 // v360: het verlagen geldt vanaf een maand die je kiest (niets voorgekozen), en het potje gaat omlaag met wat de
 // post per maand vraagt. Parkeergelden komt elke maand, dus dat is hier zijn hele bedrag (EUR 19).
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 const VELDEN = () => JSON.stringify([SET.fixDueExcl, resLijst(), SET.budgets, SET.budgetsNext||{}, SET.potMetaNext||{}]);
 /* v413: de vraag per post met de vlag uit reservering (groep a) kan de regel onder "nog N" duwen; dan staat hij in de
-   lijst achter die link (openGripLetOpLijst()). */
+   lijst achter die link (gripKiesTab('kiezen')). */
 /* v340: de kaart staat achter de Let op-regel [data-letop="uit"] op Grip, in de sheet #gripLetOpSheet.
    De tik op 'Wordt een reservering' komt daar vandaan en vervangt die sheet door de bevestiging. */
-const openVervoer = page => page.evaluate(()=>{ go('maand'); renderMaand();
+const openVervoer = page => page.evaluate(()=>{ go('maand'); gripKiesTab('kiezen'); renderMaand();
   if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip');
-  (document.querySelector('#gripLetOp [data-letop="uit"]')||(openGripLetOpLijst(),document.querySelector('#gripLetOpLijst [data-letop="uit"]'))).click();
+  (document.querySelector('#gripTeKiezen [data-letop="uit"]')||(gripKiesTab('kiezen'),document.querySelector('#gripTeKiezen [data-letop="uit"]'))).click();
   const r=document.querySelector('#gripLetOpSheet #uitgeslotenKaart [data-uitgesloten="vervoer"]');
   const P=uitgeslotenPotjes().find(x=>x.key===r.dataset.sleutel);
   [...r.querySelectorAll('[onclick]')].find(b=>/Wordt een reservering/.test(b.innerText)).click();

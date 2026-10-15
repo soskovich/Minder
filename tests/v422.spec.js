@@ -51,7 +51,7 @@ test.describe('v422', () => {
     const Q = await page.evaluate(() => gegevensVragen().filter(q => q.soort === 'poststop'));
     expect(Q.map(q => [q.key, q.dag])).toEqual([['HEALTH CLUB', '2026-10-08']]);
     await page.evaluate(() => { go('maand'); });
-    const regel = await page.locator('[data-gegevensregel]').innerText();
+    const regel = await page.locator('[data-gegevensregel]').textContent();   // v428: de kop van de eigen kaart (hoofdletters via CSS)
     expect(regel).toContain('Kloppen mijn gegevens?');
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
     await page.evaluate(() => openGegevensVragen('alle'));

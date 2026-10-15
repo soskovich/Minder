@@ -10,6 +10,8 @@
 // De vastlegging is de reden dat dit bestaat: het potje verhogen laat een signaal verdwijnen zonder
 // dat je minder uitgeeft, en zonder telling is dat de makkelijkste knop.
 // De service worker staat globaal uit via playwright.config.js.
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const { pinDag } = require('./vaste-dag');
 
@@ -61,8 +63,8 @@ async function boot(page, o) {
 
 /* v340: op Grip staat elk signaal als regel onder 'Let op'; een tik opent de kaart in een sheet. */
 async function kaart(page, n) {
-  await page.evaluate(() => { closeSheet(); go('maand'); });
-  await page.locator('#gripLetOp [data-letop="sig"]').nth(n || 0).click();
+  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
+  await page.locator('#gripTeKiezen [data-letop="sig"]').nth(n || 0).click();
   await page.locator('#gripLetOpSheet .valtop-open').waitFor();
 }
 const sigKeys = (page) => page.evaluate(() => valtOpSignals(thisYM()).map((s) => s.potjeId));
@@ -113,7 +115,7 @@ test.describe('valtOpSignals: de detectie', () => {
     expect(await sigKeys(page)).not.toContain('sport');
     expect(await logVan(page)).not.toHaveProperty(`${CUR}|sport`);
     // v359: Inzichten draagt geen signaalrijen meer; het patroonblok leest de log van afgesloten maanden
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     await expect(page.locator('#s-maand')).not.toContainText('Sport & gezondheid');
   });
 
@@ -162,8 +164,8 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
      vervallen met de kaarten op het scherm. */
   test('dezelfde twee in dezelfde volgorde, als regels onder Let op', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
-    const rijen = page.locator('#gripLetOp [data-letop="sig"]');
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
+    const rijen = page.locator('#gripTeKiezen [data-letop="sig"]');
     await expect(rijen).toHaveCount(2);
     const t = await rijen.allInnerTexts();
     expect(t[0]).toContain('Boodschappen');
@@ -190,12 +192,12 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
 
   test('geen patroonregels en geen derde signaal op Grip', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     await expect(page.locator('#s-maand .valtop-patroon')).toHaveCount(0);
-    await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(2);
+    await expect(page.locator('#gripTeKiezen [data-letop="sig"]')).toHaveCount(2);
     // het derde signaal staat wel in de log (dat is de bedoeling: je ziet wat je niet gezien hebt),
     // maar niet op Grip
-    expect(await page.locator('#gripLetOp').innerText()).not.toContain('Vervoer & auto');
+    expect(await page.locator('#gripTeKiezen').innerText()).not.toContain('Vervoer & auto');
     await page.evaluate(() => go('logboek'));   // v331: de log is een eigen scherm
     await expect(page.locator('#s-logboek #valtOpLog')).toContainText('niet getoond');
   });
@@ -269,8 +271,8 @@ test.describe('de drie handelingen', () => {
     await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
     await page.locator('#valtOpSave').click();
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);   // nummer drie schuift door
-    await page.evaluate(() => go('maand'));
-    expect(await page.locator('#gripLetOp').innerText()).not.toContain('Boodschappen');
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
+    expect(await page.locator('#gripTeKiezen').innerText()).not.toContain('Boodschappen');
     await page.reload();
     await page.waitForFunction(() => typeof valtOpSignals === 'function');
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);
@@ -539,13 +541,13 @@ test.describe('de lek-regel op Inzichten', () => {
     expect(await sigKeys(page)).toEqual([]);            // geen enkele overschrijding
     await page.evaluate(() => go('ins'));
     expect(await ingang(page, 'ins')).toBe(0);
-    await page.evaluate(() => go('maand'));
-    await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(0);
-    const rij = page.locator('#gripLetOp [data-letop="lek"]');
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
+    await expect(page.locator('#gripTeKiezen [data-letop="sig"]')).toHaveCount(0);
+    const rij = page.locator('#gripTeKiezen [data-letop="lek"]');
     await expect(rij).toHaveCount(1);
     await expect(rij).toContainText('Zalando');
     // v391: de categorie zonder potje staat op een eigen regel; v406: een categorie die er niet vaker is heet eenmalig
-    await expect(page.locator('#gripLetOp [data-letop="eenmalig"]')).toContainText('zonder potje');
+    await expect(page.locator('#gripTeKiezen [data-letop="eenmalig"]')).toContainText('zonder potje');
     // de regel zelf start het gesprek niet: hij opent de sheet, en pas daar staat de route (spiegel, gevolg, keuze)
     expect(await ingang(page, 'maand')).toBe(0);
     await rij.click();
@@ -563,7 +565,7 @@ test.describe('de lek-regel op Inzichten', () => {
       set: { budgets: { boodschappen: 400 } },
     });
     expect(await page.evaluate(() => coachLeak(thisYM()))).toBeNull();
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     await expect(page.locator('[data-letop="lek"]')).toHaveCount(0);
   });
 
@@ -580,7 +582,7 @@ test.describe('de lek-regel op Inzichten', () => {
     await kaart(page);   // v340: de chevron staat in de kaart achter de Let op-regel
     expect(await page.evaluate(() => document.querySelectorAll("#gripLetOpSheet [onclick*=\"coStart('lek'\"]").length)).toBe(1);
     // de overschrijding staat al als eigen regel: geen tweede lek-regel op dezelfde categorie
-    expect(await page.evaluate(() => document.querySelectorAll('#gripLetOp [data-letop="lek"]').length)).toBe(0);
+    expect(await page.evaluate(() => document.querySelectorAll('#gripTeKiezen [data-letop="lek"]').length)).toBe(0);
   });
 
   /* v359: 'op een afgesloten maand komt de lek-regel niet mee' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */

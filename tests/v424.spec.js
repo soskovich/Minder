@@ -4,6 +4,8 @@
    - 03-10 Gemeente Utrecht EUR 120 met "NAHEFFING" in de omschrijving (laag b, voorstel Boete of wegslepen);
    - 25-09 CJIB Verkeersboetes EUR 150 in Onvoorzien (laag a, uit de omschrijving);
    - geen kandidaat: een Gemeente-boeking van EUR 60 (onder de 100) en een opname van EUR 200. */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
@@ -118,14 +120,21 @@ test.describe('v424', () => {
     expect((await stand(page, G120)).laag).toBe('b');
   });
 
-  test('fit: met een Let op-kaart staat "Kloppen mijn gegevens?" in de kop daarvan, zonder Zien hoger te maken', async ({ page }) => {
+  /* v428: Let op is geen kaart meer; Kloppen mijn gegevens? is een eigen kaart op Zien (de enige plek daar die iets wijzigt),
+     met de wachtrij eronder, en de koopknop blijft minstens 16px boven de menubalk. */
+  test('fit: "Kloppen mijn gegevens?" is een eigen kaart op Zien, en de koopknop blijft boven de menubalk', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await boot(page);
-    await page.evaluate(() => { go('maand'); window._gripTab = 'zien'; renderMaand(); });
-    const r = await page.evaluate(() => { const g = document.querySelector('[data-gegevensregel]'), lo = document.getElementById('gripLetOp');
-      return { inKop: !!(lo && g && lo.contains(g)), n: document.querySelectorAll('[data-gegevensregel]').length, tekst: g && g.innerText }; });
-    expect(r).toEqual({ inKop: true, n: 1, tekst: expect.stringMatching(/^Kloppen mijn gegevens\? · \d+ ›$/) });
-    await page.locator('#gripLetOp [data-gegevensregel]').click();
+    await page.evaluate(() => { go('maand'); });
+    const r = await page.evaluate(() => { const g = document.querySelector('[data-gegevensregel]'), k = document.getElementById('gripGegevens');
+      return { inKaart: !!(k && g && k.contains(g)), n: document.querySelectorAll('[data-gegevensregel]').length, tekst: g && g.textContent.replace(/\s+/g, ' ').trim(),
+        rijen: k ? k.querySelectorAll('[data-gegevenskaart]').length : 0,
+        ruimte: document.querySelector('.nav').getBoundingClientRect().top - document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom }; });
+    expect(r.inKaart).toBe(true); expect(r.n).toBe(1);
+    expect(r.tekst).toMatch(/^Kloppen mijn gegevens\?\s*\d+ ›$/);
+    expect(r.rijen).toBeGreaterThan(0); expect(r.rijen).toBeLessThanOrEqual(3);
+    expect(r.ruimte).toBeGreaterThanOrEqual(16);
+    await page.locator('#gripGegevens [data-gegevensregel]').click();
     expect(await page.locator('#gegevensSheet').count()).toBe(1);
   });
 });

@@ -1,4 +1,6 @@
 /* v406: LET OP, DE BRUG EN DE LABELS OP GRIP (bevindingen op het toestel). Op grip-v406-stand (10 oktober 2026). */
+/* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
+   opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
 const S = require('./grip-v406-stand');
 
@@ -88,14 +90,18 @@ test.describe('A2/A3 · volgorde en eenmalig', () => {
     /* het lek gaat hier over dezelfde categorie en heeft geen eigen partij-regel: de tik opent zijn sheet (categorie wijzigen,
        potje maken, het gesprek), zodat de ingang naar de coach blijft (v359) */
     expect(await page.evaluate(() => (lekSignaal(thisYM(), budgetFlaggedCats(thisYM())) || {}).cat)).toBe('zorg');
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); renderMaand(); const L = document.querySelector('#gripLetOp');
-      if (L.querySelector('[data-letopnog]')) openGripLetOpLijst(); const rij = [...document.querySelectorAll('[data-letop="eenmalig"]')][0]; return rij ? rij.innerText : ''; });
+    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); renderMaand(); const L = document.querySelector('#gripTeKiezen');
+      if (L.querySelector('[data-letopnog]')) gripKiesTab('kiezen'); const rij = [...document.querySelectorAll('[data-letop="eenmalig"]')][0]; return rij ? rij.innerText : ''; });
     expect(r.split('›').length - 1).toBe(1);   // alleen de › in "categorie klopt? ›", geen losse pijl
   });
-  test('Let op toont er twee en de rest achter "nog n"', async ({ page }) => {
+  /* v428: Let op is geen kaart meer en heeft geen maximum; Te kiezen toont elke handeling, in de volgorde van Let op */
+  test('Te kiezen toont elke handeling uit Let op, zonder "nog n", in de volgorde van Let op', async ({ page }) => {
     await S.boot(page); const L = await letop(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); renderMaand(); const K = document.querySelector('#gripLetOp'); return { n: K.querySelectorAll('[data-letop]').length, nog: +(K.querySelector('[data-letopnog]') || { dataset: { letopnog: 0 } }).dataset.letopnog, eerste: [...K.querySelectorAll('[data-letop]')].map(e => e.dataset.letop) }; });
-    expect(r.n).toBe(2); expect(r.nog).toBe(L.length - 2); expect(r.eerste).toEqual(L.slice(0, 2).map(x => x.soort));
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); const K = document.querySelector('#gripTeKiezen');
+      return { nog: document.querySelectorAll('[data-letopnog]').length, eerste: [...K.querySelectorAll('[data-letop]')].map(e => e.dataset.letop),
+        kies: gripCyc().kies.filter(k => k.bron === 'letop' && k.x).map(k => k.x.soort) }; });
+    expect(r.nog).toBe(0); expect(r.eerste.length).toBeGreaterThanOrEqual(2); expect(r.eerste).toEqual(r.kies);
+    expect(r.eerste).toEqual(L.map(x => x.soort).filter(s => r.eerste.includes(s)));
   });
 });
 
@@ -160,11 +166,12 @@ test.describe('C · de brug op Zien', () => {
     await S.boot(page); const B = await brug(page);
     const tr = B.st.filter(s => s.soort === 'teruim');
     expect(tr.map(s => [s.label, s.label2])).toEqual([['2 potjes', 'niet gebruikt']]);
-    await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
-    const r = await page.evaluate(() => ({ af: [...document.querySelectorAll('#gripBrug [data-brugeen], #gripBrug [data-brugeen2]')].filter(e => e.scrollWidth > e.clientWidth + 1)   /* v410: een label buiten BRUG_KORT staat op een regel met ellipsis-stijl; afgekapt is het pas als de tekst er niet in past */.map(e => e.innerText),
-      labels: [...document.querySelectorAll('#gripBrug [data-brugeen]')].map(e => e.innerText.replace(/­|\n/g, '')), licht: (document.querySelector('[data-zienlicht]') || {}).innerText }));
+    /* v428: de brug op Grip is de groepbrug in Begrijpen; te ruim staat in de sheet per groep. De labels blijven kort en vast. */
+    await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
+    const r = await page.evaluate(() => ({ af: [...document.querySelectorAll('#gripGroepBrug [data-brugeen], #gripGroepBrug [data-brugeen2]')].filter(e => e.scrollWidth > e.clientWidth + 1)   /* v410: een label buiten BRUG_KORT staat op een regel met ellipsis-stijl; afgekapt is het pas als de tekst er niet in past */.map(e => e.innerText),
+      labels: [...document.querySelectorAll('#gripGroepBrug [data-brugeen]')].map(e => e.innerText.replace(/­|\n/g, '')), licht: (document.querySelector('[data-zienlicht]') || {}).innerText }));
     expect(r.af).toEqual([]);
-    expect(r.labels).toEqual(['budget', 'Vices', 'Boodschappen', 'z. potje', '2 potjes', expect.stringMatching(/^\d+ onder$/), 'verwacht']);   // v408: "n onder", nooit "overig"
+    expect(r.labels).toEqual(['budget', 'vast', 'Vices', 'Boodschappen', expect.stringMatching(/^\d+ onder$/), 'z. potje', 'verwacht']);   // v408: "n onder", nooit "overig"
     expect(B.tweekleur).toBe(true); expect(r.licht).toBe('licht = nog verwacht');
   });
   test('een te ruim potje alleen: zijn naam en "niet gebruikt"', async ({ page }) => {
@@ -172,21 +179,21 @@ test.describe('C · de brug op Zien', () => {
     const r = await page.evaluate(() => { const V = maandVooruit(); const TR = teRuim(V); const Br = gripZienBrug(V, TR.slice(0, 1)); return { k: TR[0].k, st: Br.stappen.filter(s => s.soort === 'teruim').map(s => [s.label, s.label2]) }; });
     expect(r.st).toEqual([[r.k === 'huur' ? 'Huur' : 'Vervoer', 'niet gebruikt']]);
   });
-  test('Zien past op 390x844 boven de menubalk, met Boodschappen als eigen stap', async ({ page }) => {
+  test('Begrijpen past op 390x844 boven de menubalk, met Boodschappen als eigen stap (v428)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await S.boot(page);
-    const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); return { kol: document.querySelectorAll('#gripBrug [data-brugstap]').length, bood: !!document.querySelector('#gripBrug [data-brugstap="potje"] [title="Boodschappen"]'),
-      breed: [...document.querySelectorAll('#gripBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width), knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); return { kol: document.querySelectorAll('#gripGroepBrug [data-brugstap]').length, bood: !!document.querySelector('#gripGroepBrug [data-brugstap="potje"][data-brugk="boodschappen"]'),
+      breed: [...document.querySelectorAll('#gripGroepBrug [data-brugstap]')].map(e => e.getBoundingClientRect().width), knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }; });
     console.log(`zien 390: ${r.kol} kolommen, knop ${Math.round(r.knop)}px, menubalk ${Math.round(r.nav)}px`);
     expect(r.bood).toBe(true); expect(r.kol).toBeLessThanOrEqual(7);
     for (const b of r.breed) expect(b).toBeGreaterThanOrEqual(40);
-    expect(r.knop).toBeLessThanOrEqual(r.nav); expect(r.sw).toBeLessThanOrEqual(390);
+    expect(r.knop).toBeLessThanOrEqual(r.nav - 16); expect(r.sw).toBeLessThanOrEqual(390);
   });
 });
 
 test('D · de regel onder de meters begint met "Doelen:", en de feitregel van Budget blijft de eerste', async ({ page }) => {
   await S.boot(page);
-  const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); const n = document.querySelector('[data-meternuverwacht]'), f = document.querySelector('[data-nietgebruikt]');
+  const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); const n = document.querySelector('[data-meternuverwacht]'), f = document.querySelector('[data-nietgebruikt]');
     return { tekst: n.innerText, volgorde: f ? !!(f.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) : null }; });
   expect(r.tekst).toMatch(/^Doelen: nu netto /); expect(r.volgorde).toBe(true);
 });

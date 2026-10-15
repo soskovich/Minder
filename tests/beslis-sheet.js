@@ -23,7 +23,8 @@ const BESLIS_KEYS_JS = `(() => {
   try { window._gripMeter = 'beleggen'; renderGripMeter(); els.push(...document.querySelectorAll('#gripMeterSheet [data-meterwv]')); } catch (_) {}
   const sheet = [...els].map((e) => e.getAttribute('onclick') || '');
   try { closeSheet(); } catch (_) {}
-  els.length = 0; els.push(...document.querySelectorAll('#s-maand [data-letop="str"]'));
+  /* v428: Let op bestaat niet meer; de handeling van een structureel signaal staat in Kiezen onder Te kiezen */
+  els.length = 0; { const d = document.createElement('div'); d.innerHTML = gripKiezenHtml(); els.push(...d.querySelectorAll('[data-letop="str"]')); }
   for (const oc of sheet.concat([...els].map((e) => e.getAttribute('onclick') || ''))) {
     const el = { getAttribute: () => oc };
     const m = /openMaandBeslis\\('([^']*)'\\)/.exec(el.getAttribute('onclick') || '');
@@ -100,6 +101,7 @@ module.exports = { KLEUR_VAN, beslisKeys, beslisIngangen, beslisTekst, beslisTek
 /* v387: de ingang naar de sheet van een regel, zoals de gebruiker hem neemt: een structureel signaal onder 'Let op', en
    dekking, buffer en doel via de sheet van de Beleggen-meter. */
 async function openRegelUI(page, k) {
+  await page.evaluate(() => gripKiesTab('kiezen'));   // v428: een structureel signaal staat als keuze in Kiezen
   const str = page.locator(`#s-maand [data-letop="str"][onclick*="'${k}'"]`);
   if (await str.count()) { await str.first().click(); return; }
   await page.click('#s-maand [data-meter="beleggen"]');
@@ -129,13 +131,25 @@ const regelTegels = (page) => page.evaluate(() => {
 module.exports.regelTegels = regelTegels;
 
 /* v388: een potje boven zijn grens is een signaal van een patroon in Begrijpen. Deze helper opent de signaalkaart
-   (de kaart met de handelingen uit Let op) langs de echte route: het patroon in Begrijpen en een tik op het
-   signaal. Staat het potje in geen patroon, dan staat het nog onder Let op, en dan tikt hij daar. */
+   (de kaart met de handelingen uit Let op) langs de echte route.
+   v428: die route is Kiezen. In een patroon is het een eigen keuze ("<potje>: bijstellen of grens", data-kies="sig:<id>"),
+   anders de keuze die tot v428 onder Let op stond (data-kies="lo:sig:<id>"). */
 async function sigKaart(page, k) {
   k = k || await page.evaluate(() => (valtOpSignals(thisYM())[0] || {}).potjeId);
-  const inPatroon = await page.evaluate((k) => { go('maand'); return gripNaarSignaal(k); }, k);
-  if (inPatroon) await page.locator(`#s-maand [data-patsig="potje"][data-patsigk="${k}"]`).click();
-  else { await page.evaluate(() => gripKiesTab('zien')); await page.locator('#gripLetOp [data-letop="sig"]', { hasText: await page.evaluate((k) => CATS[k].name, k) }).click(); }
-  return inPatroon;
+  const r = await page.evaluate((k) => { go('maand'); gripKiesTab('kiezen'); const id = valtOpId(thisYM(), k);
+    return { id, inPatroon: gripPatronen().some((p) => (p.sig || []).some((g) => g.k === k)) }; }, k);
+  const sel = r.inPatroon ? `#s-maand [data-kies="sig:${r.id}"]` : `#s-maand [data-kies="lo:sig:${r.id}"]`;
+  await page.locator(sel).click();
+  return r.inPatroon;
 }
 module.exports.sigKaart = sigKaart;
+
+/* v428: wat de kaart Let op droeg staat nu op twee plekken: het feit met zijn sub (het bewijs) in de drill van het symptoom
+   (Begrijpen, via Signalen op Zien) en de handeling onder Te kiezen. Deze helper leest beide, in die volgorde. */
+async function letOpTekst(page) {
+  return page.evaluate(() => { go('maand'); const C = gripCyc(); let t = '';
+    for (const s of C.sym.filter((x) => x.bron === 'letop')) { gripNaarSymptoom(s.id); const d = document.querySelector('#gripSymptoom'); t += '\n' + (d ? d.innerText : ''); }
+    gripKiesTab('kiezen'); t += '\n' + ((document.querySelector('#gripTeKiezen') || {}).innerText || '');
+    return t; });
+}
+module.exports.letOpTekst = letOpTekst;

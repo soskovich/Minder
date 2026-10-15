@@ -1564,3 +1564,23 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Heen en terug** dezelfde dag, even groot, dezelfde persoon (Renate -200 / +200): geen vraag (`kennisTerugZelfdeDag()`).
 - **Specs**: nieuw `v427.spec.js` (5 tests, 12 sabotages rood; ook geen "Tikkie via Tikkie" bij een onbekende persoon, `tikkieNaam()`); `v425` en `v426` lezen Zorg op Lausa Eriksson. `sw.js` naar
   `minder-v427`.
+
+## v428: Grip als cyclus, fase 1 (vier tabs, inhoud op de juiste plek)
+- **Een bron** (`gripCyclus()`): symptomen, keuzes, terugblikken en wat al gekozen is; de slim-regel ("N keuzes staan open ›"), de
+  stip op Kiezen en Te kiezen lezen dezelfde lijst. Grip opent op Zien; de koopknop is sticky, minstens 16px boven de menubalk.
+- **Zien**: nog N dagen, de salariskaart (vast, potjes, buiten, opzij, rest, met bedrag en deel; `salarisData()`/`salarisBalk()` uit
+  blok 20), Openstaand (leningen), Nieuw sinds gisteren, Signalen (feiten met stip en "waarom ›") en Kloppen mijn gegevens? als eigen
+  kaart. De kaart Let op, `gripLetOpKaart()` en de lijst achter "nog N ›" zijn weg.
+- **Begrijpen**: de groepbrug "Waar zit de EUR X?" (sluit op `V.projectie`), "per groep ›", de symptomen met "oorzaak nog niet
+  bepaald" en hun drill, en Vaste lasten over 6 maanden met de woning apart.
+- **Kiezen**: Mee uit vorige maand, Te kiezen (alle handelingen van Let op en de bestaande keuzes, met het signaal als reden; klopt/niet
+  staat hier), Wacht op oorzaak (leeg), Al gekozen deze maand, en "Budget aanpassen ›".
+- **Terugblik**: de laatste afgesloten maand met de salarisbalk en "Eenmalig, telt niet als gedrag" (benoemd en uit een reservering),
+  Nog niet bepaald in een eigen kaart.
+- **Blok 21** "Grip-cyclus": waar elk oud element nu staat, verloren 0, brug-som en aantal keuzes.
+- **Gemeten**: met `bottom:92px` stond de koopknop op 390x844 13,5px boven de menubalk (knop 758, menubalk 771,5); met 100px is dat
+  minstens 16px op elke tab. Een rij in Te kiezen respecteert `geenPijl` (eenmalig draagt alleen de pijl in "categorie klopt? ›"),
+  en de patroonknoop in de drill houdt zijn label ("uit spaargeld", "inleg", "erboven").
+- **Specs**: nieuw `v428.spec.js`; omgezet waar alleen de plek veranderde (zie het rapport). `sw.js` naar `minder-v428`.
+  Volle suite: 4518 groen, 1 rood (de bekende `decimaalteken`). Zeven sabotages, alle zeven rood.
+

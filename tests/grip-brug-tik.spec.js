@@ -7,7 +7,12 @@
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
-const grip = (page) => page.evaluate(() => { closeSheet(); go('maand'); });
+/* v428: DE BRUG STAAT IN BEGRIJPEN, in groepen (gripGroepBrug). Een tik op de brug opent de sheet per groep (#gripGroepen);
+   daaruit gaan de routes van v353 verder: een potje erboven naar zijn sheet (data-groeppotje), de potjes naar de sheet
+   overig onder (data-groep="potjes") met de andere variabele potjes, en de volle lijst (data-groepvooruit). Alleen de plek
+   van de ingang is veranderd; de sheets zijn dezelfde. */
+const grip = (page) => page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('begrijpen'); });
+const perGroep = async (page) => { await page.waitForTimeout(350); await page.click('#gripGroepBrug [data-brugstap="begin"]'); await page.waitForTimeout(150); };
 const tik = async (page, sel) => { await page.waitForTimeout(350); await page.click(sel); await page.waitForTimeout(150); };
 const sheet = (page) => page.evaluate(() => { const s = $('#sheet'); return { id: (s.querySelector('[id]') || {}).id || null, tekst: s.innerText.replace(/\s+/g, ' '),
   hand: [...s.querySelectorAll('[data-handeling]')].map((e) => e.dataset.handeling), alle: !!s.querySelector('[data-allepotjes]') }; });
@@ -18,7 +23,7 @@ test('a. een tik op Vices toont alleen Vices, met waarom en zijn handelingen, en
   // invoermeting: er zijn meer handelingen dan die van Vices, anders onderscheidt "alleen Vices" niets
   expect(inv.h).toContain('vices');
   expect(inv.h.length).toBeGreaterThan(1);
-  await tik(page, '#gripBrug [data-brugstap="potje"][data-brugwaarde="83"]');
+  await perGroep(page); await tik(page, '#gripGroepen [data-groeppotje="vices"]');
   const s = await sheet(page);
   expect(s.id).toBe('gripPotje');
   expect(s.hand).toEqual(['vices']);
@@ -42,7 +47,7 @@ const VIER = { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, s
   extraTx: ['2026-07', '2026-08', '2026-09'].map((m) => ({ id: 'bol' + m, date: m + '-20', amount: -200, name: 'Bol.com', desc: 'BEA, BETAALPAS BOL.COM' })) };
 test('b. een tik op rest toont de variabele potjes in die stap met hun verschil, en die tellen op tot de stap', async ({ page }) => {
   await boot(page, VIER); await grip(page);
-  await tik(page, '#gripBrug [data-brugstap="overig"]');
+  await perGroep(page); await tik(page, '#gripGroepen [data-groep="potjes"]');
   await page.click('[data-overigdeel="rest"]');
   const r = await page.evaluate(() => { const g = document.getElementById('gripRest'); const V = maandVooruit(), Br = dezeMaandBrug(V);
     const los = Br.los.map((x) => x.k);
@@ -62,14 +67,15 @@ test('b. een tik op rest toont de variabele potjes in die stap met hun verschil,
   expect(await page.evaluate(() => document.getElementById('gripPotje') && document.getElementById('gripPotje').dataset.potje)).toBe('shopping');
 });
 
-test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', async ({ page }) => {
+test('c. een tik op budget of op de uitkomst opent per groep, en daaruit de volle lijst', async ({ page }) => {
   await boot(page);
-  for (const sel of ['#gripBrug [data-brugstap="begin"]', '#gripBrug [data-brugstap="eind"]']) {   // v387: de kop van de kaart is weg
+  for (const sel of ['#gripGroepBrug [data-brugstap="begin"]', '#gripGroepBrug [data-brugstap="eind"]']) {
     await grip(page);
-    // v395: bovenop de begin-balk staat het te ruime deel gearceerd met een eigen tik; tik dus onderin de kolom
     await page.waitForTimeout(350);
     const b = await page.evaluate((s) => { const r = document.querySelector(s).querySelector('i').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom - 4 }; }, sel);
     await page.mouse.click(b.x, b.y); await page.waitForTimeout(150);
+    expect((await sheet(page)).id, sel).toBe('gripGroepen');
+    await tik(page, '[data-groepvooruit]');
     const s = await sheet(page);
     expect(s.id, sel).toBe('gripVooruit');
     expect(s.tekst.toUpperCase()).toContain('WAT JE DEZE MAAND KUNT DOEN');
@@ -80,16 +86,16 @@ test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', a
 test('d. het tikvlak is de hele kolom, ook bij een dunne balk', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
   await boot(page); await grip(page);
-  const m = await page.evaluate(() => [...document.querySelectorAll('#gripBrug [data-brugstap]')].map((k) => { const r = k.getBoundingClientRect(), b = k.querySelector('i').getBoundingClientRect();
+  const m = await page.evaluate(() => [...document.querySelectorAll('#gripGroepBrug [data-brugstap]')].map((k) => { const r = k.getBoundingClientRect(), b = k.querySelector('i').getBoundingClientRect();
     return { soort: k.dataset.brugstap, tik: k.hasAttribute('data-brugtik'), kolH: Math.round(r.height), kolW: Math.round(r.width), balkH: Math.round(b.height) }; }));
   for (const c of m) { expect(c.tik).toBe(true); expect(c.kolH).toBeGreaterThanOrEqual(112); expect(c.kolW).toBeGreaterThanOrEqual(40); }
   // de dunste balk: een tik bovenin zijn kolom, ver van de balk, opent toch zijn stap
   const dun = m.filter((c) => c.soort === 'potje').sort((a, b) => a.balkH - b.balkH)[0];
-  const box = await page.evaluate((w) => { const k = document.querySelector(`#gripBrug [data-brugstap="potje"][data-brugwaarde="${w}"]`).getBoundingClientRect(); return { x: k.left + k.width / 2, y: k.top + 4 }; }, dun && (await page.evaluate(() => [...document.querySelectorAll('#gripBrug [data-brugstap="potje"]')].sort((a, b) => a.querySelector('i').getBoundingClientRect().height - b.querySelector('i').getBoundingClientRect().height)[0].dataset.brugwaarde)));
+  const box = await page.evaluate((w) => { const k = document.querySelector(`#gripGroepBrug [data-brugstap="potje"][data-brugwaarde="${w}"]`).getBoundingClientRect(); return { x: k.left + k.width / 2, y: k.top + 4 }; }, dun && (await page.evaluate(() => [...document.querySelectorAll('#gripGroepBrug [data-brugstap="potje"]')].sort((a, b) => a.querySelector('i').getBoundingClientRect().height - b.querySelector('i').getBoundingClientRect().height)[0].dataset.brugwaarde)));
   await page.waitForTimeout(350);
   await page.mouse.click(box.x, box.y);
   await page.waitForTimeout(150);
-  expect((await sheet(page)).id).toBe('gripPotje');
+  expect((await sheet(page)).id).toBe('gripGroepen');   // v428: elke stap opent per groep
 });
 
 test('e. de bridge op Inzichten krijgt geen tik', async ({ page }) => {
@@ -103,10 +109,10 @@ for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
     await boot(page, VIER); await grip(page);
     const maat = async () => page.evaluate(() => { const s = $('#sheet'), g = s.querySelector('[id]'); return { id: g.id, h: Math.round(g.getBoundingClientRect().height), over: s.scrollWidth > s.clientWidth }; });
-    await tik(page, '#gripBrug [data-brugstap="potje"][data-brugwaarde="83"]'); await page.waitForTimeout(250);
+    await perGroep(page); await tik(page, '#gripGroepen [data-groeppotje="vices"]'); await page.waitForTimeout(250);
     const p = await maat();
     await grip(page);
-    await tik(page, '#gripBrug [data-brugstap="overig"]'); await page.click('[data-overigdeel="rest"]'); await page.waitForTimeout(250);
+    await perGroep(page); await tik(page, '#gripGroepen [data-groep="potjes"]'); await page.click('[data-overigdeel="rest"]'); await page.waitForTimeout(250);
     const r = await maat();
     console.log(`v353 ${w}px potje ${p.h} rest ${r.h}`);
     expect(p).toMatchObject({ id: 'gripPotje', over: false });

@@ -12,26 +12,20 @@ const K = require('./grip-kring-stand');
 const grip = async page => { await page.setViewportSize({ width: 390, height: 844 }); await K.boot(page); await page.evaluate(() => go('maand')); };
 
 test.describe('A · onder de drempel', () => {
-  test('Vices +EUR 5 staat als noot bij overig, Uit eten niet; een tik zegt "Vices · onder de drempel" (v393)', async ({ page }) => {
+  /* v428: de brug op Grip staat in Begrijpen ("Waar zit de EUR X?") en zet elk potje dat boven eindigt los, ook onder de drempel;
+     de noot van v393 (op de oude Zien-brug) staat niet meer op Grip. Wat blijft: geen signaal, geen patroon, geen eigen regel. */
+  test('Vices +EUR 5 staat in de groepbrug als eigen stap, zonder noot en zonder signaal (v428)', async ({ page }) => {
     await grip(page);
+    await page.evaluate(() => gripKiesTab('begrijpen'));
     const r = await page.evaluate(() => { const V = maandVooruit(), x = V.potjes.find(p => p.k === 'vices');
-      const noten = [...document.querySelectorAll('#gripZien [data-brugnoot]')].map(e => [e.closest('[data-brugstap]').dataset.brugstap, e.innerText]);
-      const toasts = []; const t0 = window.toast; window.toast = m => toasts.push(m);
-      let kolom = 0; const o0 = window.openGripOverig; window.openGripOverig = () => { kolom++; };
-      document.querySelector('#gripZien [data-brugnoot]').click(); window.toast = t0; window.openGripOverig = o0;
-      return { over: Math.round(x.overR), uit: potjeUitschieter(x), noten, toasts, kolom,
-        regels: document.querySelectorAll('[data-onderdrempel]').length }; });
+      const st = document.querySelector('#gripGroepBrug [data-brugstap="potje"][data-brugk="vices"]');
+      return { over: Math.round(x.overR), uit: potjeUitschieter(x), stap: !!st, noten: document.querySelectorAll('#gripInhoud [data-brugnoot]').length,
+        regels: document.querySelectorAll('[data-onderdrempel]').length, sig: [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => e.innerText).join('|') }; });
     expect(r.over).toBe(5); expect(r.uit).toBe(false);
-    expect(r.noten).toEqual([['potje', '+€5']]);   // v415: "1 boven" (+€5) is kleiner dan BRUG_KLEIN en schoof met zijn noot bij Uit eten aan
-    expect(r.toasts).toEqual(['Vices · onder de drempel']);
-    expect(r.kolom).toBe(0);   // de noot heeft een eigen tik; de kolom (de sheet overig) opent niet
-    expect(r.regels).toBe(0);  // geen eigen grijze regel meer
-  });
-  test('de noot staat binnen het grafiekvlak: de bridge wordt er niet hoger van', async ({ page }) => {
-    await grip(page);
-    const r = await page.evaluate(() => { const h = () => document.querySelector('#gripBrug').getBoundingClientRect().height;
-      const met = h(); SET.budgets.vices = 60; save(); renderMaand(); return { met, zonder: h(), n: document.querySelectorAll('[data-brugnoot]').length }; });
-    expect(r.n).toBe(0); expect(r.met).toBe(r.zonder);
+    expect(r.stap).toBe(true);
+    expect(r.noten).toBe(0);
+    expect(r.regels).toBe(0);
+    expect(r.sig).not.toContain('Vices');
   });
   test('geen signaal en geen patroon: Vices staat niet in uitschieters, Begrijpen of de patronen op Inzichten', async ({ page }) => {
     await grip(page);
