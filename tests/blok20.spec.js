@@ -21,13 +21,13 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
       return { n, gelijk: voor === JSON.stringify(SET) }; });
     expect(r.n).toBe(0); expect(r.gelijk).toBe(true);
   });
-  test('het salaris is de bron van salarisBetalingLaatst(), herkend op de tegenpartij; overige inkomsten bij naam', async ({ page }) => {
+  test('het salaris is per maand de grootste terugkerende bron (v421), herkend op de tegenpartij; overige inkomsten bij naam', async ({ page }) => {
     await S.boot(page);
     await page.evaluate(({ MAIN }) => { const t = { id: 'b20inc', date: '2026-08-12', amount: 140, acc: MAIN, name: 'Belastingteruggave', desc: 'BELASTINGDIENST TERUGGAVE', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       categorize(t); TX.push(t); OVR[t.id] = 'inkomen'; save(); }, { MAIN: S.MAIN });
     const L = await lees(page), I = sectie(L, '1. INKOMSTEN');
-    expect(I.join('\n')).toContain('salaris herkend op tegenpartij: "Werkgever"');
-    expect(I.find(r => r.startsWith('  aug:'))).toBe('  aug: salaris 5216 (24-08 5216.00)');
+    expect(I.join('\n')).toContain('bron apr-okt: Werkgever (recurKey "WERKGEVER")');
+    expect(I.find(r => r.startsWith('  aug:'))).toBe('  aug: salaris 5216 van Werkgever (24-08 5216.00)');
     expect(I[I.findIndex(r => r.startsWith('  aug:')) + 1]).toBe('      overige inkomsten 140: Belastingteruggave 140.00');
   });
   test('de controle klopt op elke afgeronde maand van de fixture', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
     const aug = C.find(r => r.startsWith('  aug:'));
     expect(aug).toMatch(/VERSCHILT -250$/);
     expect(C[C.indexOf(aug) + 1]).toBe('      het verschil bij naam (samen -250.00, sluit):');
-    expect(C[C.indexOf(aug) + 2]).toBe('        14-08 -250.00 Vincent Ernst Sumter (Eigen rekening / overboeking zonder tegenkant in je gegevens, eigen: naam)');
+    expect(C[C.indexOf(aug) + 2]).toBe('        14-08 -250.00 Vincent Ernst Sumter (Eigen rekening / overboeking zonder tegenkant in je gegevens, eigen: naam) · rekening ' + await page.evaluate(m => accLabel(m), S.MAIN));   // v421: de rekening erbij
     expect(C.find(r => r.startsWith('  sep:'))).toMatch(/: klopt$/);
   });
   test('rest is salaris - vast - potjes - netto opzij, in elke kolom, ook de lopende', async ({ page }) => {

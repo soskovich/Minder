@@ -12,19 +12,20 @@ const zet = (page, rij) => page.evaluate(({ MAIN, rij }) => {
   TX.sort((a, b) => a.date.localeCompare(b.date)); applyOwnAccounts(); buildAccMeta(); save(); return ids; }, { MAIN: S.MAIN, rij });
 
 test.describe('v420', () => {
-  test('holding: het onregelmatige deel en de afschrijvingen zijn geen inkomen en geen uitgave, netto per maand, en de controle klopt', async ({ page }) => {
+  test('holding (v421: de partij die jij aanwijst): de maandbetaling is inkomen, de rest Holding, en de controle klopt', async ({ page }) => {
     await S.boot(page);
     const [a, b, c] = await zet(page, [
-      { date: '2026-07-31', amount: 5000, name: 'Ernst Management Holding', ovr: 'inkomen', onr: 5000 },
+      { date: '2026-07-31', amount: 5000, name: 'Ernst Management Holding' },
       { date: '2026-08-03', amount: -5000, name: 'Ernst Management Holding' },
-      { date: '2026-08-26', amount: 1500, name: 'Ernst Management Holding', ovr: 'inkomen', onr: 1500 }]);
+      { date: '2026-08-26', amount: 1500, name: 'Ernst Management Holding' }]);
+    await page.evaluate(id => { holdingZet(id); }, b);
     expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), b)).toBe('holding');
+    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), a)).toBe('holding');   // geen bedrag in 2 maanden: geen maandbetaling
     expect(await page.evaluate(() => (CATS.holding || {}).type)).toBe('internal');
-    expect(await page.evaluate(() => maandInkomen('2026-07').norm)).toBe(await page.evaluate(() => maandInkomen('2026-07').alles - 5000));
     const L = await lees(page), H = sectie(L, 'HOLDING');
     expect(H[0]).toContain('Ernst Management Holding');
     expect(H.find(x => x.startsWith('  netto:'))).toContain('jul 5000 · aug -3500');
-    expect(H.join('\n')).toContain('      aug: 03-08 -5000.00, 26-08 +1500.00 (onregelmatig deel)');
+    expect(H.join('\n')).toContain('      aug: 03-08 -5000.00, 26-08 +1500.00');
     const I = sectie(L, '1. INKOMSTEN'), j = I.findIndex(x => x.startsWith('  jul:'));
     expect(I[j + 1]).toMatch(/^      overige inkomsten/);
     expect(I[j + 1]).not.toContain('Ernst');
@@ -76,9 +77,9 @@ test.describe('v420', () => {
   test('buiten vast en potjes negatief: de boeking staat erbij met de groep die ontbreekt', async ({ page }) => {
     await S.boot(page);
     await zet(page, [{ date: '2026-05-12', amount: 3000, name: 'Kees Jansen' }]);
-    const L = await lees(page), r = L.find(x => x.startsWith('  LET OP mei:'));
+    const L = await lees(page), r = L.find(x => x.startsWith('      LET OP mei:'));   // v421: bij de controle
     expect(r).toMatch(/buiten vast en potjes is -\d/);
-    expect(L[L.indexOf(r) + 1]).toBe('      12-05 3000.00 Kees Jansen (Persoonlijke overboeking) -> ontbrekende groep: een ontvangst van een ander: een terugbetaling (Uitgeleend), je holding (markeer onregelmatig) of een eigen rekening');
+    expect(L[L.indexOf(r) + 1]).toBe('        12-05 3000.00 Kees Jansen (Persoonlijke overboeking) -> ontbrekende groep: een ontvangst van een ander: een terugbetaling (Uitgeleend), je holding ("Dit is mijn holding") of een eigen rekening');
   });
 
   test('5a: een opname is een uitgave contant, en een telling boekt alleen het verschil; een opname voor de grens blijft intern', async ({ page }) => {

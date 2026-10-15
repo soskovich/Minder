@@ -16,6 +16,17 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v421` · de holding is een partij die jij aanwijst, en het salaris is per maand de grootste terugkerende bron.** "Dit is mijn
+  holding" in de boekingssheet, een keer per partij: de terugkerende maandbetaling (bijschrijvingen binnen 10% van elkaar in
+  minstens 2 maanden, per maand de dichtste bij de mediaan) blijft inkomen, al het andere van die partij is Holding. Valkuil (die
+  van `v420`): de omweg via onregelmatig plus dezelfde naam gaf op het toestel geen holding, want er was niets gemarkeerd, en de
+  afschrijvingen stonden als "inkomen met een min". Een eigen categorie op een boeking van die partij vervalt bij de keuze en komt
+  terug bij "Niet meer mijn holding". Salaris per maand: de grootste terugkerende inkomensbron (inkomen in minstens 2 maanden, of
+  de bron van je laatste salarisbetaling); de vergelijking voor en na is mediaan tegen mediaan, nooit het maandtotaal. Valkuil: met
+  alleen de bron van de laatste betaling telde je oude werkgever als "overige inkomsten". "Opgezegd, loopt af": gestopt door jou
+  met nog een laatste betaling; tot die betaling telt hij mee, daarna is hij gestopt, en pas een betaling daarna is "weer betaald".
+  Een gestopte post met precies een betaling daarna is bij `v421` een keer omgezet (Health Club). Blok 20 rekent de stand van `v419`
+  in het geheugen na (`_SIM419`, `RULES_V419`) om een verschuiving per boeking te verklaren, zonder op te slaan.
 - **`v420` · de v419-regels in de app, en wat al als uitgave staat telt niet nog eens.** Een opname is een uitgave Contant op het
   moment van opnemen; de telling boekt alleen het verschil met wat al in Contant staat. Valkuil (die van `v419`): een telling van
   voor `v420` boekte het verschil al, dus een opname tot en met die dag blijft 'intern' (`SET.opnameVanaf`). Eigen rekening alleen

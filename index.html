@@ -885,6 +885,8 @@ const CATS={
    de rij in RULES, de grens in categorize() en de lezers van een opname lezen deze naam. */
 const CONTANT_CAT='contant';
 const ANDER_KW=['REVOLUT','WISE','N26','TIKKIE'];   // v420: uit de intern-rij (besluit van de gebruiker op v419)
+/* v421: alleen voor blok 20 ("WISSELT VAN GROEP"): de stand van v419 in het geheugen nagerekend, zonder opslaan. */
+let _SIM419=false;
 const RULES=[
   ['inkomen',['DGA','ERNST MANAGEMENT','0143178385','SALARIS',' LOON','UITKERING','AFREKENING PER','STRIPE TECHNOLOGY']],
   ['sparen',['PEAKS','SAXO BANK','SAXO','BELEGGEN','DEGIRO','BRAND NEW DAY','BUX','FLATEX','MONTHLY RULE','WEEKLY RULE','SPAARREKENING','SPAARDEPOSITO','SPAARDEPOT','SPAARGELD','SPAARPOT','DEPOSITO','SAVINGS','VERMOGENSREKENING','NAAR SPAREN','EIGEN SPAAR']],
@@ -912,6 +914,9 @@ const RULES=[
   ['persoonlijk',ANDER_KW],
   ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','OPNAME']]
 ];
+/* v421: de regels van v419, alleen gelezen als blok 20 de stand van v419 narekent (_SIM419): de intern-rij met de woorden van
+   toen, zonder de rij Contant en zonder Revolut, Wise, N26 en Tikkie op Persoonlijke overboeking. */
+const RULES_V419=RULES.filter(r=>r[0]!==CONTANT_CAT && r[1]!==ANDER_KW).map(r=>r[0]==='intern'?['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]:r);
 
 /* ---------- state ---------- */
 let TX=[];                 // alle transacties
@@ -952,7 +957,16 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
+/* v421: EEN KEER, BIJ HET LADEN (besluit van de gebruiker op v420, Health Club): een post die jij op gestopt zette en die daarna
+   precies een keer betaald werd, liep af. Hij krijgt "opgezegd, loopt af" met die betaling als laatste, en is daarmee geen
+   "weer betaald" meer. Twee of meer betalingen na het stoppen blijven gestopt en weer betaald: dan beslis jij. */
+function afloopMigreer(){
+  if(SET.afloop421) return false; SET.afloop421=vandaagYMD();
+  for(const [k,E] of Object.entries(SET.postStatus||{})){ if(!E || E.status!=='gestopt') continue;
+    const na=[...new Set(TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===k && t.date.slice(0,10)>String(E.laatste||E.op||'')).map(t=>t.date.slice(0,10)))];
+    if(na.length===1) SET.postStatus[k]={status:'afloop', op:E.op||'', laatste:E.laatste||'', tot:na[0], migr:'v421'}; }
+  return true; }
 
 /* ---------- maand-gebonden potjes (licht) ----------
  * SET.budgets      = het vastgezette plan voor de LOPENDE kalendermaand (alle lezers gebruiken dit).
@@ -1086,14 +1100,12 @@ function applyOwnAccounts(){
   const C=eigenContext();   // v419: de toetsen staan in eigenBewijs(), met blok 20 als tweede lezer
   const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
   EIGEN_AUTO=new Map();
-  const HK=holdingKeys();   // v420
+  const HK=_SIM419?new Set():holdingKeys(), HM={}; for(const k of HK) HM[k]=holdingMaandbetaling(k);   // v421
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
-    /* v420: een boeking van of naar je holding die niet je inkomen is (een afschrijving, of een bijschrijving buiten
-       inkomen) staat op Holding: geen inkomen en geen uitgave. Een bijschrijving op inkomen blijft inkomen; de knop
-       onregelmatig zegt welk deel geen maandinkomen is (v259), en blok 20 zet dat deel bij Holding. */
-    if(HK.size && HK.has(recurKey(t)) && !(rc==='inkomen' && t.amount>0)){ t.autoCat='holding'; continue; }
+    /* v421: van je holding is de terugkerende maandbetaling inkomen en al het andere Holding: geen inkomen en geen uitgave */
+    if(HK.size && HK.has(recurKey(t))){ t.autoCat=HM[recurKey(t)].ids.has(t.id)?'inkomen':'holding'; continue; }
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
     const E=eigenBewijs(t, C); let intern=!!E.r;
     if(E.r==='auto') EIGEN_AUTO.set(t.id, {namen:E.N, rc});
@@ -1127,19 +1139,70 @@ function applyOwnAccounts(){
       if(best && Math.abs(new Date(t.date)-new Date(best.date))/86400000<=100) t.autoCat=catOf(best);
     }
   }
+  if(_SIM419) return;   // v421: blok 20 rekent de stand van v419 na, zonder de stappen van v420
   try{ eigenOverboekingBewijs(C); }catch(_){}   // v420
   try{ loanAutoAfletter(); }catch(_){}           // v420
 }
-/* v420: DE HOLDING. Een partij met een bijschrijving die jij met de knop onregelmatig markeerde (v259) en met minstens een
-   afschrijving is je holding: de vaste maandbetaling is inkomen, de rest niet (besluit van de gebruiker op v419). Geen naam in
-   de code: de partij komt uit je eigen markering. */
-function holdingKeys(){
-  const O=(typeof SET!=='undefined'&&SET.onregelmatig)||{}, ids=Object.keys(O).filter(id=>+O[id]>0);
-  if(!ids.length) return new Set();
-  const byId=new Map(TX.map(t=>[t.id,t])), kand=new Set();
-  for(const id of ids){ const t=byId.get(id); if(t && t.amount>0){ const k=recurKey(t); if(k) kand.add(k); } }
-  const uit=new Set(); for(const t of TX) if(t.amount<0 && kand.has(recurKey(t))) uit.add(recurKey(t));
-  return uit;
+/* v421: DE HOLDING IS EEN PARTIJ DIE JIJ AANWIJST (besluit van de gebruiker op v420): "Dit is mijn holding" in de boekingssheet,
+   een keer per partij (SET.holdingPartij[recurKey]). De omweg van v420 (een bijschrijving die je onregelmatig markeerde plus
+   een afschrijving met dezelfde naam) is weg: op het toestel was er geen markering, dus er was geen holding. Van die partij is
+   de TERUGKERENDE MAANDBETALING inkomen (holdingMaandbetaling()); al het andere, bij- en afschrijvingen, staat op Holding:
+   geen inkomen en geen uitgave. Geen naam in de code. */
+const HOLDING_MARGE=0.1;   // v421: een bijschrijving binnen 10% van de mediaan van de maandbetaling is die maandbetaling
+function holdingKeys(){ const H=(typeof SET!=='undefined'&&SET.holdingPartij)||{}; return new Set(Object.keys(H).filter(k=>k)); }
+/* v421: de terugkerende maandbetaling van een partij: de groep bijschrijvingen die binnen HOLDING_MARGE van elkaar liggen en in
+   de meeste maanden voorkomen (minstens 2). Per maand is de bijschrijving die het dichtst bij de mediaan van die groep ligt de
+   maandbetaling; de rest is geen maandinkomen. Zonder zo'n groep is er geen maandbetaling en staat alles op Holding. */
+function holdingMaandbetaling(key){
+  const cr=TX.filter(t=>!t.pending && t.amount>0 && recurKey(t)===key);
+  let best=null;
+  for(const c of cr){ const cl=cr.filter(u=>Math.abs(u.amount-c.amount)<=HOLDING_MARGE*c.amount);
+    const mnd=new Set(cl.map(u=>u.date.slice(0,7))).size; if(mnd<2) continue;
+    if(!best || mnd>best.mnd || (mnd===best.mnd && cl.length>best.n)) best={mnd, n:cl.length, med:mediaan(cl.map(u=>u.amount))}; }
+  const ids=new Set(); if(!best) return {mediaan:null, maanden:0, ids};
+  const per={}; for(const t of cr){ const af=Math.abs(t.amount-best.med); if(af>HOLDING_MARGE*best.med) continue;
+    const m=t.date.slice(0,7); if(!per[m] || af<per[m].af) per[m]={t, af}; }
+  for(const m in per) ids.add(per[m].t.id);
+  return {mediaan:Math.round(best.med*100)/100, maanden:best.mnd, ids};
+}
+function holdingVan(t){ const k=t&&recurKey(t); return k && holdingKeys().has(k) ? k : ''; }
+/* De rij in de boekingssheet: bij een partij die je ooit iets betaalde op inkomen, of die al je holding is. */
+function holdingBlok(t){
+  const k=recurKey(t); if(!k) return '';
+  const is=holdingKeys().has(k);
+  if(!is && !TX.some(u=>u.amount>0 && recurKey(u)===k && (CATS[catOf(u)]||{}).type==='income')) return '';
+  const kk=esc(k).replace(/'/g,"\\'");
+  if(!is) return `<div class="row" data-holdingrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openHoldingVraag('${t.id}')">
+      <span class="small" style="flex:1">Dit is <b>mijn holding</b> (eigen bedrijf)<span style="display:block;color:var(--mut2)">de terugkerende maandbetaling is inkomen, de rest geen inkomen en geen uitgave</span></span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const M=holdingMaandbetaling(k), n=TX.filter(u=>recurKey(u)===k && catOf(u)==='holding').length;
+  return `<div class="row" data-holdingrij="aan" style="padding:10px 0;gap:8px;border-top:1px solid var(--line)">
+      <span class="small" style="flex:1">Je <b>holding</b><span style="display:block;color:var(--mut2)">${M.mediaan!=null?`maandbetaling ${euro(M.mediaan)} is inkomen · `:'geen terugkerende maandbetaling · '}${n} ${n===1?'boeking':'boekingen'} bij Holding</span></span>
+      <span class="small" data-holdingweg style="color:var(--mut2);cursor:pointer" onclick="holdingWeg('${kk}','${t.id}')">Niet meer mijn holding</span></div>`;
+}
+/* Eerst het gevolg, dan de knop. Openen schrijft niets. */
+function openHoldingVraag(id){
+  const t=TX.find(x=>x.id===id); if(!t) return; const k=recurKey(t);
+  const alle=TX.filter(u=>recurKey(u)===k), M=holdingMaandbetaling(k);
+  const naar=alle.filter(u=>!M.ids.has(u.id)), bij=naar.filter(u=>u.amount>0).reduce((a,u)=>a+u.amount,0), af=naar.filter(u=>u.amount<0).reduce((a,u)=>a-u.amount,0);
+  const ovr=alle.filter(u=>OVR[u.id]).length, nm=titleCase(cleanMerch(t.name)||t.name||k);
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="holdingSheet">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(nm)} is je holding</div>
+    <div class="small" style="line-height:1.5;margin:6px 0 10px">${M.mediaan!=null?`De terugkerende maandbetaling (${euro(M.mediaan)}, in ${M.maanden} maanden) blijft inkomen.`:'Er is geen terugkerende maandbetaling gevonden (een bedrag in minstens 2 maanden), dus niets blijft inkomen.'}
+      ${naar.length} andere ${naar.length===1?'boeking gaat':'boekingen gaan'} naar Holding: ${euro(bij)} erbij en ${euro(af)} eraf. Geen inkomen en geen uitgave.${ovr?` Je eigen categorie op ${ovr} ${ovr===1?'boeking vervalt':'boekingen vervalt'}; terugdraaien zet ${ovr===1?'hem':'ze'} terug.`:''}</div>
+    <div class="row" style="gap:8px"><button class="btn" data-holdingzet onclick="holdingZet('${id}')">Dit is mijn holding</button><button class="btn sec" onclick="openSheet('${id}')">Terug</button></div></div>`;
+  showSheetBg();
+}
+function holdingZet(id){
+  const t=TX.find(x=>x.id===id); if(!t) return; const k=recurKey(t); if(!k) return;
+  SET.holdingPartij=SET.holdingPartij||{}; if(SET.holdingPartij[k]) return;
+  const voor={}; for(const u of TX) if(recurKey(u)===k && OVR[u.id]){ voor[u.id]=OVR[u.id]; delete OVR[u.id]; }
+  SET.holdingPartij[k]={op:vandaagYMD(), naam:titleCase(cleanMerch(t.name)||t.name||k), ovrVoor:voor};
+  applyOwnAccounts(); save(); try{ render(); }catch(_){} openSheet(id);
+}
+function holdingWeg(k, id){
+  const E=(SET.holdingPartij||{})[k]; if(!E) return;
+  for(const [tid, c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c;
+  delete SET.holdingPartij[k]; applyOwnAccounts(); save(); try{ render(); }catch(_){} if(id) openSheet(id);
 }
 /* v420: EIGEN REKENING / OVERBOEKING ALLEEN MET BEWIJS, dezelfde regel als blok 20 (v419). Een 'intern'-boeking op een
    betaalrekening zonder eigen of gekoppelde IBAN, zonder bevestigde of herkende rekeningnaam, zonder je eigen naam en zonder
@@ -1566,7 +1629,7 @@ function categorize(t){
   // 1) eigen regels winnen van de ingebouwde categorisatie
   for(const r of (typeof SET!=='undefined'&&SET.rules)||[]){ if(CATS[r.cat] && match(r.kw)){ cat=r.cat; break; } }
   // 2) ingebouwde keyword-regels
-  if(cat==='overig'){ for(const [k,kws] of RULES){ if(kws.some(match)){ cat=k; break; } } }
+  if(cat==='overig'){ for(const [k,kws] of (_SIM419?RULES_V419:RULES)){ if(kws.some(match)){ cat=k; break; } } }
   if(cat==='overig' && t.amount>0) cat='intern'; // onbekende bijschrijving = meestal eigen overboeking
   /* v420: een opname of storting van contant geld op of voor SET.opnameVanaf blijft 'intern': die zit al in een telling van
      voor v420, die het verschil boekte (v258). Zonder deze grens telt dat geld twee keer (de opname en de telling). */
@@ -3091,7 +3154,7 @@ function recurringSchedule(metOud){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
-    else if(meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (SET.fixOvrM||{})[recurKey(t)]==='fixed')) type='fixed'; else continue;   // v420: ook wat jij per partij op vast zette (Nikki)   // vaste last = herkende terugkerende betaling (incasso OF periodieke overboeking), niet de betaalvorm
+    else if(meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (!_SIM419 && (SET.fixOvrM||{})[recurKey(t)]==='fixed'))) type='fixed'; else continue;   // v420: ook wat jij per partij op vast zette (Nikki)   // vaste last = herkende terugkerende betaling (incasso OF periodieke overboeking), niet de betaalvorm
     const key=recurKey(t); if(!key) continue;
     const m=(map[key]=map[key]||{name:t.name,cat:c,type,occ:[],inc:0,per:0,tot:0});
     m.occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7), acc:t.acc});
@@ -3979,9 +4042,18 @@ function postStatusVan(s, vandaag){
     bedrag:Math.round(+s.amount||0), cadansTxt:postCadansTxt(s),
     oud6:!!laatste && laatste<ymdVan(new Date(vandaag.getFullYear(), vandaag.getMonth()-POST_OUD_MAANDEN, vandaag.getDate()))};
   if(E && E.status==='gestopt') return Object.assign(basis, {status:'gestopt', door:'jij', op:E.op||'', weerBetaald:!!laatste && laatste>String(E.laatste||E.op||'')});
+  /* v421: OPGEZEGD, LOOPT AF. Door jou gestopt, met nog een laatste betaling: `tot` is die betaling als hij al geweest is, anders
+     is de eerste betaling na `laatste` de laatste. Tot die betaling telt de post mee (hij wordt nog verwacht); daarna is hij
+     gestopt. Een betaling na de laatste is "weer betaald", net als bij gestopt. */
+  if(E && E.status==='afloop'){ const na=postBetalingenNa(s.key, E.laatste||E.op||'');
+    const eind=E.tot || (na[0]||'');
+    if(!eind) return Object.assign(basis, {status:'afloop', door:'jij', op:E.op||''});
+    return Object.assign(basis, {status:'gestopt', door:'jij', op:E.op||'', afloop:true, eind, weerBetaald:!!laatste && laatste>eind}); }
   if(verlopen && !(E && E.status==='actief' && E.laatste===laatste)) return Object.assign(basis, {status:'verlopen'});
   return Object.assign(basis, {status:'actief', bevestigd:!!(E && E.status==='actief')});
 }
+/* v421: de betaaldagen van een post na een dag, oud naar nieuw (de boekingen zelf, niet het schema) */
+function postBetalingenNa(key, na){ return [...new Set(TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===key && t.date.slice(0,10)>String(na||'')).map(t=>t.date.slice(0,10)))].sort(); }
 let _postSt=null, _postStSleutel='';
 function postStatusMap(){
   const sl=_dataGen+'|'+vandaagYMD(); if(_postSt && _postStSleutel===sl) return _postSt;
@@ -3990,20 +4062,24 @@ function postStatusMap(){
   for(const s of R) M[s.key]=postStatusVan(s, v);
   _postSt=M; _postStSleutel=sl; return M; }
 function postStatus(key){ const M=postStatusMap(); if(M[key]) return M[key];
-  const E=(SET.postStatus||{})[key]; return E && E.status==='gestopt' ? {key, status:'gestopt', door:'jij', op:E.op||'', laatste:E.laatste||''} : {key, status:'actief'}; }
-function postTelt(key){ return postStatus(key).status==='actief'; }
-const POST_STATUS_TXT={actief:'actief', gestopt:'gestopt door jou', verlopen:'verlopen, niet meegeteld'};
-function postZet(key, status, terug){
+  const E=(SET.postStatus||{})[key]; if(E && E.status==='afloop') return {key, status:(E.tot||postBetalingenNa(key, E.laatste||E.op||'').length)?'gestopt':'afloop', door:'jij', op:E.op||'', laatste:E.laatste||'', afloop:true};
+  return E && E.status==='gestopt' ? {key, status:'gestopt', door:'jij', op:E.op||'', laatste:E.laatste||''} : {key, status:'actief'}; }
+function postTelt(key){ const st=postStatus(key).status; return st==='actief' || st==='afloop'; }   // v421: een post die afloopt wordt nog een keer verwacht
+const POST_STATUS_TXT={actief:'actief', gestopt:'gestopt door jou', verlopen:'verlopen, niet meegeteld', afloop:'opgezegd, loopt af'};
+function postZet(key, status, terug, tot){
   if(!key) return; SET.postStatus=SET.postStatus||{};
   let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
   const laatste=s?String(s.lastDate||'').slice(0,10):(((SET.postStatus[key]||{}).laatste)||'');
   const herstel=setSnap(['postStatus','fixDueExcl','uitResAntw']);
   if(status==='gestopt' || status==='actief') SET.postStatus[key]={status, op:vandaagYMD(), laatste};
+  /* v421: opgezegd, loopt af. Met `tot` (de laatste betaling is al geweest) staat de post meteen op gestopt zonder "weer betaald". */
+  if(status==='afloop'){ const E=SET.postStatus[key]||{}; SET.postStatus[key]={status:'afloop', op:vandaagYMD(), laatste:tot?String(tot):(E.status==='gestopt'&&E.laatste?E.laatste:laatste), tot:tot?String(tot):''}; }
   save();
   const nm=s?titleCase(cleanMerch(s.name)||s.name||''):'Post';
   /* v415: de sheet sluit en alles rekent opnieuw; vanuit de lijst Vaste lasten gaat hij terug naar die lijst */
-  if(terug==='vaste'){ try{ render(); }catch(_){} openVasteLasten(); toast(status==='gestopt'?`${ICON('check')} ${esc(nm)} gestopt`:`${ICON('check')} ${esc(nm)} actief`); return; }
-  keuzeKlaar(status==='gestopt'?`${nm} gestopt`:`${nm} actief`, herstel);
+  const wat=status==='gestopt'?'gestopt':status==='afloop'?'opgezegd, loopt af':'actief';
+  if(terug==='vaste'){ try{ render(); }catch(_){} openVasteLasten(); toast(`${ICON('check')} ${esc(nm)} ${wat}`); return; }
+  keuzeKlaar(`${nm} ${wat}`, herstel);
 }
 /* De sheet van een post: de status, de laatste betaling, en de handeling die past. Openen schrijft niets. */
 function openPostStatus(key, terug){
@@ -4011,14 +4087,15 @@ function openPostStatus(key, terug){
   const P=postStatus(key), nm=P.naam||(s?titleCase(cleanMerch(s.name)||s.name||''):key);
   const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,'');
   const cad=s?(s.cadans==='4w'?'4-wekelijks':s.cadans==='maand'?'per maand':(INTERVAL_TXT[s.intervalM]||`elke ${s.intervalM} maanden`)):'';
-  const knop=(st,l,sec)=>`<button class="btn${sec?' sec':''}" data-postzet="${st}" onclick="postZet('${kk}','${st}','${tt}')">${l}</button>`;
+  const knop=(st,l,sec,tot)=>`<button class="btn${sec?' sec':''}" data-postzet="${st}${tot?'-tot':''}" onclick="postZet('${kk}','${st}','${tt}'${tot?`,'${tot}'`:''})">${l}</button>`;
   let uitleg='', knoppen='';
-  if(P.status==='gestopt' && P.weerBetaald){ uitleg=`Je zette ${esc(nm)} op gestopt${P.op?` op ${dagKort(P.op)}`:''}, en er kwam daarna weer een betaling (${dagKort(P.laatste)}).`;
-    knoppen=knop('actief','Actief zetten')+knop('gestopt','Blijft gestopt',true); }
-  else if(P.status==='gestopt'){ uitleg=`Gestopt door jou${P.op?` op ${dagKort(P.op)}`:''}. Hij telt niet mee in wat een potje nodig heeft, in te krap en te ruim, en wordt niet meer verwacht.`; knoppen=knop('actief','Toch actief',true); }
+  if(P.status==='gestopt' && P.weerBetaald){ uitleg=`Je zette ${esc(nm)} op gestopt${P.op?` op ${dagKort(P.op)}`:''}, en er kwam daarna weer een betaling (${dagKort(P.laatste)}).${P.afloop?'':' Was dat de laatste betaling na het opzeggen, kies dan "Opgezegd, dit was de laatste".'}`;
+    knoppen=knop('actief','Actief zetten')+(P.afloop?'':knop('afloop','Opgezegd, dit was de laatste',true,P.laatste))+knop('gestopt','Blijft gestopt',true); }
+  else if(P.status==='afloop'){ uitleg=`Opgezegd, de laatste betaling komt nog. Tot die betaling wordt hij verwacht; daarna staat hij op gestopt.`; knoppen=knop('gestopt','Gestopt',true)+knop('actief','Toch actief',true); }
+  else if(P.status==='gestopt'){ uitleg=`${P.afloop?`Opgezegd en afgelopen: de laatste betaling was ${dagKort(P.eind||P.laatste)}`:'Gestopt door jou'}${P.op?` (gekozen op ${dagKort(P.op)})`:''}. Hij telt niet mee in wat een potje nodig heeft, in te krap en te ruim, en wordt niet meer verwacht.`; knoppen=knop('actief','Toch actief',true); }
   else if(P.status==='verlopen'){ uitleg=`Niet betaald sinds ${dagKort(P.laatste)}: de volgende betaling werd rond ${dagKort(P.verwachtNa)} verwacht, en dat is langer dan ${P.tol} dagen geleden. Tot je antwoordt rekent Minder er niet meer mee.`;
     knoppen=knop('gestopt','Ja, gestopt')+knop('actief','Nee, nog actief',true); }
-  else { uitleg=`Actief${P.laatste?` · laatste betaling ${dagKort(P.laatste)}`:''}. Gestopt zetten haalt hem uit wat een potje nodig heeft, uit te krap en te ruim, en uit wat er nog verwacht wordt. Terugzetten kan altijd.`; knoppen=knop('gestopt','Gestopt',true); }
+  else { uitleg=`Actief${P.laatste?` · laatste betaling ${dagKort(P.laatste)}`:''}. Gestopt zetten haalt hem uit wat een potje nodig heeft, uit te krap en te ruim, en uit wat er nog verwacht wordt. Terugzetten kan altijd. Opgezegd, loopt af: de laatste betaling komt nog, daarna is hij gestopt.`; knoppen=knop('gestopt','Gestopt',true)+knop('afloop','Opgezegd, loopt af',true); }
   $('#sheet').innerHTML=`<div class="grab"></div><div id="postStatusSheet" data-poststatus="${esc(P.status)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(nm)}</div>
     <div class="small muted" style="margin:2px 0 8px">${s?`${euro0(Math.round(+s.amount||0))} ${esc(cad)} · `:''}${esc(POST_STATUS_TXT[P.status]||P.status)}${P.laatste?` · laatste betaling ${dagKort(P.laatste)}`:''}</div>
@@ -4041,7 +4118,7 @@ function openUitResVraag(key){
 }
 function uitResKeuze(key){ return (((SET.uitResAntw||{})[key])||{}).keuze||''; }
 /* De posten met de vlag zonder antwoord; een post die je al op gestopt zette telt als beantwoord. */
-function uitResOpen(){ return Object.keys(SET.fixDueExcl||{}).filter(k=>!uitResKeuze(k) && postStatus(k).status!=='gestopt'); }
+function uitResOpen(){ return Object.keys(SET.fixDueExcl||{}).filter(k=>!uitResKeuze(k) && postStatus(k).status!=='gestopt' && postStatus(k).status!=='afloop'); }
 function uitResAntwZet(key, keuze){
   if(!key || (keuze!=='gestopt' && keuze!=='reservering')) return;
   const herstel=setSnap(['postStatus','fixDueExcl','uitResAntw']);
@@ -22748,7 +22825,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
+    ${onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).filter(([k])=>k===cur||!potGearchiveerd(k)).map(([k,c])=>`
@@ -28206,22 +28283,49 @@ function diagZonderPotje(V){
    maandSplitsing), de potjes uit de snede van piekInScope(), opzij uit vermogensInleg(), en de lopende maand uit
    maandVooruit(). Bedragen worden onafgerond opgeteld en pas in de uitvoer afgerond. */
 const DIAG_SAL_MAANDEN=6;
+/* v421: de groep van een boeking zoals blok 20 hem telt (vast, potjes, zonder potje, buiten, inkomen of een eigen groep). */
+function diagGroep(t, B){ const c=catOf(t), m=CATS[c]||{};
+  if(m.type==='income') return 'inkomen';
+  if(m.type!=='expense') return c==='holding'?'holding':(c===LOAN_CAT.uit||c===LOAN_CAT.in)?'uitgeleend':'intern (geen uitgave)';
+  if(geenNorm(c) || !isUitgave(t,B)) return 'buiten vast en potjes';
+  if(isFixed(t) || potHeelVast(c)) return 'vast';
+  return (+B[c]||0)>0 ? 'potjes (variabel)' : 'zonder potje (variabel)'; }
+/* v421: DE STAND VAN v419, IN HET GEHEUGEN NAGEREKEND (alleen lezen, geen save()). De regels van v419 (RULES_V419), geen holding,
+   geen eigen-overboeking-zonder-bewijs, geen automatische terugbetaling van een lening (de eigen keuze die dat schreef valt weg)
+   en geen vaste post uit je keuze per partij in het schema. Daarna alles terug, ook als er iets misgaat. */
+function diagV419Stand(yms){
+  const lees=()=>{ const g={}; for(const ym of yms){ const B=maandPotjes(ym).B; for(const t of txOfMonth(ym)) g[t.id]={g:diagGroep(t,B), c:catOf(t)}; }
+    let V=null; try{ V=maandVooruit(); }catch(_){} return {g, V}; };
+  const nu=lees(), ovrOud=OVR; let oud=null;
+  try{ const O=Object.assign({}, OVR); for(const l of loans()) for(const id of (l.terugAuto||[])) delete O[id];
+    OVR=O; _SIM419=true; _dataGen++; TX.forEach(categorize); applyOwnAccounts(); oud=lees(); }
+  finally{ _SIM419=false; OVR=ovrOud; _dataGen++; TX.forEach(categorize); applyOwnAccounts(); }
+  return {nu, oud}; }
 function diagSalarisVerdeling(){
   const L=[], e0=x=>Math.round(+x||0), c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
   const cur=thisYM(), ms=[]; for(let i=DIAG_SAL_MAANDEN;i>=1;i--) ms.push(valtOpYmPlus(cur,-i)); ms.push(cur);
   const af=ms.slice(0,-1);
   L.push('DEFINITIE VAN VAST (v355/v383, dezelfde als Grip en Inzichten via maandSplitsing): een uitgave is vast als de app hem als terugkerende betaling herkent (isFixed: een herkende herhaling, of jouw keuze per boeking of per winkel) of als het potje door jou op vast staat (potHeelVast). Alle andere uitgaven met een norm zijn potjes (de snede van piekInScope), met of zonder potje. Uitgaven zonder norm (onvoorzien, contant), een persoonlijke overboeking zonder potje en het deel dat je uit een reservering betaalde zijn geen van beide en staan apart als "buiten vast en potjes".');
   L.push(`Maanden: ${af.map(MN).join(' · ')} afgerond, ${MN(cur)} lopend (geboekt plus verwacht). Eigen overboekingen (intern) tellen nergens als inkomen of uitgave. Afgerond wordt pas na het optellen.`);
-  /* het salaris: de bron van salarisBetalingLaatst(), over alles tot en met deze maand */
-  let sal=null; try{ sal=salarisBetalingLaatst(valtOpYmPlus(cur,1)); }catch(_){}
-  const salKey=sal?recurKey(sal):null;
-  const isSal=t=>salKey!=null && recurKey(t)===salKey;
+  /* v421: SALARIS PER MAAND is de grootste terugkerende inkomensbron van die maand (besluit van de gebruiker op v420): terugkerend
+     is dezelfde partij met een bijschrijving op inkomen in minstens 2 maanden. Een bron per maand, dus een nieuwe werkgever
+     neemt het over in de maand dat hij de grootste is. De lopende maand zonder salaris erin houdt de bron van de maand ervoor. */
+  const inkTx=telbareTx().filter(t=>t.amount>0 && (CATS[catOf(t)]||{}).type==='income');
+  const bronMnd={}; for(const t of inkTx){ const k=recurKey(t); (bronMnd[k]=bronMnd[k]||new Set()).add(t.date.slice(0,7)); }
+  const terugk=new Set(Object.keys(bronMnd).filter(k=>k && bronMnd[k].size>=2));
+  /* de bron van je laatste salarisbetaling (salarisBetalingLaatst) telt ook als hij nog maar in een maand voorkomt: een nieuwe
+     werkgever is vanaf zijn eerste betaling je salaris, net als in de rest van de app */
+  try{ const sl=salarisBetalingLaatst(valtOpYmPlus(cur,1)); if(sl && recurKey(sl)) terugk.add(recurKey(sl)); }catch(_){}
+  const bronSom=(k,ym)=>inkTx.filter(t=>recurKey(t)===k && t.date.slice(0,7)===ym).reduce((a,t)=>a+t.amount-onregelmatigBedrag(t),0);
+  const salBron={}; for(const ym of ms){ const ks=[...terugk].filter(k=>bronMnd[k].has(ym)).sort((a,b)=>bronSom(b,ym)-bronSom(a,ym)); salBron[ym]=ks[0]||null; }
+  if(salBron[cur]==null) salBron[cur]=salBron[ms[ms.length-2]]||null;
+  const salNaam=k=>{ const t=inkTx.find(u=>recurKey(u)===k); return t?titleCase(cleanMerch(t.name)||t.name||k):String(k); };
   const sav=new Set((()=>{ try{ return n26SavingsAccounts(); }catch(_){ return []; } })()), resA=(()=>{ try{ return resAccId(); }catch(_){ return ''; } })();
   const opzijRek=a=>sav.has(a) || (resA && a===resA);
   const EC=eigenContext();
   /* een maand: inkomen, vast per post, potjes per categorie, buiten, opzij, en wat er op je betaalrekeningen netto bleef */
   const maand=ym=>{
-    const tx=txOfMonth(ym), B=maandPotjes(ym).B;
+    const tx=txOfMonth(ym), B=maandPotjes(ym).B, sk=salBron[ym], isSal=t=>sk!=null && recurKey(t)===sk;
     let salaris=0, buiten=0, betaal=0; const salTx=[], overTx=[], posten={}, vastPot={}, potjes={}, zonder={}, postNaam={}, postTx={};
     const bDeel={geennorm:0, persoonlijk:0, uitres:0, kas:0, persOverb:0}, bTx=[], woning={}, wNaam={};
     /* v419: WELKE 'INTERN'-BOEKING IS GEEN EIGEN OVERBOEKING. Eerst de paren: een interne boeking met een tegenkant op een
@@ -28246,20 +28350,19 @@ function diagSalarisVerdeling(){
       else zonderKant.push({t, eigen}); }
     /* v420: de app zet zo'n boeking zelf om (na je bevestiging of als hij nieuw is): dan staat hij hier als omgezet */
     for(const t of tx) if(WISSEL420.includes(t.id) && catOf(t)==='persoonlijk') wissel.push({t, g:'persOverb', omgezet:true});
-    /* v420: HOLDING EN UITGELEEND. Holding is de partij uit holdingKeys(): het onregelmatige deel van een bijschrijving en alles
-       op de categorie Holding. Uitgeleend is wat op Uitgeleend of Geleend staat (de lening en de terugbetaling). Geen inkomen
-       en geen uitgave; de controle telt hun netto apart. */
-    const HKs=holdingKeys(), holdTx=[], leenTx=[]; let holdIn=0, holdNet=0, leenNet=0;
+    /* v421: HOLDING EN UITGELEEND. Holding is alles op de categorie Holding (de partij die jij aanwees, behalve de terugkerende
+       maandbetaling). Uitgeleend is wat op Uitgeleend of Geleend staat. Geen inkomen en geen uitgave; de controle telt hun
+       netto apart. */
+    const holdTx=[], leenTx=[]; let holdNet=0, leenNet=0;
     for(const t of tx){ const c=catOf(t);
       if(c==='holding'){ holdNet+=t.amount; holdTx.push({t, v:t.amount}); }
-      else if(HKs.has(recurKey(t)) && onregelmatigBedrag(t)>0){   // onregelmatigBedrag() is alleen > 0 bij een bijschrijving op inkomen
-        const o=onregelmatigBedrag(t); holdIn+=o; holdNet+=o; holdTx.push({t, v:o, onr:true}); }
       else if(c===LOAN_CAT.uit || c===LOAN_CAT.in){ leenNet+=t.amount; leenTx.push(t); } }
+    /* v421: contant opgenomen in die maand, met de opnames erachter */
+    const opn=tx.filter(t=>t.amount<0 && isOpnameTx(t)), opnSom=opn.reduce((a,t)=>a-t.amount,0);
     for(const t of tx){ const c=catOf(t), meta=CATS[c]||{};
       if(!opzijRek(t.acc)) betaal+=t.amount;
       if(meta.type==='income'){ const v=Math.max(t.amount,0), o=onregelmatigBedrag(t);
-        const hold=o>0 && HKs.has(recurKey(t));   // v420: het onregelmatige deel van je holding staat bij Holding
-        if(isSal(t)){ salaris+=v-o; salTx.push(t); if(o>0 && !hold) overTx.push({t, v:o, onr:true}); } else { const w=hold?v-o:v; if(w>0.005) overTx.push({t, v:w}); } continue; }
+        if(isSal(t)){ salaris+=v-o; salTx.push(t); if(o>0) overTx.push({t, v:o, onr:true}); } else if(v>0.005) overTx.push({t, v}); continue; }
       if(meta.type!=='expense') continue;
       const geld=-t.amount, vn=uitgaveNorm(t);
       if(geenNorm(c) || !isUitgave(t, B)){ buiten+=geld; bDeel[!geenNorm(c)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm']+=geld; bTx.push({t, v:geld}); continue; }
@@ -28270,7 +28373,7 @@ function diagSalarisVerdeling(){
       else if(potHeelVast(c)) vastPot[c]=(vastPot[c]||0)+vn;
       else if((+B[c]||0)>0) potjes[c]=(potjes[c]||0)+vn;
       else zonder[c]=(zonder[c]||0)+vn; }
-    const MI=maandInkomen(ym), overige=MI.alles-salaris-holdIn;
+    const MI=maandInkomen(ym), overige=MI.alles-salaris;
     let VI={totaal:null, delen:[]}; try{ VI=vermogensInleg(ym); }catch(_){}
     const deel=k=>{ const d=(VI.delen||[]).find(x=>x.key===k); return d&&d.bedrag!=null?+d.bedrag:0; };
     /* v419: EEN ONTTREKKING IS GELD VAN JE SPAAR- OF RESERVERINGSREKENING NAAR EEN BETAALREKENING (besluit van de gebruiker).
@@ -28289,7 +28392,7 @@ function diagSalarisVerdeling(){
     return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, bDeel, wissel, zonderKant, vast, pot, potMet:som(potjes), potZonder:som(zonder),
       spaar:deel('spaar'), res:deel('res'), bel:deel('bel'), ontt, binnen, onttSom:ontt.reduce((a,t)=>a-t.amount,0), binnenSom:binnen.reduce((a,t)=>a-t.amount,0), opzij, betaal, VIbekend:VI.totaal!=null,
       opzijBoek, xBoek, negInk, ov:(()=>{ try{ return overschotInkomen(ym)||0; }catch(_){ return 0; } })(), paarRest, resBoek,
-      holdTx, holdNet, leenTx, leenNet, bTx,
+      holdTx, holdNet, leenTx, leenNet, bTx, opn, opnSom, sk,
       woning, wNaam,
       studie:som(Object.fromEntries(Object.entries(posten).filter(([k])=>catOf(postNaam[k])==='studie')))+(vastPot.studie||0)+(potjes.studie||0)+(zonder.studie||0)};
   };
@@ -28305,10 +28408,16 @@ function diagSalarisVerdeling(){
   const kol=f=>R.map(r=>`${MN(r.ym)}${r===Rc?'*':''} ${e0(f(r))}`).join(' · ');
   /* 1. inkomsten */
   L.push('', '1. INKOMSTEN (* = lopend: geboekt plus verwacht)');
-  if(!sal) L.push('  salaris: niet herkend (geen inkomensboeking voor of in deze maand)');
-  else L.push(`  salaris herkend op tegenpartij: "${titleCase(cleanMerch(sal.name)||sal.name||'')}" (recurKey "${salKey}", de bron van salarisBetalingLaatst(): de grootste inkomensboeking van de laatste maand met inkomen, en elke boeking met dezelfde naam)${salKey===''?'; LET OP: de naam is leeg, dus elke inkomensboeking zonder naam telt als salaris':''}`);
+  L.push('  SALARIS PER MAAND (v421): de grootste terugkerende inkomensbron van die maand (dezelfde partij, inkomen in minstens 2 maanden, of de bron van je laatste salarisbetaling)');
+  if(!terugk.size) L.push('  geen terugkerende inkomensbron: geen salaris herkend');
+  /* de vergelijking voor en na een wissel van bron: de mediaan van elke bron (zijn maandbedragen), niet het maandtotaal */
+  { const bronnen=[]; for(const r of R) if(r.sk!=null && (!bronnen.length || bronnen[bronnen.length-1].k!==r.sk)) bronnen.push({k:r.sk, van:r.ym, tot:r.ym}); else if(r.sk!=null) bronnen[bronnen.length-1].tot=r.ym;
+    const med=k=>mediaan([...bronMnd[k]].map(ym=>bronSom(k,ym)).filter(v=>v>0.005));
+    for(const b of bronnen) L.push(`  bron ${MN(b.van)}${b.tot!==b.van?'-'+MN(b.tot):''}: ${salNaam(b.k)} (recurKey "${b.k}"), mediaan ${c2(med(b.k))} over ${bronMnd[b.k].size} ${bronMnd[b.k].size===1?'maand':'maanden'} met inkomen van deze partij`);
+    for(let i=1;i<bronnen.length;i++){ const a=med(bronnen[i-1].k), b=med(bronnen[i].k);
+      L.push(`  INKOMEN VOOR EN NA (mediaan tegen mediaan): ${salNaam(bronnen[i-1].k)} ${c2(a)} -> ${salNaam(bronnen[i].k)} ${c2(b)} vanaf ${MN(bronnen[i].van)}: ${b-a>=0?'+':''}${c2(b-a)}`); } }
   for(const r of R){ const d=r.salTx.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)}`).join(', ');
-    L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: salaris ${e0(tot(r,'salaris'))}${d?` (${d})`:' (geen betaling)'}${r===Rc?` = geboekt ${e0(r.salaris)} + nog te ontvangen ${e0(r.salarisVerwacht)} (monthLiquidity().incDue, je norm min wat er binnen is)`:''}`);
+    L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: salaris ${e0(tot(r,'salaris'))}${r.sk!=null?' van '+salNaam(r.sk):''}${d?` (${d})`:' (geen betaling)'}${r===Rc?` = geboekt ${e0(r.salaris)} + nog te ontvangen ${e0(r.salarisVerwacht)} (monthLiquidity().incDue, je norm min wat er binnen is)`:''}`);
     L.push(`      overige inkomsten ${e0(r.overige)}${r.overTx.length?': '+r.overTx.sort((a,b)=>b.v-a.v).map(o=>`${titleCase(cleanMerch(o.t.name)||o.t.name||'?')} ${c2(o.v)}${o.onr?' (onregelmatig deel)':''}`).join(', '):''}${Math.abs(r.overige-r.overTx.reduce((a,o)=>a+o.v,0))>0.005?' (+ ontvangst bij een lening zonder boeking, v343)':''}`); }
   /* 2. vast */
   L.push('', '2. VAST: per post het bedrag in die maand (status nu), de vaste delen van je potjes, en het totaal');
@@ -28342,20 +28451,34 @@ function diagSalarisVerdeling(){
   L.push(`      waarvan persoonlijke overboeking zonder potje: ${kol(r=>r.bDeel.persoonlijk)}`);
   L.push(`      waarvan uit een reservering betaald: ${kol(r=>r.bDeel.uitres)}`);
   L.push(`      waarvan contant (opname min storting, en de telling die alleen het verschil boekt, v420): ${kol(r=>r.bDeel.kas)}`);
+  L.push(`  CONTANT OPGENOMEN (v421): ${kol(r=>r.opnSom)}`);
+  for(const r of R) if(r.opn.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.opn.slice().sort((a,b)=>a.date<b.date?-1:1).map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
   L.push(`      waarvan overboeking aan een ander (geen eigen IBAN en niet je eigen naam, v419): ${kol(r=>r.bDeel.persOverb)}`);
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
   { let n=0; for(const r of R) if(r.wissel.length){ n++;
       L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.wissel.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(w=>`${w.t.date.slice(8,10)}-${w.t.date.slice(5,7)} ${c2(w.t.amount)} ${titleCase(cleanMerch(w.t.name)||w.t.name||'?')} -> ${w.g==='kas'?'uitgave in contant':'persoonlijke overboeking'}${w.omgezet?' (omgezet)':w.wacht?' (wacht op je bevestiging)':''}`).join(', ')}`); }
     if(!n) L.push('      geen'); }
-  /* v420: BUITEN VAST EN POTJES KAN NIET NEGATIEF ZIJN (besluit van de gebruiker). Is het dat toch, dan staat er een ontvangst
-     in die bij een andere groep hoort; de boekingen met een min staan erbij, met de groep die ontbreekt. */
+  /* v421: de ontbrekende groep van een negatieve maand staat bij de CONTROLE (besluit van de gebruiker op v420) */
   { const neg=R.filter(r=>r.buiten<-0.005);
-    if(!neg.length) L.push('  buiten vast en potjes is in geen maand negatief');
-    for(const r of neg){ const ms=[...r.bTx.filter(x=>x.v<-0.005).map(x=>x.t), ...r.wissel.filter(w=>w.t.amount>0).map(w=>w.t)];
-      L.push(`  LET OP ${MN(r.ym)}${r===Rc?'*':''}: buiten vast en potjes is ${c2(r.buiten)}; een ontvangst staat in de verkeerde groep:`);
-      for(const t of ms){ let g='een ontvangst van een ander: een terugbetaling (Uitgeleend), je holding (markeer onregelmatig) of een eigen rekening';
-        try{ if(loanMatch(t)) g='een terugbetaling van je lening (Uitgeleend)'; else if(holdingKeys().has(recurKey(t))) g='je holding (Holding)'; else if(stortKenmerk(t)||contantStorting(t)) g='een storting van contant geld (Contant)'; }catch(_){}
-        L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')} (${(CATS[catOf(t)]||{}).name||catOf(t)}) -> ontbrekende groep: ${g}`); } } }
+    L.push(neg.length?`  buiten vast en potjes negatief in: ${neg.map(r=>MN(r.ym)+(r===Rc?'*':'')).join(', ')} (de boeking staat bij de CONTROLE)`:'  buiten vast en potjes is in geen maand negatief'); }
+  /* v421: WAT v420 EN v421 AAN DE GROEPEN VERANDERDEN. De stand van v419 wordt in het geheugen nagerekend (diagV419Stand(), niets
+     opgeslagen) en per boeking naast de groep van nu gelegd, voor de lopende maand en de drie maanden waaruit de verwachting
+     haar patroon haalt. Daarnaast wat dat met de verwachting van de lopende maand doet. Alleen uitleggen, niets veranderen. */
+  { let S=null; try{ S=diagV419Stand(R.slice(-4).map(r=>r.ym)); }catch(e){ L.push('  (de stand van v419 is niet na te rekenen: '+e.message+')'); }
+    if(S){ const vO=S.oud.V, vN=S.nu.V, ok=vO&&!vO.onbekend&&vN&&!vN.onbekend;
+      L.push(`  VERSCHUIVING DOOR DE REGELS VAN v420/v421 (${MN(cur)}*, nagerekend met de regels van v419 op dezelfde dag en dezelfde boekingen):`);
+      if(ok){ L.push(`      potjes (variabel) verwacht: v419 ${c2(vO.varEindR)} -> nu ${c2(vN.varEindR)} (${vN.varEindR-vO.varEindR>=0?'+':''}${c2(vN.varEindR-vO.varEindR)})`);
+        L.push(`      vast (potjes) verwacht: v419 ${c2(vO.vasteEindR)} -> nu ${c2(vN.vasteEindR)} (${vN.vasteEindR-vO.vasteEindR>=0?'+':''}${c2(vN.vasteEindR-vO.vasteEindR)})`);
+        L.push(`      zonder potje verwacht: v419 ${c2(vO.zonderStand.geboekt+vO.zonderStand.verwacht)} -> nu ${c2(vN.zonderStand.geboekt+vN.zonderStand.verwacht)}`);
+        L.push(`      verwacht totaal: v419 ${vO.projectie} -> nu ${vN.projectie} (${vN.projectie-vO.projectie>=0?'+':''}${vN.projectie-vO.projectie})`); }
+      else L.push('      de verwachting is in een van de twee standen onbekend');
+      const ids=Object.keys(S.nu.g).filter(id=>S.oud.g[id] && (S.oud.g[id].g!==S.nu.g[id].g || S.oud.g[id].c!==S.nu.g[id].c));
+      const byId=new Map(TX.map(t=>[t.id,t])), rij=ids.map(id=>byId.get(id)).filter(Boolean).sort((a,b)=>a.date<b.date?-1:1);
+      L.push(`      boekingen die van groep of categorie wisselden: ${rij.length||'geen'}${rij.length?'':'; een ander verschil met een eerdere aflezing komt dan van de dag en nieuwe boekingen'}`);
+      const cn=c=>(CATS[c]||{}).name||c;
+      for(const t of rij.slice(0,40)){ const o=S.oud.g[t.id], n=S.nu.g[t.id];
+        L.push(`        ${MN(t.date.slice(0,7))} ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}: ${o.g} [${cn(o.c)}] -> ${n.g} [${cn(n.c)}]`); }
+      if(rij.length>40) L.push(`        en ${rij.length-40} meer`); } }
   /* 4. opzij */
   L.push('', '4. OPZIJ (vermogensInleg: netto naar je spaarrekening, je reserveringen en je beleggingen)');
   L.push(`  naar Plan en sparen (spaarrekening, netto): ${kol(r=>r.spaar)}`);
@@ -28367,13 +28490,15 @@ function diagSalarisVerdeling(){
   for(const r of R) if(r.binnen.length) L.push(`      ${MN(r.ym)}: ${r.binnen.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
   L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.opzijVerwacht)} (nog te sparen uit safeToSpend + inleg in Plan die nog moet)`);
   L.push(`  NETTO OPZIJ: ${kol(r=>tot(r,'opzij'))}${R.some(r=>!r.VIbekend)?' (een maand zonder spaar- of reserveringsrekening en zonder beleggingsboeking telt als 0: niet gemeten)':''}`);
-  /* v420: HOLDING. De partij uit holdingKeys(): je eigen markering onregelmatig bij een bijschrijving, en een afschrijving
-     naar dezelfde partij. De vaste maandbetaling is je salaris (punt 1); de rest staat hier, geen inkomen en geen uitgave. */
-  { const HK=holdingKeys(); let hn=''; for(const t of TX) if(HK.has(recurKey(t))){ hn=titleCase(cleanMerch(t.name)||t.name||''); break; }
-    L.push('', `HOLDING (v420)${hn?': '+hn:''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
-    if(!HK.size) L.push('  geen holding herkend: markeer bij een bijschrijving van je holding het deel dat geen maandinkomen is met de knop onregelmatig');
-    else { L.push(`  netto: ${kol(r=>r.holdNet)}`);
-      for(const r of R) if(r.holdTx.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.holdTx.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(x=>`${x.t.date.slice(8,10)}-${x.t.date.slice(5,7)} ${x.v>0?'+':''}${c2(x.v)}${x.onr?' (onregelmatig deel)':''}`).join(', ')}`); } }
+  /* v421: HOLDING. De partij die jij aanwees ("Dit is mijn holding"). De terugkerende maandbetaling is inkomen (punt 1); de rest
+     staat hier, geen inkomen en geen uitgave, per maand netto met de boekingen erachter. */
+  { const HK=holdingKeys();
+    L.push('', `HOLDING (v421)${HK.size?': '+[...HK].map(k=>(SET.holdingPartij[k]||{}).naam||k).join(', '):''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
+    if(!HK.size) L.push('  geen holding aangewezen: kies bij een boeking van je holding "Dit is mijn holding"');
+    else { for(const k of HK){ const M=holdingMaandbetaling(k);
+        L.push(`  terugkerende maandbetaling: ${M.mediaan!=null?`mediaan ${c2(M.mediaan)} in ${M.maanden} maanden, telt als inkomen (punt 1)`:'niet gevonden (geen bedrag in minstens 2 maanden), alles staat hier'}`); }
+      L.push(`  netto: ${kol(r=>r.holdNet)}`);
+      for(const r of R) if(r.holdTx.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.holdTx.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(x=>`${x.t.date.slice(8,10)}-${x.t.date.slice(5,7)} ${x.v>0?'+':''}${c2(x.v)}`).join(', ')}`); } }
   /* v420: UITGELEEND. Elke lening die jij markeerde (SET.loans, richting uit): bedrag uit de boeking, wat er terugkwam (de
      boekingen in terugTx en een contante ontvangst), en wat er nog open staat. Geen uitgave, niet in budget of potjes. */
   { const LL=loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar');
@@ -28402,12 +28527,23 @@ function diagSalarisVerdeling(){
      wat er binnenkwam. Alleen de afgeronde maanden: verwacht is geen meting. */
   L.push('', 'CONTROLE (afgeronde maanden): vast + potjes + buiten + netto opzij + netto op je betaalrekeningen = salaris + overige inkomsten + holding netto + uitgeleend netto');
   L.push('  (de rest uit punt 5 rekent alleen met het salaris; hier staat ernaast wat er gemeten op je betaalrekeningen bleef, de rekeningen buiten je spaar- en reserveringsrekening)');
+  /* v421: BUITEN VAST EN POTJES KAN NIET NEGATIEF ZIJN (besluit van de gebruiker op v419). Is het dat toch, dan staat er een
+     ontvangst in die bij een andere groep hoort: de boeking staat hier, bij de controle, met de groep die ontbreekt. */
+  const letOp=r=>{ if(r.buiten>=-0.005) return;
+    const ms=[...r.bTx.filter(x=>x.v<-0.005).map(x=>x.t), ...r.wissel.filter(w=>w.t.amount>0).map(w=>w.t)];
+    L.push(`      LET OP ${MN(r.ym)}${r===Rc?'*':''}: buiten vast en potjes is ${c2(r.buiten)}; een ontvangst staat in de verkeerde groep:`);
+    for(const t of ms){ let g='een ontvangst van een ander: een terugbetaling (Uitgeleend), je holding ("Dit is mijn holding") of een eigen rekening';
+      try{ if(loanMatch(t)) g='een terugbetaling van je lening (Uitgeleend)'; else if(stortKenmerk(t)||contantStorting(t)) g='een storting van contant geld (Contant)'; }catch(_){}
+      L.push(`        ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')} (${(CATS[catOf(t)]||{}).name||catOf(t)}) -> ontbrekende groep: ${g}`); } };
+  const rek=a=>{ try{ return accLabel(a)||a||'?'; }catch(_){ return a||'?'; } };
   for(const r of R.slice(0,-1)){ const links=r.vast+r.pot+r.buiten+r.opzij+r.betaal, rechts=r.salaris+r.overige+r.holdNet+r.leenNet, d=links-rechts;
     L.push(`  ${MN(r.ym)}: ${e0(r.vast)} + ${e0(r.pot)} + ${e0(r.buiten)} + ${e0(r.opzij)} + ${e0(r.betaal)} = ${e0(links)} tegen ${e0(r.salaris)} + ${e0(r.overige)} + ${e0(r.holdNet)} + ${e0(r.leenNet)} = ${e0(rechts)}: ${Math.abs(d)<0.5?'klopt':'VERSCHILT '+(d>0?'+':'')+e0(d)}`);
+    letOp(r);
     if(Math.abs(d)>=0.5){ /* v419: HET VERSCHIL BIJ NAAM. Elke term is een bedrag dat links wel en rechts niet telt (of andersom), uit
          dezelfde boekingen; samen zijn ze per constructie het verschil, en wat er overblijft staat als rest. */
       const it=[];
-      for(const x of r.zonderKant) it.push({v:x.t.amount, n:`${x.t.date.slice(8,10)}-${x.t.date.slice(5,7)} ${c2(x.t.amount)} ${titleCase(cleanMerch(x.t.name)||x.t.name||'?')} (${(CATS[catOf(x.t)]||{}).name||catOf(x.t)} zonder tegenkant in je gegevens${x.eigen?', eigen: '+x.eigen:''})`});
+      for(const x of r.zonderKant){ const t=x.t, tg=r.zonderKant.map(y=>y.t).find(u=>u!==t && Math.abs(u.amount+t.amount)<0.005 && u.date===t.date);
+        it.push({v:t.amount, n:`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')} (${(CATS[catOf(t)]||{}).name||catOf(t)} zonder tegenkant in je gegevens${x.eigen?', eigen: '+x.eigen:''}) · rekening ${rek(t.acc)}${tg?` · tegenhanger ${c2(tg.amount)} ${titleCase(cleanMerch(tg.name)||tg.name||'?')} op ${tg.acc===t.acc?'DEZELFDE rekening, dus geen paar':rek(tg.acc)}`:''}`}); }
       const op=r.opzij-r.opzijBoek+r.xBoek; if(Math.abs(op)>=0.005) it.push({v:op, n:`netto opzij ${e0(r.opzij)} tegen de boekingen erachter ${c2(r.opzijBoek-r.xBoek)}${Math.abs(op)<1?' (afronding)':''}`});
       for(const t of r.negInk) it.push({v:t.amount, n:`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')} (inkomen met een min: telt rechts als 0)`});
       if(Math.abs(r.ov)>=0.005) it.push({v:-r.ov, n:`${c2(r.ov)} contant ontvangen bij een lening (inkomen zonder boeking)`});
@@ -28415,6 +28551,7 @@ function diagSalarisVerdeling(){
       const verkl=it.reduce((a,x)=>a+x.v,0), rest=d-verkl;
       L.push(`      het verschil bij naam (samen ${c2(verkl)}${Math.abs(rest)>=0.005?`, rest zonder naam ${c2(rest)}`:', sluit'}):`);
       for(const x of it.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v))) L.push(`        ${x.n}`); } }
+  if(Rc.buiten<-0.005){ L.push(`  ${MN(cur)}* (lopend, geen controle):`); letOp(Rc); }
   /* 7. de lopende maand in groepen, uit maandVooruit() */
   L.push('', `7. ${MN(cur).toUpperCase()} IN GROEPEN: budget | verwacht | onder/boven (maandVooruit, de getallen van Grip)`);
   if(!vk) L.push('  geen drie afgeronde maanden: maandVooruit() is onbekend');
@@ -28465,6 +28602,13 @@ function diagSalarisVerdeling(){
     const lst=String(P.laatste||s.lastDate||'').slice(0,10); if(lst && lst.slice(0,7)<af[0]) continue;
     gestopt.push(`${titleCase(cleanMerch(s.name)||s.name||s.key)} (${POST_STATUS_TXT[P.status]||P.status}, laatste betaling ${lst?ymFull(lst.slice(0,7))+' '+lst.slice(0,4):'onbekend'})`); }
   L.push(`  GESTOPT in deze periode: ${gestopt.length?gestopt.join(', '):'geen'}`);
+  /* v421: een post die jij stopte en daarna nog betaald werd, behalve de laatste betaling van "opgezegd, loopt af" */
+  { const na=[], af=[]; for(const s of sched){ let P=null; try{ P=postStatus(s.key); }catch(_){} if(!P) continue; const nm=titleCase(cleanMerch(s.name)||s.name||s.key);
+      if(P.status==='gestopt' && P.weerBetaald){ const E=(SET.postStatus||{})[s.key]||{}, d=postBetalingenNa(s.key, P.afloop?P.eind:(E.laatste||E.op||''));
+        na.push(`${nm} (${P.afloop?'opgezegd, laatste betaling '+dagKort(P.eind):'gestopt'}${P.op?' op '+dagKort(P.op):''}, daarna betaald op ${d.map(dagKort).join(', ')||dagKort(P.laatste)})`); }
+      else if(P.status==='afloop' || P.afloop) af.push(`${nm} (${P.status==='afloop'?'laatste betaling nog verwacht':'laatste betaling '+dagKort(P.eind||P.laatste)})`); }
+    L.push(`  GESTOPT EN DAARNA NOG BETAALD (v421): ${na.length?na.join(', '):'geen'}`);
+    L.push(`  OPGEZEGD, LOOPT AF (v421): ${af.length?af.join(', '):'geen'}`); }
   const dv=laatste.vast-eerste.vast;
   L.push(`  TOTAAL VAST: ${MN(eerste.ym)} ${e0(eerste.vast)} -> ${MN(laatste.ym)} ${e0(laatste.vast)} (${dv>=0?'+':''}${e0(dv)})`);
   /* v420: UITGAVEN ZONDER WONING EN STUDIESCHULD (gevraagd door de gebruiker): vast + potjes + buiten, min de woning (de grootste
@@ -28473,7 +28617,12 @@ function diagSalarisVerdeling(){
     const wkey=Object.keys(wk).sort((a,b)=>wk[b]-wk[a])[0];
     const wr=R.find(r=>r.wNaam[wkey]), wnaam=wkey?titleCase(cleanMerch(wr.wNaam[wkey].name)||wr.wNaam[wkey].name||wkey):'geen woonpost herkend';
     L.push('', `UITGAVEN ZONDER WONING EN STUDIESCHULD (v420): vast + potjes + buiten - ${wnaam} (woning: de partij met het meeste vaste geld in ${(CATS.huur||{}).name||'Huur'}) - ${(CATS.studie||{}).name||'Studieschuld'}`);
-    L.push(`  ${kol(r=>r.vast+r.pot+r.buiten-(wkey?(r.woning[wkey]||0):0)-r.studie)} (* = lopend, alleen geboekt)`);
+    /* v421: de lopende maand is geboekt plus verwacht, net als punt 7 (de verwachte woning en studieschuld gaan er ook af); de
+       versie met alleen geboekt staat ernaast. */
+    const fdi=(Lq&&Lq.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje);
+    const wVerw=wkey?fdi.filter(x=>x.key===wkey).reduce((a,x)=>a+(+x.amount||0),0):0, sVerw=fdi.filter(x=>x.cat==='studie').reduce((a,x)=>a+(+x.amount||0),0);
+    const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-(wkey?(r.woning[wkey]||0):0)-r.studie;
+    L.push(`  ${kol(r=>zonder(r, r===Rc))} (* = lopend: geboekt plus verwacht, zoals punt 7) · ${MN(cur)}* alleen geboekt ${e0(zonder(Rc,false))}`);
     L.push(`  waarvan woning: ${kol(r=>wkey?(r.woning[wkey]||0):0)} · studieschuld: ${kol(r=>r.studie)}`); }
   return L;
 }
