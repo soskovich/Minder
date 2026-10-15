@@ -2817,14 +2817,14 @@ function maandNaamKort(ym){ const d=new Date(ym+'-01T12:00:00'); return isNaN(d)
 /* Het gevolg voor de sheet, uit dezelfde functies die het scherm leest: geen tweede som. */
 function loanContantGevolg(id, bedrag, geteld, K){
   const l=loans().find(x=>x.id===id); if(!l) return null;
-  const open=Math.max(Math.round(+l.open||0),0);
-  const b=Math.max(Math.round(+bedrag||0),0), af=Math.min(b, open), rest=b-af;
+  const r2=x=>Math.round(x*100)/100, open=Math.max(r2(+l.open||0),0);   // v423: in centen, anders verdwijnt 5,99 van 405,99
+  const b=Math.max(r2(+bedrag||0),0), af=Math.min(b, open), rest=r2(b-af);
   const V=contantVerwacht(), nw=netWorth().netto;
   const naV = V==null ? (geteld==null?null:Math.round(+geteld*100)/100) : Math.round((V+b)*100)/100;
   const kies = rest>0 && !overschotKeuzeKlaar(K);
   const extra = rest>0 ? overschotNetto(rest, K) : 0;
   const naNw = kies ? null : (V==null ? (naV==null?null:nw-af+naV-(rest-extra)) : nw+extra);
-  return {b, af, rest, open, naOpen:open-af, V, naV, nw, naNw, geteld:V==null, kies};
+  return {b, af, rest, open, naOpen:r2(open-af), V, naV, nw, naNw, geteld:V==null, kies};
 }
 function loanContantOntvangen(id, bedrag, geteld, K){
   const l=loans().find(x=>x.id===id); if(!l || l.richting==='in') return false;
@@ -2840,8 +2840,9 @@ function loanContantOntvangen(id, bedrag, geteld, K){
       maand:K.soort==='terug'?K.maand:dag.slice(0,7), cat:K.soort==='terug'?K.cat:'', inId:x.id});
     x.overschot=o.id;
   }
+  loanLogKlaar(l);
   SET.contantIn=contantIns().concat([x]);
-  l.open=G.naOpen;
+  l.open=G.naOpen; loanLog(l, 'Contant terugontvangen', -G.af);
   /* Nog nooit geteld: de telling met de ontvangst erin wordt nu je eerste telling, met een moment NA de
      ontvangst. Die telt dan niet nog eens mee, en een eerste telling schrijft geen boeking. */
   if(G.geteld) SET.contant={stand:Math.max(+geteld||0,0), datum:dag, op:nu+1};
@@ -2854,9 +2855,9 @@ function loanContantOntvangen(id, bedrag, geteld, K){
 function loanContantTerug(inId){
   const x=contantIns().find(y=>y.id===inId); if(!x) return;
   if(!contantInTelt(x)){ toast('Je telde daarna; die telling bevat dit geld al'); return; }
-  const l=loans().find(y=>y.id===x.loanId);
+  const l=loans().find(y=>y.id===x.loanId); loanLogKlaar(l);
   const af = x.aflossing!=null ? +x.aflossing : x.bedrag;
-  if(l) l.open=Math.min(Math.round((+l.open||0)+af), Math.max(+l.bedrag||0, Math.round((+l.open||0)+af)));
+  if(l){ l.open=Math.round(((+l.open||0)+af)*100)/100; loanLog(l, 'Contante ontvangst teruggedraaid', af); }
   if(x.overschot) overschotWeg(x.overschot);
   SET.contantIn=contantIns().filter(y=>y.id!==inId);
   if(!SET.contantIn.length) delete SET.contantIn;
@@ -22246,6 +22247,94 @@ function renderCatBreak(list){
 const LOAN_CAT={uit:'uitgeleend', in:'geleend'};
 function loans(){ return Array.isArray(SET.loans)?SET.loans:[]; }
 function loanFor(txId){ return loans().find(l=>l.txId===txId)||null; }
+/* ===== v423: EEN LENING SLUIT (besluit van de gebruiker) =====
+   Per lening: bedrag = terugbetaald + nog open + niet meer terug verwacht. loanStand(l) is de ENE plek die dat narekent, met
+   drie lezers: de leningsheet, de vraag in Zien en blok 20. Wat er niet sluit is het verschil zonder verklaring; dat wordt
+   een vraag ("Is EUR X van Y nog open of niet meer terug?"), nooit een stille correctie.
+   - terugbetaald: de bevestigde boekingen (terugTx, met het bedrag dat tegen de lening viel: terugBedrag, of de aflossing
+     van een ontvangst met meer, of het hele bedrag), de contante ontvangsten (aflossing) en wat je zonder boeking als
+     terugbetaald zette (terugZonder, "Helemaal terugbetaald");
+   - niet meer terug verwacht (nietTerug): telt als uitgave in de maand van de lening, via een boekingpaar zonder bank
+     (loanNietTerugSync(): Persoonlijke overboeking -X en Uitgeleend +X op de dag van de lening), zodat het geld van de lening
+     X lager is en je uitgaven X hoger, en blok 20 blijft sluiten;
+   - l.log: per knop de dag, wat er gebeurde en het bedrag, zodat je ziet hoe een restant ontstond. Een lening van voor v423
+     heeft geen log: dan staat erbij wat er wel vastligt (de boekingen en de ontvangsten met hun datum). */
+function loanC2(x){ return euro(Math.round((+x||0)*100)/100); }
+/* Een lening van voor v423 krijgt bij zijn eerste knop een log met wat er vastligt (de markering, de terugbetalingen met hun dag
+   en een restant zonder vastgelegde knop), zodat de herkomst blijft staan. De stand wordt dan de stand die loanStand() las. */
+function loanLogStart(l){ const S=loanStand(l), r2=x=>Math.round(x*100)/100; let o=S.bedrag;
+  const log=[{dag:l.datum||'', knop:'Gemarkeerd als uitgeleend (van voor v423)', bedrag:S.bedrag, open:S.bedrag}];
+  for(const d of S.delen.slice().sort((a,b)=>String(a.dag)<String(b.dag)?-1:1)){ o=r2(o-d.bedrag);
+    log.push({dag:d.dag||'', knop:d.soort==='zonder'?'Terugbetaald zonder boeking (van voor v423)':d.soort==='contant'?'Contant terugontvangen':(d.auto?'Terugbetaling (zelfde tegenpartij, vanzelf)':'Terugbetaling bevestigd'), bedrag:-d.bedrag, open:o}); }
+  if(S.nietTerug){ o=r2(o-S.nietTerug); log.push({dag:'', knop:'Niet meer terug (van voor v423)', bedrag:-S.nietTerug, open:o}); }
+  if(!S.sluit) log.push({dag:'', knop:'Restant veranderd zonder vastgelegde knop (van voor v423)', bedrag:-S.verschil, open:S.open});
+  l.open=S.open; return log; }
+function loanLogKlaar(l){ if(l && !Array.isArray(l.log)) l.log=loanLogStart(l); }
+function loanLog(l, knop, bedrag){ if(!l) return; l.log=(Array.isArray(l.log)?l.log:loanLogStart(l)).concat([{dag:vandaagYMD(), knop, bedrag:Math.round((+bedrag||0)*100)/100, open:Math.round((+l.open||0)*100)/100}]); }
+function loanStand(l){
+  if(!l) return null;
+  const r2=x=>Math.round((+x||0)*100)/100;
+  const bt=l.txId?TX.find(t=>t.id===l.txId):null, bedrag=r2(bt?Math.abs(bt.amount):(+l.bedrag||0));
+  const OV=(()=>{ try{ return overschotten(); }catch(_){ return []; } })();
+  const delen=[];
+  for(const id of (l.terugTx||[])){ const t=TX.find(x=>x.id===id); if(!t) continue;
+    const o=OV.find(o=>o.txId===id && o.loanId===l.id), tb=(l.terugBedrag||{})[id];
+    const v=r2(tb!=null?tb:(o&&o.aflossing!=null?o.aflossing:Math.abs(t.amount)));
+    delen.push({soort:'bank', dag:t.date, bedrag:v, t, auto:(l.terugAuto||[]).includes(id)}); }
+  for(const x of (()=>{ try{ return contantInVan(l.id); }catch(_){ return []; } })())
+    delen.push({soort:'contant', dag:x.datum, bedrag:r2(x.aflossing!=null?x.aflossing:x.bedrag)});
+  if(+l.terugZonder>0) delen.push({soort:'zonder', dag:'', bedrag:r2(l.terugZonder)});
+  const terug=r2(delen.reduce((a,x)=>a+x.bedrag,0)), nietTerug=r2(l.nietTerug);
+  let open=r2(l.open);
+  /* een bedrag van voor v420 staat in hele euro's: ligt het binnen een euro van wat er rekenkundig open is, dan is dat de stand */
+  if(!Array.isArray(l.log) && Math.abs(open-Math.round(open))<0.005 && Math.abs(open-(bedrag-terug-nietTerug))<1) open=Math.max(r2(bedrag-terug-nietTerug),0);
+  const verschil=r2(bedrag-terug-open-nietTerug);
+  return {l, bedrag, terug, open, nietTerug, verschil, sluit:Math.abs(verschil)<0.005, delen, log:Array.isArray(l.log)?l.log:null, bt};
+}
+/* Hoe het restant ontstond, als regels: de log (v423) of wat er van een oudere lening vastligt. */
+function loanHerkomst(S){
+  if(!S) return [];
+  if(S.log) return S.log.map(x=>`${x.dag?`${dagKort(x.dag)} ${String(x.dag).slice(0,4)}`:'dag onbekend'}: ${x.knop}${x.bedrag?` (${x.bedrag>0?'+':''}${loanC2(x.bedrag)})`:''} · nog open ${loanC2(x.open)}`);
+  const out=[`${dagKort(S.l.datum)} ${String(S.l.datum||'').slice(0,4)}: gemarkeerd als uitgeleend (${loanC2(S.bedrag)})`];
+  for(const d of S.delen.slice().sort((a,b)=>String(a.dag)<String(b.dag)?-1:1))
+    out.push(d.soort==='zonder'?`${loanC2(d.bedrag)} terugbetaald zonder boeking`
+      :`${dagKort(d.dag)} ${String(d.dag).slice(0,4)}: ${d.soort==='contant'?'Contant terugontvangen':(d.auto?'terugbetaling, zelfde tegenpartij (vanzelf)':'terugbetaling bevestigd')} (${loanC2(d.bedrag)})`);
+  if(S.nietTerug) out.push(`${loanC2(S.nietTerug)} niet meer terug verwacht`);
+  out.push(`nog open nu ${loanC2(S.open)}${S.sluit?'':` · van voor v423 is niet vastgelegd welke knop het restant van ${loanC2(S.verschil)} veranderde (het veld Nog open, of Helemaal terugbetaald)`}`);
+  return out;
+}
+/* Niet meer terug verwacht: een boekingpaar zonder bank op de dag van de lening. De boekingen dragen hun categorie (vasteCat)
+   en src 'lening', zodat de afletter en de vraag in Zien ze overslaan. Opnieuw opgebouwd bij elke wijziging. */
+function loanNietTerugWeg(id){ const r='nietterug|'+id; TX=TX.filter(t=>!(String(t.bankRef||'')===r || String(t.bankRef||'')===r+'|v')); }
+function loanNietTerugSync(l){
+  loanNietTerugWeg(l.id);
+  const X=Math.round((+l.nietTerug||0)*100)/100; if(!(X>0)) return;
+  const naam=(l.naam||'').trim(), dag=l.datum||vandaagYMD();
+  const mk=(amount, ref, cat, extra)=>{ const t={date:dag, amount, acc:'', name:`Niet meer terug: ${naam}`.trim(), desc:`LENING ${l.id} NIET MEER TERUG ${naam.toUpperCase()}${extra}`,
+    typ:'', ref:'', src:'lening', accName:'', refNums:[], bankRef:ref, vasteCat:cat}; categorize(t); return t; };
+  TX.push(mk(-X, 'nietterug|'+l.id, 'persoonlijk', ''), mk(X, 'nietterug|'+l.id+'|v', LOAN_CAT.uit, ' VORDERING'));
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+}
+/* De knop in de leningsheet: wat nog open staat komt niet meer terug. */
+function loanNietTerug(id){
+  const l=loans().find(x=>x.id===id); if(!l) return; loanLogKlaar(l); const o=Math.round((+l.open||0)*100)/100; if(!(o>0)) return;
+  l.nietTerug=Math.round(((+l.nietTerug||0)+o)*100)/100; l.open=0; loanLog(l, 'Rest komt niet meer terug', -o);
+  loanNietTerugSync(l); applyOwnAccounts(); buildAccMeta(); save(); closeSheet(); render();
+  toast(`${ICON('check')} ${loanC2(o)} telt als uitgave in ${maandNaamKort(String(l.datum||'').slice(0,7))}`);
+}
+/* De vraag in Zien: een verschil zonder verklaring. Nog open, niet meer terug, of terugbetaald buiten je gegevens. */
+function loanRestVragen(){
+  return loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar').map(loanStand).filter(S=>S && S.verschil>=0.005)
+    .map(S=>({l:S.l, bedrag:S.verschil, S})); }
+function loanRestZet(id, keuze){
+  const l=loans().find(x=>x.id===id), S=loanStand(l); if(!S || !(S.verschil>=0.005)) return;   // opnieuw gelezen (v319)
+  const v=S.verschil, r2=x=>Math.round(x*100)/100; loanLogKlaar(l);
+  if(keuze==='open'){ l.open=r2((+l.open||0)+v); loanLog(l, 'Zien: verschil is nog open', v); }
+  else if(keuze==='niet'){ l.nietTerug=r2((+l.nietTerug||0)+v); loanLog(l, 'Zien: verschil komt niet meer terug', v); loanNietTerugSync(l); applyOwnAccounts(); buildAccMeta(); }
+  else if(keuze==='terug'){ l.terugZonder=r2((+l.terugZonder||0)+v); loanLog(l, 'Zien: verschil al terugbetaald buiten je gegevens', -v); }
+  else return;
+  save(); render(); try{ if(gegevensVragen().length) openGegevensVragen(); else closeSheet(); }catch(_){}
+}
 function loanTotals(){
   let uit=0, inn=0;
   for(const l of loans()){ const o=Math.max(+l.open||0,0); if(l.richting==='in') inn+=o; else uit+=o; }
@@ -22258,7 +22347,8 @@ function markLoan(txId, richting, soort){
   SET.loans=loans().filter(l=>l.txId!==txId);
   SET.loans.push({id:'l'+Date.now().toString(36)+Math.floor(Math.random()*1e3).toString(36),
     txId, naam:(cleanMerch(t.name)||t.name||'onbekend').slice(0,40), richting:(richting==='in'?'in':'uit'),
-    soort:(soort==='borg'?'borg':'lening'), bedrag, open:bedrag, datum:t.date, terug:''});
+    soort:(soort==='borg'?'borg':'lening'), bedrag, open:bedrag, datum:t.date, terug:'',
+    log:[{dag:vandaagYMD(), knop:(richting==='in'?'Geld geleend':(soort==='borg'?'Borg / voorschot':'Geld uitgeleend'))+' gemarkeerd', bedrag, open:bedrag}]});
   OVR[txId]=LOAN_CAT[richting==='in'?'in':'uit'];
   save(); closeSheet(); render();
   toast(`${ICON('check')} ${richting==='in'?'Geleend':(soort==='borg'?'Borg':'Uitgeleend')} · ${euro0(bedrag)}`);
@@ -22270,7 +22360,8 @@ function setLoanField(id,veld,val){
   else if(veld==='terug') l.terug=String(val||'').slice(0,10);
   else if(veld==='waarvoor') l.waarvoor=String(val||'').slice(0,60);          // voor het betaalverzoek-bericht
   else if(veld==='link') l.link=String(val||'').trim().slice(0,200);          // eigen Tikkie-/betaallink, optioneel
-  else if(veld==='open'){ const v=Math.max(Math.round(+val||0),0); l.open=Math.min(v,Math.max(+l.bedrag||0,v)); }
+  else if(veld==='open'){ loanLogKlaar(l); const voor=+l.open||0, v=Math.max(Math.round(numIn(val)*100)/100,0); l.open=v;   // v423: in centen, en de knop staat in de log
+    if(Math.abs(v-voor)>=0.005) loanLog(l, `Nog open aangepast van ${loanC2(voor)} naar ${loanC2(v)}`, v-voor); }
   save(); render(); openLoan(id);
 }
 /* Betaalverzoek: de app verstuurt niets zelf (serverloze PWA, niets draait op de achtergrond).
@@ -22320,8 +22411,12 @@ function loanRepaidFromNotif(id){
 function loanRepay(id, bedrag, txId){
   const l=loans().find(x=>x.id===id); if(!l) return;
   const b=Math.max(Math.round((+bedrag||0)*100)/100,0);   // v420: in centen
+  loanLogKlaar(l);
   l.open=Math.max(Math.round(((+l.open||0)-b)*100)/100,0);
-  if(txId){ OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]); }
+  if(txId){ OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]); l.terugBedrag=Object.assign({}, l.terugBedrag, {[txId]:b});
+    const t=TX.find(x=>x.id===txId); loanLog(l, `Terugbetaling van ${t?dagKort(t.date):'?'} bevestigd`, -b); }
+  /* v423: zonder boeking ("Helemaal terugbetaald") telt het als terugbetaald buiten je gegevens, en dat staat erbij */
+  else if(b>0){ l.terugZonder=Math.round(((+l.terugZonder||0)+b)*100)/100; loanLog(l, 'Helemaal terugbetaald (zonder boeking)', -b); }
   save(); closeSheet(); render();
   toast(l.open>0?`${ICON('check')} Nog ${euro0(l.open)} open`:`${ICON('check')} Volledig terugbetaald`);
 }
@@ -22329,12 +22424,14 @@ function loanRepay(id, bedrag, txId){
 // op dít moment. Dat is eerlijk: pas nu is het geld echt weg.
 function loanWriteOff(id, cat){
   const l=loans().find(x=>x.id===id); if(!l) return;
+  loanNietTerugWeg(id);
   if(l.txId){ OVR[l.txId]=cat||'persoonlijk'; }
   SET.loans=loans().filter(x=>x.id!==id);
   save(); closeSheet(); render(); toast(`${ICON('check')} Als uitgave geboekt`);
 }
 function loanDelete(id){
   const l=loans().find(x=>x.id===id); if(!l) return;
+  loanNietTerugWeg(id);
   if(l.txId && OVR[l.txId] && (OVR[l.txId]==='uitgeleend'||OVR[l.txId]==='geleend')) delete OVR[l.txId];
   SET.loans=loans().filter(x=>x.id!==id);
   save(); closeSheet(); render();
@@ -22350,14 +22447,16 @@ function loanAutoAfletter(){
   const L=loans().filter(l=>l.richting==='uit' && (+l.open||0)>0); if(!L.length) return;
   const af=loanAfgeletterd(), nee=SET.loanNee||{};
   for(const t of TX.slice().sort((a,b)=>a.date<b.date?-1:1)){
-    if(!(t.amount>0) || t.pending || OVR[t.id] || af.has(t.id) || nee[t.id]) continue;
+    if(!(t.amount>0) || t.pending || OVR[t.id] || af.has(t.id) || nee[t.id] || t.src==='lening') continue;
     if((CATS[t.autoCat]||{}).type==='income') continue;
     if(isTikkie(t)) continue;   // v422: een Tikkie zegt niets over wie hem stuurde; een lening is alleen wat jij markeert (de vraag blijft)
     const nk=loanNaamKey(cleanMerch(t.name)||t.name); if(nk.length<4) continue;
     const l=L.find(l=>(+l.open||0)>0 && l.datum<=t.date && loanNaamKey(l.naam)===nk && t.amount<=(+l.open||0)+0.5);
     if(!l) continue;
+    loanLogKlaar(l);
     l.open=Math.max(Math.round(((+l.open||0)-t.amount)*100)/100,0);
     l.terugTx=(l.terugTx||[]).concat([t.id]); l.terugAuto=(l.terugAuto||[]).concat([t.id]);
+    l.terugBedrag=Object.assign({}, l.terugBedrag, {[t.id]:t.amount}); loanLog(l, `Terugbetaling van ${dagKort(t.date)} (zelfde tegenpartij, vanzelf)`, -t.amount);
     OVR[t.id]=LOAN_CAT.uit; t.autoCat=LOAN_CAT.uit; af.add(t.id); }
 }
 /* De twijfelgevallen: een bijschrijving die loanMatch() bij een lening legt zonder dezelfde naam, of met meer dan er open
@@ -22365,7 +22464,7 @@ function loanAutoAfletter(){
 function loanVragen(){
   if(!loans().some(l=>l.richting==='uit' && (+l.open||0)>0)) return [];
   const af=loanAfgeletterd(), nee=SET.loanNee||{}, out=[];
-  for(const t of TX){ if(!(t.amount>0) || t.pending || OVR[t.id] || af.has(t.id) || nee[t.id]) continue;
+  for(const t of TX){ if(!(t.amount>0) || t.pending || OVR[t.id] || af.has(t.id) || nee[t.id] || t.src==='lening') continue;
     if((CATS[catOf(t)]||{}).type==='income') continue;
     const m=loanMatch(t); if(!m) continue;
     out.push({t, l:m.loan, bedrag:Math.min(t.amount, +m.loan.open||0)}); }
@@ -22407,7 +22506,7 @@ function loanBlokHTML(t){
   }
   // binnenkomend geld dat bij een open vordering past: bied aan het als terugbetaling te boeken
   if(+t.amount>0){
-    if(String(t.bankRef||'').startsWith('overschot|')) return '';     // v343: de terugbetaling die de app zelf schreef
+    if(String(t.bankRef||'').startsWith('overschot|') || String(t.bankRef||'').startsWith('nietterug|')) return '';     // v343/v423: wat de app zelf schreef
     const O=overschotten().find(o=>o.txId===t.id);
     if(O) return `<div class="card" data-overschotrij style="margin:10px 0 6px;padding:12px 13px">
       <div class="small" style="font-weight:700;color:var(--teal)">Terugbetaling van ${esc(O.naam||'')}</div>
@@ -22445,8 +22544,9 @@ function openLoan(id){
     <div class="row" id="loanHead" style="margin-bottom:2px"><div style="font-weight:800;font-size:var(--fs-lg)">${uit?(l.soort==='borg'?'Borg / voorschot':'Uitgeleend'):(l.soort==='bewaar'?'Bewaard voor iemand':'Geleend')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="small muted" style="margin-bottom:12px">${uit?'Een vordering: dit geld is van jou, het staat alleen ergens anders.':'Een schuld: dit geld is niet van jou.'} Het telt niet mee als ${uit?'uitgave':'inkomen'}.</div>
     <label class="fld">Van wie / aan wie</label><input id="loanNaam" type="text" value="${esc(l.naam||'')}" onchange="setLoanField('${l.id}','naam',this.value)" style="width:100%">
-    <label class="fld" style="margin-top:10px">Nog open (€)</label><input id="loanOpen" type="number" inputmode="numeric" min="0" value="${Math.max(+l.open||0,0)}" onchange="setLoanField('${l.id}','open',this.value)" style="width:100%">
-    <div class="small muted" style="margin-top:6px">Oorspronkelijk ${euro0(l.bedrag)} op ${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}.</div>
+    <label class="fld" style="margin-top:10px">Nog open (€)</label><input id="loanOpen" type="text" inputmode="decimal" value="${numUit(Math.max(+l.open||0,0))}" onchange="setLoanField('${l.id}','open',this.value)" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Oorspronkelijk ${loanC2(l.bedrag)} op ${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}.</div>
+    ${uit?loanStandBlok(l):''}
     <label class="fld" style="margin-top:10px">Terug te ontvangen vóór (optioneel)</label><input id="loanTerug" type="date" value="${esc(l.terug||'')}" onchange="setLoanField('${l.id}','terug',this.value)" style="width:100%">
     <div class="small muted" style="margin-top:6px">${l.terug?(uit?`Je krijgt hier ${LOAN_REMIND_DAYS} dagen van tevoren een herinnering, met een betaalverzoek dat je zelf verstuurt.`:'Je krijgt hier een herinnering als de datum in zicht komt.'):'Laat leeg als er geen afspraak is; dan komt er ook geen herinnering.'}</div>
     ${uit?`<label class="fld" style="margin-top:10px">Waarvoor (optioneel)</label><input id="loanWaarvoor" type="text" value="${esc(l.waarvoor||'')}" placeholder="bv. concertkaartjes" onchange="setLoanField('${l.id}','waarvoor',this.value)" style="width:100%">
@@ -22456,12 +22556,17 @@ function openLoan(id){
     ${uit&&(+l.open||0)>0?`<button class="btn sec" data-contantterug style="margin-top:8px" onclick="openLoanContant('${l.id}')">${ICON('coins')} Contant terugontvangen</button>`:''}
     ${uit?loanContantLijst(l):''}
     <button class="btn" style="margin-top:${uit?'8px':'14px'}" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
-    ${uit?`<button class="btn sec" style="margin-top:8px" onclick="loanWriteOff('${l.id}','persoonlijk')">Kwijtgescholden · boek als uitgave</button>`:''}
+    ${uit&&(+l.open||0)>0?`<button class="btn sec" data-nietterug style="margin-top:8px" onclick="loanNietTerug('${l.id}')">Rest komt niet meer terug · uitgave in ${esc(maandNaamKort(String(l.datum||'').slice(0,7)))}</button>`:''}
     ${l.bron?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="overschotTerug('${l.bron}')">Ontvangst terugdraaien</div>`
       :`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>`}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
+/* v423: de rekensom van de lening en hoe het restant ontstond, uit loanStand() en de log. */
+function loanStandBlok(l){ const S=loanStand(l); if(!S) return '';
+  return `<div class="small" data-leningstand style="margin-top:10px;padding:9px 10px;border-radius:10px;background:var(--card2);line-height:1.5">
+    <div data-leningsom><b>${loanC2(S.bedrag)}</b> = ${loanC2(S.terug)} terugbetaald + ${loanC2(S.open)} nog open + ${loanC2(S.nietTerug)} niet meer terug${S.sluit?'':` <span data-leningverschil style="color:var(--amber)">· ${loanC2(S.verschil)} zonder verklaring</span>`}</div>
+    <div class="muted" data-leningherkomst style="margin-top:4px">${loanHerkomst(S).map(esc).join('<br>')}</div></div>`; }
 /* v342: de contante ontvangsten bij deze lening, met terugdraaien zolang hij nog in je contante stand telt. */
 function loanContantLijst(l){
   const xs=contantInVan(l.id), bank=overschotVan(l.id).filter(o=>o.txId); if(!xs.length && !bank.length) return '';
@@ -22562,9 +22667,9 @@ function loanContantBevestig(id){ const I=loanContantInvoer(); if(loanContantOnt
    nul en de rest is van jou, of een schuld. Hetzelfde overschot als bij contant, met txId in plaats van inId. */
 function loanBankGevolg(loanId, txId, K){
   const l=loans().find(x=>x.id===loanId), t=TX.find(x=>x.id===txId); if(!l || !t) return null;
-  const open=Math.max(Math.round(+l.open||0),0), b=Math.max(Math.round(+t.amount||0),0), af=Math.min(b,open), rest=b-af;
+  const r2=x=>Math.round(x*100)/100, open=Math.max(r2(+l.open||0),0), b=Math.max(r2(+t.amount||0),0), af=Math.min(b,open), rest=r2(b-af);
   const kies = rest>0 && !overschotKeuzeKlaar(K);
-  return {l, t, b, af, rest, open, naOpen:open-af, kies, delta: kies?null:(rest>0?overschotNetto(rest,K):0)};
+  return {l, t, b, af, rest, open, naOpen:r2(open-af), kies, delta: kies?null:(rest>0?overschotNetto(rest,K):0)};
 }
 function openLoanOverschotBank(loanId, txId){
   const G=loanBankGevolg(loanId, txId, null); if(!G) return;
@@ -22597,9 +22702,10 @@ function loanBankToon(loanId, txId){
 function loanBankBevestig(loanId, txId){
   const K=window._ovK, G=loanBankGevolg(loanId, txId, K); if(!G) return false;
   if(G.kies){ toast(`Kies wat de ${euro0(G.rest)} is`); return false; }
-  const l=G.l;
+  const l=G.l; loanLogKlaar(l);
   l.open=G.naOpen;
-  OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]);
+  OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]); l.terugBedrag=Object.assign({}, l.terugBedrag, {[txId]:G.af});
+  loanLog(l, `Terugbetaling van ${dagKort(G.t.date)} bevestigd${G.rest>0?` (${loanC2(G.rest)} meer: ${K.soort})`:''}`, -G.af);
   if(G.rest>0) overschotMaak({loanId:l.id, naam:l.naam||'', bedrag:G.rest, soort:K.soort, datum:G.t.date,
     maand:K.soort==='terug'?K.maand:G.t.date.slice(0,7), cat:K.soort==='terug'?K.cat:'', txId, aflossing:G.af});
   save(); closeSheet(); render();
@@ -22609,8 +22715,9 @@ function loanBankBevestig(loanId, txId){
 /* Een bankontvangst terugdraaien zet de vordering terug, haalt de terugbetaling van de boeking en de rest weg. */
 function loanBankTerug(oid){
   const o=overschotten().find(x=>x.id===oid); if(!o || !o.txId) return;
-  const l=loans().find(y=>y.id===o.loanId);
-  if(l){ l.open=Math.round((+l.open||0)+(+o.aflossing||0)); l.terugTx=(l.terugTx||[]).filter(x=>x!==o.txId); }
+  const l=loans().find(y=>y.id===o.loanId); loanLogKlaar(l);
+  if(l){ l.open=Math.round(((+l.open||0)+(+o.aflossing||0))*100)/100; l.terugTx=(l.terugTx||[]).filter(x=>x!==o.txId);
+    if(l.terugBedrag) delete l.terugBedrag[o.txId]; loanLog(l, 'Bankontvangst teruggedraaid', +o.aflossing||0); }
   if(l && OVR[o.txId]===LOAN_CAT[l.richting]) delete OVR[o.txId];
   overschotWeg(oid);
   save(); render(); if(l) openLoan(l.id);
@@ -23779,6 +23886,7 @@ function eigenAutoMeldingCheck(){
 function gegevensVragen(){ const out=[];
   const W=wisselOpen(); if(W.length) out.push({soort:'wissel', n:W.length, som:W.reduce((a,t)=>a-t.amount,0)});
   for(const v of loanVragen()) out.push(Object.assign({soort:'lening'}, v));
+  for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant'}, v));   // v423
   for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop'}, v));   // v422
   return out; }
 /* v422: GESTOPT, MAAR DAARNA NOG BETAALD (besluit van de gebruiker op v421, in plaats van de migratie van v421). Per post die jij
@@ -23797,6 +23905,11 @@ function openGegevensVragen(){
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
       <div class="small muted" style="margin-top:2px">${euro0(q.bedrag)} \u00b7 ja: opgezegd, loopt af, en daarna telt hij niet meer mee \u00b7 nee: hij loopt nog en wordt weer verwacht</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn" style="flex:1" data-poststopja onclick="postNaStopJa('${kk}','${esc(q.dag)}')">Ja, laatste</button><button class="btn sec" style="flex:1" data-poststopnee onclick="postNaStopNee('${kk}')">Nee, loopt nog</button></div></div>`; }
+    if(q.soort==='restant'){ const L=q.l, id=esc(L.id);
+      return `<div data-gegevensvraag="restant" data-lening="${id}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Is ${loanC2(q.bedrag)} van ${esc(L.naam||'?')} nog open of niet meer terug?</div>
+      <div class="small muted" style="margin-top:2px">${esc(dagKort(L.datum))} ${String(L.datum||'').slice(0,4)} uitgeleend ${loanC2(q.S.bedrag)} · terugbetaald ${loanC2(q.S.terug)} · nog open ${loanC2(q.S.open)}${q.S.nietTerug?` · niet meer terug ${loanC2(q.S.nietTerug)}`:''} · niet meer terug telt als uitgave in ${esc(maandNaamKort(String(L.datum||'').slice(0,7)))}</div>
+      <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-restopen onclick="loanRestZet('${id}','open')">Nog open</button><button class="btn sec" style="flex:1" data-restniet onclick="loanRestZet('${id}','niet')">Niet meer terug</button></div>
+      <div class="small" data-restterug style="margin-top:6px;color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRestZet('${id}','terug')">Al terugbetaald, buiten je gegevens ›</div></div>`; }
     const t=q.t, wie=titleCase(cleanMerch(t.name)||t.name||'onbekend');
     return `<div data-gegevensvraag="lening" data-tx="${esc(t.id)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Is ${euro(t.amount)} van ${esc(wie)} een terugbetaling van je lening?</div>
       <div class="small muted" style="margin-top:2px">${esc(dagKort(t.date))} \u00b7 lening aan ${esc(q.l.naam)} ${euro(+q.l.bedrag||0)}, nog open ${euro(+q.l.open||0)}</div>
@@ -28386,7 +28499,7 @@ function diagSalarisVerdeling(){
   const maand=ym=>{
     const tx=txOfMonth(ym), B=maandPotjes(ym).B, sk=salBron[ym], isSal=t=>sk!=null && recurKey(t)===sk;
     let salaris=0, buiten=0, betaal=0; const salTx=[], overTx=[], posten={}, vastPot={}, potjes={}, zonder={}, postNaam={}, postTx={};
-    const bDeel={geennorm:0, persoonlijk:0, uitres:0, kas:0, persOverb:0}, bTx=[], woning={}, wNaam={};
+    const bDeel={geennorm:0, persoonlijk:0, uitres:0, kas:0, persOverb:0}, bTx=[], bSoort=[], woning={}, wNaam={};   // v423: bSoort per boeking
     /* v419: WELKE 'INTERN'-BOEKING IS GEEN EIGEN OVERBOEKING. Eerst de paren: een interne boeking met een tegenkant op een
        andere eigen rekening in dezelfde maand (zelfde bedrag, andere kant, hooguit 3 dagen) is een eigen overboeking, want
        het geld kwam bij jou aan. Beleggingsinleg en, zonder spaarrekening, de terugval van savedNet() staan apart (X): die
@@ -28405,7 +28518,7 @@ function diagSalarisVerdeling(){
       const eigen=eigenBewijs(t, EC).r || (eigenNaamIn(t)?'naam':'');
       if(catOf(t)==='intern' && !opzijRek(t.acc) && !eigen){
         const U=String(t.desc||'').toUpperCase(), cont=t.amount<0 ? OPNAME_KW.some(w=>U.includes(w)) : STORT_KW.test(U);
-        const g=cont?'kas':'persOverb'; buiten+=-t.amount; bDeel[g]+=-t.amount; wissel.push({t, g, wacht:WISSEL420.includes(t.id)}); }
+        const g=cont?'kas':'persOverb'; buiten+=-t.amount; bDeel[g]+=-t.amount; bSoort.push({t, g, v:-t.amount}); wissel.push({t, g, wacht:WISSEL420.includes(t.id)}); }
       else zonderKant.push({t, eigen}); }
     /* v420: de app zet zo'n boeking zelf om (na je bevestiging of als hij nieuw is): dan staat hij hier als omgezet */
     for(const t of tx) if(WISSEL420.includes(t.id) && catOf(t)==='persoonlijk') wissel.push({t, g:'persOverb', omgezet:true});
@@ -28424,8 +28537,9 @@ function diagSalarisVerdeling(){
         if(isSal(t)){ salaris+=v-o; salTx.push(t); if(o>0) overTx.push({t, v:o, onr:true}); } else if(v>0.005) overTx.push({t, v}); continue; }
       if(meta.type!=='expense') continue;
       const geld=-t.amount, vn=uitgaveNorm(t);
-      if(geenNorm(c) || !isUitgave(t, B)){ buiten+=geld; bDeel[!geenNorm(c)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm']+=geld; bTx.push({t, v:geld}); continue; }
-      buiten+=geld-vn; bDeel.uitres+=geld-vn;
+      if(geenNorm(c) || !isUitgave(t, B)){ const g=!geenNorm(c)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm';
+        buiten+=geld; bDeel[g]+=geld; bTx.push({t, v:geld}); bSoort.push({t, g, v:geld}); continue; }
+      buiten+=geld-vn; bDeel.uitres+=geld-vn; if(Math.abs(geld-vn)>=0.005) bSoort.push({t, g:'uitres', v:geld-vn});
       /* v420: de woning per partij, uit alles wat in Huur als vast telt (een post of het vaste potje) */
       if(c==='huur' && (isFixed(t) || potHeelVast(c))){ const k=recurKey(t); woning[k]=(woning[k]||0)+vn; wNaam[k]=wNaam[k]||t; }
       if(isFixed(t)){ const k=recurKey(t); posten[k]=(posten[k]||0)+vn; postNaam[k]=postNaam[k]||t; (postTx[k]=postTx[k]||[]).push(t); }
@@ -28448,7 +28562,7 @@ function diagSalarisVerdeling(){
     const negInk=tx.filter(t=>(CATS[catOf(t)]||{}).type==='income' && t.amount<0);
     const paarRest=intTx.filter(t=>paar.has(t.id)).reduce((a,t)=>a+t.amount,0);
     const resBoek=resA?tx.filter(t=>t.acc===resA).reduce((a,t)=>a+t.amount,0):0;
-    return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, bDeel, wissel, zonderKant, vast, pot, potMet:som(potjes), potZonder:som(zonder),
+    return {ym, salaris, salTx, overige, overTx, posten, postNaam, postTx, vastPot, potjes, zonder, buiten, bDeel, bSoort, wissel, zonderKant, vast, pot, potMet:som(potjes), potZonder:som(zonder),
       spaar:deel('spaar'), res:deel('res'), bel:deel('bel'), ontt, binnen, onttSom:ontt.reduce((a,t)=>a-t.amount,0), binnenSom:binnen.reduce((a,t)=>a-t.amount,0), opzij, betaal, VIbekend:VI.totaal!=null,
       opzijBoek, xBoek, negInk, ov:(()=>{ try{ return overschotInkomen(ym)||0; }catch(_){ return 0; } })(), paarRest, resBoek,
       holdTx, holdNet, leenTx, leenNet, bTx, opn, opnSom, sk,
@@ -28513,6 +28627,18 @@ function diagSalarisVerdeling(){
   L.push(`  CONTANT OPGENOMEN (v421): ${kol(r=>r.opnSom)}`);
   for(const r of R) if(r.opn.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.opn.slice().sort((a,b)=>a.date<b.date?-1:1).map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
   L.push(`      waarvan overboeking aan een ander (geen eigen IBAN en niet je eigen naam, v419): ${kol(r=>r.bDeel.persOverb)}`);
+  /* v423: DE LAATSTE AFGERONDE MAAND PER SOORT, MET DE BOEKINGEN ERACHTER (gevraagd door de gebruiker, alleen uitleggen). Dezelfde
+     boekingen als de regels hierboven (bSoort, gevuld waar bDeel telt), dus per soort sluit het op het getal erboven. */
+  { const Ra=R[R.length-2];
+    if(Ra){ const SRT=[['kas','contant'],['persoonlijk','persoonlijke overboeking zonder potje'],['uitres','uit een reservering betaald'],['geennorm','geen norm'],['persOverb','overboeking aan een ander']];
+      L.push(`  BUITEN VAST EN POTJES IN ${MN(Ra.ym).toUpperCase()} PER SOORT (v423, alleen uitleg, er verandert niets): ${e0(Ra.buiten)}`);
+      let somAll=0;
+      for(const [g,naam] of SRT){ const xs=Ra.bSoort.filter(x=>x.g===g).sort((a,b)=>a.t.date<b.t.date?-1:a.t.date>b.t.date?1:0), sm=xs.reduce((a,x)=>a+x.v,0); somAll+=sm;
+        L.push(`    ${naam}: ${c2(sm)}${Math.abs(sm-Ra.bDeel[g])<0.005?'':` (TEGEN ${c2(Ra.bDeel[g])} HIERBOVEN)`}${xs.length?'':' · geen boekingen'}`);
+        for(const x of xs){ const t=x.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
+          const waarom=g==='uitres'?` (boeking ${c2(-t.amount)}, waarvan uit je reservering)`:g==='kas'&&isOpnameTx(t)?' (opname)':g==='kas'&&t.src==='contant'?' (telling: alleen het verschil)':t.src==='lening'?' (lening: niet meer terug)':'';
+          L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${cat}]${waarom}`); } }
+      L.push(`    samen ${c2(somAll)} tegen buiten vast en potjes ${c2(Ra.buiten)}: ${Math.abs(somAll-Ra.buiten)<0.005?'sluit':'VERSCHILT '+c2(somAll-Ra.buiten)}`); } }
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
   { let n=0; for(const r of R) if(r.wissel.length){ n++;
       L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.wissel.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(w=>`${w.t.date.slice(8,10)}-${w.t.date.slice(5,7)} ${c2(w.t.amount)} ${titleCase(cleanMerch(w.t.name)||w.t.name||'?')} -> ${w.g==='kas'?'uitgave in contant':'persoonlijke overboeking'}${w.omgezet?' (omgezet)':w.wacht?' (wacht op je bevestiging)':''}`).join(', ')}`); }
@@ -28570,21 +28696,22 @@ function diagSalarisVerdeling(){
       for(const r of R) if(r.holdTx.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.holdTx.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(x=>`${x.t.date.slice(8,10)}-${x.t.date.slice(5,7)} ${x.v>0?'+':''}${c2(x.v)}`).join(', ')}`); } }
   /* v420: UITGELEEND. Elke lening die jij markeerde (SET.loans, richting uit): bedrag uit de boeking, wat er terugkwam (de
      boekingen in terugTx en een contante ontvangst), en wat er nog open staat. Geen uitgave, niet in budget of potjes. */
+  /* v423: per lening sluit bedrag = terugbetaald + nog open + niet meer terug (loanStand(), de bron van de leningsheet en de
+     vraag in Zien). Per lening ook hoe het restant ontstond: de knop en de dag uit de log, of wat er van een oudere lening
+     vastligt. Een verschil zonder verklaring staat er met de vraag die Zien stelt. */
   { const LL=loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar');
-    L.push('', 'UITGELEEND (v420): per lening datum | bedrag | terugbetaald | nog open');
-    let tot=0;
-    for(const l of LL.slice().sort((a,b)=>String(a.datum)<String(b.datum)?-1:1)){
-      const bt=TX.find(t=>t.id===l.txId), bedrag=bt?Math.abs(bt.amount):(+l.bedrag||0);
-      const terugB=(l.terugTx||[]).map(id=>TX.find(t=>t.id===id)).filter(Boolean), ci=(()=>{ try{ return contantIns().filter(x=>x.loanId===l.id); }catch(_){ return []; } })();
-      const terug=terugB.reduce((a,t)=>a+Math.abs(t.amount),0)+ci.reduce((a,x)=>a+(+x.aflossing||+x.bedrag||0),0);
-      let open=+l.open||0; if(Math.abs(open-Math.round(open))<0.005 && Math.abs(open-(bedrag-terug))<1) open=Math.max(bedrag-terug,0);   // een bedrag van voor v420 staat in hele euro's
-      tot+=open;
-      L.push(`  ${String(l.datum||'').slice(8,10)}-${String(l.datum||'').slice(5,7)} ${l.naam||'?'} | ${c2(bedrag)} | ${c2(terug)}${terugB.length?` (${terugB.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)}${(l.terugAuto||[]).includes(t.id)?' zelfde tegenpartij':' bevestigd'}`).join(', ')})`:''}${ci.length?' (contant terug)':''} | ${c2(open)}`); }
+    L.push('', 'UITGELEEND (v420/v423): per lening datum | bedrag | terugbetaald | nog open | niet meer terug verwacht · sluit');
+    let tot=0, totN=0, nOnv=0;
+    for(const l of LL.slice().sort((a,b)=>String(a.datum)<String(b.datum)?-1:1)){ const S=loanStand(l);
+      tot+=S.open; totN+=S.nietTerug; if(!S.sluit) nOnv++;
+      const bank=S.delen.filter(d=>d.soort==='bank'), ct=S.delen.filter(d=>d.soort==='contant'), zb=S.delen.find(d=>d.soort==='zonder');
+      L.push(`  ${String(l.datum||'').slice(8,10)}-${String(l.datum||'').slice(5,7)} ${l.naam||'?'} | ${c2(S.bedrag)} | ${c2(S.terug)}${bank.length?` (${bank.map(d=>`${d.dag.slice(8,10)}-${d.dag.slice(5,7)} ${c2(d.bedrag)}${d.auto?' zelfde tegenpartij':' bevestigd'}`).join(', ')})`:''}${ct.length?` (contant ${ct.map(d=>`${String(d.dag).slice(8,10)}-${String(d.dag).slice(5,7)} ${c2(d.bedrag)}`).join(', ')})`:''}${zb?` (zonder boeking ${c2(zb.bedrag)})`:''} | ${c2(S.open)} | ${c2(S.nietTerug)}${S.nietTerug?` (uitgave in ${MN(String(l.datum).slice(0,7))})`:''} · ${S.sluit?'sluit':`VERSCHIL ${c2(S.verschil)} zonder verklaring${S.verschil>=0.005?`: vraag in Zien "Is ${c2(S.verschil)} van ${l.naam||'?'} nog open of niet meer terug?"`:' (meer verklaard dan uitgeleend)'}`}`);
+      for(const h of loanHerkomst(S)) L.push(`      ${h}`); }
     if(!LL.length) L.push('  geen lening gemarkeerd: markeer een afschrijving als Uitgeleend in de boekingssheet');
-    L.push(`  TOTAAL NOG OPEN: ${c2(tot)}`);
-    let nv=0; try{ nv=loanVragen().length; }catch(_){}
+    L.push(`  TOTAAL NOG OPEN: ${c2(tot)} · TOTAAL NIET MEER TERUG: ${c2(totN)} · leningen met een verschil zonder verklaring: ${nOnv}`);
+    let nv=0; try{ nv=loanVragen().length+loanRestVragen().length; }catch(_){}
     L.push(`  vragen in Zien (Kloppen mijn gegevens?): ${nv}`);
-    L.push(`  netto in je gegevens per maand (- = uitgeleend, + = terug): ${kol(r=>r.leenNet)}`); }
+    L.push(`  netto in je gegevens per maand (- = uitgeleend, + = terug of niet meer terug): ${kol(r=>r.leenNet)}`); }
   /* 5. rest en 6. percentages */
   const rest=r=>tot(r,'salaris')-tot(r,'vast')-tot(r,'pot')-tot(r,'opzij');
   L.push('', '5. REST = salaris - vast - potjes - netto opzij');
@@ -28693,6 +28820,8 @@ function diagSalarisVerdeling(){
     const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-(wkey?(r.woning[wkey]||0):0)-r.studie;
     L.push(`  ${kol(r=>zonder(r, r===Rc))} (* = lopend: geboekt plus verwacht, zoals punt 7) · ${MN(cur)}* alleen geboekt ${e0(zonder(Rc,false))}`);
     L.push(`  waarvan woning: ${kol(r=>wkey?(r.woning[wkey]||0):0)} · studieschuld: ${kol(r=>r.studie)}`); }
+  /* v423: bovenaan hoeveel regels het blok heeft, zodat je ziet of wat aankwam compleet is (de regel zelf telt mee) */
+  L.unshift(`deel 1 van 1 · ${L.length+1} regels`);
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -28741,10 +28870,31 @@ async function diagOpen(){
     <textarea id="diagUit" readonly onclick="this.select()" style="width:100%;height:46vh;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);line-height:1.45;white-space:pre;overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px">Bezig met lezen...</textarea>
     <div class="row" style="margin-top:10px;gap:8px">
       <button class="btn" id="diagCopy" onclick="diagCopy()" style="flex:1">Kopieer</button>
+      <button class="btn sec" id="diagDeel20" data-deelblok20 onclick="diagDeelBlok20()" style="flex:1">Blok 20 delen als bestand</button>
     </div>`;
   showSheetBg();
   let t; try{ t=await diagTekst(); }catch(e){ t='FOUT bij het lezen: '+e.message; }
   const el=$('#diagUit'); if(el) el.value=t;
+}
+/* v423: BLOK 20 ALS BESTAND. Een lange tekst kwam via kopieren afgekapt aan; een .txt via het deelmenu van de telefoon
+   draagt alles. Alleen dat ene blok, met de kop van het diagnosescherm, en de regel "deel 1 van 1 · N regels" bovenaan het
+   blok zegt of het compleet is. Er gaat niets vanzelf weg: jij kiest in het deelmenu waarheen (MECHANISM_SPEC.defaultEffect).
+   Zonder deelmenu met bestanden wordt het een download. */
+function diagBlok20Bestand(){
+  const i=DIAG_BLOKKEN.findIndex(b=>b.lees===diagSalarisVerdeling), b=DIAG_BLOKKEN[i];
+  let r; try{ r=b.lees(); }catch(e){ r=['FOUT: '+e.message]; }
+  const tekst=['=== MINDER DIAGNOSE, BLOK '+(i+1)+' ===', 'tijd: '+new Date().toString(), '', `-- ${i+1}. ${b.titel} --`, ...(Array.isArray(r)?r:[String(r)]).map(String), '', '=== EINDE ==='].join('\n');
+  return {naam:`minder-blok${i+1}-${vandaagYMD()}.txt`, tekst};
+}
+async function diagDeelBlok20(){
+  const B=diagBlok20Bestand();
+  let f=null; try{ f=new File([B.tekst], B.naam, {type:'text/plain'}); }catch(_){}
+  try{ if(f && navigator.canShare && navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:B.naam}); toast(`${ICON('check')} Blok 20 gedeeld`); return 'gedeeld'; } }
+  catch(e){ if(e && e.name==='AbortError') return 'afgebroken'; }
+  try{ const a=document.createElement('a'), u=URL.createObjectURL(new Blob([B.tekst],{type:'text/plain'}));
+    a.href=u; a.download=B.naam; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 4000);
+    toast(`${ICON('check')} ${B.naam} gedownload`); return 'download'; }
+  catch(_){ toast('Delen lukte niet op dit toestel'); return 'mislukt'; }
 }
 async function diagCopy(){
   const el=$('#diagUit'); if(!el) return;

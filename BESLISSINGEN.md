@@ -16,6 +16,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v423` · een lening sluit: bedrag = terugbetaald + nog open + niet meer terug verwacht.** `loanStand()` rekent het na en is de
+  bron van de leningsheet, de vraag in Zien en blok 20. Niet meer terug verwacht telt als uitgave in de maand van de lening, via een
+  boekingpaar zonder bank (Persoonlijke overboeking -X, Uitgeleend +X), zodat de uitgave stijgt, het geld van de lening daalt en de
+  controle van blok 20 blijft sluiten. Valkuil (gemeten op de melding): het veld Nog open rondde op hele euro's en een contante
+  ontvangst ook (400 van 405,99 liet 6 open), en geen knop legde vast wat hij deed, dus een restant als 5,99 bij Ma of 45 bij
+  A. Buiten was achteraf niet te verklaren. Nu rekent alles in centen, elke knop schrijft een regel in `l.log`, en een lening van
+  voor v423 krijgt bij zijn eerste knop een log met wat er vastlag. Een verschil zonder verklaring wordt nooit stil gecorrigeerd:
+  Zien vraagt "Is EUR X van Y nog open of niet meer terug?" (met een derde ingang: al terugbetaald buiten je gegevens).
+  "Kwijtgescholden" (de hele boeking als uitgave, de lening weg) is in de sheet vervangen door "Rest komt niet meer terug".
+
 - **`v422` · de holding als salarisbron per maand, niets stil omgezet, en een Tikkie is een uitgave.** In een maand waarin de
   holding je salarisbron is telt een bijschrijving in de marge als salaris, en is er geen, de grootste van die maand; het deel boven
   de mediaan is "extra in salaris" en blijft inkomen. Valkuil (die van `v421`): de marge van 10% liet mei en augustus vallen, en

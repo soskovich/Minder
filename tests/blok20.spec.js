@@ -9,9 +9,10 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
   test('staat in het register, bovenaan de definitie van vast, zeven maanden', async ({ page }) => {
     await S.boot(page); const r = await page.evaluate(() => ({ reg: DIAG_BLOKKEN.some(b => b.lees === diagSalarisVerdeling), L: diagSalarisVerdeling() }));
     expect(r.reg).toBe(true);
-    expect(r.L[0]).toMatch(/^DEFINITIE VAN VAST/);
-    expect(r.L[0]).toContain('isFixed'); expect(r.L[0]).toContain('potHeelVast');
-    expect(r.L[1]).toContain('apr · mei · jun · jul · aug · sep afgerond, okt lopend');
+    expect(r.L[0]).toBe(`deel 1 van 1 · ${r.L.length} regels`);   // v423: bovenaan de telling, dan de definitie
+    expect(r.L[1]).toMatch(/^DEFINITIE VAN VAST/);
+    expect(r.L[1]).toContain('isFixed'); expect(r.L[1]).toContain('potHeelVast');
+    expect(r.L[2]).toContain('apr · mei · jun · jul · aug · sep afgerond, okt lopend');
   });
   test('leest alleen: geen setItem, en SET is na het lezen gelijk', async ({ page }) => {
     await S.boot(page);

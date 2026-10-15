@@ -43,13 +43,13 @@ test.describe('v420', () => {
     expect((await lees(page)).join('\n')).not.toContain('Western Union -> persoonlijke overboeking');   // een lening wisselt niet van groep
     expect(await page.evaluate(() => totals('2026-09').spendNorm)).toBe(voor);   // een lening is geen uitgave
     let U = sectie(await lees(page), 'UITGELEEND');
-    expect(U.find(x => x.startsWith('  TOTAAL NOG OPEN'))).toBe('  TOTAAL NOG OPEN: 750.99');
-    expect(U).toContain('  09-09 Western Union | 405.99 | 0.00 | 405.99');
+    expect(U.find(x => x.startsWith('  TOTAAL NOG OPEN'))).toBe('  TOTAAL NOG OPEN: 750.99 · TOTAAL NIET MEER TERUG: 0.00 · leningen met een verschil zonder verklaring: 0')   // v423;
+    expect(U).toContain('  09-09 Western Union | 405.99 | 0.00 | 405.99 | 0.00 · sluit');
     /* dezelfde tegenpartij: weggestreept zonder vraag; een ander bedrag zonder naam: een vraag */
     const [rt, onb] = await zet(page, [{ date: '2026-09-15', amount: 100, name: 'Renate Galdeij' }, { date: '2026-09-20', amount: 405.99, name: 'Hr J Jansen' }]);
     expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), rt)).toBe('uitgeleend');
     U = sectie(await lees(page), 'UITGELEEND');
-    expect(U).toContain('  30-07 Renate Galdeij | 300.00 | 100.00 (15-09 100.00 zelfde tegenpartij) | 200.00');
+    expect(U).toContain('  30-07 Renate Galdeij | 300.00 | 100.00 (15-09 100.00 zelfde tegenpartij) | 200.00 | 0.00 · sluit');
     expect(U.find(x => x.startsWith('  vragen in Zien'))).toBe('  vragen in Zien (Kloppen mijn gegevens?): 1');
     const Q = await page.evaluate(() => { openGegevensVragen(); return document.querySelector('#gegevensSheet').innerText; });
     expect(Q).toContain('Is €405,99 van Hr J Jansen een terugbetaling van je lening?');
@@ -58,7 +58,7 @@ test.describe('v420', () => {
     await page.evaluate(() => document.querySelector('[data-leningja]').click());
     expect(await page.evaluate(() => loans().find(l => l.naam === 'Western Union').open)).toBe(0);
     expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), onb)).toBe('uitgeleend');
-    expect(sectie(await lees(page), 'UITGELEEND').find(x => x.startsWith('  TOTAAL NOG OPEN'))).toBe('  TOTAAL NOG OPEN: 245.00');
+    expect(sectie(await lees(page), 'UITGELEEND').find(x => x.startsWith('  TOTAAL NOG OPEN'))).toBe('  TOTAAL NOG OPEN: 245.00 · TOTAAL NIET MEER TERUG: 0.00 · leningen met een verschil zonder verklaring: 0');
   });
 
   test('nee onthoudt de vraag, en Zien toont de regel alleen met een vraag', async ({ page }) => {
