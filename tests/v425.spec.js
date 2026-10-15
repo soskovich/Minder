@@ -168,7 +168,7 @@ test.describe('v425', () => {
 
   test('2f. eerste uitgaande Tikkie per persoon: jouw deel met een categorie geldt ook voor de volgende Tikkie', async ({ page }) => {
     await boot(page);
-    expect(await kopVan(page, 'tikkie|tikkie')).toBe('€60,00 aan Tikkie via Tikkie · 20 sep · was dit…');
+    expect(await kopVan(page, 'tikkie|tikkie')).toBe('€60,00 aan Tikkie · 20 sep · was dit…');   // v427: geen Tikkie via Tikkie
     await page.locator('[data-qkey="tikkie|tikkie"] [data-kennisoptie="deel"]').click();
     await page.locator('[data-qkey="tikkie|tikkie"] [data-kenniscat="uiteten"]').click();
     expect(await page.evaluate(() => TX.filter(t => isTikkie(t)).map(catOf))).toEqual(['uiteten', 'uiteten']);

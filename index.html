@@ -24245,6 +24245,8 @@ function kennisWoningZet(key, ja){ const q=kennisWoningVragen().find(x=>x.key===
 function tikkiePersoon(t){ const n0=benoemPartij(t), n=n0.replace(/\s+via\s+tikk\w*$/i,'').trim()||n0; if(n!==n0) return n; if(!/tikkie/i.test(n)) return n;   // v427: "Lausa Eriksson via Tikki" is Lausa Eriksson
   const m=String(t.desc||'').match(/\b(?:VAN|NAAR|AAN)\s+([A-Za-z][A-Za-z .'-]{1,30}?)(?:\s*,|\s+NL\d|\s+IBAN|$)/i);
   return m?titleCase(m[1].trim().toLowerCase()):'Tikkie'; }
+/* v427: "via Tikkie" achter de naam, maar niet als de naam het al zegt (een onbekende persoon heet Tikkie) */
+function tikkieNaam(p){ return /tikkie/i.test(p)?p:`${p} via Tikkie`; }
 function kennisTikkieCat(t){ const uit=TX.filter(d=>d.amount<0 && isTikkie(d) && (CATS[catOf(d)]||{}).type==='expense' && d.date<=t.date).sort((a,b)=>a.date<b.date?1:-1)[0]; return uit?catOf(uit):null; }
 /* de categorie die jij een persoon gaf; applyOwnAccounts() leest hem voor elke Tikkie aan die persoon */
 function kennisTikkieCats(){ const M={}; for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='tikkie' && E.cat && CATS[E.cat]) M[k.slice(7)]=E.cat; return M; }
@@ -24387,7 +24389,7 @@ function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).sl
   const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
     poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
     vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
-    woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${q.partij} via Tikkie: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
+    woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${tikkieNaam(q.partij)}: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
   return (T[q.soort]?T[q.soort]():q.soort)+d; }
 /* de rij van een nieuwe vraag in "Kloppen mijn gegevens?" */
 function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q.t?kk(q.t.id):'', K=(window._kennisKeuze||{})[q.t?q.t.id:q.qkey];
@@ -24421,7 +24423,7 @@ function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q
     body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisVervangerWie('${sk}','${nk}',true)`,'Ja','data-kennisvervangerwie="ja"')}${knop(`kennisVervangerWie('${sk}','${nk}',false)`,'Nee','data-kennisvervangerwie="nee"')}</div>`; }
   if(q.soort==='woning'){ const sk=kk(q.key); kop=`Is ${esc(q.partij)} je woonhuur of hypotheek?`; sub=`voorstel: de grootste vaste post in ${esc((CATS.huur||{}).name||'Huur')} (${euro0(q.bedrag)}); de app raadt niet zelf`;
     body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisWoningZet('${sk}',true)`,'Ja','data-kenniswoning="ja"')}${knop(`kennisWoningZet('${sk}',false)`,'Nee','data-kenniswoning="nee"')}</div>`; }
-  if(q.soort==='tikkie'){ kop=q.herhaal?`${euro(q.bedrag)} aan ${esc(q.partij)} via Tikkie \u00b7 ook een lening, net als eerder?`:`${euro(q.bedrag)} aan ${esc(q.partij)} via Tikkie \u00b7 ${esc(dagKort(q.datum))} \u00b7 was dit…`; sub='het antwoord geldt voor volgende Tikkies aan dezelfde persoon';
+  if(q.soort==='tikkie'){ kop=q.herhaal?`${euro(q.bedrag)} aan ${esc(tikkieNaam(q.partij))} \u00b7 ook een lening, net als eerder?`:`${euro(q.bedrag)} aan ${esc(tikkieNaam(q.partij))} \u00b7 ${esc(dagKort(q.datum))} \u00b7 was dit…`; sub='het antwoord geldt voor volgende Tikkies aan dezelfde persoon';
     if(q.herhaal) body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kennisTikkieZet('${id}','lening')`,'Ja, lening','data-kennisoptie="lening"')}${knop(`kennisTikkieZet('${id}','nee')`,'Nee','data-kennisoptie="nee"')}</div>`;
     else if(K && K.keuze==='deel'){ const C=kennisCats();
       body=`<div class="small" data-kennisstap style="margin-top:6px">Jouw deel van gedeelde kosten \u00b7 welke categorie?</div><div class="chips" style="margin-top:6px">${C.map(k=>chip(`kennisTikkieZet('${id}','deel','${k}')`, CATS[k].name, `data-kenniscat="${k}"`)).join('')}</div>`; }

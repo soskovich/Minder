@@ -59,7 +59,8 @@ test.describe('v427', () => {
     expect(V).toEqual([{ soort: 'tikkie', qkey: 'tikkie|bram visser', t: B, kort: '€120,00 aan Bram Visser via Tikkie: wat was dit? · 3 okt' }]);
     const per = {}; for (const q of await vragen(page)) if (q.t) per[q.t] = (per[q.t] || 0) + 1;
     expect(Object.values(per).every(n => n === 1)).toBe(true);
-    expect((await vragen(page)).some(q => /via Tikki via Tikkie|Via Tikki/.test(q.kort))).toBe(false);
+    expect((await vragen(page)).some(q => /via Tikki via Tikkie|Via Tikki|Tikkie via Tikkie/.test(q.kort))).toBe(false);
+    expect((await vragen(page)).filter(q => q.soort === 'tikkie').map(q => q.kort)).toContain('€60,00 aan Tikkie: wat was dit? · 20 sep');   // een onbekende persoon: geen "Tikkie via Tikkie"
   });
 
   test('3. "vast inkomen?" alleen bij een echte inkomensbron: niet bij een binnenkomende Tikkie, niet bij een partij die je betaalde', async ({ page }) => {

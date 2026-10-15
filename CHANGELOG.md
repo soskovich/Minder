@@ -1562,5 +1562,5 @@ Gevraagd door de gebruiker als vervolg op v398.
   vraag met Teruggave, `kennisEerderBetaald()`).
 - **DUO** is laag a, Studieschuld uit de omschrijving; een vaste last met een zeker bekende naam vraagt niet "wat is dit?".
 - **Heen en terug** dezelfde dag, even groot, dezelfde persoon (Renate -200 / +200): geen vraag (`kennisTerugZelfdeDag()`).
-- **Specs**: nieuw `v427.spec.js` (5 tests, 11 sabotages rood); `v425` en `v426` lezen Zorg op Lausa Eriksson. `sw.js` naar
+- **Specs**: nieuw `v427.spec.js` (5 tests, 12 sabotages rood; ook geen "Tikkie via Tikkie" bij een onbekende persoon, `tikkieNaam()`); `v425` en `v426` lezen Zorg op Lausa Eriksson. `sw.js` naar
   `minder-v427`.
