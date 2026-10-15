@@ -176,12 +176,12 @@ test.describe('v425', () => {
   test('2g. contant opnemen: een tik binnen 3 dagen, telt in blok 20 en verandert geen boeking', async ({ page }) => {
     await boot(page);
     const O = await id(page, '2026-10-09', -150);
-    expect(await vragen(page)).toContain('contant|' + O);
-    expect((await vragen(page)).filter(q => q.startsWith('contant|')).length).toBe(1);   // de opnames van juni en augustus niet
-    expect(await kopVan(page, 'contant|' + O)).toBe('Waar ging de €150 contant vooral naar?');
-    expect(await page.locator(`[data-qkey="contant|${O}"] [data-kennisoptie]`).allInnerTexts()).toEqual(['Uitgaan of eten', 'Boodschappen', 'Kinderen', 'Vices', 'Anders', 'Weet ik niet']);
+    expect(await vragen(page)).toContain('opname|' + O);
+    expect((await vragen(page)).filter(q => q.startsWith('opname|')).length).toBe(1);   // de opnames van juni en augustus niet
+    expect(await kopVan(page, 'opname|' + O)).toBe('Waar ging de €150 contant vooral naar?');
+    expect(await page.locator(`[data-qkey="opname|${O}"] [data-kennisoptie]`).allInnerTexts()).toEqual(['Uitgaan of eten', 'Boodschappen', 'Kinderen', 'Vices', 'Anders', 'Weet ik niet']);
     const voor = await page.evaluate(() => [JSON.stringify(TX), JSON.stringify(OVR), totals('2026-10').spendNorm]);
-    await page.locator(`[data-qkey="contant|${O}"] [data-kennisoptie="Boodschappen"]`).click();
+    await page.locator(`[data-qkey="opname|${O}"] [data-kennisoptie="Boodschappen"]`).click();
     expect(await page.evaluate(() => [JSON.stringify(TX), JSON.stringify(OVR), totals('2026-10').spendNorm])).toEqual(voor);
     expect(sectie(await lees(page), 'CONTANT NAAR')).toContain('  okt | Boodschappen | 150.00');
   });
@@ -222,7 +222,7 @@ test.describe('v425', () => {
     const A = await id(page, '2026-10-02', -250);
     await page.evaluate(A => kennisUitZet(A, 'gift'), A);
     await page.evaluate(() => openKennis());
-    expect(await page.locator('[data-kennisgroep]').evaluateAll(E => E.map(e => e.dataset.kennisgroep))).toEqual(['inkomen', 'woning', 'leningen', 'vast', 'tikkie', 'eenmalig', 'contant']);
+    expect(await page.locator('[data-kennisgroep]').evaluateAll(E => E.map(e => e.dataset.kennisgroep))).toEqual(['inkomen', 'woning', 'leningen', 'vast', 'tikkie', 'eenmalig', 'opname']);
     const r = (await page.locator('[data-kennisrij="k:uit|j bakker"]').innerText()).replace(/\s+/g, ' ');
     expect(r).toBe('J Bakker Gift door jou · 10 okt 2026 Wijzigen Vergeten');
     /* Vergeten zonder bedrag in je maanden zegt dat */

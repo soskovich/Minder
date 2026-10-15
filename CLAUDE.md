@@ -141,7 +141,7 @@ genoemde versietag.)*
   bedrijf opent `openHoldingVraag()`), `vastink` (dezelfde partij in 2 maanden), c `vast` (nieuwe vaste last: eerst het
   tekstveld, dan het potje; `kennisVastPotjes()` in `applyOwnAccounts()`), d `vervanger`/`vervangerwie` (na "Ja, laatste",
   `vervangerVraag`), e `woning` (de grootste vaste post in Huur is alleen een voorstel, `kennisWoningKey()` in blok 20), f
-  `tikkie` (per persoon, `tikkiePersoon()`, `kennisTikkieCats()` in `applyOwnAccounts()`), g `contant` (opname vanaf 100,
+  `tikkie` (per persoon, `tikkiePersoon()`, `kennisTikkieCats()` in `applyOwnAccounts()`), g `opname` (contant opnemen vanaf 100; de soort heet zo omdat de sleutel `contant` een geenNorm-categorie is, `geennorm-hardcode.spec.js`),
   binnen `KENNIS_CONTANT_DAGEN` 3, verandert geen boeking), h `benoem` (v424). Niets verandert tot je antwoordt; elk antwoord
   draagt zijn `effect` zodat Vergeten precies dat terugzet. RUST (`gegevensOpen()`): hooguit `KENNIS_MAX_OPEN` (3) op bedrag,
   "Later" (`kennisLater()`, `SET.kennisLater`) een week op, na `KENNIS_LATER_MAX` (2) pas weer als jij hem opent

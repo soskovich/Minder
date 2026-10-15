@@ -24019,7 +24019,7 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
    nooit stil aannemen, een vraag per partij, alleen bij bedragen die ertoe doen, en het antwoord wordt onthouden met zijn bron.
    EEN OPSLAG VOOR BETEKENIS: SET.kennis[sleutel]={soort, partij, kenmerk, wat, aard, bron, op, tx, ...}. De soorten: benoem (v424,
    uit SET.benoemd overgenomen), uit (overboeking aan een ander), in (onbekende bijschrijving), vastink (vast inkomen), vast (nieuwe
-   vaste last), vervanger, woning, tikkie (per persoon) en contant. De bron is een van KENNIS_BRON. Wat al een eigen plek had
+   vaste last), vervanger, woning, tikkie (per persoon) en opname (contant). De bron is een van KENNIS_BRON. Wat al een eigen plek had
    (je holding, je leningen, een gestopte of opgezegde post, vast per partij, "klopt, eenmalig") blijft daar staan, want daar zit
    het gevolg; kennisLijst() leest die plekken met bron "door jou" en is de ENE lezer voor alle schermen en blok 20.
    EEN ANTWOORD DRAAGT ZIJN GEVOLG (E.effect: de categorie die het zette, de vlag onregelmatig, de lening), zodat Vergeten precies
@@ -24027,7 +24027,7 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
 const KENNIS_BRON=BENOEM_BRON;   // v425: een woordenlijst voor de bron, ook voor v424
 const KENNIS_MIN=100, KENNIS_VAST_MIN=10, KENNIS_TIKKIE_MIN=10, KENNIS_CONTANT_DAGEN=3, KENNIS_VERVANGER_MAANDEN=2;
 const KENNIS_MAX_OPEN=3, KENNIS_LATER_DAGEN=7, KENNIS_LATER_MAX=2, KENNIS_VAST_NIEUW_DAGEN=120, KENNIS_VAST_START_DAGEN=60;
-const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['contant','Contant']];
+const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['opname','Contant']];
 const KENNIS_UIT=[['lening','Lening, verwacht terug'],['uitgave','Uitgave'],['gift','Gift']];
 const KENNIS_IN=[['terug','Terugbetaling'],['teruggave','Teruggave'],['gift','Gift'],['verkoop','Verkoop'],['extra','Extra inkomen'],['bedrijf','Van mijn eigen bedrijf']];
 const KENNIS_IN_SUB={terug:'van een lening of Tikkie', teruggave:'belasting, verzekering, winkel', extra:'bonus, vakantiegeld'};
@@ -24200,14 +24200,14 @@ function kennisTikkieZet(id, keuze, cat, tekst){ const t=TX.find(x=>x.id===id); 
 
 /* ---- g. CONTANT OPNEMEN vanaf KENNIS_MIN: een tik, binnen KENNIS_CONTANT_DAGEN dagen; het verandert geen boekingen ---- */
 function kennisContantVragen(){ const o=[];
-  for(const t of telbareTx()){ if(t.pending || !(t.amount<=-KENNIS_MIN) || !isOpnameTx(t) || kennisGet('contant|'+t.id) || !kennisRecent(t, KENNIS_CONTANT_DAGEN)) continue;
-    o.push({soort:'contant', qkey:'contant|'+t.id, t, partij:benoemPartij(t), bedrag:-t.amount, datum:t.date}); }
+  for(const t of telbareTx()){ if(t.pending || !(t.amount<=-KENNIS_MIN) || !isOpnameTx(t) || kennisGet('opname|'+t.id) || !kennisRecent(t, KENNIS_CONTANT_DAGEN)) continue;
+    o.push({soort:'opname', qkey:'opname|'+t.id, t, partij:benoemPartij(t), bedrag:-t.amount, datum:t.date}); }
   return o; }
 function kennisContantZet(id, wat){ const t=TX.find(x=>x.id===id); if(!t) return; const herstel=kennisSnap();
-  kennisZet('contant|'+id, {soort:'contant', partij:benoemPartij(t), wat:wat||null, bedrag:-t.amount, datum:t.date, tx:[id]});
+  kennisZet('opname|'+id, {soort:'opname', partij:benoemPartij(t), wat:wat||null, bedrag:-t.amount, datum:t.date, tx:[id]});
   save(); keuzeKlaar(`Contant ${euro0(-t.amount)}: ${wat||'weet ik niet'}`, herstel); }
 /* per maand waar het contante geld volgens jou heen ging (blok 20, en de vergelijking per potje) */
-function kennisContantMaand(ym){ const M={}; for(const E of Object.values(SET.kennis||{})) if(E && E.soort==='contant' && String(E.datum||'').slice(0,7)===ym){ const w=E.wat||'weet ik niet'; M[w]=(M[w]||0)+(+E.bedrag||0); } return M; }
+function kennisContantMaand(ym){ const M={}; for(const E of Object.values(SET.kennis||{})) if(E && E.soort==='opname' && String(E.datum||'').slice(0,7)===ym){ const w=E.wat||'weet ik niet'; M[w]=(M[w]||0)+(+E.bedrag||0); } return M; }
 
 /* ---- RUST: hooguit KENNIS_MAX_OPEN open vragen, op bedrag; "Later" schuift een week op, na twee keer pas weer als jij hem opent ---- */
 function kennisLaterStand(qkey){ const L=(SET.kennisLater||{})[qkey]; if(!L) return {wacht:false, n:0};
@@ -24221,11 +24221,11 @@ function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.q
 
 /* ---- DE ENE LEZER: alles wat Minder van jou weet, met bron en datum ---- */
 function kennisLijst(){ const o=[];
-  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', contant:()=>'contant'};
+  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
     const wat=E.soort==='benoem'?`${E.label||E.wat||'nog niet benoemd'}${E.aard?' \u00b7 '+(E.aard==='eenmalig'?'eenmalig':'komt terug'):''}`
-      :E.soort==='vast'?`${E.wat} \u00b7 ${(CATS[E.potje]||{}).name||E.potje}`:E.soort==='contant'?`${E.wat||'weet ik niet'} (${euro0(E.bedrag)} contant ${dagKort(E.datum)})`:(E.wat||'weet ik niet');
+      :E.soort==='vast'?`${E.wat} \u00b7 ${(CATS[E.potje]||{}).name||E.potje}`:E.soort==='opname'?`${E.wat||'weet ik niet'} (${euro0(E.bedrag)} contant ${dagKort(E.datum)})`:(E.wat||'weet ik niet');
     o.push({id:'k:'+k, groep:g, partij:E.partij||'', wat, bron:E.bron||'jij', op:E.op||'', bedrag:+E.bedrag||0, soort:E.soort, kennis:k}); }
   for(const [k,E] of Object.entries(SET.holdingPartij||{})) o.push({id:'h:'+k, groep:'inkomen', partij:E.naam||k, wat:'Je holding (eigen bedrijf)', bron:'jij', op:E.op||'', soort:'holding', key:k});
   for(const l of loans()) o.push({id:'l:'+l.id, groep:'leningen', partij:l.naam||'', wat:`${l.richting==='in'?'Geleend':'Uitgeleend'} ${loanC2(+l.bedrag||0)} \u00b7 nog open ${loanC2(+l.open||0)}`, bron:'jij', op:((l.log||[])[0]||{}).dag||l.datum||'', soort:'lening', key:l.id});
@@ -24272,10 +24272,10 @@ function kennisVergeetGevolg(id){ const ids=new Set(kennisTxVan(id)); const mnd=
   const meet=()=>mnd.map(m=>{ const T=totals(m); return {m, uit:T.spendNorm, ink:T.income}; });
   const s=JSON.stringify(SET), o=JSON.stringify(OVR), tx=JSON.stringify(TX);
   let voor=[], na=[];
-  try{ voor=meet(); kennisVergeetKern(id); applyOwnAccounts(); _dataGen++; try{ telbaarVergeten(); }catch(_){} na=meet(); }
+  try{ voor=meet(); kennisVergeetKern(id); applyOwnAccounts(); _dataGen++; na=meet(); }
   finally{ const S0=JSON.parse(s); for(const k of Object.keys(SET)) if(!(k in S0)) delete SET[k]; Object.assign(SET, S0);
     const O0=JSON.parse(o); for(const k of Object.keys(OVR)) delete OVR[k]; Object.assign(OVR, O0);
-    TX=JSON.parse(tx); applyOwnAccounts(); _dataGen++; try{ telbaarVergeten(); }catch(_){} }
+    TX=JSON.parse(tx); applyOwnAccounts(); _dataGen++; }
   const r=[]; for(let i=0;i<mnd.length;i++){ const du=Math.round(na[i].uit-voor[i].uit), di=Math.round(na[i].ink-voor[i].ink), nm=MNAMES[+mnd[i].slice(5,7)-1]||mnd[i];
     if(du) r.push(`${nm}-uitgaven ${du>0?'+':'-'}${euro0(Math.abs(du))}`); if(di) r.push(`${nm}-inkomen ${di>0?'+':'-'}${euro0(Math.abs(di))}`); }
   return r; }
@@ -24313,7 +24313,7 @@ function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).sl
   const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
     poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
     vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
-    woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${q.partij} via Tikkie: wat was dit?`, contant:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
+    woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${q.partij} via Tikkie: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
   return (T[q.soort]?T[q.soort]():q.soort)+d; }
 /* de rij van een nieuwe vraag in "Kloppen mijn gegevens?" */
 function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q.t?kk(q.t.id):'', K=(window._kennisKeuze||{})[q.t?q.t.id:q.qkey];
@@ -24352,7 +24352,7 @@ function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q
     else if(K && K.keuze==='deel'){ const C=kennisCats();
       body=`<div class="small" data-kennisstap style="margin-top:6px">Jouw deel van gedeelde kosten \u00b7 welke categorie?</div><div class="chips" style="margin-top:6px">${C.map(k=>chip(`kennisTikkieZet('${id}','deel','${k}')`, CATS[k].name, `data-kenniscat="${k}"`)).join('')}</div>`; }
     else body=`<div class="chips" style="margin-top:6px">${chip(`kennisTikkieKies('${id}','deel')`,'Jouw deel van gedeelde kosten','data-kennisoptie="deel"')}${chip(`kennisTikkieKies('${id}','lening')`,'Lening','data-kennisoptie="lening"')}</div>${anders(`(v=>kennisTikkieZet('${id}','anders',null,v))`)}`; }
-  if(q.soort==='contant'){ kop=`Waar ging de ${euro0(q.bedrag)} contant vooral naar?`; sub=`${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 een tik; het verandert geen boekingen`;
+  if(q.soort==='opname'){ kop=`Waar ging de ${euro0(q.bedrag)} contant vooral naar?`; sub=`${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 een tik; het verandert geen boekingen`;
     body=`<div class="chips" style="margin-top:6px">${KENNIS_CONTANT.map(w=>chip(`kennisContantZet('${id}','${kk(w)}')`, w, `data-kennisoptie="${esc(w)}"`)).join('')}${chip(`kennisContantZet('${id}','Anders')`,'Anders','data-kennisoptie="Anders"')}${chip(`kennisContantZet('${id}','')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>`; }
   return `<div data-gegevensvraag="${q.soort}" data-qkey="${esc(q.qkey)}"${q.t?` data-tx="${esc(q.t.id)}"`:''} style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${kop}</div><div class="small muted" style="margin-top:2px">${sub}</div>${body}</div>`; }
 
@@ -24371,7 +24371,7 @@ function openGegevensVragen(focus){
   if(!Q.length){ if(focus && focus!=='alle'){ window._gegevensFocus=''; return openGegevensVragen(); } closeSheet(); return; }
   const wacht=focus?0:alleQ.length-Q.length;
   const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
-    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','contant'].includes(q.soort)) return kennisVraagRij(q);   // v425
+    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname'].includes(q.soort)) return kennisVraagRij(q);   // v425
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='poststop'){ const kk=esc(q.key).replace(/'/g,"\\'");
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
