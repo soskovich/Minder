@@ -23959,7 +23959,7 @@ const BENOEM_SOORTEN={
 const BENOEM_PARTIJ_CAT=[[/TRANSAVIA|\bKLM\b|RYANAIR|EASYJET|VUELING|CORENDON|BOOKING\.COM|AIRBNB|HOTEL/i,['Reis']],
   [/APOTHEEK|HUISARTS|TANDARTS|FYSIO|ZIEKENHUIS|KLINIEK|OPTIEK/i,['Zorg']],
   [/ZWEMLES|ZWEMBAD|ZWEMSCHOOL/i,['Kinderen','Sport']]];
-const BENOEM_CAT_GEEN=new Set(['overig','onvoorzien','contant','persoonlijk']);
+const BENOEM_CAT_GEEN=new Set(['overig','persoonlijk']);   // een categorie zonder norm valt eruit via geenNorm(), niet bij naam
 function benoemSuggesties(t){ const s=`${t.name||''} ${t.desc||''}`, o=[];
   for(const [re,L] of BENOEM_PARTIJ_CAT) if(re.test(s)) for(const l of L) if(!o.includes(l)) o.push(l);
   if(!o.length){ const c=catOf(t); if(CATS[c] && CATS[c].type==='expense' && !BENOEM_CAT_GEEN.has(c) && !geenNorm(c)) o.push(CATS[c].name); }
