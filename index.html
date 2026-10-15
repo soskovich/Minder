@@ -22265,7 +22265,7 @@ function loanC2(x){ return euro(Math.round((+x||0)*100)/100); }
 function loanLogStart(l){ const S=loanStand(l), r2=x=>Math.round(x*100)/100; let o=S.bedrag;
   const log=[{dag:l.datum||'', knop:'Gemarkeerd als uitgeleend (van voor v423)', bedrag:S.bedrag, open:S.bedrag}];
   for(const d of S.delen.slice().sort((a,b)=>String(a.dag)<String(b.dag)?-1:1)){ o=r2(o-d.bedrag);
-    log.push({dag:d.dag||'', knop:d.soort==='zonder'?'Terugbetaald zonder boeking (van voor v423)':d.soort==='contant'?'Contant terugontvangen':(d.auto?'Terugbetaling (zelfde tegenpartij, vanzelf)':'Terugbetaling bevestigd'), bedrag:-d.bedrag, open:o}); }
+    log.push({dag:d.dag||'', knop:d.soort==='zonder'?'Terugbetaald zonder boeking (van voor v423)':d.soort==='kas'?'Contant terugontvangen':(d.auto?'Terugbetaling (zelfde tegenpartij, vanzelf)':'Terugbetaling bevestigd'), bedrag:-d.bedrag, open:o}); }
   if(S.nietTerug){ o=r2(o-S.nietTerug); log.push({dag:'', knop:'Niet meer terug (van voor v423)', bedrag:-S.nietTerug, open:o}); }
   if(!S.sluit) log.push({dag:'', knop:'Restant veranderd zonder vastgelegde knop (van voor v423)', bedrag:-S.verschil, open:S.open});
   l.open=S.open; return log; }
@@ -22282,7 +22282,7 @@ function loanStand(l){
     const v=r2(tb!=null?tb:(o&&o.aflossing!=null?o.aflossing:Math.abs(t.amount)));
     delen.push({soort:'bank', dag:t.date, bedrag:v, t, auto:(l.terugAuto||[]).includes(id)}); }
   for(const x of (()=>{ try{ return contantInVan(l.id); }catch(_){ return []; } })())
-    delen.push({soort:'contant', dag:x.datum, bedrag:r2(x.aflossing!=null?x.aflossing:x.bedrag)});
+    delen.push({soort:'kas', dag:x.datum, bedrag:r2(x.aflossing!=null?x.aflossing:x.bedrag)});
   if(+l.terugZonder>0) delen.push({soort:'zonder', dag:'', bedrag:r2(l.terugZonder)});
   const terug=r2(delen.reduce((a,x)=>a+x.bedrag,0)), nietTerug=r2(l.nietTerug);
   let open=r2(l.open);
@@ -22298,7 +22298,7 @@ function loanHerkomst(S){
   const out=[`${dagKort(S.l.datum)} ${String(S.l.datum||'').slice(0,4)}: gemarkeerd als uitgeleend (${loanC2(S.bedrag)})`];
   for(const d of S.delen.slice().sort((a,b)=>String(a.dag)<String(b.dag)?-1:1))
     out.push(d.soort==='zonder'?`${loanC2(d.bedrag)} terugbetaald zonder boeking`
-      :`${dagKort(d.dag)} ${String(d.dag).slice(0,4)}: ${d.soort==='contant'?'Contant terugontvangen':(d.auto?'terugbetaling, zelfde tegenpartij (vanzelf)':'terugbetaling bevestigd')} (${loanC2(d.bedrag)})`);
+      :`${dagKort(d.dag)} ${String(d.dag).slice(0,4)}: ${d.soort==='kas'?'Contant terugontvangen':(d.auto?'terugbetaling, zelfde tegenpartij (vanzelf)':'terugbetaling bevestigd')} (${loanC2(d.bedrag)})`);
   if(S.nietTerug) out.push(`${loanC2(S.nietTerug)} niet meer terug verwacht`);
   out.push(`nog open nu ${loanC2(S.open)}${S.sluit?'':` · van voor v423 is niet vastgelegd welke knop het restant van ${loanC2(S.verschil)} veranderde (het veld Nog open, of Helemaal terugbetaald)`}`);
   return out;
@@ -28630,13 +28630,13 @@ function diagSalarisVerdeling(){
   /* v423: DE LAATSTE AFGERONDE MAAND PER SOORT, MET DE BOEKINGEN ERACHTER (gevraagd door de gebruiker, alleen uitleggen). Dezelfde
      boekingen als de regels hierboven (bSoort, gevuld waar bDeel telt), dus per soort sluit het op het getal erboven. */
   { const Ra=R[R.length-2];
-    if(Ra){ const SRT=[['kas','contant'],['persoonlijk','persoonlijke overboeking zonder potje'],['uitres','uit een reservering betaald'],['geennorm','geen norm'],['persOverb','overboeking aan een ander']];
+    if(Ra){ const SRT=[['kas','contant geld'],['persoonlijk','persoonlijke overboeking zonder potje'],['uitres','uit een reservering betaald'],['geennorm','geen norm'],['persOverb','overboeking aan een ander']];
       L.push(`  BUITEN VAST EN POTJES IN ${MN(Ra.ym).toUpperCase()} PER SOORT (v423, alleen uitleg, er verandert niets): ${e0(Ra.buiten)}`);
       let somAll=0;
       for(const [g,naam] of SRT){ const xs=Ra.bSoort.filter(x=>x.g===g).sort((a,b)=>a.t.date<b.t.date?-1:a.t.date>b.t.date?1:0), sm=xs.reduce((a,x)=>a+x.v,0); somAll+=sm;
         L.push(`    ${naam}: ${c2(sm)}${Math.abs(sm-Ra.bDeel[g])<0.005?'':` (TEGEN ${c2(Ra.bDeel[g])} HIERBOVEN)`}${xs.length?'':' · geen boekingen'}`);
         for(const x of xs){ const t=x.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
-          const waarom=g==='uitres'?` (boeking ${c2(-t.amount)}, waarvan uit je reservering)`:g==='kas'&&isOpnameTx(t)?' (opname)':g==='kas'&&t.src==='contant'?' (telling: alleen het verschil)':t.src==='lening'?' (lening: niet meer terug)':'';
+          const waarom=g==='uitres'?` (boeking ${c2(-t.amount)}, waarvan uit je reservering)`:g==='kas'&&isOpnameTx(t)?' (opname)':g==='kas'&&t.src===catOf(t)&&geenNorm(catOf(t))?' (telling: alleen het verschil)':t.src==='lening'?' (lening: niet meer terug)':'';
           L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${cat}]${waarom}`); } }
       L.push(`    samen ${c2(somAll)} tegen buiten vast en potjes ${c2(Ra.buiten)}: ${Math.abs(somAll-Ra.buiten)<0.005?'sluit':'VERSCHILT '+c2(somAll-Ra.buiten)}`); } }
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
@@ -28704,7 +28704,7 @@ function diagSalarisVerdeling(){
     let tot=0, totN=0, nOnv=0;
     for(const l of LL.slice().sort((a,b)=>String(a.datum)<String(b.datum)?-1:1)){ const S=loanStand(l);
       tot+=S.open; totN+=S.nietTerug; if(!S.sluit) nOnv++;
-      const bank=S.delen.filter(d=>d.soort==='bank'), ct=S.delen.filter(d=>d.soort==='contant'), zb=S.delen.find(d=>d.soort==='zonder');
+      const bank=S.delen.filter(d=>d.soort==='bank'), ct=S.delen.filter(d=>d.soort==='kas'), zb=S.delen.find(d=>d.soort==='zonder');
       L.push(`  ${String(l.datum||'').slice(8,10)}-${String(l.datum||'').slice(5,7)} ${l.naam||'?'} | ${c2(S.bedrag)} | ${c2(S.terug)}${bank.length?` (${bank.map(d=>`${d.dag.slice(8,10)}-${d.dag.slice(5,7)} ${c2(d.bedrag)}${d.auto?' zelfde tegenpartij':' bevestigd'}`).join(', ')})`:''}${ct.length?` (contant ${ct.map(d=>`${String(d.dag).slice(8,10)}-${String(d.dag).slice(5,7)} ${c2(d.bedrag)}`).join(', ')})`:''}${zb?` (zonder boeking ${c2(zb.bedrag)})`:''} | ${c2(S.open)} | ${c2(S.nietTerug)}${S.nietTerug?` (uitgave in ${MN(String(l.datum).slice(0,7))})`:''} · ${S.sluit?'sluit':`VERSCHIL ${c2(S.verschil)} zonder verklaring${S.verschil>=0.005?`: vraag in Zien "Is ${c2(S.verschil)} van ${l.naam||'?'} nog open of niet meer terug?"`:' (meer verklaard dan uitgeleend)'}`}`);
       for(const h of loanHerkomst(S)) L.push(`      ${h}`); }
     if(!LL.length) L.push('  geen lening gemarkeerd: markeer een afschrijving als Uitgeleend in de boekingssheet');

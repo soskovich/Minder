@@ -160,7 +160,7 @@ test.describe('v423', () => {
     const i = L.findIndex(r => r.startsWith('  BUITEN VAST EN POTJES IN SEP PER SOORT'));
     expect(i).toBeGreaterThan(0);
     const blok = L.slice(i, L.findIndex((r, n) => n > i && r.startsWith('    samen')) + 1);
-    for (const s of ['contant', 'persoonlijke overboeking zonder potje', 'uit een reservering betaald', 'geen norm', 'overboeking aan een ander'])
+    for (const s of ['contant geld', 'persoonlijke overboeking zonder potje', 'uit een reservering betaald', 'geen norm', 'overboeking aan een ander'])
       expect(blok.some(r => r.startsWith(`    ${s}: `)), s).toBe(true);
     expect(blok.some(r => /TEGEN/.test(r))).toBe(false);
     expect(blok[blok.length - 1]).toMatch(/: sluit$/);
@@ -170,7 +170,7 @@ test.describe('v423', () => {
       const b = r.match(/^      \d\d-\d\d (-?\d+\.\d\d) /); if (b) som[k].rij += +b[1]; }
     for (const [s, v] of Object.entries(som)) expect(Math.round(v.rij * 100) / 100, s).toBe(v.kop);
     /* de vier soorten uit de vraag dragen elk hun boeking */
-    expect(som['contant'].kop).toBe(80); expect(som['persoonlijke overboeking zonder potje'].kop).toBe(30);
+    expect(som['contant geld'].kop).toBe(80); expect(som['persoonlijke overboeking zonder potje'].kop).toBe(30);
     expect(som['uit een reservering betaald'].kop).toBe(300); expect(som['geen norm'].kop).toBe(25);
     expect(blok).toContain('      22-09 300.00 Cjib Verkeersboetes [Belasting & boetes] (boeking 463.00, waarvan uit je reservering)');
     expect(blok).toContain('      14-09 80.00 Geldmaat Koestraat 13 [Contant] (opname)');
