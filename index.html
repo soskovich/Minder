@@ -28315,7 +28315,7 @@ function diagSalarisVerdeling(){
   const terugk=new Set(Object.keys(bronMnd).filter(k=>k && bronMnd[k].size>=2));
   /* de bron van je laatste salarisbetaling (salarisBetalingLaatst) telt ook als hij nog maar in een maand voorkomt: een nieuwe
      werkgever is vanaf zijn eerste betaling je salaris, net als in de rest van de app */
-  try{ const sl=salarisBetalingLaatst(valtOpYmPlus(cur,1)); if(sl && recurKey(sl)) terugk.add(recurKey(sl)); }catch(_){}
+  try{ const sl=salarisBetalingLaatst(valtOpYmPlus(cur,1)); if(sl && bronMnd[recurKey(sl)]) terugk.add(recurKey(sl)); }catch(_){}   // alleen een bron met inkomen in je gegevens
   const bronSom=(k,ym)=>inkTx.filter(t=>recurKey(t)===k && t.date.slice(0,7)===ym).reduce((a,t)=>a+t.amount-onregelmatigBedrag(t),0);
   const salBron={}; for(const ym of ms){ const ks=[...terugk].filter(k=>bronMnd[k].has(ym)).sort((a,b)=>bronSom(b,ym)-bronSom(a,ym)); salBron[ym]=ks[0]||null; }
   if(salBron[cur]==null) salBron[cur]=salBron[ms[ms.length-2]]||null;

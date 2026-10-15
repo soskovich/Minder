@@ -11,8 +11,9 @@ const HOLD = [['2026-05-04', -49.55], ['2026-06-03', -200], ['2026-06-04', -100]
 test.describe('v421', () => {
   test('1. "Dit is mijn holding": de maandbetaling blijft inkomen, de acht andere boekingen gaan naar Holding, en terug zet alles terug', async ({ page }) => {
     await S.boot(page, { holding: false });
-    await page.evaluate(() => { const t = TX.find(t => t.date === '2026-06-03' && /ERNST/.test(t.desc)); OVR[t.id] = 'inkomen'; save(); });   // een eigen keuze op een van de boekingen
-    expect(await cat(page, '2026-06-03', -200)).toBe('inkomen');   // zonder keuze: inkomen met een min
+    await page.evaluate(() => { const t = TX.find(t => t.date === '2026-06-03' && /ERNST/.test(t.desc)); OVR[t.id] = 'overig'; save(); });   // een eigen keuze die afwijkt van de regel (die zegt inkomen)
+    expect(await cat(page, '2026-06-03', -200)).toBe('overig');
+    expect(await cat(page, '2026-06-04', -100)).toBe('inkomen');   // zonder keuze: inkomen met een min
     const sheet = await page.evaluate(() => { const t = TX.find(t => t.date === '2026-07-31' && /ERNST/.test(t.desc)); openSheet(t.id);
       const r = document.querySelector('[data-holdingrij]'); r.click(); return document.querySelector('#holdingSheet').innerText; });
     expect(sheet).toContain('€3.463,86, in 6 maanden');
@@ -24,7 +25,7 @@ test.describe('v421', () => {
     expect(await page.evaluate(() => TX.filter(t => /ERNST/.test(t.desc) && t.amount > 3000 && t.amount < 3600).every(t => catOf(t) === 'inkomen'))).toBe(true);
     expect(await page.evaluate(() => document.querySelector('[data-holdingrij="aan"]').innerText)).toContain('maandbetaling €3.463,86 is inkomen');
     await page.evaluate(() => document.querySelector('[data-holdingweg]').click());
-    expect(await cat(page, '2026-06-03', -200)).toBe('inkomen');   // de eigen keuze staat terug
+    expect(await cat(page, '2026-06-03', -200)).toBe('overig');   // de eigen keuze staat terug
     expect(await cat(page, '2026-07-31', 5000)).toBe('inkomen');
     expect(await page.evaluate(() => Object.keys(SET.holdingPartij).length)).toBe(0);
   });
@@ -71,11 +72,23 @@ test.describe('v421', () => {
     expect(J).toContain('  INKOMEN VOOR EN NA (mediaan tegen mediaan): Ernst Management Holding 3463.86 -> Skf 5216.00 vanaf sep: +1752.14');
   });
 
+  test('3. een salarisbron zonder inkomensboeking in je gegevens laat blok 20 niet omvallen', async ({ page }) => {
+    await S.boot(page);
+    const L = await page.evaluate(() => { const o = salarisBetalingLaatst; salarisBetalingLaatst = () => ({ name: 'Onbekende Werkgever', amount: 100, date: '2026-09-01' });
+      try { return diagSalarisVerdeling(); } finally { salarisBetalingLaatst = o; } });
+    expect(L.find(x => x.startsWith('  sep:'))).toBe('  sep: salaris 0 (geen betaling)');   // SKF met een betaling is dan geen terugkerende bron
+    expect(L[L.findIndex(x => x.startsWith('  sep:')) + 1]).toBe('      overige inkomsten 5216: Skf 5216.00');
+    expect(L.find(x => x.startsWith('  jul:'))).toBe('  jul: salaris 3464 van Ernst Management Holding (24-07 3463.86)');
+  });
+
   test('4. opgezegd, loopt af: Health Club met de laatste betaling van 08-10 is geen "weer betaald"; een betaling daarna wel', async ({ page }) => {
     await S.boot(page, { migreer: false });
     expect(await page.evaluate(() => postStatus('HEALTH CLUB').weerBetaald)).toBe(true);
     expect((await lees(page)).find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toBe('  GESTOPT EN DAARNA NOG BETAALD (v421): Health Club (gestopt op 20 sep, daarna betaald op 8 okt)');
-    await page.evaluate(() => { afloopMigreer(); _dataGen++; });
+    await page.evaluate(() => { SET.postStatus['SHURGARD NL'] = { status: 'gestopt', op: '2026-08-10', laatste: '2026-08-03' }; afloopMigreer(); _dataGen++; });
+    expect(await page.evaluate(() => SET.postStatus['SHURGARD NL'].status)).toBe('gestopt');   // twee betalingen na het stoppen: jij beslist
+    expect((await lees(page)).find(x => x.startsWith('  GESTOPT EN DAARNA NOG BETAALD'))).toContain('Shurgard Nl (gestopt op 10 aug, daarna betaald op 1 sep, 30 sep)');
+    await page.evaluate(() => { delete SET.postStatus['SHURGARD NL']; _dataGen++; });
     expect(await page.evaluate(() => SET.postStatus['HEALTH CLUB'])).toMatchObject({ status: 'afloop', tot: '2026-10-08' });
     expect(await page.evaluate(() => postStatus('HEALTH CLUB'))).toMatchObject({ status: 'gestopt', afloop: true, weerBetaald: false });
     let L = await lees(page);
