@@ -44,7 +44,9 @@ test.describe('v425', () => {
     expect(await page.evaluate(() => kennisZaai())).toBe(true);
     const K = await page.evaluate(() => kennisLijst().map(x => `${x.groep} | ${x.partij} | ${x.wat} | ${KENNIS_BRON[x.bron]}`));
     for (const r of ['vast | Nikki | Voetbalcontributie · Kinderen | door jou', 'woning | Ml Macnack | Woonhuur (gestopt) | door jou', 'eenmalig | Gemeente Utrecht | Boete of wegslepen · eenmalig | door jou',
-      'eenmalig | Apotheek Centrum | Zorgkosten · eenmalig | door jou', 'inkomen | Ernst Management Holding | Je holding (eigen bedrijf) | door jou', 'vast | Health Club | Gestopt | door jou']) expect(K).toContain(r);
+'inkomen | Ernst Management Holding | Je holding (eigen bedrijf) | door jou', 'vast | Health Club | Gestopt | door jou']) expect(K).toContain(r);
+    /* v427: Zorg EUR 159 hoort bij de Tikkie aan Lausa Eriksson; die staat niet in deze stand, dus de apotheek is nog niet benoemd */
+    expect(K.some(r => r.includes('Zorgkosten'))).toBe(false);
     /* een keer: opnieuw zaaien schrijft niets, en een vergeten antwoord komt niet terug */
     expect(await page.evaluate(() => kennisZaai())).toBe(false);
     await page.evaluate(() => kennisVergeet('k:vast|NIKKI'));

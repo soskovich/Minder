@@ -16,6 +16,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v427` · een vraag per boeking, en een antwoord op de boeking waar het over ging.** Gemeld op het toestel: Lausa Eriksson stond
+  er twee keer (de Tikkie-vraag en "wat was dit?"), met "via Tikki via Tikkie" in de naam, en "Zorg EUR 159, eenmalig" stond op Posh
+  Clinic omdat `kennisZaai()` de eerste EUR 159 in Zorg nam. Valkuil: een antwoord zaaien op bedrag en categorie raakt de verkeerde
+  boeking zodra er twee van hetzelfde bedrag zijn; het zaad zoekt nu de persoon, en het oude zaad wordt een keer weggehaald in plaats
+  van stil te blijven staan. Tweede valkuil: "vast inkomen?" vuurde op elke partij met een bijschrijving in twee maanden, ook een
+  binnenkomende Tikkie en een teruggave van een partij die je betaalde.
 - **`v426` · een bron voor wat jij aanwees, en een tik ook als de naam al vaststaat.** Holding, leningen en een gestopte of
   opgezegde post staan sinds `v426` in `SET.kennis` (gevraagd door de gebruiker: "geen twee opslagen die uit elkaar kunnen lopen").
   De holding is VERHUISD (`SET.holdingPartij` gaat op in `holding|<key>`), want daar is het antwoord het hele gevolg. Een lening en

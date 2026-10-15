@@ -23927,7 +23927,21 @@ function gegevensVragen(){ const out=[];
   /* v425: wat Minder alleen van jou kan weten */
   const bron=[kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
   for(const f of bron){ try{ out.push(...f()); }catch(_){} }
-  return out; }
+  /* v427: EEN BOEKING IS HOOGUIT EEN VRAAG. Een boeking waar je al iets over zei (een antwoord met die boeking erin) vraagt niets
+     meer; een Tikkie krijgt de Tikkie-vraag en niet ook "wat was dit?"; en een bedrag dat dezelfde dag even groot terugkomt van
+     dezelfde persoon (kennisTerugZelfdeDag()) vraagt niets, aan geen van beide kanten. */
+  const gedekt=new Set(); for(const E of Object.values(SET.kennis||{})) if(E && E.tx) for(const id of (Array.isArray(E.tx)?E.tx:Object.keys(E.tx))) gedekt.add(id);
+  const voor=q=>q.soort==='tikkie'?0:1, gezien=new Set(), o=[];
+  for(const q of out.slice().sort((a,b)=>voor(a)-voor(b))){ const t=q.t; if(t && t.id){
+      if(gezien.has(t.id) || kennisTerugZelfdeDag(t)) continue;
+      if(gedekt.has(t.id) && !['lening','restant','poststop'].includes(q.soort) && !(q.soort==='benoem' && q.laag==='a')) continue;
+      gezien.add(t.id); }
+    o.push(q); }
+  return out.filter(q=>o.includes(q)); }
+/* v427: dezelfde persoon, dezelfde dag, hetzelfde bedrag de andere kant op: dat is heen en terug, geen vraag waard. */
+function kennisPartijSchoon(t){ return String(isTikkie(t)?tikkiePersoon(t):benoemPartij(t)).toLowerCase().replace(/\s+via\s+tikk\w*$/,'').trim(); }
+function kennisTerugZelfdeDag(t){ if(!t || !t.amount) return false; const c=Math.round(t.amount*100), p=kennisPartijSchoon(t);
+  return TX.some(u=>u!==t && !u.pending && u.date===t.date && Math.round(u.amount*100)===-c && (()=>{ const q=kennisPartijSchoon(u); return q===p || (q.length>=4 && p.length>=4 && (q.startsWith(p)||p.startsWith(q))); })()); }
 /* v422: GESTOPT, MAAR DAARNA NOG BETAALD (besluit van de gebruiker op v421, in plaats van de migratie van v421). Per post die jij
    op gestopt zette en die daarna nog een betaling kreeg: "Was dat de laatste betaling?" Ja is opgezegd, loopt af met die
    betaling als laatste; Nee is nog actief. Er verandert niets tot je kiest; tot dan blijft hij gestopt. */
@@ -23946,7 +23960,8 @@ function postNaStopNee(key){ postZet(key, 'actief'); }
    Zonder antwoord heet hij "<partij> · nog niet benoemd": de app verzint nooit een naam. Geen opname (isOpnameTx), geen boeking
    zonder bank (een telling of een lening), geen persoonlijke overboeking (buitenUitgave). */
 const BENOEM_MIN=100, BENOEM_DAGEN=120, BENOEM_AFWIJK=0.5;
-const BENOEM_ZEKER=[[/\bCJIB\b|VERKEERSBOETE/i,'Verkeersboete'],[/BELASTINGDIENST/i,'Belasting']];
+const BENOEM_ZEKER=[[/\bCJIB\b|VERKEERSBOETE/i,'Verkeersboete'],[/BELASTINGDIENST/i,'Belasting'],[/\bDUO\b/i,'Studieschuld']];   // v427: DUO is studieschuld
+function benoemZeker(t){ const s=`${t&&t.name||''} ${t&&t.desc||''}`; for(const [re,l] of BENOEM_ZEKER) if(re.test(s)) return l; return null; }
 const BENOEM_SOORTEN={
   gemeente:{re:/\bGEMEENTE\b/i, opties:['Gemeentebelasting','Boete of wegslepen','Leges of vergunning'],
     hints:[[/NAHEFFING|PARKEER|WEGSLEEP/i,'Boete of wegslepen'],[/\bOZB\b|AFVAL|RIOOL/i,'Gemeentebelasting'],[/LEGES|VERGUNNING/i,'Leges of vergunning']]},
@@ -24088,8 +24103,13 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   if(nik) zet('nikki', 'vast|'+recurKey(nik), {soort:'vast', partij:benoemPartij(nik), wat:'Voetbalcontributie', potje:kennisCatVan('Kinderen')||catOf(nik), tx:[]});
   const mac=TX.find(t=>t.amount<0 && /MACNACK/.test(recurKey(t)));
   if(mac) zet('macnack', 'woning|'+recurKey(mac), {soort:'woning', partij:benoemPartij(mac), wat:'Woonhuur (gestopt)', ja:true, tx:[]});
-  const zrg=TX.find(t=>t.amount===-159 && catOf(t)==='zorg');
-  if(zrg) zet('zorg159', benoemKandidaat(zrg)?'benoem|'+benoemKey(zrg):'eenmalig|'+zrg.id, {soort:benoemKandidaat(zrg)?'benoem':'eenmalig', partij:benoemPartij(zrg), wat:'Zorgkosten', label:'Zorgkosten', aard:'eenmalig', bedrag:159, tx:benoemKandidaat(zrg)?{[zrg.id]:{label:'Zorgkosten', bron:'jij', aard:'eenmalig'}}:[zrg.id]});
+  /* v427: het antwoord "Zorg EUR 159, eenmalig" hoort bij de Tikkie aan Lausa Eriksson (09-10), niet bij een andere boeking van
+     EUR 159 (Posh Clinic); een zaad dat op een andere boeking staat wordt een keer weggehaald, en die boeking is weer "nog niet benoemd". */
+  const zrg=TX.find(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`));
+  if(!Z.zorg427){ for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.zaad!=='zorg159') continue; const ids=Array.isArray(E.tx)?E.tx:Object.keys(E.tx||{});
+      if(!zrg || !ids.includes(zrg.id)){ delete SET.kennis[k]; delete Z.zorg159; } }
+    Z.zorg427=vandaagYMD(); gedaan=true; }
+  if(zrg) zet('zorg159', benoemKandidaat(zrg)?'benoem|'+benoemKey(zrg):'eenmalig|'+zrg.id, {soort:benoemKandidaat(zrg)?'benoem':'eenmalig', partij:isTikkie(zrg)?tikkiePersoon(zrg):benoemPartij(zrg), wat:'Zorgkosten', label:'Zorgkosten', aard:'eenmalig', bedrag:159, tx:benoemKandidaat(zrg)?{[zrg.id]:{label:'Zorgkosten', bron:'jij', aard:'eenmalig'}}:[zrg.id]});
   const gem=TX.find(t=>t.amount===-484 && /GEMEENTE/.test(String(t.name||'').toUpperCase()));
   if(gem && benoemKandidaat(gem)) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
   return gedaan; }
@@ -24133,7 +24153,7 @@ function kennisSalarisKeys(){ const S=new Set(); try{ for(const k of holdingKeys
   try{ const sl=salarisBetalingLaatst(valtOpYmPlus(thisYM(),1)); if(sl) S.add(recurKey(sl)); }catch(_){}
   try{ for(const ym of [thisYM(), valtOpYmPlus(thisYM(),-1), valtOpYmPlus(thisYM(),-2)]){ const sl=salarisBetalingLaatst(ym); if(sl) S.add(recurKey(sl)); } }catch(_){}
   return S; }
-function kennisInKandidaat(t, SK){ if(!t || t.pending || !t.acc || !(t.amount>=KENNIS_MIN) || OVR[t.id]) return false;
+function kennisInKandidaat(t, SK){ if(!t || t.pending || !t.acc || !(t.amount>=KENNIS_MIN) || OVR[t.id] || isTikkie(t)) return false;   // v427: een binnenkomende Tikkie volgt de Tikkie-regel (v422)
   const c=catOf(t); if(!CATS[c] || CATS[c].type==='internal') return false;
   if(SK.has(recurKey(t)) || onregelmatigBedrag(t)>0) return false;
   return true; }
@@ -24144,9 +24164,10 @@ function kennisInVragen(){ const SK=kennisSalarisKeys(), per={}, lv=new Set(); t
     if(E && (E.tx||[]).includes(t.id)) continue;
     const V=kennisGet('vastink|'+pl);
     if(V && V.ja) continue;                                             // vast inkomen: al je bijschrijvingen van die partij zijn inkomen
-    if(!V && maanden[pl].size>=2){ const k='vastink|'+pl; if(!per[k]) per[k]={soort:'vastink', qkey:k, t, partij:p, bedrag:t.amount, datum:t.date, maanden:[...maanden[pl]].sort()}; continue; }
+    if(!V && maanden[pl].size>=2 && !kennisEerderBetaald(t)){   /* v427: alleen een echte inkomensbron; aan wie je betaalde is een teruggave */ const k='vastink|'+pl; if(!per[k]) per[k]={soort:'vastink', qkey:k, t, partij:p, bedrag:t.amount, datum:t.date, maanden:[...maanden[pl]].sort()}; continue; }
     const k='in|'+pl; if(!per[k] || t.date<per[k].t.date) per[k]={soort:'in', qkey:k, t, partij:p, bedrag:t.amount, datum:t.date}; }
   return Object.values(per); }
+function kennisEerderBetaald(t){ const pl=benoemPartij(t).toLowerCase(); return TX.some(u=>u.amount<0 && !u.pending && u.date<=t.date && benoemPartij(u).toLowerCase()===pl); }
 /* De tweede stap van een bijschrijving: wat er dan gebeurt staat er eerst (de lening, de Tikkie of het potje), en pas Bevestig schrijft. */
 function kennisInKies(id, keuze){ window._kennisKeuze=window._kennisKeuze||{};
   if(keuze==='bedrijf'){ openHoldingVraag(id); return; }
@@ -24180,7 +24201,7 @@ function kennisVastVragen(){ const o=[]; let R=[]; try{ R=recurringSchedule(true
   const grens=(()=>{ const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()-KENNIS_VAST_NIEUW_DAGEN); return ymdVan(d); })();
   /* NIEUW is pas nieuw als je gegevens van ervoor er zijn: een post die bij het begin van je import al liep is niet nieuw */
   const start=TX.reduce((a,t)=>(!a||t.date<a)?t.date:a, ''), na=(()=>{ const d=new Date(String(start||vandaagYMD())+'T12:00:00'); d.setDate(d.getDate()+KENNIS_VAST_START_DAGEN); return ymdVan(d); })();
-  for(const s of R){ if(!(+s.amount>=KENNIS_VAST_MIN) || kennisGet('vast|'+s.key) || (SET.fixOvrM||{})[s.key]) continue;
+  for(const s of R){ if(!(+s.amount>=KENNIS_VAST_MIN) || kennisGet('vast|'+s.key) || (SET.fixOvrM||{})[s.key] || benoemZeker({name:s.name, desc:s.key})) continue;   // v427: een naam die de app zeker kent (DUO, CJIB) vraagt niet "wat is dit?"
     const bet=TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===s.key).sort((a,b)=>a.date<b.date?-1:1);
     if(bet.length<2 || bet[0].date<grens || bet[0].date<na) continue;
     const st=(SET.postStatus||{})[s.key]; if(st && st.status!=='actief') continue;
@@ -24221,7 +24242,7 @@ function kennisWoningZet(key, ja){ const q=kennisWoningVragen().find(x=>x.key===
   save(); keuzeKlaar(`${q?q.partij:key}: ${ja?'je woning':'niet je woning'}`, herstel); }
 
 /* ---- f. EERSTE UITGAANDE TIKKIE PER PERSOON ---- */
-function tikkiePersoon(t){ const n=benoemPartij(t); if(!/tikkie/i.test(n)) return n;
+function tikkiePersoon(t){ const n0=benoemPartij(t), n=n0.replace(/\s+via\s+tikk\w*$/i,'').trim()||n0; if(n!==n0) return n; if(!/tikkie/i.test(n)) return n;   // v427: "Lausa Eriksson via Tikki" is Lausa Eriksson
   const m=String(t.desc||'').match(/\b(?:VAN|NAAR|AAN)\s+([A-Za-z][A-Za-z .'-]{1,30}?)(?:\s*,|\s+NL\d|\s+IBAN|$)/i);
   return m?titleCase(m[1].trim().toLowerCase()):'Tikkie'; }
 function kennisTikkieCat(t){ const uit=TX.filter(d=>d.amount<0 && isTikkie(d) && (CATS[catOf(d)]||{}).type==='expense' && d.date<=t.date).sort((a,b)=>a.date<b.date?1:-1)[0]; return uit?catOf(uit):null; }

@@ -1552,3 +1552,15 @@ Gevraagd door de gebruiker als vervolg op v398.
   boeking, dan Eenmalige aankoop / Anders… / Weet ik niet; Boete en Belasting alleen bij overheid, gemeente, CJIB en Belastingdienst.
 - **Specs**: nieuw `v426.spec.js` (5 tests); `v421`, `v422`, `v424` en `v425` lezen de holding uit `SET.kennis`, het nieuwe gevolg en
   de laag-a-kolom. `sw.js` naar `minder-v426`.
+
+## v427: afronding van de vragenronde (alleen fouten)
+- **Zorg EUR 159** staat op de Tikkie aan Lausa Eriksson (09-10); het zaad op Posh Clinic wordt een keer weggehaald, die is weer
+  "nog niet benoemd", en de vraag over Lausa Eriksson is uit OPEN VRAGEN.
+- **Een boeking, hooguit een vraag** (`gegevensVragen()`): een Tikkie houdt de Tikkie-vraag, een beantwoorde boeking vraagt niets
+  meer, en "via Tikki" gaat uit de naam (`tikkiePersoon()`).
+- **Vast inkomen?** niet bij een binnenkomende Tikkie (die volgt v422) en niet bij een partij die je betaalde (Travelcard: de gewone
+  vraag met Teruggave, `kennisEerderBetaald()`).
+- **DUO** is laag a, Studieschuld uit de omschrijving; een vaste last met een zeker bekende naam vraagt niet "wat is dit?".
+- **Heen en terug** dezelfde dag, even groot, dezelfde persoon (Renate -200 / +200): geen vraag (`kennisTerugZelfdeDag()`).
+- **Specs**: nieuw `v427.spec.js` (5 tests, 11 sabotages rood); `v425` en `v426` lezen Zorg op Lausa Eriksson. `sw.js` naar
+  `minder-v427`.

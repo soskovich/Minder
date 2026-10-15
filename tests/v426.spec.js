@@ -1,6 +1,6 @@
 /* v426: v425 AFRONDEN EN TWEE AANPASSINGEN OP v424 (gevraagd door de gebruiker). Op v421-stand (10 oktober 2026, GECONSTRUEERD:
    de boekingen van het toestel staan alleen daar) met de negen antwoorden die de gebruiker gaf of al had:
-   - Nikki voetbalcontributie, Ml Macnack woonhuur, Zorg EUR 159 (Apotheek Centrum, basisfixture), Gemeente EUR 484 (kennisZaai);
+   - Nikki voetbalcontributie, Ml Macnack woonhuur, Zorg EUR 159 (v427: de Tikkie aan Lausa Eriksson van 09-10), Gemeente EUR 484 (kennisZaai);
    - Ernst Management Holding (de holding van v421-stand), Health Club (gestopt, v421-stand);
    - drie leningen: Pam EUR 250 open, Ma EUR 405,99 en A. Buiten EUR 45 (zoals v423);
    en verder CJIB Verkeersboetes EUR 150 (laag a), Transavia EUR 150, Apotheek De Brug EUR 120 en Rijksoverheid EUR 210 (de antwoorden per partij). */
@@ -18,6 +18,7 @@ async function boot(page) {
     add('2026-10-06', -150, 'Transavia', 'TRANSAVIA AIRLINES BOEKING', 'vakantie');
     add('2026-10-01', -210, 'Rijksoverheid', 'RIJKSOVERHEID INCASSO 5521', 'onvoorzien');
     add('2026-10-08', -120, 'Apotheek De Brug', 'APOTHEEK DE BRUG', 'zorg');
+    add('2026-10-09', -159, 'Lausa Eriksson via Tikki', 'LAUSA ERIKSSON VIA TIKKIE BETAALVERZOEK');
     const p = add('2026-09-02', -250, 'Pam', 'PAM BETAALVERZOEK');
     const b = add('2026-09-12', -45, 'A. Buiten', 'A. BUITEN BETAALVERZOEK');
     const m = add('2026-08-15', -405.99, 'Western Union', 'WESTERN UNION MA');
@@ -98,7 +99,7 @@ test.describe('v426', () => {
       '  Vaste lasten | Nikki | Voetbalcontributie · Kinderen | door jou | 10-10-2026',
       '  Vaste lasten | Health Club | Gestopt | door jou | 20-09-2026',
       '  Eenmalige uitgaven | Gemeente Utrecht | Boete of wegslepen · eenmalig | door jou | 10-10-2026',
-      '  Eenmalige uitgaven | Apotheek Centrum | Zorgkosten · eenmalig | door jou | 10-10-2026']) expect(K).toContain(r);
+      '  Eenmalige uitgaven | Lausa Eriksson | Zorgkosten | door jou | 10-10-2026']) expect(K).toContain(r);
     expect(K.length).toBe(10);
   });
 
