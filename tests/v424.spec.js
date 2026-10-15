@@ -52,7 +52,7 @@ test.describe('v424', () => {
     expect(await page.locator(`[data-tx="${G120}"] [data-benoemvoorstel]`).innerText()).toBe('voorstel: Boete of wegslepen · uit de omschrijving: "naheffing"');
     /* openen schrijft niets; de eerste tik ook niet */
     await page.locator(`[data-tx="${G484}"] [data-benoemoptie="Boete of wegslepen"]`).click();
-    expect(await page.evaluate(() => SET.kennis || null)).toBeNull();
+    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
     expect(await page.locator(`[data-tx="${G484}"] [data-benoemgekozen]`).innerText()).toBe('Boete of wegslepen · eenmalig of komt het terug?');
     await page.locator(`[data-tx="${G484}"] [data-benoemaard="eenmalig"]`).click();
     expect(await stand(page, G484)).toEqual({ laag: 'antw', label: 'Boete of wegslepen', bron: 'jij', aard: 'eenmalig', voorstel: null });
@@ -63,7 +63,7 @@ test.describe('v424', () => {
     /* blok 20 */
     const B = sectie(await lees(page), 'BENOEMDE UITGAVEN');
     expect(B).toContain('  18-09-2026 | 484.00 | Gemeente Utrecht [Onvoorzien] | Boete of wegslepen · door jou | eenmalig, telt niet als gedrag');
-    expect(B).toContain('  25-09-2026 | 150.00 | Cjib Verkeersboetes [Onvoorzien] | Verkeersboete · uit de omschrijving | -');
+    expect(B).toContain('  25-09-2026 | 150.00 | Cjib Verkeersboetes [Onvoorzien] | Verkeersboete · uit de omschrijving | nog niet bepaald (een tik in Zien: eenmalig of komt terug)');   // v426
     expect(B).toContain('  03-10-2026 | 120.00 | Gemeente Utrecht [Onvoorzien] | nog niet benoemd · vraag in Zien met voorstel Boete of wegslepen (uit de omschrijving: naheffing) | -');
     expect(B.some(r => r.includes('Geldmaat') || r.includes('| 60.00 |'))).toBe(false);
   });

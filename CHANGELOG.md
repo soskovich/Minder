@@ -1538,3 +1538,17 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `v425.spec.js` (11 tests); `v420`, `v422`, `v423` en `v424` openen de vragen met `'alle'`, en v424 leest de
   bron "voorstel, door jou bevestigd" en de volgorde op bedrag. `sw.js` naar `minder-v425`.
 
+## v426: v425 afronden, een bron voor holding, leningen en Health Club, en twee aanpassingen op v424
+- **v425 op main** (fast-forward naar `6798183` na de volle suite: 4494 groen, 1 bekend rood `decimaalteken`).
+- **Een bron** (`kennisSync()`, `holdingMigreer()`, `holdingKeys()`, `holdingNaam()`): de holding staat alleen nog in
+  `SET.kennis['holding|<key>']`; leningen en een gestopte of opgezegde post worden bij elke `save()` in `SET.kennis` gezet
+  (`lening|<id>`, `post|<key>`, bron "door jou", datum) en eruit gehaald als de lening of de status weg is. "Wat Minder van jou
+  weet" toont ze; Vergeten toont eerst wat er verschuift ("jul +EUR 5.000 inkomen", nu uit `maandInkomen().alles`) en Wijzigen
+  opent de boeking, de lening of de post.
+- **Blok 20 KENNIS (v425/v426)** toont op de nagebouwde stand alle 9 antwoorden met bron en datum.
+- **Laag a** vraagt een tik Eenmalig / Komt terug (telt in de wachtrij van 3), zonder "wat was dit?"; zonder tik staat hij in de
+  Terugblik onder "Nog niet bepaald" en in blok 20 als "nog niet bepaald".
+- **Antwoorden per partij** (`benoemSuggesties()`, `BENOEM_PARTIJ_CAT`, soort `overheid`): eerst de categorie uit de naam of de
+  boeking, dan Eenmalige aankoop / Anders… / Weet ik niet; Boete en Belasting alleen bij overheid, gemeente, CJIB en Belastingdienst.
+- **Specs**: nieuw `v426.spec.js` (5 tests); `v421`, `v422`, `v424` en `v425` lezen de holding uit `SET.kennis`, het nieuwe gevolg en
+  de laag-a-kolom. `sw.js` naar `minder-v426`.

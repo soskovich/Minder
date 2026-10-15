@@ -16,6 +16,17 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v426` · een bron voor wat jij aanwees, en een tik ook als de naam al vaststaat.** Holding, leningen en een gestopte of
+  opgezegde post staan sinds `v426` in `SET.kennis` (gevraagd door de gebruiker: "geen twee opslagen die uit elkaar kunnen lopen").
+  De holding is VERHUISD (`SET.holdingPartij` gaat op in `holding|<key>`), want daar is het antwoord het hele gevolg. Een lening en
+  een post zijn NIET verhuisd maar worden bij elke `save()` gespiegeld (`kennisSync()`): hun grootboek (bedrag, open, aflossingen,
+  log, laatste betaling) heeft tientallen lezers, en het antwoord in `SET.kennis` draagt alleen wat jij zei (dat het een lening is,
+  van wie, wanneer) en geen bedrag; een weggehaalde lening of een post die weer actief is verdwijnt bij dezelfde save. Valkuil,
+  gemeten: het gevolg van "holding vergeten" las `totals().income`, en dat is bij `autoIncome:false` je instelling (5216 in juli,
+  voor en na), dus het zei "er verandert geen bedrag" terwijl juli EUR 5.000 inkomen kreeg; het leest nu `maandInkomen().alles`.
+  Laag a: een naam die vaststaat (CJIB, Belastingdienst) zegt niet of het eenmalig was, dus een tik, en zonder tik "nog niet
+  bepaald" in de Terugblik in plaats van stil als gedrag. Antwoorden per partij: Boete en Belasting bij Transavia was een vraag die
+  niet past; die twee staan alleen bij de overheid.
 - **`v425` · betekenis komt van jou, staat in een opslag, en draagt zijn bron en zijn gevolg.** De app ziet bedragen, data en
   namen, niet wat iets is, voor wie, of of het terugkomt. Elk antwoord staat in `SET.kennis` met bron (uit de omschrijving /
   voorstel, door jou bevestigd / door jou) en met het gevolg dat het zette (`effect`), zodat Vergeten precies dat terugzet. Wat al

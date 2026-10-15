@@ -139,6 +139,6 @@ test.describe('v422', () => {
     expect(rijen[0]).toBe('3 jun 2026 · je koos Overig -€200,00');
     expect(rijen[1]).toMatch(/^26 aug 2026 · je koos .+ €1\.500,00$/);
     expect(await page.evaluate(() => document.querySelector('#holdingSheet').innerText)).toContain('Je eigen categorie op 2 boekingen vervalt');
-    expect(await page.evaluate(() => SET.holdingPartij)).toBeFalsy();   // openen schrijft niets
+    expect(await page.evaluate(() => [...holdingKeys()].length)).toBe(0);   // openen schrijft niets (v426: de holding staat in SET.kennis)
   });
 });

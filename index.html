@@ -948,6 +948,7 @@ const FILE_RX=/\.(sta|940|mt940|csv|txt)$/i;     // ondersteunde bestandstypen
 /* ---------- persistentie (localStorage, blijft lokaal op dit apparaat) ---------- */
 let _dataGen=0;   // bumpt bij elke mutatie; invalideert lichte caches (o.a. noodfondsModel)
 function save(){try{
+  try{ kennisSync(); }catch(_){}   // v426: leningen en gestopte posten staan bij elke wijziging ook in SET.kennis
   _dataGen++;
   localStorage.setItem('minder_tx',JSON.stringify(TX));
   localStorage.setItem('minder_ovr',JSON.stringify(OVR));
@@ -963,7 +964,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(); if(a||b) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); if(a||b||c||d) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -1168,7 +1169,14 @@ function applyOwnAccounts(){
    de TERUGKERENDE MAANDBETALING inkomen (holdingMaandbetaling()); al het andere, bij- en afschrijvingen, staat op Holding:
    geen inkomen en geen uitgave. Geen naam in de code. */
 const HOLDING_MARGE=0.1;   // v421: een bijschrijving binnen 10% van de mediaan van de maandbetaling is die maandbetaling
-function holdingKeys(){ const H=(typeof SET!=='undefined'&&SET.holdingPartij)||{}; return new Set(Object.keys(H).filter(k=>k)); }
+/* v426: EEN BRON. De holding staat in SET.kennis['holding|'+recurKey] (soort holding, bron "door jou", met ovrVoor); de oude
+   plek SET.holdingPartij gaat er een keer in op (holdingMigreer(), ook als een back-up of een oudere stand hem terugzet). */
+function holdingMigreer(){ const H=SET.holdingPartij; if(!H) return false; SET.kennis=SET.kennis||{};
+  for(const [k,E] of Object.entries(H)) if(k && E && !SET.kennis['holding|'+k]) SET.kennis['holding|'+k]={soort:'holding', key:k, partij:E.naam||k, wat:'Je holding (eigen bedrijf)', bron:'jij', op:E.op||vandaagYMD(), ovrVoor:E.ovrVoor||{}};
+  delete SET.holdingPartij; return true; }
+function holdingKeys(){ if(typeof SET==='undefined') return new Set(); if(SET.holdingPartij) holdingMigreer();
+  const o=new Set(); for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='holding' && k.length>8) o.add(k.slice(8)); return o; }
+function holdingNaam(k){ return ((SET.kennis||{})['holding|'+k]||{}).partij||k; }
 /* v421: de terugkerende maandbetaling van een partij: de groep bijschrijvingen die binnen HOLDING_MARGE van elkaar liggen en in
    de meeste maanden voorkomen (minstens 2). Per maand is de bijschrijving die het dichtst bij de mediaan van die groep ligt de
    maandbetaling; de rest is geen maandinkomen. Zonder zo'n groep is er geen maandbetaling en staat alles op Holding.
@@ -1243,15 +1251,15 @@ function openHoldingVraag(id){
 }
 function holdingZet(id){
   const t=TX.find(x=>x.id===id); if(!t) return; const k=recurKey(t); if(!k) return;
-  SET.holdingPartij=SET.holdingPartij||{}; if(SET.holdingPartij[k]) return;
+  if(holdingKeys().has(k)) return;
   const voor={}; for(const u of TX) if(recurKey(u)===k && OVR[u.id]){ voor[u.id]=OVR[u.id]; delete OVR[u.id]; }
-  SET.holdingPartij[k]={op:vandaagYMD(), naam:titleCase(cleanMerch(t.name)||t.name||k), ovrVoor:voor};
+  kennisZet('holding|'+k, {soort:'holding', key:k, partij:titleCase(cleanMerch(t.name)||t.name||k), wat:'Je holding (eigen bedrijf)', ovrVoor:voor});   // v426: in SET.kennis
   applyOwnAccounts(); save(); try{ render(); }catch(_){} openSheet(id);
 }
 function holdingWeg(k, id){
-  const E=(SET.holdingPartij||{})[k]; if(!E) return;
+  holdingKeys(); const E=(SET.kennis||{})['holding|'+k]; if(!E) return;
   for(const [tid, c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c;
-  delete SET.holdingPartij[k]; applyOwnAccounts(); save(); try{ render(); }catch(_){} if(id) openSheet(id);
+  delete SET.kennis['holding|'+k]; applyOwnAccounts(); save(); try{ render(); }catch(_){} if(id) openSheet(id);
 }
 /* v420: EIGEN REKENING / OVERBOEKING ALLEEN MET BEWIJS, dezelfde regel als blok 20 (v419). Een 'intern'-boeking op een
    betaalrekening zonder eigen of gekoppelde IBAN, zonder bevestigde of herkende rekeningnaam, zonder je eigen naam en zonder
@@ -11668,8 +11676,9 @@ function gripTerugblik(ym){
   const score=telt.reduce((a,x)=>a+(x.s==='ok'?1:(x.s==='half'?0.5:0)),0);
   const inst=gripTeRuimUitgevoerd(ym).map(x=>({naam:`${x.naam} → ${euro0(x.naar)}`, sub:'instelling · budget klopt nu'}));
   /* v424: een benoemde uitgave die jij eenmalig noemde, apart: "eenmalig, telt niet als gedrag". Hij telt niet in de score. */
-  let eenmalig=[]; try{ eenmalig=benoemMaand(ym).filter(B=>B.aard==='eenmalig'); }catch(_){}
-  return {ym, items, score, n:telt.length, inst, eenmalig};
+  let eenmalig=[], onbepaald=[]; try{ const E=benoemMaand(ym); eenmalig=E.filter(B=>B.aard==='eenmalig'); onbepaald=E.filter(B=>B.laag==='a' && !B.aard); }catch(_){}
+  /* v426: laag a zonder jouw tik (eenmalig of komt terug) is "nog niet bepaald": niet in de score en niet als gedrag */
+  return {ym, items, score, n:telt.length, inst, eenmalig, onbepaald};
 }
 const gripScoreTekst=(T)=>`${String(T.score).replace('.',',')} van ${T.n}`;
 /* v390: DE TERUGBLIK OORDEELT OVER EEN AFGESLOTEN MAAND, de lopende is een tussenstand. De score bovenaan is die van de
@@ -11698,6 +11707,8 @@ function gripTerugblikHtml(){
     ${Tp?`<div class="small" data-terugvergelijk style="margin-top:8px">${esc(Mn(Tp.ym))} ${gripScoreTekst(Tp)} · ${esc(ymFull(m))} ${esc(tus)}</div>`:''}
     ${(()=>{ const E=[valtOpYmPlus(m,-1), m].flatMap(ym=>ym===m?T.eenmalig:gripTerugblik(ym).eenmalig); if(!E.length) return '';
       return `<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label||B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron role="button" onclick="event.stopPropagation();openKennis()" style="cursor:pointer;display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron):'nog niet benoemd')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}
+    ${(()=>{ const E=[valtOpYmPlus(m,-1), m].flatMap(ym=>ym===m?T.onbepaald:gripTerugblik(ym).onbepaald); if(!E.length) return '';
+      return `<div data-terugonbepaald style="margin-top:10px"><div class="small" style="font-weight:700">Nog niet bepaald · eenmalig of komt terug?</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGegevensVragen('benoemtx|${esc(B.t.id)}')"><b style="width:18px;text-align:center">?</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(BENOEM_BRON[B.bron]||B.bron)} · telt niet als gedrag ›</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
     <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
 }
@@ -23939,10 +23950,23 @@ const BENOEM_ZEKER=[[/\bCJIB\b|VERKEERSBOETE/i,'Verkeersboete'],[/BELASTINGDIENS
 const BENOEM_SOORTEN={
   gemeente:{re:/\bGEMEENTE\b/i, opties:['Gemeentebelasting','Boete of wegslepen','Leges of vergunning'],
     hints:[[/NAHEFFING|PARKEER|WEGSLEEP/i,'Boete of wegslepen'],[/\bOZB\b|AFVAL|RIOOL/i,'Gemeentebelasting'],[/LEGES|VERGUNNING/i,'Leges of vergunning']]},
-  overig:{re:null, opties:['Boete','Belasting','Aankoop','Reparatie of onderhoud'], hints:[]} };
+  overheid:{re:/OVERHEID|\bCJIB\b|BELASTINGDIENST/i, opties:['Boete','Belasting'], hints:[]},
+  overig:{re:null, opties:['Eenmalige aankoop'], hints:[]} };
+/* v426: DE ANTWOORDEN PASSEN BIJ DE PARTIJ (besluit van de gebruiker op v424). Eerst de categorie die de app voorstelt: uit de naam
+   (BENOEM_PARTIJ_CAT) en anders de categorie waar de boeking nu in staat; dan Eenmalige aankoop, Anders… en Weet ik niet.
+   Boete en Belasting staan er alleen bij de overheid, een gemeente, het CJIB of de Belastingdienst (benoemSoort()). Een
+   voorgestelde categorie die jij kiest heeft bron "voorstel, door jou bevestigd"; het is een naam, de boeking verhuist niet. */
+const BENOEM_PARTIJ_CAT=[[/TRANSAVIA|\bKLM\b|RYANAIR|EASYJET|VUELING|CORENDON|BOOKING\.COM|AIRBNB|HOTEL/i,['Reis']],
+  [/APOTHEEK|HUISARTS|TANDARTS|FYSIO|ZIEKENHUIS|KLINIEK|OPTIEK/i,['Zorg']],
+  [/ZWEMLES|ZWEMBAD|ZWEMSCHOOL/i,['Kinderen','Sport']]];
+const BENOEM_CAT_GEEN=new Set(['overig','onvoorzien','contant','persoonlijk']);
+function benoemSuggesties(t){ const s=`${t.name||''} ${t.desc||''}`, o=[];
+  for(const [re,L] of BENOEM_PARTIJ_CAT) if(re.test(s)) for(const l of L) if(!o.includes(l)) o.push(l);
+  if(!o.length){ const c=catOf(t); if(CATS[c] && CATS[c].type==='expense' && !BENOEM_CAT_GEEN.has(c) && !geenNorm(c)) o.push(CATS[c].name); }
+  return benoemSoort(t)==='overig'?o:[]; }
 const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'voorstel, door jou bevestigd', jij:'door jou'};   // v425: 'voorstel, door jou bevestigd'
 function benoemPartij(t){ return titleCase(cleanMerch(t&&t.name)||(t&&t.name)||'onbekend'); }
-function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SOORTEN.gemeente.re.test(s)?'gemeente':'overig'; }
+function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SOORTEN.gemeente.re.test(s)?'gemeente':BENOEM_SOORTEN.overheid.re.test(s)?'overheid':'overig'; }
 function benoemKandidaat(t){
   if(!t || t.pending || !t.acc || !(t.amount<=-BENOEM_MIN) || isOpnameTx(t)) return false;
   const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || buitenUitgave(c)) return false;
@@ -23956,18 +23980,21 @@ function benoemKey(t){ const h=benoemHint(t); return `${benoemPartij(t).toLowerC
 function benoemStand(t){
   if(!benoemKandidaat(t)) return null;
   const s=`${t.name||''} ${t.desc||''}`, partij=benoemPartij(t), bedrag=-t.amount;
-  for(const [re,label] of BENOEM_ZEKER) if(re.test(s)) return {t, laag:'a', partij, bedrag, label, bron:'omschrijving', aard:null};
+  /* v426: laag a benoemt de app zelf, maar eenmalig of komt terug is een tik van jou; zonder die tik is hij "nog niet bepaald" */
+  for(const [re,label] of BENOEM_ZEKER) if(re.test(s)){ const key=benoemKey(t), A=kennisGet('benoem|'+key); let aard=null;
+    if(A){ const P=(A.tx||{})[t.id]; if(P) aard=P.aard||null; else { const b=+A.bedrag||0; if(b>0 && Math.abs(bedrag-b)<=BENOEM_AFWIJK*b) aard=A.aard||null; } }
+    return {t, laag:'a', key, partij, bedrag, label, bron:'omschrijving', aard}; }
   const key=benoemKey(t), h=benoemHint(t), A=kennisGet('benoem|'+key);   // v425: in SET.kennis
   if(A){ const P=(A.tx||{})[t.id]; if(P) return {t, laag:'antw', key, partij, bedrag, label:P.label, bron:P.bron, aard:P.aard, weetniet:!P.label};
     const b=+A.bedrag||0; if(b>0 && Math.abs(bedrag-b)<=BENOEM_AFWIJK*b) return {t, laag:'antw', key, partij, bedrag, label:A.label, bron:A.bron, aard:A.aard, weetniet:!A.label, over:true};
-    return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t), opnieuw:{bedrag:b, label:A.label}}; }
-  return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t)}; }
+    return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t), sug:benoemSuggesties(t), opnieuw:{bedrag:b, label:A.label}}; }
+  return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t), sug:benoemSuggesties(t)}; }
 /* De tekst bij een benoemde uitgave, overal waar hij staat (Zien, Begrijpen, Terugblik, blok 20): met de bron erbij. */
 function benoemTekst(t){ const B=benoemStand(t); if(!B) return '';
   return B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:`${B.partij} · nog niet benoemd`; }
 function benoemVanaf(){ const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()-BENOEM_DAGEN); return ymdVan(d); }
 function benoemVragen(){ const v=benoemVanaf(), o=[];
-  for(const t of telbareTx()){ if(t.date<v) continue; const B=benoemStand(t); if(B && (B.laag==='b'||B.laag==='c')) o.push(B); }
+  for(const t of telbareTx()){ if(t.date<v) continue; const B=benoemStand(t); if(B && (B.laag==='b'||B.laag==='c'||(B.laag==='a'&&!B.aard))) o.push(B); }
   return o.sort((a,b)=>a.t.date<b.t.date?1:a.t.date>b.t.date?-1:0); }
 /* De boekingen van een maand met een naam of een open vraag (voor de Terugblik, Begrijpen en blok 20). */
 function benoemMaand(ym){ const o=[]; for(const t of txOfMonth(ym)){ const B=benoemStand(t); if(B) o.push(B); } return o.sort((a,b)=>a.t.date<b.t.date?-1:1); }
@@ -23979,14 +24006,14 @@ function benoemKies(id, label){ window._benoemKeuze=window._benoemKeuze||{};
 function benoemAnders(id){ const el=document.getElementById('benoemAnders_'+id); const v=String((el&&el.value)||'').trim(); if(!v){ toast('Vul in wat het was'); return; }
   window._benoemKeuze=window._benoemKeuze||{}; window._benoemKeuze[id]={label:v}; openGegevensVragen(window._gegevensFocus||''); }
 function benoemAard(id, aard){
-  const t=TX.find(x=>x.id===id), B=t?benoemStand(t):null, K=(window._benoemKeuze||{})[id];
+  const t=TX.find(x=>x.id===id), B=t?benoemStand(t):null, K=B&&B.laag==='a'?{label:B.label}:(window._benoemKeuze||{})[id];
   if(!B || !K || K.anders || (aard!=='eenmalig' && aard!=='terug')) return;
-  const bron=K.label && B.laag==='b' && K.label===B.voorstel?'bevestigd':'jij';
+  const bron=B.laag==='a'?'omschrijving':K.label && ((B.laag==='b' && K.label===B.voorstel) || (B.sug||[]).includes(K.label))?'bevestigd':'jij';
   const herstel=setSnap(['kennis']);
   const oud=kennisGet('benoem|'+B.key)||{}, tx=Object.assign({}, oud.tx||{});
   tx[id]={label:K.label, bron, aard};
   kennisZet('benoem|'+B.key, {soort:'benoem', partij:B.partij, kenmerk:B.kenmerk||'', wat:K.label, label:K.label, bron, aard, bedrag:Math.round(B.bedrag*100)/100, tx});
-  delete window._benoemKeuze[id];
+  if(window._benoemKeuze) delete window._benoemKeuze[id];
   save(); keuzeKlaar(`${B.partij}: ${K.label||'nog niet benoemd'} · ${aard==='eenmalig'?'eenmalig':'komt terug'}`, herstel); }
 /* Kiezen: een benoemde uitgave die terugkomt, zonder reservering die erbij hoort, krijgt een voorstel voor een reservering. */
 function benoemTerugVoorstellen(){ const R=resLijst(), o=[];
@@ -24004,6 +24031,9 @@ function benoemResVoorstel(key){ const x=benoemTerugVoorstellen().find(v=>v.key=
 function benoemGeenRes(key){ const herstel=setSnap(['kennis']); const A=kennisGet('benoem|'+key); if(!A) return; A.geenRes=vandaagYMD(); save(); keuzeKlaar('Geen reservering', herstel); }
 function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{})[t.id];
   const S=BENOEM_SOORTEN[q.psoort]||BENOEM_SOORTEN.overig, kk=s=>esc(s).replace(/'/g,"\\'");
+  if(q.laag==='a') return `<div data-gegevensvraag="benoem" data-benoemlaag="a" data-tx="${id}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${euro(-t.amount)} aan ${esc(q.partij)} · ${esc(dagKort(t.date))} · ${esc(q.label)}</div>
+    <div class="small muted" style="margin-top:2px">${esc(BENOEM_BRON.omschrijving)} · eenmalig of komt het terug?</div>
+    <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-benoemaard="eenmalig" onclick="benoemAard('${id}','eenmalig')">Eenmalig</button><button class="btn sec" style="flex:1" data-benoemaard="terug" onclick="benoemAard('${id}','terug')">Komt terug</button></div></div>`;   // v426
   const kop=`<div style="font-weight:600">${euro(-t.amount)} aan ${esc(q.partij)} · ${esc(dagKort(t.date))} · wat was dit?</div>`;
   const sub=q.laag==='b'?`<div class="small" data-benoemvoorstel style="margin-top:2px">voorstel: <b>${esc(q.voorstel)}</b> · uit de omschrijving: "${esc(q.kenmerk.toLowerCase())}"</div>`
     :`<div class="small muted" style="margin-top:2px">${q.opnieuw?`eerder benoemd als ${esc(q.opnieuw.label||'nog niet benoemd')} bij ${euro(q.opnieuw.bedrag)}; dit bedrag wijkt meer dan ${Math.round(BENOEM_AFWIJK*100)}% af`:'de omschrijving zegt niet wat het was; de app verzint geen naam'}</div>`;
@@ -24011,8 +24041,8 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
   if(K && K.anders) body=`<div class="row" style="gap:8px;margin-top:6px"><input id="benoemAnders_${id}" type="text" placeholder="wat was het?" style="flex:1;min-width:0"><button class="btn" style="width:auto;padding:9px 14px" data-benoemanderszet onclick="benoemAnders('${id}')">Verder</button></div>`;
   else if(K) body=`<div class="small" data-benoemgekozen style="margin-top:6px">${esc(K.label||'Weet ik niet')} · eenmalig of komt het terug?</div>
     <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-benoemaard="eenmalig" onclick="benoemAard('${id}','eenmalig')">Eenmalig</button><button class="btn sec" style="flex:1" data-benoemaard="terug" onclick="benoemAard('${id}','terug')">Komt terug</button></div>`;
-  else { const opts=S.opties.slice(); if(q.voorstel){ const i=opts.indexOf(q.voorstel); if(i>0){ opts.splice(i,1); opts.unshift(q.voorstel); } }
-    body=`<div class="chips" style="margin-top:6px">${opts.map(o=>`<span class="chip" data-benoemoptie="${esc(o)}" onclick="benoemKies('${id}','${kk(o)}')">${esc(o)}${o===q.voorstel?' · klopt':''}</span>`).join('')}<span class="chip" data-benoemoptie="__anders" onclick="benoemKies('${id}','__anders')">Anders…</span><span class="chip" data-benoemoptie="__weetniet" onclick="benoemKies('${id}','__weetniet')">Weet ik niet</span></div>`; }
+  else { const sug=(q.sug||[]).filter(o=>!S.opties.includes(o)), opts=sug.concat(S.opties); if(q.voorstel){ const i=opts.indexOf(q.voorstel); if(i>0){ opts.splice(i,1); opts.unshift(q.voorstel); } }   // v426: eerst wat de partij doet vermoeden
+    body=`<div class="chips" style="margin-top:6px">${opts.map(o=>`<span class="chip" data-benoemoptie="${esc(o)}"${sug.includes(o)?' data-benoemsug':''} onclick="benoemKies('${id}','${kk(o)}')">${esc(o)}${o===q.voorstel?' · klopt':''}</span>`).join('')}<span class="chip" data-benoemoptie="__anders" onclick="benoemKies('${id}','__anders')">Anders…</span><span class="chip" data-benoemoptie="__weetniet" onclick="benoemKies('${id}','__weetniet')">Weet ik niet</span></div>`; }
   return `<div data-gegevensvraag="benoem" data-benoemlaag="${q.laag}" data-tx="${id}" style="padding:9px 0;border-top:1px solid var(--line)">${kop}${sub}${body}</div>`; }
 /* v425: WAT MINDER ALLEEN VAN JOU KAN WETEN: VRAGEN, ONTHOUDEN, TERUGZIEN (gevraagd door de gebruiker). De app ziet bedragen,
    data en namen, maar niet wat iets is, voor wie, of of je het terugverwacht. Die betekenis komt van jou, en de regels zijn:
@@ -24063,6 +24093,23 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   const gem=TX.find(t=>t.amount===-484 && /GEMEENTE/.test(String(t.name||'').toUpperCase()));
   if(gem && benoemKandidaat(gem)) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
   return gedaan; }
+
+/* v426: EEN BRON VOOR WAT JIJ AANWEES. Je holding staat sinds v426 alleen in SET.kennis (holdingMigreer()). Een lening en een
+   gestopte of opgezegde post hebben hun grootboek in SET.loans en SET.postStatus (bedrag, open, aflossingen, laatste betaling),
+   en hun antwoord (dat het een lening is, of gestopt, van wie, door jou, wanneer) in SET.kennis: kennisSync() schrijft het bij
+   elke save() en haalt een antwoord weg zodra de lening of de status weg is, dus de twee kunnen niet uiteenlopen. De bedragen
+   worden niet gekopieerd: kennisLijst() leest ze uit het grootboek. */
+function kennisSync(){ if(typeof SET==='undefined' || !SET) return false; const K=SET.kennis||{}; let n=false;
+  const L=Array.isArray(SET.loans)?SET.loans:[], P=SET.postStatus||{}, ids=new Set(L.map(l=>l.id));
+  for(const l of L){ if(!l || !l.id) continue; const k='lening|'+l.id;
+    if(!K[k]){ K[k]={soort:'lening', loanId:l.id, partij:l.naam||'', bron:'jij', op:((l.log||[])[0]||{}).dag||l.datum||vandaagYMD()}; n=true; }
+    else if(K[k].partij!==(l.naam||'')){ K[k].partij=l.naam||''; n=true; } }
+  for(const k of Object.keys(K)) if(K[k] && K[k].soort==='lening' && !ids.has(K[k].loanId)){ delete K[k]; n=true; }
+  const telt=E=>E && (E.status==='gestopt' || E.status==='afloop');
+  for(const [pk,E] of Object.entries(P)){ if(!telt(E)) continue; const k='post|'+pk, A=K[k];
+    if(!A || A.status!==E.status || A.op!==(E.op||A.op)){ K[k]=Object.assign({}, A||{partij:kennisNaamVan(pk)}, {soort:'post', key:pk, status:E.status, bron:'jij', op:E.op||(A&&A.op)||vandaagYMD()}); n=true; } }
+  for(const k of Object.keys(K)) if(K[k] && K[k].soort==='post' && !telt(P[K[k].key])){ delete K[k]; n=true; }
+  if(n || SET.kennis) SET.kennis=K; return n; }
 
 /* ---- a. OVERBOEKING AAN EEN ANDER vanaf KENNIS_MIN ---- */
 function kennisUitVragen(){ const per={};
@@ -24221,16 +24268,18 @@ function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.q
 
 /* ---- DE ENE LEZER: alles wat Minder van jou weet, met bron en datum ---- */
 function kennisLijst(){ const o=[];
-  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname'};
+  holdingKeys(); try{ kennisSync(); }catch(_){}
+  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
+    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
+    if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId); if(!l) continue;
+      o.push({id:'k:'+k, groep:g, partij:l.naam||E.partij||'', wat:`${l.richting==='in'?'Geleend':'Uitgeleend'} ${loanC2(+l.bedrag||0)} \u00b7 nog open ${loanC2(+l.open||0)}`, bron:E.bron||'jij', op:E.op||'', soort:'lening', kennis:k}); continue; }
+    if(E.soort==='post'){ let P={}; try{ P=postStatus(E.key); }catch(_){}
+      o.push({id:'k:'+k, groep:g, partij:P.naam||E.partij||kennisNaamVan(E.key), wat:E.status==='afloop'?'Opgezegd, loopt af':'Gestopt', bron:E.bron||'jij', op:E.op||'', soort:'post', kennis:k}); continue; }
     const wat=E.soort==='benoem'?`${E.label||E.wat||'nog niet benoemd'}${E.aard?' \u00b7 '+(E.aard==='eenmalig'?'eenmalig':'komt terug'):''}`
       :E.soort==='vast'?`${E.wat} \u00b7 ${(CATS[E.potje]||{}).name||E.potje}`:E.soort==='opname'?`${E.wat||'weet ik niet'} (${euro0(E.bedrag)} contant ${dagKort(E.datum)})`:(E.wat||'weet ik niet');
     o.push({id:'k:'+k, groep:g, partij:E.partij||'', wat, bron:E.bron||'jij', op:E.op||'', bedrag:+E.bedrag||0, soort:E.soort, kennis:k}); }
-  for(const [k,E] of Object.entries(SET.holdingPartij||{})) o.push({id:'h:'+k, groep:'inkomen', partij:E.naam||k, wat:'Je holding (eigen bedrijf)', bron:'jij', op:E.op||'', soort:'holding', key:k});
-  for(const l of loans()) o.push({id:'l:'+l.id, groep:'leningen', partij:l.naam||'', wat:`${l.richting==='in'?'Geleend':'Uitgeleend'} ${loanC2(+l.bedrag||0)} \u00b7 nog open ${loanC2(+l.open||0)}`, bron:'jij', op:((l.log||[])[0]||{}).dag||l.datum||'', soort:'lening', key:l.id});
-  for(const [k,E] of Object.entries(SET.postStatus||{})){ if(!E || E.status==='actief') continue; let P={}; try{ P=postStatus(k); }catch(_){}
-    o.push({id:'p:'+k, groep:'vast', partij:P.naam||kennisNaamVan(k), wat:E.status==='afloop'?'Opgezegd, loopt af':'Gestopt', bron:'jij', op:E.op||'', soort:'post', key:k}); }
   for(const [k,v] of Object.entries(SET.fixOvrM||{})){ if(v!=='fixed' || kennisGet('vast|'+k)) continue;   /* met een antwoord (wat het is) staat hij daar */ o.push({id:'f:'+k, groep:'vast', partij:kennisNaamVan(k), wat:'Vast per maand', bron:'jij', op:'', soort:'vastm', key:k}); }
   for(const [id,v] of Object.entries(SET.eenmaligOk||{})){ const t=TX.find(x=>x.id===id); if(!t) continue;
     o.push({id:'e:'+id, groep:'eenmalig', partij:benoemPartij(t), wat:`Klopt, eenmalig (${euro0(-t.amount)} op ${dagKort(t.date)})`, bron:'jij', op:typeof v==='string'?v:'', soort:'eenmaligok', key:id}); }
@@ -24246,30 +24295,32 @@ function kennisBlok(t){ const K=kennisVoorTx(t); if(!K.length) return '';
 /* ---- VERGETEN: terug naar "nog niet benoemd", met het gevolg vooraf ---- */
 function kennisVergeetKern(id){ const [s, ...r]=id.split(':'), k=r.join(':');
   if(s==='k'){ const E=kennisGet(k); if(!E) return; const F=E.effect||{};
+    /* v426: holding, lening en post: vergeten haalt het weg op de plek waar het gevolg zit */
+    if(E.soort==='holding'){ for(const [tid,c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c; delete SET.kennis[k]; return; }
+    if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId); if(l){ try{ loanNietTerugWeg(l.id); }catch(_){} for(const tid of [l.txId, ...(l.terugTx||[])]) if(tid) delete OVR[tid]; SET.loans=loans().filter(x=>x.id!==l.id); } delete SET.kennis[k]; return; }
+    if(E.soort==='post'){ if(SET.postStatus) delete SET.postStatus[E.key]; delete SET.kennis[k]; return; }
     for(const [tid,v] of Object.entries(F.ovr||{})){ if(v) OVR[tid]=v; else delete OVR[tid]; }
     for(const [tid,v] of Object.entries(F.onr||{})){ SET.onregelmatig=SET.onregelmatig||{}; if(v) SET.onregelmatig[tid]=v; else delete SET.onregelmatig[tid]; }
     for(const tid of F.loan||[]){ const l=loanFor(tid); if(l){ try{ loanNietTerugWeg(l.id); }catch(_){} SET.loans=loans().filter(x=>x.id!==l.id); } delete OVR[tid]; }
     for(const [tid,lid] of Object.entries(F.loanTerug||{})){ const l=loans().find(x=>x.id===lid); if(l){ const b=(l.terugBedrag||{})[tid]||0; l.open=Math.round(((+l.open||0)+b)*100)/100; l.terugTx=(l.terugTx||[]).filter(x=>x!==tid); if(l.terugBedrag) delete l.terugBedrag[tid]; } delete OVR[tid]; }
     delete SET.kennis[k]; if(SET.kennisLater) delete SET.kennisLater[k]; return; }
-  if(s==='h'){ const E=(SET.holdingPartij||{})[k]; if(!E) return; for(const [tid,c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c; delete SET.holdingPartij[k]; return; }
-  if(s==='l'){ const l=loans().find(x=>x.id===k); if(!l) return; try{ loanNietTerugWeg(l.id); }catch(_){} for(const tid of [l.txId, ...(l.terugTx||[])]) if(tid) delete OVR[tid]; SET.loans=loans().filter(x=>x.id!==k); return; }
-  if(s==='p'){ if(SET.postStatus) delete SET.postStatus[k]; return; }
   if(s==='f'){ if(SET.fixOvrM) delete SET.fixOvrM[k]; return; }
   if(s==='e'){ if(SET.eenmaligOk) delete SET.eenmaligOk[k]; return; } }
 /* de boekingen die een kennisregel raakt, voor het gevolg per maand */
 function kennisTxVan(id){ const [s, ...r]=id.split(':'), k=r.join(':');
-  if(s==='k'){ const E=kennisGet(k)||{}; let ids=Array.isArray(E.tx)?E.tx.slice():Object.keys(E.tx||{}); const F=E.effect||{}; ids=ids.concat(Object.keys(F.ovr||{}), F.loan||[], Object.keys(F.loanTerug||{}));
+  if(s==='k'){ const E=kennisGet(k)||{};
+    if(E.soort==='holding' || E.soort==='post') return TX.filter(t=>recurKey(t)===E.key).map(t=>t.id);
+    if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId)||{}; return [l.txId, ...(l.terugTx||[])].filter(Boolean); }
+    let ids=Array.isArray(E.tx)?E.tx.slice():Object.keys(E.tx||{}); const F=E.effect||{}; ids=ids.concat(Object.keys(F.ovr||{}), F.loan||[], Object.keys(F.loanTerug||{}));
     if(E.soort==='vast') ids=ids.concat(TX.filter(t=>recurKey(t)===k.slice(5)).map(t=>t.id));
     if(E.soort==='tikkie') ids=ids.concat(TX.filter(t=>isTikkie(t) && tikkiePersoon(t).toLowerCase()===k.slice(7)).map(t=>t.id));
     if(E.soort==='benoem'){ const p=k.slice(7).split('|')[0]; ids=ids.concat(TX.filter(t=>benoemPartij(t).toLowerCase()===p).map(t=>t.id)); }
     return [...new Set(ids)]; }
-  if(s==='h') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
-  if(s==='l'){ const l=loans().find(x=>x.id===k)||{}; return [l.txId, ...(l.terugTx||[])].filter(Boolean); }
-  if(s==='p'||s==='f') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
+  if(s==='f') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
   if(s==='e') return [k]; return []; }
 /* het gevolg van Vergeten, in het geheugen doorgerekend en teruggezet zonder save(): per maand de uitgaven en het inkomen */
 function kennisVergeetGevolg(id){ const ids=new Set(kennisTxVan(id)); const mnd=[...new Set(TX.filter(t=>ids.has(t.id)).map(t=>t.date.slice(0,7)))].sort();
-  const meet=()=>mnd.map(m=>{ const T=totals(m); return {m, uit:T.spendNorm, ink:T.income}; });
+  const meet=()=>mnd.map(m=>{ const T=totals(m); return {m, uit:T.spendNorm, ink:maandInkomen(m).alles}; });   // v426: het gemeten inkomen, niet totals().income (dat volgt bij autoIncome:false je instelling)
   const s=JSON.stringify(SET), o=JSON.stringify(OVR), tx=JSON.stringify(TX);
   let voor=[], na=[];
   try{ voor=meet(); kennisVergeetKern(id); applyOwnAccounts(); _dataGen++; na=meet(); }
@@ -24277,18 +24328,20 @@ function kennisVergeetGevolg(id){ const ids=new Set(kennisTxVan(id)); const mnd=
     const O0=JSON.parse(o); for(const k of Object.keys(OVR)) delete OVR[k]; Object.assign(OVR, O0);
     TX=JSON.parse(tx); applyOwnAccounts(); _dataGen++; }
   const r=[]; for(let i=0;i<mnd.length;i++){ const du=Math.round(na[i].uit-voor[i].uit), di=Math.round(na[i].ink-voor[i].ink), nm=MNAMES[+mnd[i].slice(5,7)-1]||mnd[i];
-    if(du) r.push(`${nm}-uitgaven ${du>0?'+':'-'}${euro0(Math.abs(du))}`); if(di) r.push(`${nm}-inkomen ${di>0?'+':'-'}${euro0(Math.abs(di))}`); }
+    if(di) r.push(`${nm} ${di>0?'+':'-'}${euro0(Math.abs(di))} inkomen`); if(du) r.push(`${nm} ${du>0?'+':'-'}${euro0(Math.abs(du))} uitgaven`); }   // v426: "jul +EUR 5.000 inkomen"
   return r; }
 function kennisVergeet(id){ const herstel=kennisSnap(), x=kennisLijst().find(e=>e.id===id); kennisVergeetKern(id);
   try{ applyOwnAccounts(); }catch(_){} save(); keuzeKlaar(`${x?x.partij+': ':''}vergeten, weer nog niet benoemd`, herstel); }
 /* Wijzigen: een antwoord op een vraag gaat terug en de vraag staat meteen open; wat een eigen scherm heeft, opent dat */
 function kennisWijzig(id){ const [s, ...r]=id.split(':'), k=r.join(':');
-  if(s==='k'){ kennisVergeetKern(id); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){}
+  if(s==='k'){ const E=kennisGet(k)||{};
+    if(E.soort==='holding'){ const t=TX.find(u=>recurKey(u)===E.key); if(t) openSheet(t.id); return; }
+    if(E.soort==='lening'){ openLoan(E.loanId); return; }
+    if(E.soort==='post'){ openPostStatus(E.key); return; }
+    kennisVergeetKern(id); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){}
     const q=gegevensVragen().find(v=>v.qkey===k || (k.startsWith('benoem|') && v.soort==='benoem' && 'benoem|'+v.key===k));
     if(q) openGegevensVragen(q.qkey); else openKennis(); return; }
-  if(s==='h'){ const t=TX.find(u=>recurKey(u)===k); if(t) openSheet(t.id); return; }
-  if(s==='l'){ openLoan(k); return; }
-  if(s==='p'||s==='f'){ openPostStatus(k); return; }
+  if(s==='f'){ openPostStatus(k); return; }
   if(s==='e'){ openSheet(k); } }
 function openKennisVergeet(id){ const x=kennisLijst().find(e=>e.id===id); if(!x){ openKennis(); return; }
   let G=[]; try{ G=kennisVergeetGevolg(id); }catch(_){}
@@ -24311,7 +24364,7 @@ function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
 /* een vraag in een regel (het scherm hierboven en blok 20) */
 function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).slice(0,10)):'';
   const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
-    poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
+    poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
     vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
     woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${q.partij} via Tikkie: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
   return (T[q.soort]?T[q.soort]():q.soort)+d; }
@@ -29160,7 +29213,7 @@ function diagSalarisVerdeling(){
   /* v421: HOLDING. De partij die jij aanwees ("Dit is mijn holding"). De terugkerende maandbetaling is inkomen (punt 1); de rest
      staat hier, geen inkomen en geen uitgave, per maand netto met de boekingen erachter. */
   { const HK=holdingKeys();
-    L.push('', `HOLDING (v421)${HK.size?': '+[...HK].map(k=>(SET.holdingPartij[k]||{}).naam||k).join(', '):''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
+    L.push('', `HOLDING (v421)${HK.size?': '+[...HK].map(k=>holdingNaam(k)).join(', '):''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
     if(!HK.size) L.push('  geen holding aangewezen: kies bij een boeking van je holding "Dit is mijn holding"');
     else { for(const k of HK){ const M=holdingMaandbetaling(k);
         L.push(`  terugkerende maandbetaling: ${M.mediaan!=null?`mediaan ${c2(M.mediaan)} in ${M.maanden} maanden, telt als inkomen (punt 1)`:'niet gevonden (geen bedrag in minstens 2 maanden), alles staat hier'}`);
@@ -29304,7 +29357,7 @@ function diagSalarisVerdeling(){
      "Kloppen mijn gegevens?" op bedrag, met hoe vaak "later". CONTANT NAAR: waar je contante geld volgens jou heen ging (een tik,
      het verandert geen boekingen). Alleen uitleg. */
   { const KL=kennisLijst();
-    L.push('', `KENNIS (v425): ${KL.length} ${KL.length===1?'antwoord':'antwoorden'} · soort | partij | wat | bron | datum`);
+    L.push('', `KENNIS (v425/v426): ${KL.length} ${KL.length===1?'antwoord':'antwoorden'} · soort | partij | wat | bron | datum`);
     if(!KL.length) L.push('  geen');
     for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)) L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
     const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)), O=new Set(gegevensOpen().slice(0, KENNIS_MAX_OPEN).map(q=>q.qkey));
@@ -29321,7 +29374,7 @@ function diagSalarisVerdeling(){
     L.push('', `BENOEMDE UITGAVEN (v424): zonder potje of zonder norm, vanaf ${BENOEM_MIN} · datum | bedrag | partij [categorie] | naam · bron | eenmalig of komt terug`);
     if(!E.length) L.push('  geen');
     for(const B of E){ const t=B.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
-      L.push(`  ${t.date.slice(8,10)}-${t.date.slice(5,7)}-${t.date.slice(0,4)} | ${c2(B.bedrag)} | ${B.partij} [${cat}] | ${B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:(B.weetniet?'nog niet benoemd (jij: weet ik niet)':`nog niet benoemd · vraag in Zien${B.laag==='b'?` met voorstel ${B.voorstel} (uit de omschrijving: ${B.kenmerk.toLowerCase()})`:''}`)} | ${B.aard==='eenmalig'?'eenmalig, telt niet als gedrag':B.aard==='terug'?'komt terug':'-'}`); }
+      L.push(`  ${t.date.slice(8,10)}-${t.date.slice(5,7)}-${t.date.slice(0,4)} | ${c2(B.bedrag)} | ${B.partij} [${cat}] | ${B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:(B.weetniet?'nog niet benoemd (jij: weet ik niet)':`nog niet benoemd · vraag in Zien${B.laag==='b'?` met voorstel ${B.voorstel} (uit de omschrijving: ${B.kenmerk.toLowerCase()})`:''}`)} | ${B.aard==='eenmalig'?'eenmalig, telt niet als gedrag':B.aard==='terug'?'komt terug':B.laag==='a'?'nog niet bepaald (een tik in Zien: eenmalig of komt terug)':'-'}`); }
     const T=benoemTerugVoorstellen(); if(T.length) L.push(`  komt terug zonder reservering (voorstel in Kiezen): ${T.map(x=>x.naam+' '+c2(-x.t.amount)).join(', ')}`); }
   /* v423: bovenaan hoeveel regels het blok heeft, zodat je ziet of wat aankwam compleet is (de regel zelf telt mee) */
   L.unshift(`deel 1 van 1 · ${L.length+1} regels`);

@@ -19,7 +19,7 @@ test.describe('v421', () => {
     expect(sheet).toContain('€3.463,86, in 4 maanden');   // v422: mei en augustus vallen buiten de marge en tellen als grootste bijschrijving
     expect(sheet).toContain('8 andere boekingen gaan naar Holding');
     expect(sheet).toContain('Je eigen categorie op 1 boeking vervalt');
-    expect(await page.evaluate(() => SET.holdingPartij)).toBeFalsy();   // openen schrijft niets
+    expect(await page.evaluate(() => [...holdingKeys()].length)).toBe(0);   // openen schrijft niets (v426: de holding staat in SET.kennis)
     await page.evaluate(() => document.querySelector('[data-holdingzet]').click());
     for (const [d, a] of HOLD) expect(await cat(page, d, a)).toBe('holding');
     expect(await page.evaluate(() => TX.filter(t => /ERNST/.test(t.desc) && t.amount > 3000 && t.amount < 3600).every(t => catOf(t) === 'inkomen'))).toBe(true);
@@ -27,7 +27,7 @@ test.describe('v421', () => {
     await page.evaluate(() => document.querySelector('[data-holdingweg]').click());
     expect(await cat(page, '2026-06-03', -200)).toBe('overig');   // de eigen keuze staat terug
     expect(await cat(page, '2026-07-31', 5000)).toBe('inkomen');
-    expect(await page.evaluate(() => Object.keys(SET.holdingPartij).length)).toBe(0);
+    expect(await page.evaluate(() => [SET.holdingPartij || null, [...holdingKeys()].length])).toEqual([null, 0]);
   });
 
   test('1. blok 20: holding netto per maand met de boekingen, en de controle klopt in elke afgeronde maand', async ({ page }) => {
