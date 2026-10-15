@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v424` · een grote uitgave zonder potje krijgt alleen een naam met een bron.** Vanaf EUR 100, zonder potje of zonder norm:
+  zeker uit de naam (bron "uit de omschrijving"), een voorstel bij een hint in de omschrijving (jij bevestigt: "door jou
+  bevestigd"), of een vraag (jij kiest: "door jou"). Het antwoord geldt per tegenpartij + kenmerk, en een bedrag dat meer dan 50%
+  afwijkt vraagt opnieuw. Valkuil: een gemeente is een betaling voor belasting, een boete, wegslepen of leges, en een naam raden op
+  de partij alleen is precies een verzonnen naam; daarom heet zo'n boeking zonder antwoord "<partij> · nog niet benoemd". Eenmalig
+  telt in de Terugblik apart en niet als gedrag; komt terug geeft in Kiezen een voorstel voor een reservering, nooit vanzelf.
+
 - **`v423` · een lening sluit: bedrag = terugbetaald + nog open + niet meer terug verwacht.** `loanStand()` rekent het na en is de
   bron van de leningsheet, de vraag in Zien en blok 20. Niet meer terug verwacht telt als uitgave in de maand van de lening, via een
   boekingpaar zonder bank (Persoonlijke overboeking -X, Uitgeleend +X), zodat de uitgave stijgt, het geld van de lening daalt en de

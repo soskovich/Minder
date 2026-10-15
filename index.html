@@ -9140,7 +9140,7 @@ function openEenmalig(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.fi
   if(!x){ closeSheet(); return; } const ok=SET.eenmaligOk||{}, tx=(x.tx||[]).filter(t=>!ok[t.id]), kk=esc(k).replace(/'/g,"\\'");
   $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligSheet" data-eenmalig="${esc(k)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} ${euro0(eenmaligOpen(x))} zonder potje</div>
-    ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}</div>`).join('')}
+    ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}${(()=>{ const b=benoemTekst(t); return b?` \u00b7 <span data-benoembron>${esc(b)}</span>`:''; })()}</div>`).join('')}
     <div class="small" data-eenmaliguitleg style="line-height:1.5;margin-top:8px">Eenmalige uitgave zonder potje. Klopt dat, dan hoef je niets te doen.</div>
     <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-eenmaligklopt style="width:auto;padding:9px 14px" onclick="eenmaligKlopt('${kk}')">Klopt, eenmalig</button>
       <button class="btn sec" data-eenmaligcat style="width:auto;padding:9px 14px" onclick="closeSheet();openCategory('${kk}','${esc(thisYM())}')">Categorie wijzigen</button></div>
@@ -10760,7 +10760,7 @@ function renderZonderPotje(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const D=V&&!V.onbekend&&V.zonderStand?zonderPotjeDelen(V):null; if(!D){ closeSheet(); return; }
   const m=V.m;
-  const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const rij=x=>`<div class="row" data-zondercat="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="closeSheet();openCategory('${esc(x.k)}','${esc(m)}')"><div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)"><span data-zondercatg="${x.g}">${euro0(x.g)} geboekt</span> · <span data-zondercatv="${x.v}">${euro0(x.v)} verwacht</span> · uitgaven in ${x.n} van ${x.maanden} mnd${(x.tx||[]).filter(benoemKandidaat).map(t=>`<div class="small" data-benoemzien="${esc(t.id)}" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(dagKort(t.date))} ${euro0(-t.amount)} · <span data-benoembron>${esc(benoemTekst(t))}</span></div>`).join('')}</div></div><span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.g+x.v)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   const losRij=x=>{ const t=zonderLosBoeking(x.key), cat=x.cat&&CATS[x.cat]?CATS[x.cat]:null;
     const wat=cat?`vaste last in ${esc(cat.name)}, ${cat.type==='expense'?'een categorie zonder norm':'geen uitgavencategorie'}`:'vaste last zonder categorie';
     return `<div class="row" data-zonderlos="${esc(x.key)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)${t?';cursor:pointer':''}"${t?` onclick="closeSheet();openSheet('${esc(t.id)}')"`:''}><div style="flex:1;min-width:0"><div class="small">${esc(titleCase(cleanMerch(x.naam)||x.naam))}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${wat}${x.datum?` · verwacht ${dagKort(x.datum)}`:''}${t?' · categorie geven':''}</div></div><span class="small" style="font-weight:700;white-space:nowrap" data-zonderlosv="${x.v}">${euro0(x.v)}</span>${t?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`; };
@@ -11310,7 +11310,13 @@ function gripOordeelZet(pid, klopt, reden){
   M[pid]={klopt:!!klopt, reden:klopt?null:(reden||null), op:vandaagYMD()};
   save(); renderMaand();
 }
-function gripBegrijpenHtml(){
+/* v424: in Begrijpen staan de grote uitgaven zonder potje of zonder norm van vorige en deze maand met hun naam en bron
+   (benoemTekst()), of "nog niet benoemd" met de ingang naar de vraag in Zien. Geen patroon: alleen wat er is. */
+function benoemBegrijpenBlok(){ const m=thisYM(); let E=[]; try{ E=[valtOpYmPlus(m,-1), m].flatMap(benoemMaand); }catch(_){ return ''; }
+  if(!E.length) return '';
+  return `<div class="card" data-begrijpenbenoem><div class="hlabel" style="margin:0 0 6px">Grote uitgaven zonder potje</div>${E.map(B=>`<div class="row" data-benoemrij="${esc(B.t.id)}" style="gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)${B.label?'':';cursor:pointer'}"${B.label?'':' onclick="openGegevensVragen()"'}><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(B.label?B.label:B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron)+(B.aard?' · '+(B.aard==='eenmalig'?'eenmalig':'komt terug'):''):'wat was dit? ›')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; }
+function gripBegrijpenHtml(){ return gripBegrijpenKern()+benoemBegrijpenBlok(); }
+function gripBegrijpenKern(){
   const P=gripPatronen();
   if(!P.length) return `<div class="card gm-stage" data-begrijpen data-geenpatroon><div class="small" style="line-height:1.5">Er is deze maand geen patroon: geen geld uit je spaargeld, geen potje dat boven uitkomt en geen inleg vóór je fundament. Wat je maand doet staat op Zien.</div></div>`;
   let i=Math.min(Math.max(+window._gripPatroonI||0,0), P.length-1); window._gripPatroonI=i;
@@ -11532,6 +11538,13 @@ function gripKiezenHtml(){
   const acties=overboekActiesOpen().map(A=>`<div class="row" data-kiesactie="${A.soort}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
       <span style="width:22px;height:22px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-xs)">↑</span>
       <span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(overboekActieTekst(A))}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">bij je bank · sinds ${esc(gripKortDatum(A.op))} · nog niet gezien</span></span></div>`).join('');
+  /* v424: een benoemde uitgave die terugkomt: een voorstel voor een reservering (benoemTerugVoorstellen()). Een tik opent de
+     bestaande verplichting-editor met de naam, het bedrag en een jaar later ingevuld; opslaan is jouw handeling. */
+  const benRes=benoemTerugVoorstellen().map(x=>{ const kk=esc(x.key).replace(/'/g,"\\'");
+    return `<div class="row" data-kiesbenoem="${esc(x.key)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+      <span style="width:22px;height:22px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-xs)">↻</span>
+      <span style="flex:1;min-width:0;cursor:pointer" onclick="benoemResVoorstel('${kk}')"><span style="display:block;font-weight:700">${esc(x.naam)} komt terug · reservering?</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(x.partij)} · ${euro0(-x.t.amount)} op ${esc(dagKort(x.t.date))} · ${esc(BENOEM_BRON[x.A.bron]||x.A.bron)} · voorstel ${euro0(-x.t.amount)} per jaar</span><span class="small" data-kiesbenoemgeen style="display:block;color:var(--mut2);font-size:var(--fs-xs);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();benoemGeenRes('${kk}')">geen reservering</span></span>
+      <span style="color:var(--teal);font-weight:700;cursor:pointer" onclick="benoemResVoorstel('${kk}')">›</span></div>`; }).join('');
   let ligt='';
   if(nuId && sinds[nuId]){ const d=Math.round((new Date(vandaagYMD()+'T00:00:00')-new Date(sinds[nuId]+'T00:00:00'))/864e5); const M=gripMomentDatum();
     if(d>=GRIP_STAP_LIGT || (M.d && M.d<=vandaagYMD())){ const p=P.find(x=>x.id===nuId);
@@ -11542,7 +11555,7 @@ function gripKiezenHtml(){
   const volg=(SET.gripVolgorde&&SET.gripVolgorde.modus==='zelf')?'zelf':'app';
   return `<div class="card gm-stage" data-kiezen>
     <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Jouw keuzes deze maand</span><span class="small" data-kiesvoortgang style="font-weight:700">${gek} van ${n}</span></div>${balk}
-    ${herz}${acties}${n?P.map(rij).join(''):(herz||acties?'':'<div class="small muted" data-geenstap>Er staat deze maand geen stap open: er is geen patroon.</div>')}
+    ${herz}${acties}${benRes}${n?P.map(rij).join(''):(herz||acties||benRes?'':'<div class="small muted" data-geenstap>Er staat deze maand geen stap open: er is geen patroon.</div>')}
     ${ligt}${meld}
     <div class="small" style="margin-top:8px;color:var(--mut2);font-size:var(--fs-xs)">volgorde <span data-kiesvolgorde style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVolgorde()">${volg} ›</span> · moment: <span data-kiesmoment style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripMoment()">${esc(gripMomentTekst())} ›</span></div>
     ${(()=>{ const af=gripAfsprakenHtml(); return af?`<div style="margin-top:10px">${af}</div>`:''; })()}
@@ -11648,7 +11661,9 @@ function gripTerugblik(ym){
   const telt=items.filter(x=>['ok','half','nee'].includes(x.s));
   const score=telt.reduce((a,x)=>a+(x.s==='ok'?1:(x.s==='half'?0.5:0)),0);
   const inst=gripTeRuimUitgevoerd(ym).map(x=>({naam:`${x.naam} → ${euro0(x.naar)}`, sub:'instelling · budget klopt nu'}));
-  return {ym, items, score, n:telt.length, inst};
+  /* v424: een benoemde uitgave die jij eenmalig noemde, apart: "eenmalig, telt niet als gedrag". Hij telt niet in de score. */
+  let eenmalig=[]; try{ eenmalig=benoemMaand(ym).filter(B=>B.aard==='eenmalig'); }catch(_){}
+  return {ym, items, score, n:telt.length, inst, eenmalig};
 }
 const gripScoreTekst=(T)=>`${String(T.score).replace('.',',')} van ${T.n}`;
 /* v390: DE TERUGBLIK OORDEELT OVER EEN AFGESLOTEN MAAND, de lopende is een tussenstand. De score bovenaan is die van de
@@ -11675,6 +11690,8 @@ function gripTerugblikHtml(){
       <div class="small" style="font-weight:700">Tussenstand ${esc(ymFull(m))} <span style="font-weight:400;color:var(--mut2);font-size:var(--fs-xs)">· ${esc(tus)} · eind ${esc(ymFull(m))} definitief</span></div>
       ${T.items.map(rij).join('')}${inst}</div>
     ${Tp?`<div class="small" data-terugvergelijk style="margin-top:8px">${esc(Mn(Tp.ym))} ${gripScoreTekst(Tp)} · ${esc(ymFull(m))} ${esc(tus)}</div>`:''}
+    ${(()=>{ const E=[valtOpYmPlus(m,-1), m].flatMap(ym=>ym===m?T.eenmalig:gripTerugblik(ym).eenmalig); if(!E.length) return '';
+      return `<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label||B.partij+' \u00b7 nog niet benoemd')}</span><span class="small" data-benoembron style="display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(B.label?(BENOEM_BRON[B.bron]||B.bron):'nog niet benoemd')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
     <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`;
 }
@@ -12193,7 +12210,7 @@ function openResAccPick(){
 }
 function resAccSet(a){ if(a) SET.resAcc=a; else delete SET.resAcc; save(); render(); renderResSheet(); }
 function openReservering(id){
-  window._resEdit=id||'';
+  window._resEdit=id||''; window._benoemRes=null;   // v424: alleen benoemResVoorstel() zet hem na het openen
   const v=id?resLijst().find(x=>x.id===id):null;
   const d=v||{naam:'',bedrag:'',vervalmaand:'',intervalM:12,cat:''};
   const iv=Math.max(Math.round(+d.intervalM||0),0);
@@ -12301,6 +12318,7 @@ function saveReservering(id){
     intervalM:(window._resIv!=null?window._resIv:(+oud.intervalM||0)),
     cat:String(v('rCat')||'') };
   if(oud.bron) g.bron=oud.bron;   // v329: de koppeling aan de incasso blijft bij een wijziging
+  else if(!id && window._benoemRes) g.bron='benoem:'+window._benoemRes;   // v424: het voorstel uit Kiezen zwijgt daarna
   SET.reserveringen=resLijst().slice();
   const i=SET.reserveringen.findIndex(x=>x.id===id);
   if(i>=0) SET.reserveringen[i]=g; else SET.reserveringen.push(g);
@@ -23888,6 +23906,7 @@ function gegevensVragen(){ const out=[];
   for(const v of loanVragen()) out.push(Object.assign({soort:'lening'}, v));
   for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant'}, v));   // v423
   for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop'}, v));   // v422
+  for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag}));   // v424
   return out; }
 /* v422: GESTOPT, MAAR DAARNA NOG BETAALD (besluit van de gebruiker op v421, in plaats van de migratie van v421). Per post die jij
    op gestopt zette en die daarna nog een betaling kreeg: "Was dat de laatste betaling?" Ja is opgezegd, loopt af met die
@@ -23896,11 +23915,102 @@ function postNaStopVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){ return
   return Object.values(M).filter(P=>P.status==='gestopt' && P.weerBetaald && P.laatste).sort((a,b)=>(a.naam<b.naam?-1:1)).map(P=>({key:P.key, naam:P.naam||P.key, dag:P.laatste, bedrag:P.bedrag||0})); }
 function postNaStopJa(key, dag){ postZet(key, 'afloop', '', dag); }
 function postNaStopNee(key){ postZet(key, 'actief'); }
+/* v424: ONBEKENDE GROTE UITGAVEN BENOEMEN, ALLEEN MET BRON (gevraagd door de gebruiker). Een uitgave van BENOEM_MIN (100) of meer
+   zonder potje of in een categorie zonder norm krijgt een van drie lagen:
+   a. de naam herkent het zeker (BENOEM_ZEKER): de app benoemt hem, bron "uit de omschrijving";
+   b. de omschrijving geeft een hint (BENOEM_SOORTEN[..].hints): een voorstel in Zien onder "Kloppen mijn gegevens?";
+   c. geen hint: een vraag "EUR X aan <partij> · <dag> · wat was dit?", met tikantwoorden per soort partij, daarna Eenmalig of
+      Komt terug.
+   Het antwoord staat per tegenpartij + kenmerk in SET.benoemd[key]={label, bron, aard, bedrag, op, tx:{id:{label,bron,aard}}}.
+   Een volgende boeking neemt het over, tenzij het bedrag meer dan BENOEM_AFWIJK (50%) afwijkt: dan vraagt de app opnieuw.
+   Zonder antwoord heet hij "<partij> · nog niet benoemd": de app verzint nooit een naam. Geen opname (isOpnameTx), geen boeking
+   zonder bank (een telling of een lening), geen persoonlijke overboeking (buitenUitgave). */
+const BENOEM_MIN=100, BENOEM_DAGEN=120, BENOEM_AFWIJK=0.5;
+const BENOEM_ZEKER=[[/\bCJIB\b|VERKEERSBOETE/i,'Verkeersboete'],[/BELASTINGDIENST/i,'Belasting']];
+const BENOEM_SOORTEN={
+  gemeente:{re:/\bGEMEENTE\b/i, opties:['Gemeentebelasting','Boete of wegslepen','Leges of vergunning'],
+    hints:[[/NAHEFFING|PARKEER|WEGSLEEP/i,'Boete of wegslepen'],[/\bOZB\b|AFVAL|RIOOL/i,'Gemeentebelasting'],[/LEGES|VERGUNNING/i,'Leges of vergunning']]},
+  overig:{re:null, opties:['Boete','Belasting','Aankoop','Reparatie of onderhoud'], hints:[]} };
+const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'door jou bevestigd', jij:'door jou'};
+function benoemPartij(t){ return titleCase(cleanMerch(t&&t.name)||(t&&t.name)||'onbekend'); }
+function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SOORTEN.gemeente.re.test(s)?'gemeente':'overig'; }
+function benoemKandidaat(t){
+  if(!t || t.pending || !t.acc || !(t.amount<=-BENOEM_MIN) || isOpnameTx(t)) return false;
+  const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || buitenUitgave(c)) return false;
+  return geenNorm(c) || zonderPotjeCat(c); }
+/* De hint uit de omschrijving: het kenmerk (het woord dat hem gaf) en het voorstel. */
+function benoemHint(t){ const s=`${t.name||''} ${t.desc||''}`, H=BENOEM_SOORTEN[benoemSoort(t)].hints;
+  for(const [re,label] of H){ const m=s.match(re); if(m) return {kenmerk:m[0].toUpperCase(), label}; }
+  return null; }
+function benoemKey(t){ const h=benoemHint(t); return `${benoemPartij(t).toLowerCase()}|${h?h.kenmerk:''}`; }
+/* De stand van een boeking: laag a, een antwoord dat geldt, of een open vraag (b met voorstel, c zonder). */
+function benoemStand(t){
+  if(!benoemKandidaat(t)) return null;
+  const s=`${t.name||''} ${t.desc||''}`, partij=benoemPartij(t), bedrag=-t.amount;
+  for(const [re,label] of BENOEM_ZEKER) if(re.test(s)) return {t, laag:'a', partij, bedrag, label, bron:'omschrijving', aard:null};
+  const key=benoemKey(t), h=benoemHint(t), A=(SET.benoemd||{})[key];
+  if(A){ const P=(A.tx||{})[t.id]; if(P) return {t, laag:'antw', key, partij, bedrag, label:P.label, bron:P.bron, aard:P.aard, weetniet:!P.label};
+    const b=+A.bedrag||0; if(b>0 && Math.abs(bedrag-b)<=BENOEM_AFWIJK*b) return {t, laag:'antw', key, partij, bedrag, label:A.label, bron:A.bron, aard:A.aard, weetniet:!A.label, over:true};
+    return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t), opnieuw:{bedrag:b, label:A.label}}; }
+  return {t, laag:h?'b':'c', key, partij, bedrag, voorstel:h?h.label:null, kenmerk:h?h.kenmerk:'', psoort:benoemSoort(t)}; }
+/* De tekst bij een benoemde uitgave, overal waar hij staat (Zien, Begrijpen, Terugblik, blok 20): met de bron erbij. */
+function benoemTekst(t){ const B=benoemStand(t); if(!B) return '';
+  return B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:`${B.partij} · nog niet benoemd`; }
+function benoemVanaf(){ const d=new Date(vandaagYMD()+'T12:00:00'); d.setDate(d.getDate()-BENOEM_DAGEN); return ymdVan(d); }
+function benoemVragen(){ const v=benoemVanaf(), o=[];
+  for(const t of telbareTx()){ if(t.date<v) continue; const B=benoemStand(t); if(B && (B.laag==='b'||B.laag==='c')) o.push(B); }
+  return o.sort((a,b)=>a.t.date<b.t.date?1:a.t.date>b.t.date?-1:0); }
+/* De boekingen van een maand met een naam of een open vraag (voor de Terugblik, Begrijpen en blok 20). */
+function benoemMaand(ym){ const o=[]; for(const t of txOfMonth(ym)){ const B=benoemStand(t); if(B) o.push(B); } return o.sort((a,b)=>a.t.date<b.t.date?-1:1); }
+/* Eerste tik: wat was het. De keuze staat in het geheugen tot Eenmalig of Komt terug; dan pas wordt er geschreven. */
+function benoemKies(id, label){ window._benoemKeuze=window._benoemKeuze||{};
+  if(label==='__anders'){ window._benoemKeuze[id]={anders:true}; }
+  else window._benoemKeuze[id]={label: label==='__weetniet'?null:label};
+  openGegevensVragen(); }
+function benoemAnders(id){ const el=document.getElementById('benoemAnders_'+id); const v=String((el&&el.value)||'').trim(); if(!v){ toast('Vul in wat het was'); return; }
+  window._benoemKeuze=window._benoemKeuze||{}; window._benoemKeuze[id]={label:v}; openGegevensVragen(); }
+function benoemAard(id, aard){
+  const t=TX.find(x=>x.id===id), B=t?benoemStand(t):null, K=(window._benoemKeuze||{})[id];
+  if(!B || !K || K.anders || (aard!=='eenmalig' && aard!=='terug')) return;
+  const bron=K.label && B.laag==='b' && K.label===B.voorstel?'bevestigd':'jij';
+  const herstel=setSnap(['benoemd']); SET.benoemd=SET.benoemd||{};
+  const oud=SET.benoemd[B.key]||{}, tx=Object.assign({}, oud.tx||{});
+  tx[id]={label:K.label, bron, aard};
+  SET.benoemd[B.key]={label:K.label, bron, aard, bedrag:Math.round(B.bedrag*100)/100, op:vandaagYMD(), tx};
+  delete window._benoemKeuze[id];
+  save(); keuzeKlaar(`${B.partij}: ${K.label||'nog niet benoemd'} · ${aard==='eenmalig'?'eenmalig':'komt terug'}`, herstel); }
+/* Kiezen: een benoemde uitgave die terugkomt, zonder reservering die erbij hoort, krijgt een voorstel voor een reservering. */
+function benoemTerugVoorstellen(){ const R=resLijst(), o=[];
+  for(const [key,A] of Object.entries(SET.benoemd||{})){ if(A.aard!=='terug' || A.geenRes) continue;
+    if(R.some(r=>r.bron==='benoem:'+key)) continue;
+    const ids=Object.keys(A.tx||{}), t=TX.filter(x=>ids.includes(x.id)).sort((a,b)=>a.date<b.date?1:-1)[0]; if(!t) continue;
+    o.push({key, A, t, partij:benoemPartij(t), naam:A.label||benoemPartij(t)}); }
+  return o; }
+function benoemResVoorstel(key){ const x=benoemTerugVoorstellen().find(v=>v.key===key); if(!x) return;
+  openReservering(''); window._benoemRes=key;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
+  const vm=valtOpYmPlus(x.t.date.slice(0,7),12);
+  set('rNaam', `${x.naam} (${x.partij})`); set('rBedrag', String(Math.round(-x.t.amount))); set('rMaand', vm);
+  try{ resIntervalPick(12); }catch(_){} }
+function benoemGeenRes(key){ const herstel=setSnap(['benoemd']); if(!(SET.benoemd||{})[key]) return; SET.benoemd[key].geenRes=vandaagYMD(); save(); keuzeKlaar('Geen reservering', herstel); }
+function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{})[t.id];
+  const S=BENOEM_SOORTEN[q.psoort]||BENOEM_SOORTEN.overig, kk=s=>esc(s).replace(/'/g,"\\'");
+  const kop=`<div style="font-weight:600">${euro(-t.amount)} aan ${esc(q.partij)} · ${esc(dagKort(t.date))} · wat was dit?</div>`;
+  const sub=q.laag==='b'?`<div class="small" data-benoemvoorstel style="margin-top:2px">voorstel: <b>${esc(q.voorstel)}</b> · uit de omschrijving: "${esc(q.kenmerk.toLowerCase())}"</div>`
+    :`<div class="small muted" style="margin-top:2px">${q.opnieuw?`eerder benoemd als ${esc(q.opnieuw.label||'nog niet benoemd')} bij ${euro(q.opnieuw.bedrag)}; dit bedrag wijkt meer dan ${Math.round(BENOEM_AFWIJK*100)}% af`:'de omschrijving zegt niet wat het was; de app verzint geen naam'}</div>`;
+  let body;
+  if(K && K.anders) body=`<div class="row" style="gap:8px;margin-top:6px"><input id="benoemAnders_${id}" type="text" placeholder="wat was het?" style="flex:1;min-width:0"><button class="btn" style="width:auto;padding:9px 14px" data-benoemanderszet onclick="benoemAnders('${id}')">Verder</button></div>`;
+  else if(K) body=`<div class="small" data-benoemgekozen style="margin-top:6px">${esc(K.label||'Weet ik niet')} · eenmalig of komt het terug?</div>
+    <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-benoemaard="eenmalig" onclick="benoemAard('${id}','eenmalig')">Eenmalig</button><button class="btn sec" style="flex:1" data-benoemaard="terug" onclick="benoemAard('${id}','terug')">Komt terug</button></div>`;
+  else { const opts=S.opties.slice(); if(q.voorstel){ const i=opts.indexOf(q.voorstel); if(i>0){ opts.splice(i,1); opts.unshift(q.voorstel); } }
+    body=`<div class="chips" style="margin-top:6px">${opts.map(o=>`<span class="chip" data-benoemoptie="${esc(o)}" onclick="benoemKies('${id}','${kk(o)}')">${esc(o)}${o===q.voorstel?' · klopt':''}</span>`).join('')}<span class="chip" data-benoemoptie="__anders" onclick="benoemKies('${id}','__anders')">Anders…</span><span class="chip" data-benoemoptie="__weetniet" onclick="benoemKies('${id}','__weetniet')">Weet ik niet</span></div>`; }
+  return `<div data-gegevensvraag="benoem" data-benoemlaag="${q.laag}" data-tx="${id}" style="padding:9px 0;border-top:1px solid var(--line)">${kop}${sub}${body}</div>`; }
 function gegevensRegel(){ const Q=gegevensVragen(); if(!Q.length) return '';
   return `<div class="row small" data-gegevensregel role="button" style="gap:8px;margin:0 0 10px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openGegevensVragen()"><span style="flex:1;min-width:0;font-weight:600">Kloppen mijn gegevens? \u00b7 ${Q.length===1?'1 vraag':Q.length+' vragen'}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">›</span></div>`; }
 function openGegevensVragen(){
   const Q=gegevensVragen(); if(!Q.length){ closeSheet(); return; }
-  const rij=q=>{ if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
+  const rij=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
+    if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='poststop'){ const kk=esc(q.key).replace(/'/g,"\\'");
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
       <div class="small muted" style="margin-top:2px">${euro0(q.bedrag)} \u00b7 ja: opgezegd, loopt af, en daarna telt hij niet meer mee \u00b7 nee: hij loopt nog en wordt weer verwacht</div>
@@ -28637,7 +28747,8 @@ function diagSalarisVerdeling(){
         L.push(`    ${naam}: ${c2(sm)}${Math.abs(sm-Ra.bDeel[g])<0.005?'':` (TEGEN ${c2(Ra.bDeel[g])} HIERBOVEN)`}${xs.length?'':' · geen boekingen'}`);
         for(const x of xs){ const t=x.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
           const waarom=g==='uitres'?` (boeking ${c2(-t.amount)}, waarvan uit je reservering)`:g==='kas'&&isOpnameTx(t)?' (opname)':g==='kas'&&t.src===catOf(t)&&geenNorm(catOf(t))?' (telling: alleen het verschil)':t.src==='lening'?' (lening: niet meer terug)':'';
-          L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${cat}]${waarom}`); } }
+          const bn=benoemTekst(t);   // v424: de naam en de bron, of "nog niet benoemd"
+          L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${cat}]${waarom}${bn?` · ${bn}`:''}`); } }
       L.push(`    samen ${c2(somAll)} tegen buiten vast en potjes ${c2(Ra.buiten)}: ${Math.abs(somAll-Ra.buiten)<0.005?'sluit':'VERSCHILT '+c2(somAll-Ra.buiten)}`); } }
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
   { let n=0; for(const r of R) if(r.wissel.length){ n++;
@@ -28820,6 +28931,14 @@ function diagSalarisVerdeling(){
     const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-(wkey?(r.woning[wkey]||0):0)-r.studie;
     L.push(`  ${kol(r=>zonder(r, r===Rc))} (* = lopend: geboekt plus verwacht, zoals punt 7) · ${MN(cur)}* alleen geboekt ${e0(zonder(Rc,false))}`);
     L.push(`  waarvan woning: ${kol(r=>wkey?(r.woning[wkey]||0):0)} · studieschuld: ${kol(r=>r.studie)}`); }
+  /* v424: GROTE UITGAVEN ZONDER POTJE OF ZONDER NORM (vanaf BENOEM_MIN), met hun naam en de bron, of "nog niet benoemd". Over de
+     maanden van dit blok; alleen uitleg, er verandert niets. */
+  { const E=R.flatMap(r=>benoemMaand(r.ym));
+    L.push('', `BENOEMDE UITGAVEN (v424): zonder potje of zonder norm, vanaf ${BENOEM_MIN} · datum | bedrag | partij [categorie] | naam · bron | eenmalig of komt terug`);
+    if(!E.length) L.push('  geen');
+    for(const B of E){ const t=B.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
+      L.push(`  ${t.date.slice(8,10)}-${t.date.slice(5,7)}-${t.date.slice(0,4)} | ${c2(B.bedrag)} | ${B.partij} [${cat}] | ${B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:(B.weetniet?'nog niet benoemd (jij: weet ik niet)':`nog niet benoemd · vraag in Zien${B.laag==='b'?` met voorstel ${B.voorstel} (uit de omschrijving: ${B.kenmerk.toLowerCase()})`:''}`)} | ${B.aard==='eenmalig'?'eenmalig, telt niet als gedrag':B.aard==='terug'?'komt terug':'-'}`); }
+    const T=benoemTerugVoorstellen(); if(T.length) L.push(`  komt terug zonder reservering (voorstel in Kiezen): ${T.map(x=>x.naam+' '+c2(-x.t.amount)).join(', ')}`); }
   /* v423: bovenaan hoeveel regels het blok heeft, zodat je ziet of wat aankwam compleet is (de regel zelf telt mee) */
   L.unshift(`deel 1 van 1 · ${L.length+1} regels`);
   return L;
