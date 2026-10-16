@@ -224,8 +224,14 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     const inPat = await page.evaluate((k) => gripPatronen().filter((p) => p.sig.some((s) => s.k === k)).length, sig[0].potjeId);
     const zien = await page.evaluate(([id, inPat]) => document.querySelectorAll(inPat ? '#gripSignalen [data-signaal^="pat:"]' : `#gripSignalen [data-signaal="lo:sig:${id}"]`).length, [sig[0].id, inPat]);
     expect(zien).toBeGreaterThanOrEqual(1);
-    const kies = await page.evaluate((id) => { gripKiesTab('kiezen'); return document.querySelectorAll(`#gripTeKiezen [data-kies="sig:${id}"], #gripTeKiezen [data-kies="lo:sig:${id}"]`).length; }, sig[0].id);
-    expect(kies).toBe(1);
+    /* v430: binnen het spaargeld-patroon is het potje een eigen symptoom (sig:<potje>) en zijn keuze een gedragskeuze; zonder
+       bevestigde oorzaak staat hij onder Wacht op oorzaak en niet onder Te kiezen. Precies een keer is dus een keer in Te kiezen
+       en Wacht samen (dezelfde lijst als de Kiezen-tab, gripCyclus), en in Te kiezen hooguit een keer. */
+    const kies = await page.evaluate((id) => { gripKiesTab('kiezen'); const C = gripCyclusLees(), ids = ['sig:' + id, 'lo:sig:' + id];
+      return { lijst: (C.kies || []).concat(C.wacht || []).filter((x) => ids.includes(x.id)).length,
+        dom: document.querySelectorAll(`#gripTeKiezen [data-kies="sig:${id}"], #gripTeKiezen [data-kies="lo:sig:${id}"]`).length }; }, sig[0].id);
+    expect(kies.lijst).toBe(1);
+    expect(kies.dom).toBeLessThanOrEqual(1);
     expect(await page.locator('#s-maand .valtop-kaart').count()).toBe(0);
   });
 });

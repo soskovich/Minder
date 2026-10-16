@@ -1634,4 +1634,6 @@ staan als symptoom terwijl hij eenmalig was bevestigd, en juli en augustus hadde
   inkomen gelijk aan blok 20. Spec `v430.spec.js`. `sw.js` naar `minder-v430`.
 - **Gemigreerde specs**: `beslis-sheet.js` (`sigKaart()` beantwoordt het symptoom waar de keuze onder wacht), `grip-correcties`,
   `grip-kiezen-v391`, `grip-kring-deel2` (nietklopt via de oorzaakvraag; meetlat en sparen op het potje-patroon), `grip-dashboard`,
-  `v428`, `v429`.
+  `v428`, `v429`, `boven-verwacht-eind` (R8: binnen het spaargeld-patroon is Boodschappen een eigen symptoom en noemen de
+  keuzes van het patroon geen potje), `ontdubbeling-schermen` (een signaal in de betaalrekening staat een keer in Te kiezen en
+  Wacht samen). De groep Contant van Na je salaris leest `CONTANT_CAT` (`geennorm-hardcode`).

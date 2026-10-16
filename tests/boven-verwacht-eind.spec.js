@@ -2,7 +2,8 @@
 // "+€57, 4 mnd boven" en op Inzichten als "herstelt", want herstelt keek alleen naar de uitgave tot vandaag. Nu: een potje
 // met een vorige maand erboven dat naar verwachting weer boven eindigt (potjeUitschieter, dezelfde toets als uitschieters())
 // is "herhaalt" met het verwachte bedrag; "herstelt" alleen als het naar verwachting NIET boven eindigt. Een potje dat 2+
-// maanden op rij boven is krijgt in Kiezen als eerste optie "<potje> herzien", ook binnen het spaargeld-patroon.
+// maanden op rij boven is krijgt in Kiezen als eerste optie "<potje> herzien"; binnen het spaargeld-patroon (v430, R8) is
+// het potje een eigen symptoom.
 const { test, expect } = require('@playwright/test');
 const K = require('./grip-kring-stand');
 
@@ -53,17 +54,20 @@ test.describe('Kiezen: 2+ maanden boven geeft eerst "herzien"', () => {
     expect(s.gp.twee).toBe(true);
     expect(s.gp.opties[0]).toBe('Boodschappen herzien');
   });
-  test('binnen het spaargeld-patroon, en de route opent Boodschappen en niet het eerste potje', async ({ page }) => {
+  /* v430 (R8): binnen het spaargeld-patroon gaan de keuzes over je spaargeld en je salaris (opzij verlagen of een buffer), niet over
+     een potje. Boodschappen is daar een EIGEN symptoom (sig:boodschappen) met zijn eigen oorzaak en keuzes; de eis van v391 (de
+     route valt niet op het eerste potje) geldt nu voor dat symptoom: het draagt Boodschappen en niet het eerste potje. */
+  test('binnen het spaargeld-patroon is Boodschappen een eigen symptoom, en de keuzes van het patroon noemen geen potje', async ({ page }) => {
     await boot(page, { opnames: [['2026-10-06', 300], ['2026-10-09', 400]] });
     const r = await page.evaluate(() => { const p = gripPatronen().find(x => x.id === 'spaargeld');
       const pots = (p.sig || []).filter(x => x.soort === 'potje').map(x => x.k);
-      const o = gripOpties(p);
-      const geopend = []; window.openPotjeBijstel = k => geopend.push(k); window.openPotForm = k => geopend.push(k);
-      gripOordeelZet('spaargeld', true); window._gripK = { pid: 'spaargeld', optie: o[0].id, lat: [], latOk: true }; gripKeuzeZet();
-      return { pots, eerste: o[0].titel, geopend }; });
+      const C = gripCyclusLees(), s = C.sym.find(z => z.id === 'sig:boodschappen');
+      return { pots, opties: gripOpties(p).map(o => o.titel), sym: s && { k: s.k, naam: s.naam, pid: s.pid } }; });
+    expect(r.pots).toContain('boodschappen');
     expect(r.pots[0]).not.toBe('boodschappen');   // de route mag niet op het eerste potje vallen
-    expect(r.eerste).toBe('Boodschappen herzien');
-    expect(r.geopend).toEqual(['boodschappen']);
+    expect(r.opties).toEqual(['Niets meer uit je spaargeld', 'Zet het terug']);
+    for (const t of r.opties) expect(t).not.toMatch(/Boodschappen|herzien/);
+    expect(r.sym).toEqual({ k: 'boodschappen', naam: 'Boodschappen boven je potje', pid: 'spaargeld' });
   });
   test('een potje dat alleen deze maand boven is krijgt geen herzien-voorop', async ({ page }) => {
     await boot(page); const r = await page.evaluate(() => { const p = gripPatronen().find(x => x.id === 'pot:uiteten'); return { twee: p.twee, eerste: gripOpties(p)[0].titel }; });

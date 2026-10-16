@@ -11643,7 +11643,7 @@ function opzijKeuzeZet(key){ const S=window._opz||{}, Z=opzijKeuzeData(); if(!Z 
    (4) DE VERHOUDING MET JE SALARIS over 6 maanden, in de Terugblik.
    De vragen van (2) en (3) tellen mee in OORZAAK_MAX_VRAGEN. */
 const VAST_STIJG={deel:0.10, euro:10}, INKOMEN_STIJG={deel:0.25, euro:250, voor:5, na:3}, TERUG_KLOPT_DEEL=0.5;
-const NA_SALARIS_GROEP=[['vices+uiteten','Vices en Uit eten',['vices','uiteten']],['contant','Contant',[]],['online+overig','Online en Overig',['shopping','overig']]];
+const NA_SALARIS_GROEP=[['vices+uiteten','Vices en Uit eten',['vices','uiteten']],[CONTANT_CAT,'Contant',[]],['online+overig','Online en Overig',['shopping','overig']]];
 function fase3Sal(){ const s=thisYM()+'|'+_dataGen; if(window._f3Sal && window._f3Sal.s===s) return window._f3Sal.D;
   let D=null; try{ D=salarisData(9); }catch(_){} window._f3Sal={s, D}; return D; }
 const f3MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
@@ -11698,7 +11698,7 @@ function inkomenStijging(){ const D=fase3Sal(); if(!D) return null; const R=D.R,
 /* de variabele uitgaven van een maand: potjes en zonder potje (zonder studieschuld) plus contant, zonder wat jij eenmalig noemde */
 function naSalarisMaand(r){ const g={}; let tot=0; const cats=new Set(Object.keys(r.potjes).concat(Object.keys(r.zonder)));
   for(const c of cats){ if(c==='studie') continue; const v=(+r.potjes[c]||0)+(+r.zonder[c]||0)-eenmaligInCat(c, r.ym); tot+=v; for(const [id,,ks] of NA_SALARIS_GROEP) if(ks.includes(c)) g[id]=(g[id]||0)+v; }
-  const kas=+((r.bDeel||{}).kas)||0; tot+=kas; g.contant=(g.contant||0)+kas; return {tot, g}; }
+  const kas=+((r.bDeel||{}).kas)||0; tot+=kas; g[CONTANT_CAT]=(g[CONTANT_CAT]||0)+kas; return {tot, g}; }
 function naJeSalarisData(){ const I=inkomenStijging(); if(!I) return null; const D=fase3Sal(), cur=thisYM();
   const voorR=I.voor.map(ym=>D.R.find(r=>r.ym===ym)), naR=I.na.filter(ym=>ym!==cur).map(ym=>D.R.find(r=>r.ym===ym));
   if(!naR.length) return Object.assign({}, I, {geenNa:true});
