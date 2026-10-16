@@ -9,6 +9,8 @@ const { test, expect } = require('@playwright/test');
 const S = require('./grip-v409-stand');
 
 const letOp = (page) => page.evaluate(() => gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), [])
+  // v429: de vraag gestopt of uit reservering staat in Zien onder Kloppen mijn gegevens? en niet meer in Let op
+  .concat(gegevensVragen().filter(q => q.soort === 'uitres').map(q => ({ soort: 'uitresvraag', key: q.key, naam: q.naam + ': gestopt of uit reservering? · ' + q.det })))
   .map(x => ({ soort: x.soort, key: x.key, naam: x.naam, sub: x.sub, groep: x.groep, bedrag: x.bedrag })));
 /* een vaste post met drie betalingen; `d` is de laatste, de rest staat er telkens `stap` maanden voor */
 const post = (page, naam, bedrag, cat, data) => page.evaluate(({ MAIN, naam, bedrag, cat, data }) => {

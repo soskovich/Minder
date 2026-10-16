@@ -232,6 +232,9 @@ test.describe('3 - geen enkele app-functie leest het veld', () => {
       'function diagPiekdag(){',
       'function diagDubbel(){',
       'function diagPendBots(){',
+      /* v429, gevraagd: de dagdelen in het bewijs van gewoonte en gelegenheid (Grip, oorzaken) lezen de betaaltijd. De eerste
+         app-lezer, bij naam; het geld en de sommen lezen hem nog steeds niet (de test hieronder). */
+      'function dagdeelVan(t){',
     ].map((van) => sectieVan(src, van));
     const binnen = delen.reduce((a, d) => a + (d.match(/betaal(Datum|Tijd)/g) || []).length, 0);
     expect(binnen, 'geen enkele andere functie leest het veld').toBe(totaal);

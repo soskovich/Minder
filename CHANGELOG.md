@@ -1584,3 +1584,22 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Specs**: nieuw `v428.spec.js`; omgezet waar alleen de plek veranderde (zie het rapport). `sw.js` naar `minder-v428`.
   Volle suite: 4518 groen, 1 rood (de bekende `decimaalteken`). Zeven sabotages, alle zeven rood.
 
+
+## v429: Grip-cyclus fase 2, van symptoom naar oorzaak
+- **Opruimen**: `eenmaligBevestigd(t)` is de ene toets voor een door jou bevestigde eenmalige uitgave (v415 "Klopt, eenmalig", v424
+  benoemd, v425 antwoord); zo'n bedrag telt niet voor een symptoom en staat nog wel onder Grote uitgaven zonder potje. "Gestopt of uit
+  reservering?" is een gegevensvraag in "Kloppen mijn gegevens?" (`uitResVragen()`, soort `uitres`) en geen symptoom. Uit een
+  reservering betaald staat in de Terugblik onder Eenmalig met "uit een reservering betaald" (was al zo, nu getest).
+- **Oorzaken** (`oorzaakAnalyse()`): budget past niet, verdeling, eenmalig, salaris-effect, gewoonte (met dagdelen), gelegenheid,
+  gevoel; label, bewijs, sortering op sterkte, hooguit 4. Zeker uit de data is de bevestigde oorzaak, zonder vraag.
+- **De vraag**: "Wat past het best?", hooguit 3 per kalendermaand, antwoord in `SET.kennis` (groep Oorzaken, te wijzigen).
+- **Testweek**: 7 dagen op het potje, een tik na een aankoop via de koopknop, bankboekingen om na te tikken, daarna een voorstel of
+  "geen duidelijk patroon".
+- **Kiezen**: gedragskeuzes pas met een oorzaak, anders Wacht op oorzaak; een keuze per oorzaak met het gevolg vooraf; "naar keuze ›".
+- **Blok 22** "Oorzaken" met drie controles. Spec `v429.spec.js`. `sw.js` naar `minder-v429`.
+- **Patroonvraag en oorzaak samen**: een patroonkeuze opent pas met een oordeel ("Klopt dit patroon?") en een bevestigde oorzaak
+  (`gripPatroonBevestigd()`); een oorzaak uit de data vervangt het oordeel niet. Zonder oorzaak staat de patroonvraag in de rij onder
+  Wacht op oorzaak. Beleggen vóór je fundament is geen uitgavensymptoom (`oorzaakSymptoom()`) en houdt zijn keuze onder Te kiezen.
+- **Gemigreerde specs**: `grip-v413`, `grip-v414`, `grip-v415` (de uitres-vraag uit `gegevensVragen()`), `beslis-sheet.js` (`sigKaart()`
+  beantwoordt de oorzaakvraag langs de route van de app als het signaal wacht), `v428` (oorzaakteksten, Wacht op oorzaak, keuze na
+  oorzaak, knoppen alleen in de oorzaakvraag), `v425` (groep Oorzaken), `betaaldatum-veld` (`dagdeelVan()` leest `t.betaalTijd`).

@@ -10,6 +10,8 @@ const S = require('./grip-v409-stand');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 const letOp = (page) => page.evaluate(() => gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), [])
+  // v429: de vraag gestopt of uit reservering staat in Zien onder Kloppen mijn gegevens? en niet meer in Let op
+  .concat(gegevensVragen().filter(q => q.soort === 'uitres').map(q => ({ soort: 'uitresvraag', key: q.key, naam: q.naam + ': gestopt of uit reservering? · ' + q.det })))
   .map(x => ({ soort: x.soort, key: x.key, naam: x.naam })));
 const post = (page, naam, bedrag, cat, data) => page.evaluate(({ MAIN, naam, bedrag, cat, data }) => {
   for (const d of data) { const t = { id: 'v414' + naam + d, date: d, amount: -bedrag, acc: MAIN, name: naam, desc: 'SEPA INCASSO ' + naam.toUpperCase(), typ: '', ref: '', src: 'csv', accName: '', refNums: [] };

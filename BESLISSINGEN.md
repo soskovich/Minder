@@ -16,6 +16,14 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v429` · Geen gedragskeuze zonder oorzaak.** Gevraagd als fase 2 van de cyclus. Waarom: een keuze als "minder Vices" zonder
+  te weten waarom het gebeurt is een opdracht en geen keuze, en een budget herzien terwijl het een gewoonte is lost niets op. De
+  toetsen staan in een functie (`oorzaakAnalyse()`) zodat Begrijpen, Kiezen en blok 22 hetzelfde zeggen. Wat zeker uit de data
+  blijkt wordt niet gevraagd; wat niet uit de data kan blijken (gevoel) is altijd mogelijk en wordt pas zeker door jou of door de
+  testweek. Hooguit drie vragen per maand, zodat de vraag geen formulier wordt. VALKUIL: een symptoom over je gegevens (uitgesloten
+  incasso's, contant tellen) heeft geen oorzaak; de eerste vorm gaf ze toch "gevoel" en liet ze een vraag opeten. En "niets
+  veranderen" in Begrijpen betekent je budget, je antwoorden en je afspraken: renderen schrijft al sinds v314 de valt-op-log.
+  GEMETEN: `maandPotjes()` geeft `{B, bron}` en geen kaart; de eerste vorm las hem als kaart en de test vond dat.
 - **`v428` · Grip als cyclus: elke tab een vraag, en alleen Kiezen verandert iets.** Gevraagd met de mockup "Grip compleet v423":
   Zien (wat gebeurt er), Begrijpen (waarom), Kiezen (wat ga ik doen), Terugblik (heeft het gewerkt). Let op was een kaart die feiten
   en handelingen mengde en hooguit twee regels toonde; de feiten gaan naar Signalen op Zien en de handelingen naar Te kiezen, zonder

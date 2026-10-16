@@ -8219,7 +8219,8 @@ function valtOpLogBlok(){
    de meting (resThisMonth(), catSpendMap(), AFSPRAAK_MARGE), niet de opslag. */
 const STAND_MAX_DAGEN = 90;   // een handmatige stand die ouder is dan dit vraagt om bijwerken
 function afsprakenLijst(){ return Array.isArray(SET.afspraken)?SET.afspraken:[]; }
-function afspraakSleutel(a){ return String(a.soort)+'|'+String(a.cat||a.assetId||a.key||''); }
+function afspraakSleutel(a){ if(a && a.soort==='gedrag') return 'gedrag|'+String(a.key||'')+'|'+String(a.oorzaak||'');   // v429: per oorzaak
+  return String(a.soort)+'|'+String(a.cat||a.assetId||a.key||''); }
 function afspraakMaanden(van, tot){ const u=[]; if(!van||!tot) return u; for(let m=van; m<=tot && u.length<36; m=nextYM(m)) u.push(m); return u; }
 /* v366: EEN AFSPRAAK IS EEN SCHEMA PER MAAND. Tot v366 herzag een nieuwe keuze over HETZELFDE (zelfde soort, zelfde
    categorie, bezitting of incasso) elke lopende afspraak, terwijl het budget ze allebei toepaste: Huur EUR 700 in
@@ -8313,6 +8314,15 @@ function afspraakStand(a){
     if(a.van===nu){ const W=potjeVerwacht(a.cat);
       if(W) return {status:'loopt', feit:W.eind>g?`${euro0(W.eind)} verwacht \u00b7 ${euro0(W.eind-g)} boven het nieuwe potje`:`${euro0(W.eind)} verwacht \u00b7 ${euro0(g-W.eind)} ruimte`, af:false, verwacht:W.eind}; }
     return {status:'loopt', feit:`tot nu ${euro0(sp)} van ${euro0(g)}`, af:false};
+  }
+  /* v429: een afspraak bij een oorzaak (gedrag). Gewoonte meet het aantal aankopen per week in dat potje; de andere zijn een
+     afspraak met jezelf: de app legt hem vast en meet hem niet als bedrag (klopte de oorzaak? is fase 3). */
+  if(a.soort==='gedrag'){
+    if(a.oorzaak==='gewoonte' && a.cat && a.maxWeek>0){ let n=0; for(const m of afspraakMaanden(a.van, a.tot).filter(m=>m<=nu)) for(const t of txOfMonth(m)) if(t.amount<0 && catOf(t)===a.cat && String(t.date)>String(a.op)) n++;
+      const wk=Math.max(1, Math.ceil(((klaar?new Date(a.tot+'-28'):new Date())-new Date(a.op+'T00:00:00'))/(7*864e5))), max=a.maxWeek*wk;
+      if(n>max) return {status:'nietgezien', feit:`${n} aankopen sinds ${afDag(a.op)}, afgesproken hooguit ${max}`, af:klaar};
+      return {status:klaar?'gezien':'loopt', feit:`${n} aankopen sinds ${afDag(a.op)}, hooguit ${max}`, af:klaar}; }
+    return {status:'loopt', feit:'een afspraak met jezelf; de app meet hem niet als bedrag', af:false};
   }
   if(a.soort==='pauze'){
     let tx=[]; try{ tx=bezitGekoppeld(a.assetId).filter(t=>String(t.date)>String(a.op)); }catch(_){}
@@ -8865,10 +8875,8 @@ function gripLetOpItems(RO, SIG, BV){
   /* v413: EEN POST MET DE OUDE VLAG "OPGEZEGD" (SET.fixDueExcl) KRIJGT EEN KEER DE VRAAG wat hij is: gestopt, of betaald
      uit een reservering. Tot het antwoord blijft de werking zoals hij was (niet in nog te betalen). Het antwoord staat in
      SET.uitResAntw[key]; geen stille omzetting. */
-  try{ const M=postStatusMap();
-    for(const key of uitResOpen()){ const P=M[key]||postStatus(key), kk=esc(key).replace(/'/g,"\\'");
-      const det=P.bedrag?`${euro0(P.bedrag)} ${P.cadansTxt||''}`.replace(/\s+$/,''):'';
-      L.push(postRegel({soort:'uitresvraag', groep:'a', bedrag:P.bedrag||0, key, dot:'let op', act:`openUitResVraag('${kk}')`}, P.naam||titleCase(cleanMerch(key)||key), ': gestopt of uit reservering?', det)); } }catch(_){}
+  /* v429: de vraag "gestopt of uit reservering?" is een gegevensvraag en geen symptoom: hij staat in Zien onder "Kloppen mijn
+     gegevens?" (gegevensVragen(), soort 'uitres', in de wachtrij van KENNIS_MAX_OPEN) en niet meer in Let op of Begrijpen. */
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
@@ -9132,9 +9140,20 @@ const ZONDER_MIN_MAANDEN=2;
 const ZONDER_SIGNAAL_EUR=25, ZONDER_OPNIEUW_FACTOR=2;
 /* v415: EENMALIG, "Klopt, eenmalig": SET.eenmaligOk[t.id]={op}. Wat je zo bevestigde telt niet meer mee in het signaal; een
    nieuwe boeking in dezelfde categorie wel. */
-function eenmaligOpen(x){ const ok=SET.eenmaligOk||{}; return (x.tx||[]).filter(t=>!ok[t.id]).reduce((a,t)=>a+uitgaveNorm(t),0); }
+/* v429: DOOR JOU ALS EENMALIG BEVESTIGD, op een plek. Drie routes schrijven het: "Klopt, eenmalig" (SET.eenmaligOk, v415), een
+   benoemde uitgave met aard eenmalig (SET.kennis benoem, v424) en een antwoord op een boeking (SET.kennis met soort eenmalig of
+   aard eenmalig en de boeking in tx, v425). Wat zo bevestigd is telt niet mee voor een symptoom; het geld telt wel (het blijft in
+   "Grote uitgaven zonder potje" en in de Terugblik onder Eenmalig). Geeft de bron terug, of '' . */
+function eenmaligBevestigd(t){ if(!t || !t.id) return '';
+  if((SET.eenmaligOk||{})[t.id]) return 'eenmalig bevestigd';
+  for(const E of Object.values(SET.kennis||{})){ if(!E || !E.tx) continue;
+    if(Array.isArray(E.tx)){ if(E.tx.includes(t.id) && (E.soort==='eenmalig' || E.aard==='eenmalig')) return 'door jou: eenmalig'; continue; }
+    const P=E.tx[t.id]; if(P && (P.aard||E.aard)==='eenmalig') return 'door jou: eenmalig'; }
+  try{ const B=benoemStand(t); if(B && B.aard==='eenmalig') return 'door jou: eenmalig'; }catch(_){}
+  return ''; }
+function eenmaligOpen(x){ return (x.tx||[]).filter(t=>!eenmaligBevestigd(t)).reduce((a,t)=>a+uitgaveNorm(t),0); }
 function openEenmalig(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.find(r=>r.k===k); }catch(_){}
-  if(!x){ closeSheet(); return; } const ok=SET.eenmaligOk||{}, tx=(x.tx||[]).filter(t=>!ok[t.id]), kk=esc(k).replace(/'/g,"\\'");
+  if(!x){ closeSheet(); return; } const tx=(x.tx||[]).filter(t=>!eenmaligBevestigd(t)), kk=esc(k).replace(/'/g,"\\'");
   $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligSheet" data-eenmalig="${esc(k)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} ${euro0(eenmaligOpen(x))} zonder potje</div>
     ${tx.map(t=>`<div class="small muted" data-eenmaligtx="${esc(t.id)}" style="margin-top:2px">${dagKort(t.date)} \u00b7 ${esc(titleCase(cleanMerch(t.name)||t.name||''))} \u00b7 ${euro0(Math.round(uitgaveNorm(t)))}${(()=>{ const b=benoemTekst(t); return b?` \u00b7 <span data-benoembron role="button" style="cursor:pointer" onclick="event.stopPropagation();openKennis()">${esc(b)}</span>`:''; })()}</div>`).join('')}
@@ -11197,20 +11216,36 @@ function gripCyclus(SIG){
   let BR=[]; try{ BR=benoemTerugVoorstellen(); }catch(_){}
   for(const x of BR){ const kk=esc(x.key).replace(/'/g,"\\'");
     kies.push({id:'benoem:'+x.key, bron:'benoem', naam:`${x.naam} komt terug · reservering?`, reden:`${x.partij} · ${euro0(-x.t.amount)} op ${dagKort(x.t.date)} · ${BENOEM_BRON[x.A.bron]||x.A.bron} · voorstel ${euro0(-x.t.amount)} per jaar`, act:`benoemResVoorstel('${kk}')`, x}); }
-  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, bron:'patroon', p, naam:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
+  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, sym:'pat:'+p.id, bron:'patroon', p, naam:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
   /* De handelingen van een signaal binnen een patroon (tot v428 een tik op die tak in Begrijpen, gripSigTik): een potje boven
      zijn grens (bijstellen, volgende maand anders, grens, zo laten) en inleg vóór je fundament (doorgaan of stilzetten). */
   let BVv=[]; try{ BVv=belegVragen(m); }catch(_){}
   for(const p of P) for(const g of (p.sig||[])){
     if(g.soort==='potje' && g.k){ const id=valtOpId(m, g.k), sg=(SIG||[]).find(x=>x.id===id); if(!sg || (sg.potjeId && potLaten(sg.potjeId))) continue;
-      kies.push({id:'sig:'+id, bron:'letop', soort:'sig', naam:`${sg.naam}: bijstellen of grens`, reden:`signaal: ${euro0(sg.over)} boven je potje · in ${p.naam}`, act:`openGripLetOp('sig','${esc(id)}')`}); }
-    if(g.soort==='inleg' && g.id && BVv.some(v=>v.asset.id===g.id)) kies.push({id:'beleg:'+g.id, bron:'letop', soort:'beleg', naam:`${g.naam}: bewust doorgaan of inleg stilzetten`, reden:`signaal: ${g.sub||'voorwaarden nog niet gehaald'} · in ${p.naam}`, act:`openBelegVraag('${esc(g.id)}')`}); }
+      kies.push({id:'sig:'+id, sym:'pat:'+p.id, bron:'letop', soort:'sig', naam:`${sg.naam}: bijstellen of grens`, reden:`signaal: ${euro0(sg.over)} boven je potje · in ${p.naam}`, act:`openGripLetOp('sig','${esc(id)}')`}); }
+    if(g.soort==='inleg' && g.id && BVv.some(v=>v.asset.id===g.id)) kies.push({id:'beleg:'+g.id, sym:'pat:'+p.id, bron:'letop', soort:'beleg', naam:`${g.naam}: bewust doorgaan of inleg stilzetten`, reden:`signaal: ${g.sub||'voorwaarden nog niet gehaald'} · in ${p.naam}`, act:`openBelegVraag('${esc(g.id)}')`}); }
   for(const x of LZ){ if(GRIP_LETOP_TERUG.has(x.soort) || GRIP_LETOP_FEIT.has(x.soort)) continue;
-    const t=gripKiesTitel(x); kies.push({id:lid(x), bron:'letop', soort:x.soort, naam:t, reden:t===x.naam?(x.sub||''):x.naam+(x.sub?' · '+x.sub:''), act:x.act, x}); }
+    const t=gripKiesTitel(x); kies.push({id:lid(x), sym:sym.some(z=>z.id===lid(x))?lid(x):null, bron:'letop', soort:x.soort, naam:t, reden:t===x.naam?(x.sub||''):x.naam+(x.sub?' · '+x.sub:''), act:x.act, x}); }
   const mee=L.filter(x=>GRIP_LETOP_TERUG.has(x.soort));
   const gekozen=P.filter(p=>K[p.id]).map(p=>({id:'pat:'+p.id, p, k:K[p.id]}));
   let uitg=[]; try{ uitg=gripTeRuimUitgevoerd(m); }catch(_){}
-  return {m, L, LZ, P, K, O, sym, kies, mee, gekozen, uitg};
+  /* v429: GEEN GEDRAGSKEUZE ZONDER OORZAAK. Een keuze die gedrag vraagt (een patroon, een signaal in een patroon, inleg vóór je
+     fundament, een potje boven budget herzien) staat pas onder Te kiezen als het symptoom een bevestigde oorzaak heeft; anders
+     onder Wacht op oorzaak. Wat alleen je gegevens kloppend maakt (categorie, eenmalig, potje maken, te ruim, te krap, de
+     bank) blijft onder Te kiezen. Per bevestigde oorzaak komt er een keuze bij (oorzaakKeuzes()); een symptoom dat alleen
+     eenmalig is telt niet als gedrag en krijgt geen keuze. "N keuzes staan open" telt alleen Te kiezen. */
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  let OV={A:{}, gevraagd:0, max:OORZAAK_MAX_VRAGEN}; try{ OV=oorzaakVragenStand({sym}, V); }catch(_){}
+  const gedrag=x=>x.bron==='patroon' || ['sig','beleg','boven'].includes(x.soort);
+  const te=[], wacht=[], gekozenO=[];
+  for(const x of kies){ const X=x.sym?OV.A[x.sym]:null;
+    if(!X || !gedrag(x)){ te.push(x); continue; }
+    if(X.eenmaligEnkel) continue;
+    if(X.bevestigd.length){ /* de oorzaak vervangt "Klopt dit patroon?" niet: zonder oordeel blijft de keuze dicht (v388/v428) */ x.oorzaak=X.bevestigd.map(b=>`oorzaak: ${OORZAAK_NAAM[b.soort].toLowerCase()} · ${oorzaakBronTxt(b)}`).join(' · '); te.push(x); }
+    else wacht.push(x); }
+  const OK=[]; for(const z of sym){ const X=OV.A[z.id]; if(!X) continue; for(const o of oorzaakKeuzes(X)){ if(te.some(y=>y.act===o.act) || OK.some(y=>y.id===o.id)) continue; if(oorzaakAfspraakDezeMaand(o.id)) gekozenO.push(o); else OK.push(o); } }
+  const wachtSym=[...new Set(wacht.map(x=>x.sym))].map(id=>({sym:id, naam:(sym.find(z=>z.id===id)||{}).naam||id, kies:wacht.filter(x=>x.sym===id), X:OV.A[id]}));
+  return {m, L, LZ, P, K, O, sym, kies:OK.concat(te), wacht, wachtSym, OV, mee, gekozen, gekozenO, uitg};
 }
 /* blok 21 en de tests: dezelfde cyclus zonder te schrijven (valtOpSignals() maakt records aan en zet `getoond`) */
 function gripCyclusLees(){ const s0=save, log=JSON.stringify(SET.valtOpLog||null); save=function(){};
@@ -11218,6 +11253,244 @@ function gripCyclusLees(){ const s0=save, log=JSON.stringify(SET.valtOpLog||null
 function gripCyc(){ return window._gripCyc || gripCyclusLees(); }
 const gripSub=t=>`<span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${t}</span>`;
 const gripPijl='<span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span>';
+/* ===== v429: VAN SYMPTOOM NAAR OORZAAK (Grip-cyclus fase 2) =====
+   GEEN GEDRAGSKEUZE ZONDER OORZAAK. Per symptoom toetst oorzaakAnalyse() de boekingen op zeven soorten oorzaken (OORZAAK_SOORT),
+   elk met een sterkte (zeker, waarschijnlijk, mogelijk) en een regel bewijs met getallen. Een oorzaak die zeker is uit de data
+   is de bevestigde oorzaak, bron "uit je boekingen", en dan komt er geen vraag. Anders een vraag per symptoom ("Wat past het
+   best?"), hooguit OORZAAK_MAX_VRAGEN per kalendermaand over alle symptomen samen; het antwoord staat in SET.kennis
+   ('oorzaak|'+sleutel, bron "door jou"), zichtbaar en te wijzigen in "Wat Minder van jou weet". "Weet ik niet" start een
+   testweek (TESTWEEK_DAGEN) op het potje van het symptoom. Begrijpen verandert geen budget: het enige wat je daar doet is deze
+   vraag beantwoorden. Geen oorzaken op basis van werk- of kantoordagen. */
+const OORZAAK_MAX_VRAGEN=3, OORZAAK_MAX=4, TESTWEEK_DAGEN=7, TESTWEEK_MIN_TIK=4, TESTWEEK_DEEL=0.6, TESTWEEK_NATIK_MAX=5;
+const OORZAAK_TOETS={budgetMaanden:4, budgetBoven:3, budgetSpreiding:0.2, verdelingDeel:0.7, eenmaligDeel:0.5, salarisDagen:7, salarisDeel:0.5, salarisMaanden:2, gewoonteN:8, gewoonteMax:15, gelegenheidDeel:0.4};
+const OORZAAK_SOORT=['budget','verdeling','eenmalig','salaris','gewoonte','gelegenheid','gevoel'];
+const OORZAAK_NAAM={budget:'Budget past niet', verdeling:'Verdeling', eenmalig:'Eenmalig', salaris:'Salaris-effect', gewoonte:'Gewoonte', gelegenheid:'Gelegenheid', gevoel:'Gevoel'};
+/* de opties van de vraag, in gewone taal */
+const OORZAAK_OPTIE={budget:'Mijn budget past niet bij wat ik echt uitgeef', verdeling:'Het geld komt uit een ander potje', eenmalig:'Het was eenmalig',
+  salaris:'Vlak na mijn salaris geef ik meer uit', gewoonte:'Het gaat vanzelf, een vast moment', gelegenheid:'Het hangt aan een plek of een moment',
+  gevoel:'Als ik moe of gespannen ben, of mezelf beloon'};
+const OORZAAK_STERKTE=['zeker','waarschijnlijk','mogelijk','niet gevraagd'];
+const DAGDELEN=[['ochtend',6,12],['middag',12,17],['17–20',17,20],['20–23',20,23],['nacht',23,30]];
+const TESTWEEK_GEVOEL=[['gewoon','gewoon'],['trek','trek'],['moe','gestrest of moe'],['samen','gezellig met anderen'],['beloning','beloning']];
+/* wat een antwoord in de testweek als oorzaak voorstelt */
+const TESTWEEK_NAAR={gewoon:['gewoonte','een vast moment'], trek:['gewoonte','bij trek'], moe:['gevoel','bij spanning'], samen:['gelegenheid','met anderen'], beloning:['gevoel','als beloning']};
+function dagdeelVan(t){ const h=+String((t&&t.betaalTijd)||'').slice(0,2); if(!(t&&t.betaalTijd) || !isFinite(h)) return null; const hh=h<6?h+24:h;
+  for(const [n,a,b] of DAGDELEN) if(hh>=a && hh<b) return n; return null; }
+/* de sleutel van een symptoom: het potje (cat:k), anders het symptoom zelf */
+function oorzaakSleutel(s){ return s.k?'cat:'+s.k:s.id; }
+/* de potjes waar een symptoom over gaat: zijn eigen, of de potjes in zijn patroon; leeg is al het losse geld (piekInScope) */
+function oorzaakKs(s){ if(s.k) return [s.k]; const P=s.p||null; return P?[...new Set((P.sig||[]).filter(g=>g.k).map(g=>g.k))]:[]; }
+/* de boekingen in de scope van een symptoom in maand ym; zonder vaste lasten; een door jou bevestigde eenmalige uitgave telt
+   niet mee als gedrag (metEenmalig: wel, voor de toets eenmalig zelf) */
+function oorzaakTx(ks, ym, metEenmalig){ return txOfMonth(ym).filter(t=>t.amount<0 && !t.pending && (ks.length?ks.includes(catOf(t)) && !isFixed(t):piekInScope(t)) && (metEenmalig || !eenmaligBevestigd(t))); }
+/* uitgegeven en budget van potje k in maand ym; de lopende maand is het verwachte eind (maandVooruit, dezelfde bron als de brug) */
+function oorzaakUitBud(k, ym, V){ const bud0=Math.round(+((SET.budgets||{})[k])||0);
+  if(ym===thisYM()){ let e=null; if(V && !V.onbekend){ const a=(V.potjes||[]).find(x=>x.k===k), b=(V.vastePotjes||[]).find(x=>x.k===k), z=((V.zonderStand||{}).rijen||[]).find(x=>x.k===k);
+      if(a||b) e=(a?+a.eindR||0:0)+(b?+b.eindR||0:0); else if(z) e=z.geboekt+z.verwacht; }
+    if(e==null){ try{ e=+(catSpendMap(ym)||{})[k]||0; }catch(_){ e=0; } } return {uit:Math.round(e), bud:bud0}; }
+  let uit=0; try{ uit=+(catSpendMap(ym)||{})[k]||0; }catch(_){} const MP=(maandPotjes(ym)||{}).B;
+  return {uit:Math.round(uit), bud:Math.round(MP && MP[k]!=null?+MP[k]||0:bud0)}; }
+/* de datum van je salaris in maand ym: de eerste betaling van de bron van salarisBetalingLaatst() */
+function oorzaakSalarisDag(ym){ let S=null; try{ S=salarisBetalingLaatst(thisYM()); }catch(_){} if(!S) return null; const rk=recurKey(S);
+  const L=TX.filter(t=>!t.pending && t.amount>0 && t.date.slice(0,7)===ym && recurKey(t)===rk).sort((a,b)=>a.date.localeCompare(b.date)); return L.length?L[0].date.slice(0,10):null; }
+function oorzaakDagPlus(d, n){ const x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+n); return ymdVan(x); }
+/* DE TOETSEN. Elk geeft {soort, vuurt, sterkte, bewijs, getallen}; vuurt=false staat alleen in blok 22. */
+function oorzaakAnalyse(s, V){
+  const m=thisYM(), ks=oorzaakKs(s), k=s.k||null, key=oorzaakSleutel(s), MS=[3,2,1].map(i=>valtOpYmPlus(m,-i)), T=[];
+  /* de maand van de overschrijding: de lopende als die verwacht boven eindigt, anders de laatste afgeronde erboven */
+  let M=m, uit=0, bud=0, over=0;
+  if(k){ const nu=oorzaakUitBud(k, m, V); if(nu.uit>nu.bud){ M=m; uit=nu.uit; bud=nu.bud; }
+    else { const af=MS.slice().reverse().map(ym=>Object.assign({ym}, oorzaakUitBud(k, ym, V))).find(x=>x.uit>x.bud); if(af){ M=af.ym; uit=af.uit; bud=af.bud; } else { uit=nu.uit; bud=nu.bud; } }
+    over=Math.max(uit-bud, 0); }
+  else if(s.p){ over=Math.round(+s.p.bedrag||0); uit=over; }
+  const MN=ym=>MNAMES[+ym.slice(5,7)-1];
+  /* 1. budget past niet: >=3 van de laatste 4 afgeronde maanden boven het budget, en elke maand binnen 20% van de mediaan */
+  if(k && (+((SET.budgets||{})[k])||0)>0){ const eerste=TX.reduce((a,t)=>!a||t.date<a?t.date:a,'').slice(0,7);   // een maand voor je eerste boeking is geen meting
+    const M4=[4,3,2,1].map(i=>valtOpYmPlus(m,-i)).filter(ym=>ym>=eerste).map(ym=>Object.assign({ym}, oorzaakUitBud(k, ym, V)));
+    const nb=M4.filter(x=>x.uit>x.bud).length, med=mediaan(M4.map(x=>x.uit)), uitw=M4.filter(x=>Math.abs(x.uit-med)>OORZAAK_TOETS.budgetSpreiding*med);
+    const vuurt=nb>=OORZAAK_TOETS.budgetBoven && med>0 && !uitw.length, laag=Math.min(...M4.map(x=>x.uit));
+    T.push({soort:'budget', vuurt, sterkte:'zeker', getallen:{boven:nb, mediaan:Math.round(med), maanden:M4.map(x=>`${MN(x.ym)} ${x.uit}/${x.bud}`).join(' · '), buiten:uitw.map(x=>MN(x.ym)).join(', ')},
+      bewijs:`${nb} van de laatste ${M4.length} maanden boven je budget van ${euro0(+SET.budgets[k]||0)}, laagste maand ${euro0(laag)}, elke maand binnen 20% van ${euro0(med)}`,
+      niet:`${nb} van ${M4.length} boven${uitw.length?` · ${uitw.map(x=>MN(x.ym)).join(', ')} wijkt meer dan 20% af van ${euro0(med)}`:''}`}); }
+  /* 2. verdeling: in dezelfde maand staat een ander potje minstens 70% van deze overschrijding onder budget */
+  if(k && over>0){ const Bm=M===m?(V&&V.potjes||[]).map(x=>({k:x.k, naam:x.naam, ruimte:Math.round((+x.bud||0)-(+x.eindR||0))})):(()=>{ const MP=(maandPotjes(M)||{}).B||SET.budgets||{}, SP=catSpendMap(M)||{}; return Object.keys(MP).map(j=>({k:j, naam:(CATS[j]||{}).name||j, ruimte:Math.round((+MP[j]||0)-(+SP[j]||0))})); })();
+    const kand=Bm.filter(x=>x.k!==k && CATS[x.k] && CATS[x.k].type==='expense' && !isFixedCat(x.k) && x.ruimte>=OORZAAK_TOETS.verdelingDeel*over).sort((a,b)=>b.ruimte-a.ruimte), b=kand[0];
+    T.push({soort:'verdeling', vuurt:!!b, sterkte:'zeker', ander:b?b.k:null, getallen:{over, ander:b?b.naam:'-', ruimte:b?b.ruimte:0},
+      bewijs:b?`In ${MN(M)} bleef ${b.naam} ${euro0(b.ruimte)} onder budget, tegen ${euro0(over)} erboven hier`:'', niet:`geen ander potje ${Math.round(OORZAAK_TOETS.verdelingDeel*100)}% van ${euro0(over)} onder budget in ${MN(M)}`}); }
+  /* 3. eenmalig: een boeking is minstens 50% van de overschrijding; zeker als jij hem als eenmalig bevestigde */
+  if(over>0){ const L=oorzaakTx(ks, M, true).sort((a,b)=>a.amount-b.amount), t=L[0], g=t?-t.amount:0, bev=t?eenmaligBevestigd(t):'';
+    const vuurt=!!t && g>=OORZAAK_TOETS.eenmaligDeel*over;
+    T.push({soort:'eenmalig', vuurt, sterkte:bev?'zeker':'waarschijnlijk', bron:bev?'jij':'', tx:t?t.id:null, getallen:{grootste:Math.round(g), over},
+      bewijs:t?`${euro0(g)} bij ${titleCase(cleanMerch(t.name)||t.name||'')} op ${dagKort(t.date)}, ${Math.round(g/Math.max(over,1)*100)}% van de ${euro0(over)} erboven${bev?' · door jou eenmalig':''}`:'', niet:t?`grootste boeking ${euro0(g)} is minder dan de helft van ${euro0(over)}`:'geen boeking'}); }
+  /* 4. salaris-effect: minstens 50% van de uitgaven valt in de 7 dagen na je salaris, in minstens 2 van de 3 maanden */
+  { let n=0, gem=0, bek=0; const det=[];
+    for(const ym of MS){ const d=oorzaakSalarisDag(ym); if(!d){ det.push(`${MN(ym)} geen salaris`); continue; } bek++;
+      const L=oorzaakTx(ks, ym), tot=L.reduce((a,t)=>a-t.amount,0), eind=oorzaakDagPlus(d, OORZAAK_TOETS.salarisDagen-1), na=L.filter(t=>t.date.slice(0,10)>=d && t.date.slice(0,10)<=eind).reduce((a,t)=>a-t.amount,0);
+      const p=tot>0?na/tot:0; if(tot>0 && p>=OORZAAK_TOETS.salarisDeel) n++; gem+=p; det.push(`${MN(ym)} ${Math.round(p*100)}%`); }
+    T.push({soort:'salaris', vuurt:n>=OORZAAK_TOETS.salarisMaanden, sterkte:'waarschijnlijk', getallen:{maanden:n, per:det.join(' · ')},
+      bewijs:`in ${n} van de 3 maanden ging minstens de helft in de 7 dagen na je salaris (${det.join(' · ')})`, niet:bek?`${n} van 3 maanden (${det.join(' · ')})`:'salarisdatum onbekend'}); }
+  /* 5. gewoonte: minstens 8 aankopen per maand, elk onder EUR 15; bewijs met de dagdelen */
+  const W=MS.flatMap(ym=>oorzaakTx(ks, ym));
+  const dd={}; let metTijd=0; for(const t of W){ const d=dagdeelVan(t); if(d){ dd[d]=(dd[d]||0)+1; metTijd++; } }
+  const ddTxt=DAGDELEN.map(([n])=>`${n} ${dd[n]||0}`).join(' · ');
+  { const per=MS.map(ym=>oorzaakTx(ks, ym).filter(t=>-t.amount<OORZAAK_TOETS.gewoonteMax).length), gem=per.reduce((a,v)=>a+v,0)/3;
+    const gr=W.filter(t=>-t.amount<OORZAAK_TOETS.gewoonteMax), gemB=gr.length?gr.reduce((a,t)=>a-t.amount,0)/gr.length:0;
+    T.push({soort:'gewoonte', vuurt:gem>=OORZAAK_TOETS.gewoonteN, sterkte:'waarschijnlijk', getallen:{perMaand:per.join('/'), gem:Math.round(gem*10)/10},
+      bewijs:`~${Math.round(gem)} aankopen per maand onder ${euro0(OORZAAK_TOETS.gewoonteMax)}, gemiddeld ${euro0(gemB)} · ${metTijd?ddTxt+` (${metTijd} van ${W.length} met een tijd)`:'geen tijd bekend'}`, niet:`${per.join(' · ')} aankopen onder ${euro0(OORZAAK_TOETS.gewoonteMax)} per maand`}); }
+  /* 6. gelegenheid: minstens 40% van het bedrag bij een partij of in een dagdeel */
+  { const tot=W.reduce((a,t)=>a-t.amount,0), P={}, D={}; let totT=0;
+    for(const t of W){ const p=titleCase(cleanMerch(t.name)||t.name||'?'); P[p]=(P[p]||0)-t.amount; const d=dagdeelVan(t); if(d){ D[d]=(D[d]||0)-t.amount; totT-=t.amount; } }
+    const pT=Object.entries(P).sort((a,b)=>b[1]-a[1])[0], dT=Object.entries(D).sort((a,b)=>b[1]-a[1])[0];
+    const pp=pT&&tot>0?pT[1]/tot:0, dp=dT&&totT>0?dT[1]/totT:0, opP=pp>=OORZAAK_TOETS.gelegenheidDeel, opD=dp>=OORZAAK_TOETS.gelegenheidDeel;
+    T.push({soort:'gelegenheid', vuurt:(opP||opD) && W.length>=2, sterkte:'mogelijk', plek:opP?pT[0]:null, dagdeel:!opP&&opD?dT[0]:null, getallen:{partij:pT?`${pT[0]} ${Math.round(pp*100)}%`:'-', dagdeel:dT?`${dT[0]} ${Math.round(dp*100)}%`:'-'},
+      bewijs:opP?`${Math.round(pp*100)}% van het bedrag bij ${pT[0]}`:opD?`${Math.round(dp*100)}% van het bedrag tussen ${dT[0]}`:'', niet:`grootste partij ${pT?Math.round(pp*100):0}%, grootste dagdeel ${dT?Math.round(dp*100):0}%`}); }
+  /* 7. gevoel: blijkt nooit uit de data; altijd mogelijk */
+  { const avond=(dd['20–23']||0)+(dd['nacht']||0);
+    T.push({soort:'gevoel', vuurt:true, sterkte:'mogelijk', getallen:{avond, metTijd}, bewijs:`blijkt niet uit je boekingen${metTijd?` · ${avond} van ${metTijd} aankopen met een tijd na 20 uur`:''}`, niet:''}); }
+  /* de bevestigde oorzaken: zeker uit de data, en jouw antwoord (SET.kennis) */
+  const E=kennisGet('oorzaak|'+key), bev=[];
+  for(const x of T) if(x.vuurt && x.sterkte==='zeker') bev.push({soort:x.soort, bron:x.soort==='eenmalig'&&x.bron==='jij'?'jij':'boekingen', op:'', bewijs:x.bewijs});
+  if(E && !bev.some(b=>b.soort===E.aard)) bev.push({soort:E.aard, bron:E.bron||'jij', op:E.op||'', detail:E.detail||'', bewijs:E.wat||''});
+  /* de lijst: wat vuurt, op sterkte en dan in vaste volgorde; hooguit OORZAAK_MAX, gevoel blijft erbij */
+  let O=T.filter(x=>x.vuurt).map(x=>Object.assign({}, x, {label:x.sterkte})).sort((a,b)=>(OORZAAK_STERKTE.indexOf(a.sterkte)-OORZAAK_STERKTE.indexOf(b.sterkte))||(OORZAAK_SOORT.indexOf(a.soort)-OORZAAK_SOORT.indexOf(b.soort)));
+  if(O.length>OORZAAK_MAX){ const gv=O.find(x=>x.soort==='gevoel'); O=O.filter(x=>x!==gv).slice(0, OORZAAK_MAX-1).concat(gv?[gv]:[]); }
+  if(bev.length) for(const x of O) if(!bev.some(b=>b.soort===x.soort)) x.label='niet gevraagd';
+  const eenmaligEnkel=bev.length>0 && bev.every(b=>b.soort==='eenmalig');
+  return {key, s, ks, k, M, uit, bud, over, toetsen:T, oorzaken:O, bevestigd:bev, eenmaligEnkel, antwoord:E}; }
+/* ---- de vraag en de testweek ---- */
+function oorzaakGevraagd(ym){ return ((SET.oorzaakVragen||{})[ym||thisYM()])||[]; }
+function testweekStand(key){ const W=(SET.testweek||{})[key]; if(!W) return null; const v=vandaagYMD();
+  const eind=oorzaakDagPlus(W.start, TESTWEEK_DAGEN-1), loopt=v<=eind, nog=loopt?Math.round((new Date(eind+'T00:00:00')-new Date(v+'T00:00:00'))/864e5)+1:0;
+  const A=W.antw||{}, vals=Object.values(A), tel={}; for(const a of vals) tel[a]=(tel[a]||0)+1;
+  const top=Object.entries(tel).sort((a,b)=>b[1]-a[1])[0]||null, n=vals.length, deel=top&&n?top[1]/n:0;
+  const voorstel=!loopt && n>=TESTWEEK_MIN_TIK && deel>=TESTWEEK_DEEL ? top[0] : null;
+  return {W, start:W.start, eind, loopt, nog, n, tel, top:top?top[0]:null, deel, voorstel, klaar:!loopt, afgewezen:!!W.afgewezen, uitkomst:W.uitkomst||null}; }
+/* bankboekingen in het potje tijdens de testweek die niet via de koopknop gingen (geen koopknop-aankoop met hetzelfde bedrag
+   binnen 2 dagen), om na te tikken, hooguit TESTWEEK_NATIK_MAX */
+function testweekBank(key){ const W=(SET.testweek||{})[key]; if(!W) return []; const eind=oorzaakDagPlus(W.start, TESTWEEK_DAGEN-1), A=W.antw||{}, K=W.koop||[];
+  return TX.filter(t=>t.amount<0 && !t.pending && catOf(t)===W.k && t.date.slice(0,10)>=W.start && t.date.slice(0,10)<=eind && !A[t.id]
+    && !K.some(x=>Math.round(x.bedrag)===Math.round(-t.amount) && Math.abs((new Date(t.date.slice(0,10))-new Date(x.op))/864e5)<=2)).slice(0, TESTWEEK_NATIK_MAX); }
+/* de vraag per symptoom: hooguit OORZAAK_MAX_VRAGEN per kalendermaand. Een symptoom dat deze maand al gevraagd is (in
+   SET.oorzaakVragen) houdt zijn plek; de rest krijgt een plek zolang er over is, in de volgorde van de symptomen. */
+/* een symptoom over uitgaven: een potje of categorie (s.k) of een patroon. Een melding over je gegevens (uitgesloten incasso's,
+   contant tellen) heeft geen oorzaak om te vragen en telt niet mee in de vragen. */
+/* v429: beleggen vóór je fundament is geen uitgavensymptoom: de toetsen (budget, verdeling, eenmalig, salaris, gewoonte,
+   gelegenheid, gevoel) gaan over wat er uit een potje gaat, en geen van zeven zegt waarom je inlegt voordat de voorwaarden er zijn.
+   Die keuze (bewust doorgaan of zelf stilzetten) blijft dus onder Te kiezen, zonder oorzaakvraag. */
+function oorzaakSymptoom(s){ return !!(s && (s.k || (s.p && s.p.id!=='beleggen'))); }
+function oorzaakVragenStand(C, V){ const m=thisYM(), al=oorzaakGevraagd(m), A={}; let vrij=OORZAAK_MAX_VRAGEN-al.length;
+  for(const s of C.sym){ if(!oorzaakSymptoom(s)) continue; const X=oorzaakAnalyse(s, V), tw=testweekStand(X.key); let stand;
+    if(X.bevestigd.length) stand='bevestigd';
+    else if(tw && tw.loopt) stand='testweek';
+    else if(tw && tw.klaar && tw.voorstel && !tw.afgewezen) stand='voorstel';
+    else if(tw && tw.klaar && String(tw.eind).slice(0,7)>=m) stand='vervallen';
+    else if(al.includes(X.key)) stand='vraag';
+    else if(vrij>0){ stand='vraag'; vrij--; }
+    else stand='later';
+    A[s.id]=Object.assign(X, {stand, tw}); }
+  return {A, gevraagd:al.length, max:OORZAAK_MAX_VRAGEN, volgende:nextYM(m)}; }
+function oorzaakKies(sid, soort){ window._oorzaakKeuze=Object.assign({}, window._oorzaakKeuze, {[sid]:soort}); renderMaand(); }
+/* het antwoord: bevestigen schrijft; "weet ik niet" start de testweek. Beide tellen als vraag van deze maand. */
+function oorzaakBevestig(sid){ const soort=(window._oorzaakKeuze||{})[sid]; if(!soort) return;
+  const C=gripCyc(), s=C.sym.find(x=>x.id===sid); if(!s) return; const key=oorzaakSleutel(s), m=thisYM();
+  SET.oorzaakVragen=SET.oorzaakVragen||{}; const al=SET.oorzaakVragen[m]||[]; if(!al.includes(key)) SET.oorzaakVragen[m]=al.concat([key]);
+  if(soort==='weetniet'){ SET.testweek=SET.testweek||{}; SET.testweek[key]={k:s.k||oorzaakKs(s)[0]||null, sym:sid, naam:s.naam, start:vandaagYMD(), koop:[], antw:{}}; }
+  else kennisZet('oorzaak|'+key, {soort:'oorzaak', partij:(s.k&&CATS[s.k]?CATS[s.k].name:s.naam), wat:OORZAAK_OPTIE[soort], aard:soort, bron:'jij', symId:sid, via:'vraag'});
+  delete (window._oorzaakKeuze||{})[sid]; save(); renderMaand(); }
+/* na de testweek: het voorstel bevestigen (bron "voorstel, door jou bevestigd") of afwijzen (de vraag vervalt tot volgende maand) */
+function testweekVoorstelZet(key, ja){ const tw=testweekStand(key); if(!tw || !tw.voorstel) return; const W=SET.testweek[key], C=gripCyc(), s=C.sym.find(x=>x.id===W.sym)||{naam:W.naam, k:W.k};
+  if(ja){ const [aard, det]=TESTWEEK_NAAR[tw.voorstel]; kennisZet('oorzaak|'+key, {soort:'oorzaak', partij:(W.k&&CATS[W.k]?CATS[W.k].name:W.naam), wat:`${OORZAAK_NAAM[aard]} · ${det}`, aard, detail:det, bron:'bevestigd', symId:W.sym, via:'testweek'}); W.uitkomst={op:vandaagYMD(), keuze:'bevestigd', aard}; }
+  else { W.afgewezen=vandaagYMD(); W.uitkomst={op:vandaagYMD(), keuze:'klopt niet'}; }
+  save(); renderMaand(); }
+function testweekStop(key){ const W=(SET.testweek||{})[key]; if(!W) return; W.start=oorzaakDagPlus(vandaagYMD(), -TESTWEEK_DAGEN); W.gestopt=vandaagYMD(); save(); renderMaand(); }
+/* een tik: het gevoel bij een aankoop (koopknop) of een bankboeking (natikken) */
+function testweekTik(key, id, gevoel){ const W=(SET.testweek||{})[key]; if(!W) return; W.antw=W.antw||{}; if(gevoel) W.antw[id]=gevoel; else W.overgeslagen=(W.overgeslagen||[]).concat([id]); save(); try{ closeSheet(); }catch(_){} renderMaand(); }
+/* de koopknop: na een aankoop in een potje met een lopende testweek komt een tik "Hoe voelde je je net?" */
+function testweekVoorPotje(cat){ for(const [key,W] of Object.entries(SET.testweek||{})){ const S=testweekStand(key); if(S && S.loopt && W.k===cat) return key; } return null; }
+function testweekKoop(cat, amt, item){ const key=testweekVoorPotje(cat); if(!key) return null; const W=SET.testweek[key], id='koop'+Date.now().toString(36);
+  W.koop=(W.koop||[]).concat([{id, bedrag:+amt||0, item:item||'', op:vandaagYMD()}]); save(); return {key, id}; }
+function openTestweekTik(key, id){ const W=(SET.testweek||{})[key]; if(!W) return; const K=(W.koop||[]).find(x=>x.id===id), t=K?null:TX.find(x=>x.id===id);
+  const wat=K?`${potName(W.k)} ${euro0(K.bedrag)}`:t?`${titleCase(cleanMerch(t.name)||t.name||'')} ${euro0(-t.amount)} op ${dagKort(t.date)}`:'';
+  const kk=s=>esc(String(s)).replace(/'/g,"\\'");
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="testweekTik" data-testweektik="${esc(id)}"><div class="small muted">Testweek · ${esc(potName(W.k))}</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${esc(wat)}. Hoe voelde je je ${K?'net':'toen'}?</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${TESTWEEK_GEVOEL.map(([v,l])=>`<button class="btn sec" data-gevoel="${v}" style="width:auto;padding:8px 12px" onclick="testweekTik('${kk(key)}','${kk(id)}','${v}')">${l}</button>`).join('')}</div>
+    <div class="small" data-gevoeloverslaan role="button" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="testweekTik('${kk(key)}','${kk(id)}','')">Overslaan</div></div>`;
+  showSheetBg(); }
+/* ---- de weergave in Begrijpen ---- */
+function oorzaakRijen(X){ const sterkteKleur={zeker:'var(--green)', waarschijnlijk:'var(--teal)', mogelijk:'var(--mut)', 'niet gevraagd':'var(--mut2)'};
+  return X.oorzaken.map(x=>`<div class="row" data-oorzaak="${x.soort}" data-sterkte="${x.label}" style="gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${OORZAAK_NAAM[x.soort]}</span>${gripSub(esc(x.bewijs))}</span><span class="small" data-oorzaaklabel style="white-space:nowrap;color:${sterkteKleur[x.label]};font-weight:700">${x.label}</span></div>`).join(''); }
+function oorzaakBronTxt(b){ return b.bron==='boekingen'?'uit je boekingen':(KENNIS_BRON[b.bron]||'door jou')+(b.op?' · '+dagKort(b.op):''); }
+function oorzaakBlok(X, C){ const sid=X.s.id, kk=esc(sid).replace(/'/g,"\\'");
+  let html=`<div class="hlabel" style="margin:10px 0 2px">Mogelijke oorzaken · op bewijs</div><div data-oorzaken="${esc(X.key)}">${oorzaakRijen(X)}</div>`;
+  if(X.bevestigd.length){ html+=`<div data-oorzaakbevestigd style="margin-top:10px">${X.bevestigd.map(b=>`<div class="row" data-bevestigd="${b.soort}" style="gap:8px;padding:4px 0"><span style="color:var(--green);font-weight:800">✓</span><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(b.soort==='gevoel'||b.soort==='gewoonte'||b.soort==='gelegenheid'?(b.bewijs||OORZAAK_NAAM[b.soort]):OORZAAK_NAAM[b.soort])}</span>${gripSub(b.bron==='boekingen'?esc(oorzaakBronTxt(b)):kennisBronLink(oorzaakBronTxt(b)))}</span></div>`).join('')}</div>`;
+    if(X.eenmaligEnkel) html+=`<div class="small" data-geengedrag style="margin-top:6px;line-height:1.45">Eenmalig: dit symptoom telt niet als gedrag, en er hoort geen keuze bij.</div>`;
+    return html; }
+  if(X.stand==='testweek'){ const tw=X.tw, nat=testweekBank(X.key), kq=esc(X.key).replace(/'/g,"\\'");
+    html+=`<div class="card" data-testweek="${esc(X.key)}" style="margin:10px 0 0;background:var(--card2)"><div style="font-weight:800">Testweek: nog ${tw.nog} ${tw.nog===1?'dag':'dagen'}</div>
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${esc(dagKort(tw.start))} t/m ${esc(dagKort(tw.eind))} · alleen ${esc(potName(tw.W.k))} · na een aankoop via "Ik wil iets kopen" een tik: hoe voelde je je net? · ${tw.n} ${tw.n===1?'tik':'tikken'} tot nu toe</div>
+      ${nat.length?`<div class="small" style="margin-top:6px;font-weight:600">Niet via de koopknop, na te tikken:</div>${nat.map(t=>`<div class="row" data-natik="${esc(t.id)}" role="button" style="gap:8px;padding:5px 0;cursor:pointer" onclick="openTestweekTik('${kq}','${esc(t.id)}')"><span class="small" style="flex:1">${esc(dagKort(t.date))} · ${esc(titleCase(cleanMerch(t.name)||t.name||''))}</span><span class="small" style="font-weight:700">${euro0(-t.amount)}</span>${gripPijl}</div>`).join('')}`:''}
+      <div class="small" data-testweekstop role="button" style="margin-top:8px;color:var(--mut2);cursor:pointer" onclick="testweekStop('${kq}')">Test stoppen</div></div>`;
+    return html; }
+  if(X.stand==='voorstel'){ const tw=X.tw, [aard,det]=TESTWEEK_NAAR[tw.voorstel], kq=esc(X.key).replace(/'/g,"\\'");
+    html+=`<div class="card" data-testweekvoorstel="${aard}" style="margin:10px 0 0;background:var(--card2)"><div style="font-weight:800">Lijkt op: ${esc(OORZAAK_NAAM[aard].toLowerCase())} – ${esc(det)}</div>
+      <div class="small muted" style="margin-top:2px">${tw.tel[tw.voorstel]} van je ${tw.n} tikken: ${esc((TESTWEEK_GEVOEL.find(g=>g[0]===tw.voorstel)||[])[1]||'')}</div>
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn" style="flex:1" data-voorstelja onclick="testweekVoorstelZet('${kq}',true)">Bevestigen</button><button class="btn sec" style="flex:1" data-voorstelnee onclick="testweekVoorstelZet('${kq}',false)">Klopt niet</button></div></div>`;
+    return html; }
+  if(X.stand==='vervallen') return html+`<div class="small" data-oorzaakvervallen style="margin-top:8px;line-height:1.45">${X.tw&&X.tw.afgewezen?'Je wees het voorstel af':'De testweek liet geen duidelijk patroon zien'}${X.tw?` (${X.tw.n} ${X.tw.n===1?'tik':'tikken'})`:''}. De vraag komt terug in ${esc(MNAMES[+nextYM(thisYM()).slice(5,7)-1])}.</div>`;
+  if(X.stand==='later') return html+`<div class="small" data-oorzaaklater style="margin-top:8px;color:var(--mut2)">Je had deze maand ${OORZAAK_MAX_VRAGEN} vragen · volgende vraag in ${esc(ymFull(nextYM(thisYM())).split(' ')[0])}</div>`;
+  /* de vraag: de mogelijke oorzaken in gewone taal (niet de eenmalige: die bevestig je in de eenmalig-vraag), plus "Weet ik niet" */
+  const opts=X.oorzaken.filter(x=>x.soort!=='eenmalig').map(x=>x.soort).concat(['weetniet']), gek=(window._oorzaakKeuze||{})[sid];
+  html+=`<div class="card" data-oorzaakvraag="${esc(X.key)}" style="margin:10px 0 0;background:var(--card2)"><div style="font-weight:800">Wat past het best?</div>
+    ${opts.map(o=>`<div class="row" data-vraagoptie="${o}" role="button" style="gap:8px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="oorzaakKies('${kk}','${o}')"><span style="width:16px;height:16px;border-radius:50%;border:2px solid ${gek===o?'var(--teal)':'var(--mut2)'};background:${gek===o?'var(--teal)':'transparent'};flex-shrink:0"></span><span class="small" style="flex:1">${o==='weetniet'?'Weet ik niet <span style="color:var(--mut2)">· start een testweek van 7 dagen</span>':esc(OORZAAK_OPTIE[o])}</span></div>`).join('')}
+    <button class="btn" data-vraagbevestig style="margin-top:8px"${gek?'':' disabled'} onclick="oorzaakBevestig('${kk}')">${gek==='weetniet'?'Testweek starten':'Bevestigen'}</button>
+    ${X.oorzaken.some(x=>x.soort==='eenmalig')?`<div class="small muted" style="margin-top:6px">Eenmalig niet gevraagd: dat bevestig je bij de uitgave zelf (Kiezen of Kloppen mijn gegevens?).</div>`:''}</div>`;
+  return html; }
+/* de korte stand op de symptoomrij in Begrijpen */
+function oorzaakRijTekst(X){ const n=X.oorzaken.length, z=X.oorzaken.filter(x=>x.sterkte==='zeker'&&x.label!=='niet gevraagd').length;
+  const links=`${n} mogelijke ${n===1?'oorzaak':'oorzaken'}${z?` · ${z} al zeker`:''}`;
+  const rechts=X.eenmaligEnkel?'eenmalig':X.bevestigd.length?'zeker ›':X.stand==='testweek'?`testweek · nog ${X.tw.nog} d`:X.stand==='voorstel'?'voorstel ›':X.stand==='vraag'?'1 vraag ›':X.stand==='later'?`vraag in ${MNAMES[+nextYM(thisYM()).slice(5,7)-1]}`:'›';
+  return {links, rechts}; }
+/* Kiezen op een keuze openen, zonder iets te veranderen */
+function gripNaarKeuze(id){ window._gripKiesFocus=id; window._gripTab='kiezen'; renderMaand();
+  try{ const el=document.querySelector(`[data-kies="${CSS.escape(id)}"]`); if(el) el.scrollIntoView({block:'center'}); }catch(_){} }
+/* ---- de keuze per oorzaak (Kiezen) ---- */
+function oorzaakKeuzes(X){ if(!X.bevestigd.length || X.eenmaligEnkel) return []; const s=X.s, k=X.k, cn=k&&CATS[k]?CATS[k].name:s.naam, kq=esc(X.key).replace(/'/g,"\\'"), out=[];
+  for(const b of X.bevestigd){ const reden=`oorzaak: ${OORZAAK_NAAM[b.soort].toLowerCase()}${b.detail?' · '+b.detail:''} · ${oorzaakBronTxt(b)}`, id=`oorz:${X.key}:${b.soort}`;
+    if(b.soort==='eenmalig') continue;
+    if(b.soort==='budget' && k){ let inL=false; try{ inL=potBovenLijst().some(y=>y.k===k)||potKrapLijst().some(y=>y.k===k); }catch(_){} out.push({id, sym:s.id, bron:'oorzaak', soort:'budget', naam:`${cn}: budget herzien`, reden, act:inL?`openPotHerzien('${esc(k)}')`:`openPotForm('${esc(k)}')`}); continue; }
+    if(b.soort==='verdeling' && k){ const tv=X.toetsen.find(x=>x.soort==='verdeling'), an=tv&&tv.ander; out.push({id, sym:s.id, bron:'oorzaak', soort:'verdeling', naam:`${cn}: budget verschuiven${an?' van '+((CATS[an]||{}).name||an):''}`, reden, act:`openPotjeBijstel('${esc(k)}'${an?`,'${esc(an)}'`:''})`}); continue; }
+    const tekst=oorzaakAfspraakTekst(X, b); if(!tekst) continue;
+    out.push({id, sym:s.id, bron:'oorzaak', soort:b.soort, naam:tekst.naam, reden, act:`openOorzaakAfspraak('${kq}','${b.soort}')`}); }
+  return out; }
+/* de afspraak bij een oorzaak die gedrag is: salaris-effect, gewoonte, gelegenheid, gevoel */
+function oorzaakAfspraakTekst(X, b){ const cn=X.k&&CATS[X.k]?CATS[X.k].name:X.s.naam, tg=X.toetsen.find(x=>x.soort==='gelegenheid')||{};
+  const opzij=Math.max(Math.round((X.over||0)/5)*5, 10);
+  if(b.soort==='salaris') return {naam:`Op je salarisdag eerst ${euro0(opzij)} opzij`, wat:`Op je salarisdag zet je eerst ${euro0(opzij)} opzij, voordat je ${cn} uitgeeft.`, bedrag:opzij};
+  if(b.soort==='gewoonte') return {naam:`${cn}: hooguit 2× per week`, wat:`${cn} hooguit 2 keer per week.`, maxWeek:2};
+  if(b.soort==='gelegenheid') return {naam:`${cn}: een afspraak voor ${tg.plek||tg.dagdeel||'dat moment'}`, wat:`${tg.plek?`Bij ${tg.plek}`:tg.dagdeel?`Tussen ${tg.dagdeel}`:'Op dat moment'} koop je ${cn} alleen als je het vooraf had gepland.`};
+  if(b.soort==='gevoel') return {naam:`${cn} bij spanning: eerst 10 minuten`, wat:`Als je ${cn} wilt bij spanning, wacht je eerst 10 minuten en kies je dan opnieuw.`};
+  return null; }
+function openOorzaakAfspraak(key, soort){ const C=gripCyc(); let V=null; try{ V=maandVooruit(); }catch(_){}
+  const s=C.sym.find(x=>oorzaakSleutel(x)===key); if(!s){ closeSheet(); return; } const X=oorzaakAnalyse(s, V), b=X.bevestigd.find(x=>x.soort===soort); if(!b){ closeSheet(); return; }
+  const T=oorzaakAfspraakTekst(X, b), kq=esc(key).replace(/'/g,"\\'");
+  const gevolg=soort==='salaris'?`Je maandbudget en je potjes blijven gelijk. De ${euro0(T.bedrag)} gaat van je ruimte af in de eerste week na je salaris; Minder legt het vast als afspraak en meet het niet als bedrag.`
+    :soort==='gewoonte'?`Je potje blijft ${euro0(X.bud)}. Minder telt deze maand je aankopen in ${esc(potName(X.k))} per week tegen de 2.`
+    :`Je potjes en je maandbudget blijven gelijk. Het is een afspraak met jezelf; Minder legt hem vast en vraagt er in de Terugblik naar.`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="oorzaakAfspraak" data-oorzaakafspraak="${soort}"><div class="small muted">${esc(OORZAAK_NAAM[soort])} · ${esc(oorzaakBronTxt(b))}</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${esc(T.naam)}</div>
+    <div class="small" style="margin-top:8px;line-height:1.5">${esc(T.wat)}</div>
+    <div class="hlabel" style="margin:12px 0 2px">Het gevolg</div><div class="small" data-afspraakgevolg style="line-height:1.5">${gevolg} Geldt tot eind ${esc(ymFull(thisYM()))}.</div>
+    <div class="row" style="gap:8px;margin-top:14px"><button class="btn" data-afspraakbevestig onclick="oorzaakAfspraakZet('${kq}','${soort}')">Bevestigen</button><button class="btn sec" onclick="closeSheet()">Terug</button></div></div>`;
+  showSheetBg(); }
+function oorzaakAfspraakZet(key, soort){ const C=gripCyc(); let V=null; try{ V=maandVooruit(); }catch(_){}
+  const s=C.sym.find(x=>oorzaakSleutel(x)===key); if(!s) return; const X=oorzaakAnalyse(s, V), b=X.bevestigd.find(x=>x.soort===soort); if(!b) return;   // leest opnieuw (v319)
+  const T=oorzaakAfspraakTekst(X, b), m=thisYM(), herstel=setSnap(['afspraken']);
+  afspraakMaak({soort:'gedrag', oorzaak:soort, key:'oorz:'+key, cat:X.k||'', wat:T.wat, titel:T.naam, maxWeek:T.maxWeek||0, bedrag:T.bedrag||0, van:m, tot:m});
+  save(); keuzeKlaar(`${T.naam} · afspraak`, herstel); }
+/* een gedragsafspraak deze maand: dan staat de keuze onder Al gekozen */
+function oorzaakAfspraakDezeMaand(id){ const m=thisYM(), p=String(id).split(':'); const key='oorz:'+p.slice(1,-1).join(':'), soort=p[p.length-1];
+  return afsprakenLijst().find(a=>a.soort==='gedrag' && a.key===key && a.oorzaak===soort && String(a.van)<=m && String(a.tot)>=m && !afspraakHerzienVan(a))||null; }
 /* ===== ZIEN ===== */
 /* De balk van een maand (salarisBalk) met bedrag en deel van het salaris per stuk. */
 const SALBALK_KLEUR={vast:'var(--mut)', potjes:'var(--teal)', buiten:'var(--amber)', opzij:'var(--green)', rest:'var(--bar)'};
@@ -11382,9 +11655,13 @@ function gripPatroonBoom(p){ const N=p.sig.length;
 const GRIP_OORZAAK_OPEN='oorzaak nog niet bepaald';
 function gripSymMaandTekst(s, V){ const M=gripSymMaanden(s, V); if(!M) return ''; return M.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(M.v[i])}${i===M.ms.length-1&&M.lopend?'*':''}`).join(' · '); }
 function gripBegrijpenLijst(C, V){
-  const rij=s=>{ const mt=gripSymMaandTekst(s, V);
-    return `<div class="row" data-symptoom="${esc(s.id)}" role="button" style="gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(s.naam)}</span>${gripSub(`${mt?esc(mt)+' · ':''}<span data-oorzaakopen>${GRIP_OORZAAK_OPEN}</span>`)}</span>${gripPijl}</div>`; };
-  return gripGroepBrugKaart(V)+`<div class="card" id="gripSymptomen"><div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Waarom gebeurt het?</span><span class="small" style="color:var(--mut2)">${C.sym.length} ${C.sym.length===1?'symptoom':'symptomen'}</span></div>
+  /* v429: per symptoom de mogelijke oorzaken en de stand (zeker, een vraag, testweek, eenmalig); de kop zegt hoeveel vragen er
+     deze maand nog zijn (OORZAAK_MAX_VRAGEN over alle symptomen samen) */
+  const OV=C.OV||{A:{}, gevraagd:0, max:OORZAAK_MAX_VRAGEN};
+  const rij=s=>{ const mt=gripSymMaandTekst(s, V), X=OV.A[s.id], R=X?oorzaakRijTekst(X):null;
+    return `<div class="row" data-symptoom="${esc(s.id)}"${X?` data-symstand="${X.eenmaligEnkel?'eenmalig':X.stand}"`:''} role="button" style="gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(s.naam)}</span>${gripSub(`${mt?esc(mt)+' · ':''}<span data-oorzaakopen>${R?esc(R.links):'over je gegevens, geen oorzaakvraag'}</span>`)}</span>${R?`<span class="small" data-symrechts style="white-space:nowrap;color:var(--teal);font-weight:700">${esc(R.rechts)}</span>`:gripPijl}</div>`; };
+  const open=Object.values(OV.A).filter(X=>X.stand==='vraag' && !X.bevestigd.length).length;
+  return gripGroepBrugKaart(V)+`<div class="card" id="gripSymptomen"><div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Waarom gebeurt het?</span><span class="small" data-vragenmaand="${OV.gevraagd}" style="color:var(--mut2)">${open} ${open===1?'vraag':'vragen'} open · ${OV.gevraagd} van ${OV.max} gesteld deze maand</span></div>
     ${C.sym.length?C.sym.map(rij).join(''):'<div class="small muted" data-geensymptoom style="margin-top:4px">Er is deze maand geen signaal.</div>'}
     <div class="row" data-symptoom="vast" role="button" style="gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripNaarVast()"><span class="small" style="flex:1">Vaste lasten over ${DIAG_SAL_MAANDEN} maanden</span>${gripPijl}</div></div>`+benoemBegrijpenBlok(); }
 function gripSymptoomDrill(C, V, id){
@@ -11392,13 +11669,13 @@ function gripSymptoomDrill(C, V, id){
   const terug=`<div class="small" data-symterug role="button" style="color:var(--teal);font-weight:700;cursor:pointer;margin:0 2px 8px" onclick="gripNaarLijst()">← alle symptomen</div>`;
   if(!s) return terug+`<div class="card"><div class="small muted">Dit signaal staat er niet meer.</div></div>`;
   let p=s.p||null; if(!p && s.k) p=C.P.find(q=>(q.sig||[]).some(g=>g.k===s.k))||null;
-  const kies=C.kies.find(x=>x.id===s.id) || (p?C.kies.find(x=>x.id==='pat:'+p.id):null);
+  const kies=C.kies.find(x=>x.sym===s.id) || C.kies.find(x=>x.id===s.id) || (p?C.kies.find(x=>x.id==='pat:'+p.id):null);   // v429: alleen een keuze onder Te kiezen (niet Wacht op oorzaak)
   const extra=s.soort==='belegwissel'?`<div class="small" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openBeleggenVoorwaarden()">De voorwaarden voor beleggen ›</div>`:'';
   return terug+`<div class="card gm-stage" id="gripSymptoom" data-symdrill="${esc(s.id)}"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">${esc(s.naam)}</div>${s.sub?gripSub(esc(s.sub)):''}
     ${gripSymBalken(gripSymMaanden(s, V))}
     ${p?`<div style="margin-top:10px">${gripPatroonBoom(p)}</div>`:''}
-    <div class="small" data-symoorzaak style="margin-top:10px;line-height:1.45"><b>Oorzaak:</b> ${GRIP_OORZAAK_OPEN}. Vragen over de oorzaak volgen later.</div>${extra}
-    ${kies?`<div class="small" data-symnaarkiezen role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">Naar Kiezen · ${esc(kies.naam)} ›</div>`:''}</div>`; }
+    <div data-symoorzaak>${(C.OV&&C.OV.A[s.id])?oorzaakBlok(C.OV.A[s.id], C):`<div class="small" data-geenoorzaak style="margin-top:10px;line-height:1.45">Dit signaal gaat over je gegevens en niet over gedrag: er hoort geen oorzaakvraag bij. De handeling staat onder Te kiezen.</div>`}</div>${extra}
+    ${kies?`<div class="small" data-symnaarkiezen data-naarkeuze role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarKeuze('${esc(kies.id).replace(/'/g,"\\'")}')">naar keuze · ${esc(kies.naam)} ›</div>`:''}</div>`; }
 /* Vaste lasten over de laatste DIAG_SAL_MAANDEN afgeronde maanden (salarisData, punt 8 van blok 20): per maand de woning
    apart, wat er nieuw kwam en wat stopte, en vast als deel van het salaris. */
 function gripVastDrill(){
@@ -11439,11 +11716,12 @@ function gripKiezenNieuw(C){
   const meeR=C.mee.map(x=>`<div class="row" data-kiesmee="${esc(x.soort)}" data-letop="${esc(x.soort)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">${nr(0,'↩')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span>${gripSub(esc(x.sub||''))}</span>${gripPijl}</div>`).join('');
   const mee=`<div class="card" id="gripMee"><div class="hlabel" style="margin:0 0 4px">Mee uit vorige maand</div>${Tp?`<div class="small" data-meegemeten>${esc(ymFull(Tp.ym))} ${gripScoreTekst(Tp)} · <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="gripKiesTab('terugblik')">Terugblik ›</span></div>`:'<div class="small muted" data-meegemeten>Nog geen afgesloten maand gemeten.</div>'}${meeR}</div>`;
   /* b. Te kiezen: elke rij is de keuze en de reden eronder; de tik opent de sheet die er al was */
-  const rij=(x,i)=>{ const rd=x.reden?gripSub(esc(x.reden.startsWith('signaal')?x.reden:(x.bron==='letop'?'signaal: ':'')+x.reden)):'';
-    if(x.bron==='patroon'){ const bev=x.bevestigd;
+  const rij=(x,i)=>{ let rd=x.reden?gripSub(esc(x.reden.startsWith('signaal')?x.reden:(x.bron==='letop'?'signaal: ':'')+x.reden)):'';
+    if(x.bron==='patroon'){ const bev=x.bevestigd; if(x.oorzaak) rd+=gripSub(`<span data-kiesoorzaak>${esc(x.oorzaak)}</span>`);
       return `<div data-kiesrij="${esc(x.p.id)}" data-kies="${esc(x.id)}" data-kiesstand="open"${bev?'':' data-kiesbevestig'}><div class="row" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);${bev?'cursor:pointer':''}"${bev?` onclick="${x.act}"`:''}>${nr(i+1)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span>${rd}</span><span class="small" data-kiesbedrag style="font-weight:700;white-space:nowrap">${x.bedrag}</span>${bev?gripPijl:''}</div>${bev?'':gripOordeelInline(x.p)}</div>`; }
-    const tik=x.act?` onclick="${x.act}"`:'';
-    return `<div class="row" data-kies="${esc(x.id)}"${x.bron==='letop'?` data-letop="${esc(x.soort)}"`:''}${x.bron==='herzien'?` data-kiesherzien="${esc(x.x.k)}"`:''}${x.bron==='actie'?` data-kiesactie="${esc(x.a.soort)}"`:''}${x.bron==='benoem'?` data-kiesbenoem="${esc(x.x.key)}"`:''} style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)${x.act?';cursor:pointer':''}"${tik}>${nr(i+1, x.bron==='herzien'?'↺':x.bron==='actie'?'↑':x.bron==='benoem'?'↻':'')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span>${rd}${x.bron==='benoem'?`<span class="small" data-kiesbenoemgeen style="display:block;color:var(--mut2);font-size:var(--fs-xs);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();benoemGeenRes('${esc(x.x.key).replace(/'/g,"\\'")}')">geen reservering</span>`:''}</span>${x.bedrag?`<span class="small" style="font-weight:700;white-space:nowrap">${esc(x.bedrag)}</span>`:''}${x.act&&!(x.x&&x.x.geenPijl)?gripPijl:''}</div>`; };
+    const tik=x.act?` onclick="${x.act}"`:'', fo=window._gripKiesFocus===x.id?';outline:2px solid var(--teal);border-radius:8px':'';
+    if(x.oorzaak) rd+=gripSub(`<span data-kiesoorzaak>${esc(x.oorzaak)}</span>`);
+    return `<div class="row" data-kies="${esc(x.id)}"${x.bron==='oorzaak'?` data-kiesoorzaak="${esc(x.soort)}"`:''}${window._gripKiesFocus===x.id?' data-kiesfocus':''}${x.bron==='letop'?` data-letop="${esc(x.soort)}"`:''}${x.bron==='herzien'?` data-kiesherzien="${esc(x.x.k)}"`:''}${x.bron==='actie'?` data-kiesactie="${esc(x.a.soort)}"`:''}${x.bron==='benoem'?` data-kiesbenoem="${esc(x.x.key)}"`:''} style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)${x.act?';cursor:pointer':''}${fo}"${tik}>${nr(i+1, x.bron==='herzien'?'↺':x.bron==='actie'?'↑':x.bron==='benoem'?'↻':'')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span>${rd}${x.bron==='benoem'?`<span class="small" data-kiesbenoemgeen style="display:block;color:var(--mut2);font-size:var(--fs-xs);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();benoemGeenRes('${esc(x.x.key).replace(/'/g,"\\'")}')">geen reservering</span>`:''}</span>${x.bedrag?`<span class="small" style="font-weight:700;white-space:nowrap">${esc(x.bedrag)}</span>`:''}${x.act&&!(x.x&&x.x.geenPijl)?gripPijl:''}</div>`; };
   const te=`<div class="card gm-stage" id="gripTeKiezen" data-kiezen><div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Te kiezen</span><span class="small" data-kiesvoortgang data-tekiezen="${n}" style="font-weight:700">${n} open</span></div>
     ${n?C.kies.map(rij).join(''):'<div class="small muted" data-geenstap style="margin-top:4px">Er staat deze maand geen keuze open.</div>'}
     <div class="small" style="margin-top:8px;color:var(--mut2);font-size:var(--fs-xs)">volgorde <span data-kiesvolgorde style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVolgorde()">${(SET.gripVolgorde&&SET.gripVolgorde.modus==='zelf')?'zelf':'app'} ›</span> · moment: <span data-kiesmoment style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripMoment()">${esc(gripMomentTekst())} ›</span></div></div>`;
@@ -11451,10 +11729,13 @@ function gripKiezenNieuw(C){
   let ligt=''; try{ const P0=C.kies.find(x=>x.bron==='patroon'), sinds=gripMaandLees('gripStapSinds', m);
     if(P0 && sinds[P0.p.id]){ const d=Math.round((new Date(vandaagYMD()+'T00:00:00')-new Date(sinds[P0.p.id]+'T00:00:00'))/864e5), M=gripMomentDatum();
       if(d>=GRIP_STAP_LIGT || (M.d && M.d<=vandaagYMD())) ligt=`<div class="small" data-stapligt style="margin:-4px 2px 10px;color:var(--mut2);line-height:1.45">${esc(P0.p.naam)} staat sinds ${esc(gripKortDatum(sinds[P0.p.id]))} open · ${d} ${d===1?'dag':'dagen'}.</div>`; } }catch(_){}
-  /* c. Wacht op oorzaak: in fase 1 leeg */
-  const wacht=`<div class="card" id="gripWachtOorzaak"><div class="hlabel" style="margin:0 0 4px">Wacht op oorzaak</div><div class="small muted" data-wachtoorzaak>Volgt zodra oorzaken bevestigd worden.</div></div>`;
+  /* c. Wacht op oorzaak (v429): de gedragskeuzes van een symptoom zonder bevestigde oorzaak; "bepaal oorzaak ›" opent het
+     symptoom in Begrijpen. Ze tellen niet in "N keuzes staan open". */
+  const WS=C.wachtSym||[];
+  const wacht=`<div class="card" id="gripWachtOorzaak"><div class="hlabel" style="margin:0 0 4px">Wacht op oorzaak</div>${WS.length?WS.map(w=>{ const X=w.X, st=X?(X.stand==='testweek'?`testweek · nog ${X.tw.nog} ${X.tw.nog===1?'dag':'dagen'}`:X.stand==='later'?`vraag in ${MNAMES[+nextYM(m).slice(5,7)-1]}`:X.stand==='vervallen'?`vraag in ${MNAMES[+nextYM(m).slice(5,7)-1]}`:X.stand==='voorstel'?'voorstel bevestigen':'1 vraag in Begrijpen'):'';
+      return `<div class="row" data-wachtoorzaak="${esc(w.sym)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'?')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(w.kies.map(x=>x.naam).join(' · '))}</span>${gripSub(`${esc(w.naam)}${st?' · '+esc(st):''}`)}</span><span class="small" data-bepaaloorzaak role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(w.sym).replace(/'/g,"\\'")}')">bepaal oorzaak ›</span></div>${w.kies.filter(x=>x.bron==='patroon' && x.p && !(gripOordeel(x.p.id)||{}).klopt).map(x=>gripOordeelInline(x.p)).join('')}`; }).join(''):'<div class="small muted" data-wachtleeg>Geen keuze wacht op een oorzaak.</div>'}</div>`;
   /* d. Al gekozen deze maand */
-  const gk=C.gekozen.map(g=>`<div class="row" data-kiesrij="${esc(g.p.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripKeuze('${esc(g.p.id)}')">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(g.p.naam)}</span>${gripSub(`● gekozen · ${esc(g.k.titel||'')}`)}</span>${gripPijl}</div>`).join('')
+  const gk=(C.gekozenO||[]).map(o=>{ const A=oorzaakAfspraakDezeMaand(o.id); return `<div class="row" data-kiesgekozen="${esc(o.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(o.naam)}</span>${gripSub(`● gekozen${A?' op '+esc(dagKort(A.op)):''} · ${esc(o.reden)}`)}</span></div>`; }).join('')+C.gekozen.map(g=>`<div class="row" data-kiesrij="${esc(g.p.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripKeuze('${esc(g.p.id)}')">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(g.p.naam)}</span>${gripSub(`● gekozen · ${esc(g.k.titel||'')}`)}</span>${gripPijl}</div>`).join('')
     +C.uitg.map(x=>`<div class="row" data-uitgevoerd="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)} · budget ${euro0(x.naar)}</span>${gripSub(`${euro0(x.van-x.naar)} ${x.bestem?`naar ${esc(x.bestem)}`:'minder in je maandbudget'}`)}</span></div>`).join('');
   let af=''; try{ af=gripAfsprakenHtml(); }catch(_){}
   const al=`<div class="card" id="gripAlGekozen"><div class="hlabel" style="margin:0 0 4px">Al gekozen deze maand</div>${gk||af?gk+af:'<div class="small muted">Nog niets gekozen.</div>'}
@@ -11685,7 +11966,11 @@ function gripMeetlatTekst(r){
   if(r.soort==='spaardoel') return 'netto naar je doelen ≥ Plan opzij';
   return '';
 }
-function openGripKeuze(pid){ if(!gripOordeel(pid) && !gripMaandLees('gripKeuze', thisYM())[pid]){ gripNaarBegrijpen(pid); return; }   // v391: eerst bevestigen
+/* v429: een patroon is bevestigd met "klopt/niet" (v388) of met een bevestigde oorzaak van zijn symptoom */
+/* v429: een patroonkeuze opent pas met een oordeel (Klopt dit patroon?, v388/v428) EN een bevestigde oorzaak; een patroon
+   zonder oorzaakvraag (beleggen vóór je fundament) heeft alleen het oordeel nodig. Een oorzaak vervangt het oordeel niet. */
+function gripPatroonBevestigd(pid){ if(!gripOordeel(pid)) return false; try{ const X=((gripCyc().OV||{}).A||{})['pat:'+pid]; return !X || (X.bevestigd.length>0 && !X.eenmaligEnkel); }catch(_){ return false; } }
+function openGripKeuze(pid){ if(!gripPatroonBevestigd(pid) && !gripMaandLees('gripKeuze', thisYM())[pid]){ gripNaarBegrijpen(pid); return; }   // v391: eerst bevestigen
   window._gripK={pid, optie:null, lat:null, latOk:false, aanpas:false}; renderGripKeuze(); showSheetBg(); }
 function renderGripKeuze(){
   const S=window._gripK; if(!S) return;
@@ -11724,7 +12009,7 @@ function renderGripKeuze(){
 function gripKeuzeZet(){
   const S=window._gripK; if(!S) return;
   const p=gripPatronen().find(x=>x.id===S.pid); if(!p) return;
-  if(!gripOordeel(p.id)) return;   // v391: een keuze pas na klopt of niet in Begrijpen
+  if(!gripPatroonBevestigd(p.id)) return;   // v391: een keuze pas na klopt of niet; v429: of een bevestigde oorzaak
   const o=gripOpties(p).find(x=>x.id===S.optie); if(!o) return;
   const lat=(S.lat||o.lat||[]).map(r=>Object.assign({}, r));
   if(lat.length && !S.latOk) return;
@@ -18158,7 +18443,9 @@ function openBuy(){
    terugkeren: geen bubbel, geen keuze, geen log-entry. Het overnemen van de sheet loopt daarom
    via coStart(), de enige ingang naar het gesprek; het formulier maakt er geen tweede naast. */
 function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; if(amt>0&&cat) coStart('koop',null,{cat,amt,item}); else { closeSheet(); toast('Vul een bedrag in'); } }
-function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`}); }
+function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`});
+  /* v429: een aankoop in een potje met een lopende testweek krijgt een tik "Hoe voelde je je net?" (overslaan mag) */
+  if(['gepland','verschoven','doorgezet'].includes(uitkomst)){ try{ const T=testweekKoop(cat, amt, item); if(T) setTimeout(()=>{ try{ openTestweekTik(T.key, T.id); }catch(_){} }, 700); }catch(_){} } }
 
 /* ---- Temporal discounting: de parkeer-lus sluiten. Volgt MECHANISM_SPEC.temporalDiscounting ----
  * Parkeren is alleen een belofte als de app hem nakomt. Bij terugkeer presenteert de coach
@@ -24139,6 +24426,7 @@ function gegevensVragen(){ const out=[];
   for(const v of loanVragen()) out.push(Object.assign({soort:'lening', qkey:'lening|'+v.t.id, bedrag:Math.abs(v.t.amount), datum:v.t.date}, v));
   for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant', qkey:'restant|'+v.l.id}, v));   // v423
   for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop', qkey:'poststop|'+v.key, datum:v.dag}, v));   // v422
+  for(const v of uitResVragen()) out.push(Object.assign({soort:'uitres', qkey:'uitres|'+v.key}, v));   // v429: tot v428 in Let op
   for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
   /* v425: wat Minder alleen van jou kan weten */
   const bron=[kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
@@ -24163,6 +24451,10 @@ function kennisTerugZelfdeDag(t){ if(!t || !t.amount) return false; const c=Math
    betaling als laatste; Nee is nog actief. Er verandert niets tot je kiest; tot dan blijft hij gestopt. */
 function postNaStopVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){ return []; }
   return Object.values(M).filter(P=>P.status==='gestopt' && P.weerBetaald && P.laatste).sort((a,b)=>(a.naam<b.naam?-1:1)).map(P=>({key:P.key, naam:P.naam||P.key, dag:P.laatste, bedrag:P.bedrag||0})); }
+/* v429: de posten met de vlag "uit reservering" (SET.fixDueExcl) zonder antwoord, als gegevensvraag (v413, tot v428 in Let op). */
+function uitResVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){}
+  return uitResOpen().map(key=>{ const P=M[key]||postStatus(key);
+    return {key, naam:P.naam||titleCase(cleanMerch(key)||key), bedrag:P.bedrag||0, det:P.bedrag?`${euro0(P.bedrag)} ${P.cadansTxt||''}`.replace(/\s+$/,''):'', laatste:P.laatste||''}; }); }
 function postNaStopJa(key, dag){ postZet(key, 'afloop', '', dag); try{ if((SET.postStatus||{})[key]){ SET.postStatus[key].vervangerVraag=true; save(); render(); } }catch(_){} }   // v425: daarna "komt er een vervanger?"
 function postNaStopNee(key){ postZet(key, 'actief'); }
 /* v424: ONBEKENDE GROTE UITGAVEN BENOEMEN, ALLEEN MET BRON (gevraagd door de gebruiker). Een uitgave van BENOEM_MIN (100) of meer
@@ -24288,7 +24580,7 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
 const KENNIS_BRON=BENOEM_BRON;   // v425: een woordenlijst voor de bron, ook voor v424
 const KENNIS_MIN=100, KENNIS_VAST_MIN=10, KENNIS_TIKKIE_MIN=10, KENNIS_CONTANT_DAGEN=3, KENNIS_VERVANGER_MAANDEN=2;
 const KENNIS_MAX_OPEN=3, KENNIS_LATER_DAGEN=7, KENNIS_LATER_MAX=2, KENNIS_VAST_NIEUW_DAGEN=120, KENNIS_VAST_START_DAGEN=60;
-const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['opname','Contant']];
+const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['opname','Contant'],['oorzaak','Oorzaken (Grip)']];
 const KENNIS_UIT=[['lening','Lening, verwacht terug'],['uitgave','Uitgave'],['gift','Gift']];
 const KENNIS_IN=[['terug','Terugbetaling'],['teruggave','Teruggave'],['gift','Gift'],['verkoop','Verkoop'],['extra','Extra inkomen'],['bedrijf','Van mijn eigen bedrijf']];
 const KENNIS_IN_SUB={terug:'van een lening of Tikkie', teruggave:'belasting, verzekering, winkel', extra:'bonus, vakantiegeld'};
@@ -24509,7 +24801,7 @@ function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.q
 function kennisLijst(){ const o=[];
   holdingKeys(); try{ kennisSync(); }catch(_){}
   const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
-    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast'};
+    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
     if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId); if(!l) continue;
@@ -24577,6 +24869,7 @@ function kennisWijzig(id){ const [s, ...r]=id.split(':'), k=r.join(':');
     if(E.soort==='holding'){ const t=TX.find(u=>recurKey(u)===E.key); if(t) openSheet(t.id); return; }
     if(E.soort==='lening'){ openLoan(E.loanId); return; }
     if(E.soort==='post'){ openPostStatus(E.key); return; }
+    if(E.soort==='oorzaak'){ delete SET.kennis[k]; save(); closeSheet(); go('maand'); gripNaarSymptoom(E.symId||''); return; }   // v429: wijzigen is de vraag opnieuw, in Begrijpen
     kennisVergeetKern(id); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){}
     const q=gegevensVragen().find(v=>v.qkey===k || (k.startsWith('benoem|') && v.soort==='benoem' && 'benoem|'+v.key===k));
     if(q) openGegevensVragen(q.qkey); else openKennis(); return; }
@@ -24603,7 +24896,7 @@ function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
 /* een vraag in een regel (het scherm hierboven en blok 20) */
 function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).slice(0,10)):'';
   const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
-    poststop:()=>`${q.naam}: was dat de laatste betaling?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
+    poststop:()=>`${q.naam}: was dat de laatste betaling?`, uitres:()=>`${q.naam}: gestopt of uit reservering?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
     vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
     woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${tikkieNaam(q.partij)}: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
   return (T[q.soort]?T[q.soort]():q.soort)+d; }
@@ -24669,6 +24962,10 @@ function openGegevensVragen(focus){
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
       <div class="small muted" style="margin-top:2px">${euro0(q.bedrag)} \u00b7 ja: opgezegd, loopt af, en daarna telt hij niet meer mee \u00b7 nee: hij loopt nog en wordt weer verwacht</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn" style="flex:1" data-poststopja onclick="postNaStopJa('${kk}','${esc(q.dag)}')">Ja, laatste</button><button class="btn sec" style="flex:1" data-poststopnee onclick="postNaStopNee('${kk}')">Nee, loopt nog</button></div></div>`; }
+    if(q.soort==='uitres'){ const kk=esc(q.key).replace(/'/g,"\\'");   // v429: tot v428 in Let op (openUitResVraag)
+      return `<div data-gegevensvraag="uitres" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)}: gestopt, of betaal je hem uit een reservering?</div>
+      <div class="small muted" style="margin-top:2px">${q.det?esc(q.det)+' \u00b7 ':''}telt nu niet in nog te betalen \u00b7 gestopt: ook niet meer in wat een potje nodig heeft \u00b7 uit reservering: alles blijft zoals het is</div>
+      <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-uitresantw="gestopt" onclick="uitResAntwZet('${kk}','gestopt')">Gestopt</button><button class="btn sec" style="flex:1" data-uitresantw="reservering" onclick="uitResAntwZet('${kk}','reservering')">Uit reservering</button></div></div>`; }
     if(q.soort==='restant'){ const L=q.l, id=esc(L.id);
       return `<div data-gegevensvraag="restant" data-lening="${id}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Is ${loanC2(q.bedrag)} van ${esc(L.naam||'?')} nog open of niet meer terug?</div>
       <div class="small muted" style="margin-top:2px">${esc(dagKort(L.datum))} ${String(L.datum||'').slice(0,4)} uitgeleend ${loanC2(q.S.bedrag)} · terugbetaald ${loanC2(q.S.terug)} · nog open ${loanC2(q.S.open)}${q.S.nietTerug?` · niet meer terug ${loanC2(q.S.nietTerug)}`:''} · niet meer terug telt als uitgave in ${esc(maandNaamKort(String(L.datum||'').slice(0,7)))}</div>
@@ -29692,15 +29989,16 @@ function diagGripCyclus(){
   for(const x of C.L){ const plek=[];
     if(GRIP_LETOP_TERUG.has(x.soort)){ if(C.mee.includes(x)) plek.push('Kiezen: Mee uit vorige maand'); }
     else if(x.soort==='patroon'){ const pid=(String(x.act).match(/gripNaarBegrijpen\('([^']*)'\)/)||[])[1]; if(C.sym.some(s=>s.id==='pat:'+pid)) plek.push(`Zien: Signalen en Begrijpen: symptoom pat:${pid}`); if(C.kies.some(k=>k.id==='pat:'+pid)||C.gekozen.some(g=>g.id==='pat:'+pid)) plek.push('Kiezen: het patroon'); }
-    else { if(C.sym.some(s=>s.id===lid(x))) plek.push('Zien: Signalen'); if(C.kies.some(k=>k.id===lid(x))) plek.push('Kiezen: Te kiezen'); }
+    else { if(C.sym.some(s=>s.id===lid(x))) plek.push('Zien: Signalen'); if(C.kies.some(k=>k.id===lid(x))) plek.push('Kiezen: Te kiezen'); else if((C.wacht||[]).some(k=>k.id===lid(x))) plek.push('Kiezen: Wacht op oorzaak (v429)'); else if(C.OV&&C.OV.A[lid(x)]&&C.OV.A[lid(x)].eenmaligEnkel) plek.push('geen keuze: eenmalig, telt niet als gedrag (v429)'); }
     const moet=GRIP_LETOP_TERUG.has(x.soort)?1:(x.soort==='patroon'||GRIP_LETOP_FEIT.has(x.soort)?1:2);
     L.push(`  ${x.soort} | ${x.naam} -> ${plek.length?plek.join(' + '):'GEEN PLEK'}`);
     if(plek.length<moet) verloren.push(`${x.soort} "${x.naam}": ${plek.length?'alleen '+plek.join(', '):'nergens'}${moet===2?' (een feit hoort bij Signalen en de handeling bij Kiezen)':''}`); }
   if(!C.L.length) L.push('  geen');
   L.push('', 'SIGNALEN IN EEN PATROON MET EEN HANDELING (tot v428 een tik op de tak):');
   let n=0; for(const p of C.P) for(const g of (p.sig||[])){
-    if(g.soort==='potje' && g.k){ const id=valtOpId(m, g.k), k=C.kies.find(x=>x.id==='sig:'+id); if(!k) continue; n++; L.push(`  ${g.naam} (${p.naam}) -> Kiezen: ${k.naam}`); }
-    if(g.soort==='inleg'){ const k=C.kies.find(x=>x.id==='beleg:'+g.id); if(k){ n++; L.push(`  ${g.naam} (${p.naam}) -> Kiezen: ${k.naam}`); } } }
+    const alle=C.kies.concat(C.wacht||[]), plek=k=>C.kies.includes(k)?'Kiezen':'Kiezen, wacht op oorzaak';
+    if(g.soort==='potje' && g.k){ const id=valtOpId(m, g.k), k=alle.find(x=>x.id==='sig:'+id); if(!k) continue; n++; L.push(`  ${g.naam} (${p.naam}) -> ${plek(k)}: ${k.naam}`); }
+    if(g.soort==='inleg'){ const k=alle.find(x=>x.id==='beleg:'+g.id); if(k){ n++; L.push(`  ${g.naam} (${p.naam}) -> ${plek(k)}: ${k.naam}`); } } }
   if(!n) L.push('  geen');
   L.push('', `verloren: ${verloren.length}`); for(const v of verloren) L.push('  '+v);
   /* de controle */
@@ -29715,6 +30013,32 @@ function diagGripCyclus(){
     L.push(`  per groep: vast ${Math.round(Q.vast.b)}/${Math.round(Q.vast.v)} · potjes ${Math.round(Q.potjes.b)}/${Math.round(Q.potjes.v)} · zonder potje ${Math.round(Q.zonder.b)}/${Math.round(Q.zonder.v)} · Plan-inleg ${Math.round(Q.inleg.b)}/${Math.round(Q.inleg.v)} (budget/verwacht) · samen ${Math.round(sb)}/${Math.round(sv)} tegen V.budget ${V.budget} en V.projectie ${V.projectie}: ${Math.round(sb)===V.budget&&Math.round(sv)===V.projectie?'sluit':'VERSCHILT'}`); }
   const zien=(String(gripSlimRegel(C)).match(/data-keuzesopen="(\d+)"/)||[])[1], kiezen=(String(gripKiezenNieuw(C)).match(/data-kies="/g)||[]).length;
   L.push(`  "N keuzes staan open" op Zien ${zien} tegen het aantal onder Te kiezen ${kiezen}: ${+zien===kiezen?'gelijk':'VERSCHILT'}`);
+  return L; }
+/* v429, blok 22: OORZAKEN. Per symptoom de oorzaken met hun sterkte, welke toets afging met de getallen (en welke niet), de
+   bevestigde oorzaak met bron en datum, de testweek en de keuze (te kiezen, wacht, gekozen). Drie controles. Alleen lezen. */
+function diagOorzaken(){
+  const L=['OORZAKEN (v429): per symptoom de toetsen, de bevestigde oorzaak, de testweek en de keuze · alleen lezen'];
+  const C=gripCyclusLees(), m=thisYM(), OV=C.OV||{A:{}};
+  L.push(`maand ${m} · oorzaakvragen gesteld ${OV.gevraagd} van ${OV.max}${(SET.oorzaakVragen||{})[m]?` (${SET.oorzaakVragen[m].join(', ')})`:''}`);
+  const fouten={vragen:OV.gevraagd>OORZAAK_MAX_VRAGEN, gedrag:[], eenmalig:[]};
+  for(const s of C.sym){ const X=OV.A[s.id]; L.push('', `${s.id} · ${s.naam}`); if(!X){ L.push('  over je gegevens, niet over gedrag: geen oorzaak te toetsen en geen vraag'); continue; }
+    L.push(`  scope: ${X.ks.length?X.ks.map(k=>(CATS[k]||{}).name||k).join(', '):'al het losse geld'} · maand van de overschrijding ${X.M} · uitgegeven ${X.uit}${X.k?` · budget ${X.bud}`:''} · erboven ${X.over}`);
+    for(const t of X.toetsen){ const o=X.oorzaken.find(x=>x.soort===t.soort);
+      L.push(`  ${t.vuurt?'AF ':'-  '} ${OORZAAK_NAAM[t.soort]} · ${t.vuurt?(o?o.label:t.sterkte+' (niet in de lijst, meer dan '+OORZAAK_MAX+')'):'niet'} · ${t.vuurt?t.bewijs:t.niet} · ${Object.entries(t.getallen||{}).map(([a,b])=>a+'='+b).join(', ')}`); }
+    L.push(`  bevestigd: ${X.bevestigd.length?X.bevestigd.map(b=>`${OORZAAK_NAAM[b.soort]} (${oorzaakBronTxt(b)})`).join(', '):'nee'}${X.eenmaligEnkel?' · alleen eenmalig: telt niet als gedrag':''}`);
+    L.push(`  stand: ${X.stand}${X.tw?` · testweek ${X.tw.start} t/m ${X.tw.eind}, ${X.tw.loopt?'loopt, nog '+X.tw.nog+' d':'klaar'}, ${X.tw.n} tikken${X.tw.top?`, meest ${X.tw.top} ${Math.round(X.tw.deel*100)}%`:''}${X.tw.voorstel?`, voorstel ${TESTWEEK_NAAR[X.tw.voorstel][0]}`:''}${X.tw.afgewezen?', afgewezen':''}`:''}`);
+    const te=C.kies.filter(k=>k.sym===s.id), wa=(C.wacht||[]).filter(k=>k.sym===s.id), gk=(C.gekozenO||[]).filter(k=>k.sym===s.id);
+    L.push(`  keuze: ${te.length?'te kiezen: '+te.map(k=>k.naam).join(' | '):''}${wa.length?(te.length?' · ':'')+'wacht: '+wa.map(k=>k.naam).join(' | '):''}${gk.length?' · gekozen: '+gk.map(k=>k.naam).join(' | '):''}${!te.length&&!wa.length&&!gk.length?'geen':''}`);
+    /* controle: een gedragskeuze onder Te kiezen zonder bevestigde oorzaak */
+    for(const k of te) if((k.bron==='patroon' || ['sig','beleg','boven'].includes(k.soort) || k.bron==='oorzaak') && !X.bevestigd.length) fouten.gedrag.push(`${s.id}: ${k.naam}`);
+    /* controle: een symptoom dat alleen uit een als eenmalig bevestigd bedrag bestaat */
+    if(s.k && ['eenmalig','zonderpot'].includes(s.soort)){ let open=0, alles=0; try{ const r=zonderPotjeStand(m).rijen.find(x=>x.k===s.k); if(r){ alles=(r.tx||[]).reduce((a,t)=>a+uitgaveNorm(t),0); open=eenmaligOpen(r); } }catch(_){}
+      if(s.soort==='eenmalig' && alles>0 && Math.round(open)<ZONDER_SIGNAAL_EUR) fouten.eenmalig.push(`${s.id}: ${Math.round(alles)} waarvan ${Math.round(open)} niet bevestigd`); } }
+  if(!C.sym.length) L.push('', 'geen symptomen');
+  L.push('', 'CONTROLE');
+  L.push(`  oorzaakvragen deze maand ${OV.gevraagd} <= ${OORZAAK_MAX_VRAGEN}: ${fouten.vragen?'NEE':'ja'}`);
+  L.push(`  gedragskeuze onder Te kiezen zonder bevestigde oorzaak: ${fouten.gedrag.length?'JA · '+fouten.gedrag.join(' · '):'geen'}`);
+  L.push(`  symptoom alleen uit een als eenmalig bevestigd bedrag: ${fouten.eenmalig.length?'JA · '+fouten.eenmalig.join(' · '):'geen'}`);
   return L; }
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
@@ -29738,6 +30062,7 @@ const DIAG_BLOKKEN=[
   {titel:'te ruim begroot per potje, en de meters op Grip', lees:diagTeRuim},
   {titel:'je salaris over vast, potjes en opzij, per maand, en of de vaste lasten stijgen', lees:diagSalarisVerdeling},
   {titel:'Grip-cyclus: waar elk oud element van Grip nu staat, en of de brug en het aantal keuzes sluiten', lees:diagGripCyclus},
+  {titel:'Oorzaken: per symptoom de toetsen, de bevestigde oorzaak, de testweek en de keuze', lees:diagOorzaken},
 ];
 
 async function diagTekst(){

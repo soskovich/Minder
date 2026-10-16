@@ -143,14 +143,16 @@ test.describe('v428 · Grip als cyclus', () => {
     const L = await page.evaluate(() => [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => ({ id: e.dataset.symptoom, t: e.innerText })));
     const sym = L.filter(x => x.id !== 'vast');
     expect(sym.length).toBeGreaterThan(3);
-    for (const x of sym) expect(x.t).toContain('oorzaak nog niet bepaald');
+    /* v429: "oorzaak nog niet bepaald" is de stand met mogelijke oorzaken en hun vraag geworden; een symptoom over je gegevens
+       zegt dat het geen oorzaakvraag heeft */
+    for (const x of sym) expect(x.t).toMatch(/mogelijke oorza|over je gegevens, geen oorzaakvraag/);
     expect(await page.locator('#gripInhoud').innerText()).not.toMatch(/gedrag of budget|soort oorzaak/i);
     const pat = sym.find(x => x.id.startsWith('pat:'));
     await page.click(`[data-symptoom="${pat.id}"]`);
-    const d = await page.evaluate(() => ({ m: [...document.querySelectorAll('[data-symmaand]')].map(e => e.dataset.symmaand), lijn: !!document.querySelector('[data-budgetlijn]'), boom: !!document.querySelector('#gripSymptoom [data-patboom]'), terug: !!document.querySelector('[data-symterug]'), oorzaak: document.querySelector('[data-symoorzaak]').innerText, knoppen: document.querySelectorAll('#gripSymptoom button').length }));
+    const d = await page.evaluate(() => ({ m: [...document.querySelectorAll('[data-symmaand]')].map(e => e.dataset.symmaand), lijn: !!document.querySelector('[data-budgetlijn]'), boom: !!document.querySelector('#gripSymptoom [data-patboom]'), terug: !!document.querySelector('[data-symterug]'), oorzaak: document.querySelector('[data-symoorzaak]').innerText, knoppen: [...document.querySelectorAll('#gripSymptoom button')].filter(b => !b.closest('[data-oorzaakvraag]')).length }));   // v429: alleen de oorzaakvraag draagt knoppen
     expect(d.m).toEqual(['2026-07', '2026-08', '2026-09', '2026-10']);
     expect(d.lijn).toBe(true); expect(d.boom).toBe(true); expect(d.terug).toBe(true); expect(d.knoppen).toBe(0);
-    expect(d.oorzaak).toContain('oorzaak nog niet bepaald');
+    expect(d.oorzaak).toMatch(/mogelijke oorzaken/i);   // v429
     await page.click('[data-symterug]');
     expect(await page.evaluate(() => !!document.querySelector('#gripSymptomen'))).toBe(true);
   });
@@ -177,10 +179,10 @@ test.describe('v428 · Grip als cyclus', () => {
     await boot(page);
     expect(await page.evaluate(() => !!document.querySelector('#gripInhoud [data-budgetlink]'))).toBe(false);
     await tab(page, 'kiezen');
-    const r = await page.evaluate(() => ({ kop: [...document.querySelectorAll('#gripInhoud .hlabel')].map(e => e.innerText.trim().toLowerCase()), wacht: document.querySelector('[data-wachtoorzaak]').innerText, budget: !!document.querySelector('#gripAlGekozen [data-budgetlink]'),
+    const r = await page.evaluate(() => ({ kop: [...document.querySelectorAll('#gripInhoud .hlabel')].map(e => e.innerText.trim().toLowerCase()), wacht: !!document.querySelector('#gripWachtOorzaak [data-wachtoorzaak], #gripWachtOorzaak [data-wachtleeg]'), budget: !!document.querySelector('#gripAlGekozen [data-budgetlink]'),
       reden: [...document.querySelectorAll('#gripTeKiezen [data-letop]')].map(e => e.innerText).filter(t => /signaal: /.test(t)).length, letop: document.querySelectorAll('#gripTeKiezen [data-letop]').length }));
     expect(r.kop.slice(0, 4)).toEqual(['mee uit vorige maand', 'te kiezen', 'wacht op oorzaak', 'al gekozen deze maand']);
-    expect(r.wacht).toBe('Volgt zodra oorzaken bevestigd worden.');
+    expect(r.wacht).toBe(true);   // v429: de kaart draagt de gedragskeuzes zonder oorzaak, of zegt dat er geen wacht
     expect(r.budget).toBe(true);
     expect(r.letop).toBeGreaterThan(3); expect(r.reden).toBe(r.letop);
     /* de sheets blijven zoals ze zijn: de tik op een regel opent de sheet die Let op opende */
@@ -196,7 +198,10 @@ test.describe('v428 · Grip als cyclus', () => {
     await page.locator(`[data-kiesoordeel="${id}"] button`).first().click();
     expect(await page.evaluate(id => gripOordeel(id).klopt, id)).toBe(true);
     expect(await page.evaluate(id => !!document.querySelector(`[data-kiesoordeel="${id}"]`), id)).toBe(false);
-    await page.evaluate(id => document.querySelector(`[data-kiesrij="${id}"] .row`).click(), id);
+    /* v429: zonder bevestigde oorzaak staat het patroon onder Wacht op oorzaak; met een oorzaak (hier via de vraag in
+       Begrijpen) staat hij onder Te kiezen en opent de tik de keuze-sheet */
+    await page.evaluate(id => { oorzaakKies('pat:' + id, 'gevoel'); oorzaakBevestig('pat:' + id); gripKiesTab('kiezen'); }, id);
+    await page.evaluate(id => document.querySelector(`#gripTeKiezen [data-kiesrij="${id}"] .row`).click(), id);
     expect(await page.evaluate(() => !!document.querySelector('#sheetBg.show'))).toBe(true);
   });
 
