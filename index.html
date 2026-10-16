@@ -11709,12 +11709,12 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     return s>0?Object.fromEntries(pos.map(([a,v])=>[a, v/s])):{[terugval]:1}; };
   /* (1b) de vaste lasten: rekening van de laatste betaling, alleen actief en niet uit reservering */
   let SCH=[]; try{ SCH=recurringSchedule(true).filter(x=>x.type==='fixed'); }catch(_){}
-  const excl=SET.fixDueExcl||{}, vast=[], vastNiet=[];
+  const vast=[], vastNiet=[];
   for(const x of SCH){ const L=TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===x.key).sort((a,b)=>b.date.localeCompare(a.date)), last=L[0]; if(!last) continue;
     if((CATS[catOf(last)]||{}).type!=='expense') continue;
     const naam=titleCase(cleanMerch(x.name)||x.name||x.key), st=postStatus(x.key).status;
     if(st!=='actief'){ vastNiet.push({key:x.key, naam, reden:st}); continue; }
-    if(excl[x.key]){ vastNiet.push({key:x.key, naam, reden:'uit reservering'}); continue; }
+    if(!verwachtInMaand(x.key, start.slice(0,7)) && !verwachtInMaand(x.key, eind.slice(0,7))){ vastNiet.push({key:x.key, naam, reden:'uit reservering'}); continue; }   // de ene lezer van de uitsluiting (v369)
     if(!set.has(last.acc)){ vastNiet.push({key:x.key, naam, reden:'afgeschreven van '+rekNaam(last.acc)}); continue; }
     vast.push({key:x.key, naam, acc:last.acc, bedrag:postMaandBedrag(x, Math.abs(last.amount)), termijn:Math.abs(last.amount), last:last.date.slice(0,10), s:x}); }
   /* (2b) potjes en zonder potje uit maandVooruit(), zonder eenmalig */
@@ -11767,8 +11767,9 @@ function rekBewijs(){ const P=rekVoorstel(); if(!P || !P.ok) return null; const 
   const perRek={}; for(const g of G) perRek[g.acc]=(perRek[g.acc]||0)+g.bedrag;
   const grootste=Object.entries(perRek).sort((a,b)=>b[1]-a[1])[0]||null;
   const vm=valtOpYmPlus(cur,-1), van=vm+'-01', tot=vm+'-31', L=TX.filter(t=>t.date.slice(0,7)===vm), paar=rekParen(L, set);
-  const sl=salarisBetalingLaatst(nextYM(cur)), sk=sl?recurKey(sl):null;
-  const naar=BR.map(acc=>{ let in_=0; for(const t of L) if(t.acc===acc && t.amount>0 && !t.pending){ if(paar.has(t.id)) in_+=t.amount; else if(sk && (CATS[catOf(t)]||{}).type==='income' && recurKey(t)===sk) in_+=t.amount-onregelmatigBedrag(t); }
+  /* het salaris van die maand komt uit blok 20 (salarisData, een bron), op de rekening waar het binnenkwam */
+  const D=fase3Sal(), rS=D?D.R.find(x=>x.ym===vm):null, salIn={}; if(rS) for(const t of (rS.salTx||[])) salIn[t.acc]=(salIn[t.acc]||0)+(t.amount-onregelmatigBedrag(t));
+  const naar=BR.map(acc=>{ let in_=+salIn[acc]||0; for(const t of L) if(t.acc===acc && t.amount>0 && !t.pending && paar.has(t.id)) in_+=t.amount;
     return {acc, naam:rekNaam(acc), naar:in_, af:rekAfgegaan(acc, van, tot, paar), ont:G.filter(g=>g.acc===acc && g.ym===vm).reduce((a,g)=>a+g.bedrag,0)}; }).filter(x=>x.naar>0.5 || x.af>0.5);
   return {G, perRek, grootste:grootste?grootste[0]:null, vm, naar, O}; }
 function rekBewijsHtml(){ const B=rekBewijs(); if(!B || !B.G.length) return '';
