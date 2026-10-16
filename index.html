@@ -11749,7 +11749,8 @@ const rekPlus50=v=>Math.ceil(Math.max(v,0)/REKV.rond-1e-9)*REKV.rond;
 function rekKwantiel(a, q){ const b=a.slice().sort((x,y)=>x-y); if(!b.length) return 0; const p=(b.length-1)*q, i=Math.floor(p); return b[i]+((b[Math.min(i+1,b.length-1)]-b[i])*(p-i)); }
 function rekBetaal(){ let res=''; try{ res=resAccId(); }catch(_){} return allAccounts().filter(a=>OWN.includes(a) && rekActief(a) && !isSavingsAcc(a) && a!==res); }
 function rekNaam(a){ try{ return acctNiceName(a); }catch(_){ return accShort(a); } }
-function rekDag(ymd, n){ const [y,m,d]=String(ymd).slice(0,10).split('-').map(Number); return ymdVan(new Date(y, m-1, d+n)); }
+/* v435: rekenen op de kalender en niet op de klok (UTC-velden), zodat een dag-lus altijd vooruitgaat, ook als getDate() wordt overschreven */
+function rekDag(ymd, n){ const [y,m,d]=String(ymd).slice(0,10).split('-').map(Number), x=new Date(Date.UTC(y, m-1, d+n)); return x.getUTCFullYear()+'-'+String(x.getUTCMonth()+1).padStart(2,'0')+'-'+String(x.getUTCDate()).padStart(2,'0'); }
 function rekMaandPlus(ymd, n){ const [y,m,d]=String(ymd).slice(0,10).split('-').map(Number); const dim=new Date(y, m-1+n+1, 0).getDate(); return ymdVan(new Date(y, m-1+n, Math.min(d, dim))); }
 /* de overboekingen tussen twee eigen betaalrekeningen: zelfde bedrag, andere kant, hooguit 3 dagen, de dichtstbijzijnde eerst */
 function rekParen(L, set){ const kand=L.filter(t=>!t.pending && set.has(t.acc) && (CATS[catOf(t)]||{}).type!=='income'), paar=new Map();

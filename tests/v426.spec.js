@@ -87,10 +87,11 @@ test.describe('v426', () => {
     expect(await page.evaluate(() => !!SET.kennis['lening|lma'])).toBe(true);
   });
 
-  test('0c. blok 20 sectie KENNIS toont alle 9 antwoorden met bron en datum', async ({ page }) => {
+  test('0c. blok 20 sectie KENNIS toont alle 10 antwoorden met bron en datum (v435: de salarisregel van SKF erbij)', async ({ page }) => {
     await boot(page);
     const K = sectie(await lees(page), 'KENNIS');
-    expect(K[0]).toMatch(/^KENNIS \(v425\/v426\): 9 antwoorden/);
+    expect(K[0]).toMatch(/^KENNIS \(v425\/v426\): 10 antwoorden/);
+    expect(K.join('\n')).toMatch(/Salaris SKF: de 24e, in het weekend de maandag erna \| door jou/);   // v435
     for (const r of ['  Inkomen en eigen bedrijf | Ernst Management Holding | Je holding (eigen bedrijf) | door jou | 10-10-2026',
       '  Woning | Ml Macnack | Woonhuur (gestopt) | door jou | 10-10-2026',
       '  Leningen | Pam | Uitgeleend €250,00 · nog open €250,00 | door jou | 02-09-2026',
@@ -100,7 +101,7 @@ test.describe('v426', () => {
       '  Vaste lasten | Health Club | Gestopt | door jou | 20-09-2026',
       '  Eenmalige uitgaven | Gemeente Utrecht | Boete of wegslepen · eenmalig | door jou | 10-10-2026',
       '  Eenmalige uitgaven | Lausa Eriksson | Zorgkosten | door jou | 10-10-2026']) expect(K).toContain(r);
-    expect(K.length).toBe(10);
+    expect(K.length).toBe(11);   // kop + 10 (v435: de salarisregel)
   });
 
   test('1. laag a: de app benoemt het zelf, maar vraagt een tik Eenmalig / Komt terug; zonder tik is het in de Terugblik "nog niet bepaald"', async ({ page }) => {

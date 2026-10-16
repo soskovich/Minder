@@ -54,7 +54,7 @@ test.describe('v424', () => {
     expect(await page.locator(`[data-tx="${G120}"] [data-benoemvoorstel]`).innerText()).toBe('voorstel: Boete of wegslepen · uit de omschrijving: "naheffing"');
     /* openen schrijft niets; de eerste tik ook niet */
     await page.locator(`[data-tx="${G484}"] [data-benoemoptie="Boete of wegslepen"]`).click();
-    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
+    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post', 'salaris'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
     expect(await page.locator(`[data-tx="${G484}"] [data-benoemgekozen]`).innerText()).toBe('Boete of wegslepen · eenmalig of komt het terug?');
     await page.locator(`[data-tx="${G484}"] [data-benoemaard="eenmalig"]`).click();
     expect(await stand(page, G484)).toEqual({ laag: 'antw', label: 'Boete of wegslepen', bron: 'jij', aard: 'eenmalig', voorstel: null });

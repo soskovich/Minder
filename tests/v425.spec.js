@@ -66,7 +66,7 @@ test.describe('v425', () => {
     expect((await vragen(page)).filter(q => q.startsWith('uit|'))).toEqual(['uit|j bakker']);
     expect(await kopVan(page, 'uit|j bakker')).toBe('€250,00 aan J Bakker · 2 okt · wat was dit?');
     expect(await page.locator('[data-qkey="uit|j bakker"] [data-kennisoptie]').allInnerTexts()).toEqual(['Lening, verwacht terug', 'Uitgave', 'Gift', 'Weet ik niet']);
-    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook   // openen schrijft niets
+    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post', 'salaris'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook   // openen schrijft niets
     await page.locator('[data-qkey="uit|j bakker"] [data-kennisoptie="lening"]').click();
     expect(await page.evaluate(A => [catOf(TX.find(t => t.id === A)), !!loanFor(A), kennisGet('uit|j bakker').wat, kennisGet('uit|j bakker').bron], A)).toEqual(['uitgeleend', true, 'Lening, verwacht terug', 'jij']);
     /* een lening is per keer: de volgende overboeking aan J Bakker is de volgende vraag */
@@ -89,7 +89,7 @@ test.describe('v425', () => {
     await page.locator('[data-qkey="in|k van dijk"] [data-kennisoptie="teruggave"]').click();
     await page.locator('[data-qkey="in|k van dijk"] [data-kennisdoel="vervoer"]').click();
     expect(await page.locator('[data-qkey="in|k van dijk"] [data-kennisgevolg]').innerText()).toBe('Verlaagt je uitgave in Vervoer & auto in oktober 2026 met €300,00.');
-    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
+    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post', 'salaris'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
     await page.locator('[data-qkey="in|k van dijk"] [data-kennisbevestig]').click();
     expect(Math.round(await page.evaluate(() => totals('2026-10').spendNorm))).toBe(Math.round(uit0 - 300));
     /* Vergeten toont het gevolg vooraf en zet het terug */
@@ -136,7 +136,7 @@ test.describe('v425', () => {
     await page.locator('#kennisVast_SPORTCLUB_OOST').fill('Voetbal zoon');
     await page.locator('[data-kennisvastwat]').click();
     expect(await page.locator('[data-qkey="vast|SPORTCLUB OOST"] [data-kennisstap]').innerText()).toMatch(/^Voetbal zoon · /);
-    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
+    expect(await page.evaluate(() => Object.values(SET.kennis || {}).filter(E => !['holding', 'lening', 'post', 'salaris'].includes(E.soort)).length)).toBe(0);   // v426: holding, lening en post staan er sinds v426 ook
     const kind = await page.evaluate(() => kennisCatVan('Kinderen'));
     await page.locator(`[data-qkey="vast|SPORTCLUB OOST"] [data-kennispotje="${kind}"]`).click();
     expect(await page.evaluate(() => TX.filter(t => t.name === 'Sportclub Oost').map(catOf))).toEqual([kind, kind]);
