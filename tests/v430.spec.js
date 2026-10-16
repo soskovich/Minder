@@ -305,6 +305,44 @@ test.describe('v430 · fase 3', () => {
     const r = await page.evaluate(() => verhoudingSalarisData().R.map(x => x.sal - x.vast - x.potjes - x.buiten - x.opzij - x.rest));
     for (const d of r) expect(Math.abs(d)).toBeLessThanOrEqual(3);   // de delen sluiten op het salaris (afronding per deel)
   });
+  /* v430: vier gevallen die een drempel of een uitsluiting onderscheiden van de voor de hand liggende variant (meetles o) */
+  test('1b. een post die 12 euro (7%) steeg is niet gestegen: de drempel is 10% EN 10 euro', async ({ page }) => {
+    await V.boot(page);
+    await page.evaluate(() => { const z = TX.filter(t => /ZILVEREN KRUIS/i.test(t.desc || t.name || ''));
+      const t0 = z[0]; for (const ym of ['2026-04', '2026-05']) { const t = Object.assign({}, t0, { date: ym + t0.date.slice(7) }); categorize(t); TX.push(t); }
+      for (const t of TX) if (/ZILVEREN KRUIS/i.test(t.desc || t.name || '') && t.date >= '2026-07') t.amount = -176;
+      TX.forEach(categorize); TX.sort((a, b) => a.date.localeCompare(b.date)); applyOwnAccounts(); buildAccMeta(); save(); });
+    const P = await page.evaluate(() => { const D = fase3Sal(), A = D.R.slice(0, -1).slice(-6), k = Object.keys(A[5].posten).find(k => /ZILVEREN/.test(k));
+      return { reeks: A.map(r => Math.round(+r.posten[k] || 0)), in: vastGestegenData().posten.some(p => p.key === k) }; });
+    expect(P.reeks).toEqual([164, 164, 164, 176, 176, 176]);   // de invoer: +12 euro, 7%
+    expect(P.in).toBe(false);
+  });
+  test('2b. een verhoging van 300 euro (6%) is geen inkomen gestegen: de drempel is 25% EN 250 euro', async ({ page }) => {
+    /* grip-kring-stand: een vast salaris van 5216 per maand, zonder holding; vanaf augustus 300 euro meer */
+    await K.boot(page, {});
+    const v = await page.evaluate(() => { for (const t of TX) if (t.amount === 5216 && t.date >= '2026-08') t.amount = 5516; SET.income = 5516; TX.forEach(categorize); save();
+      const D = fase3Sal(); return D.R.map(r => Math.round(D.tot(r, 'salaris'))); });
+    expect(v.slice(2)).toEqual([5216, 5216, 5216, 5216, 5216, 5516, 5516, 5516]);   // de invoer: +300 euro, 6%
+    expect(await page.evaluate(() => inkomenStijging())).toBe(null);
+    expect(await page.evaluate(() => gripCyclusLees().sym.map(s => s.id))).not.toContain('inkomen:na');
+  });
+  test('2c. wat jij eenmalig noemde telt niet als extra uitgave na je salaris', async ({ page }) => {
+    await V.boot(page);
+    const voor = await page.evaluate(() => { const N = naJeSalarisData(); return { tot: N.naTot, ov: N.groepen.find(g => g.id === 'online+overig').na }; });
+    await page.evaluate(() => { const t = TX.find(t => t.id.startsWith('m5dwa_38000')); SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [t.id]: { op: '2026-10-01' } }); save(); });
+    const na = await page.evaluate(() => { const N = naJeSalarisData(); return { tot: N.naTot, ov: N.groepen.find(g => g.id === 'online+overig').na }; });
+    expect(voor.tot - na.tot).toBe(380);
+    expect(voor.ov - na.ov).toBe(380);
+  });
+  test('3c. eerder gedacht telt niet meer als zeker: na Nee op budget staat budget niet meer als bevestigde oorzaak', async ({ page }) => {
+    await V.boot(page);
+    expect((await ana(page, 'vices')).bev.map(b => b[0])).toContain('budget');   // de invoer: budget is zeker uit de data
+    await page.evaluate(() => { afspraakMaak({ soort: 'gedrag', oorzaak: 'budget', key: 'oorz:cat:vices', cat: 'vices', wat: 'budget', titel: 'Vices budget', van: '2026-09', tot: '2026-09' }); save(); });
+    await page.evaluate(() => { const T = oorzaakTerugcheck().find(t => t.key === 'cat:vices'); oorzaakTerugZet(T.id, false); });
+    const a = await ana(page, 'vices');
+    expect(a.bev.map(b => b[0])).not.toContain('budget');
+    expect(await page.evaluate(() => kennisGet('oorzaakoud|cat:vices').aard)).toBe('budget');
+  });
   test('5. blok 22 draagt de nieuwe oorzaken en de controles', async ({ page }) => {
     await V.boot(page);
     const b = await page.evaluate(() => diagOorzaken().join('\n'));
