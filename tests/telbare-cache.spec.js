@@ -447,7 +447,10 @@ test.describe('d - de prestatiegrens', () => {
   test('Grip en de budget-editor blijven onder de grens op toestel-omvang', async ({ page }) => {
     await pinDag(page); await open(page, groot());
     const r = await page.evaluate(() => {
-      const meet = (fn) => { const t0 = performance.now(); fn(); return performance.now() - t0; };
+      /* v433: een meting onder last schommelt (gemeten bij v432: 186 tot 286 ms voor dezelfde render); daarom vijf keer en de
+         MEDIAAN, zodat een enkele uitschieter de grens niet raakt en een echte vertraging wel */
+      const een = (fn) => { const t0 = performance.now(); fn(); return performance.now() - t0; };
+      const meet = (fn) => { const a = [0, 1, 2, 3, 4].map(() => een(fn)).sort((x, y) => x - y); return a[2]; };
       renderDash();                                        // een keer warmlopen
       return { n: TX.length, maanden: months().length,
         grip: meet(() => renderMaand()), editor: meet(() => openBudgetEditor(thisYM())),

@@ -24,6 +24,8 @@ async function boot(page, o) {
     SET.acctName = Object.assign({}, SET.acctName, { [LEEF]: 'Leefgeld', [MAIN]: 'Salarisrekening' });
     SET.manualBal = Object.assign({}, SET.manualBal, { [LEEF]: 180 });
     SET.savingsAcc = Object.assign({}, SET.savingsAcc, { [LEEF]: false });
+    /* v433: een geplande inleg in Plan (een reservering) van EUR 280, naast de spaarinleg van EUR 2.200, zoals op het toestel */
+    SET.planInleg = Object.assign({}, SET.planInleg, { res: { bedrag: 280, vanaf: '2026-01', op: '2026-01-01' } });
     Object.assign(SET, o.set || {});
     save(); try { buildAccMeta(); } catch (_) {} render();
   }, { MAIN, SPAAR, LEEF, ONT, o });

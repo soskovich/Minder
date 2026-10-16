@@ -74,7 +74,7 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     const r = await page.evaluate(() => { const P = rekVoorstel(); return [P.start, P.eind, P.dagen]; });
     expect(r).toEqual(['2026-10-24', '2026-11-23', 31]);
   });
-  test('2b. gestopt, opgezegd en uit reservering tellen niet; de Plan-inleg ook niet', async ({ page }) => {
+  test('2b. gestopt, opgezegd en uit reservering tellen niet; de Plan-inleg is het budget en niet de spaarinleg (v433)', async ({ page }) => {
     await S.boot(page);
     const voor = await P(page);
     expect(voor.vastNiet.map(x => x[0])).toEqual(expect.arrayContaining(['Huurwoningen', 'Dela Natura- en levensv']));
@@ -86,13 +86,13 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     await page.evaluate(() => { SET.savingAmount = 100; save(); });
     const pl = await P(page);
     expect(pl.rek.map(x => Math.round(x.verwacht))).toEqual(na.rek.map(x => Math.round(x.verwacht)));
-    expect(pl.plan).toBe(100);
+    expect(pl.plan).toBe(280);   // v433: de geplande inleg uit blok 20 punt 7, niet SET.savingAmount
   });
-  test('2c/d. buffer is p75 min mediaan (minstens 50), en laten staan is verwacht plus buffer naar boven op 50', async ({ page }) => {
+  test('2c/d. buffer is p75 min mediaan (minstens 50, hoogstens 20% van verwacht, v433), en laten staan is verwacht plus buffer naar boven op 50', async ({ page }) => {
     await S.boot(page);
     const r = await P(page);
     for (const x of r.rek) { const b = x.bm.slice().sort((p, q) => p - q), q = (b.length - 1) * 0.75, i = Math.floor(q), p75 = b[i] + (b[Math.min(i + 1, b.length - 1)] - b[i]) * (q - i), h = b.length >> 1, med = b.length % 2 ? b[h] : (b[h - 1] + b[h]) / 2;
-      expect(x.buffer).toBeCloseTo(Math.max(p75 - med, 50), 5);
+      expect(x.buffer).toBeCloseTo(Math.max(Math.min(p75 - med, 0.2 * x.verwacht), 50), 5);
       if (!x.tekort) expect(x.laten).toBe(Math.ceil((x.verwacht + x.buffer) / 50 - 1e-9) * 50); }
     /* Leefgeld: de buffer is groter dan 50, de Salarisrekening ook: geen van beide valt op het minimum terug in deze stand */
     expect(r.rek.find(x => x.acc === LEEF).buffer).toBeGreaterThan(50);
@@ -120,14 +120,16 @@ test.describe('v432 · 2. laten staan per rekening', () => {
 });
 
 test.describe('v432 · 3. bewijs in Begrijpen', () => {
-  test('3. onttrekkingen per ontvangende rekening per maand, de grootste bovenaan met de bron; een zonder tegenkant is onbekend', async ({ page }) => {
+  test('3. onttrekkingen per ontvangende rekening per maand, de grootste bovenaan met de bron; tussen spaar en reservering telt niet (v433)', async ({ page }) => {
     await S.boot(page);
-    await add(page, [[SPAAR, '2026-10-12', -75, 'Overboeking', 'OVERBOEKING NAAR ANDERE BANK', 'intern']]);
+    await add(page, [[SPAAR, '2026-10-12', -75, 'Overboeking', 'From Spaar to Reservering', 'intern'], ['NL01RESV0000005555', '2026-10-12', 75, 'Overboeking', 'From Spaar to Reservering', 'intern']]);
+    expect(await page.evaluate(() => { OWN = [...new Set([...OWN, 'NL01RESV0000005555'])]; SET.resAcc = 'NL01RESV0000005555'; save(); return resAccId(); })).toBe('NL01RESV0000005555');
     await page.evaluate(() => { go('maand'); window._gripTab = 'begrijpen'; gripNaarSymptoom('pat:spaargeld'); });
     const rows = await page.locator('[data-rekont]').allInnerTexts();
     expect(rows[0]).toMatch(/^Leefgeld sep €1\.050 \(3×\)/);
     expect(rows[0]).toContain('hier komt het tekort vandaan');
-    expect(rows.join('|')).toMatch(/onbekende rekening okt €75 \(1×\)/);
+    expect(rows.join('|')).not.toMatch(/€75/);
+    expect(rows.join('|')).not.toMatch(/onbekend|niet aanwijst/);
     expect(await page.locator('[data-tekortbron]').count()).toBe(1);
     const naar = await page.locator('[data-reknaar="NL01LEEF0000004444"]').innerText();
     expect(naar).toContain('na je salaris naartoe €1.000 · werkelijk afgegaan €925');
@@ -141,7 +143,7 @@ test.describe('v432 · 4. Kiezen: zo verdeel je je salaris', () => {
     expect(k[0]).toEqual(['oorz:pat:spaargeld:salverdeling', 'Zo verdeel je je salaris']);
     await page.evaluate(() => openSalVerdeling('pat:spaargeld'));
     await expect(page.locator('[data-salvrek]')).toHaveCount(2);
-    await expect(page.locator('[data-salvopzij]')).toContainText(/Opzij: €[\d.]+ \(waarvan Plan €2\.200\)/);
+    await expect(page.locator('[data-salvopzij]')).toContainText(/Opzij €[\d.]+: Plan €280 \+ vrij sparen €[\d.]+/);
     await expect(page.locator('[data-salvgevolg]')).toContainText('Leefgeld: laagste saldo');
     await expect(page.locator('[data-salvgevolg]')).toContainText('onttrekkingen €0');
   });
@@ -161,7 +163,7 @@ test.describe('v432 · 4. Kiezen: zo verdeel je je salaris', () => {
     const l0 = await page.evaluate(() => rekVoorstel().rek.find(r => r.acc === 'NL01LEEF0000004444').laten);
     await page.locator(`[data-salvveld="${LEEF}"]`).fill(String(l0 + 500));
     const op1 = await page.locator('[data-salvopzij]').innerText();
-    const num = t => +t.match(/Opzij: €([\d.]+)/)[1].replace(/\./g, '');
+    const num = t => +t.match(/Opzij €([\d.]+)/)[1].replace(/\./g, '');
     expect(num(op0) - num(op1)).toBe(500);
     await expect(page.locator('[data-salvgevolg]')).toContainText(`Leefgeld: laagste saldo`);
     await page.locator(`[data-salvveld="${LEEF}"]`).fill('9000');
@@ -225,6 +227,6 @@ test.describe('v432 · 6. blok 23', () => {
     expect(t).toMatch(/\nLeefgeld\n  vaste lasten 0\n  potjes \d+: /);
     expect(t).toMatch(/LATEN STAAN \d+/);
     expect(t).toMatch(/ONTTREKKINGEN PER REKENING PER MAAND\n  Leefgeld 2026-09 1050 \(3×: 2026-09-08, 2026-09-15, 2026-09-20\) · de grootste/);
-    expect(t).toMatch(/: sluit\n.*: sluit\n.*: gelijk\n  gestopte of opgezegde post die meetelt: geen/);
+    expect(t).toMatch(/: sluit\n.*: sluit\n.*: gelijk\n(  onttrekkingen 20\d\d-\d\d: per rekening samen \d+ tegen blok 20 punt 4 \d+: gelijk\n){3}  Plan-inleg 280 tegen blok 20 punt 7 \(inleg in Plan: budget\) 280: gelijk\n  gestopte of opgezegde post die meetelt: geen/);
   });
 });
