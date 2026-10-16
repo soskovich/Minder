@@ -658,7 +658,10 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 .sw input:checked + .sl:before{transform:translateX(19px)}
 
 /* bottom nav */
-.grip-koop{position:sticky;bottom:calc(100px + env(safe-area-inset-bottom));z-index:5;background:var(--card);box-shadow:0 6px 18px rgba(0,0,0,.25)}   /* v428: de koopknop blijft vast, minstens 16px boven de menubalk (72px hoog), ook als een tab scrollt */
+.grip-koopbalk{position:fixed;left:50%;transform:translateX(-50%);bottom:var(--nav-h,calc(72px + env(safe-area-inset-bottom)));width:100%;max-width:520px;box-sizing:border-box;background:var(--bg);border-top:1px solid var(--line);padding:10px 16px 16px;z-index:40}   /* v434: de koopknop is een vaste balk die op de menubalk aansluit, dichte achtergrond in de kleur van de pagina, een dunne lijn erboven; de knop staat 16px boven de menubalk */
+.grip-koopbalk .grip-koop{margin:0}
+#s-maand.screen{animation:fadeo .25s ease}   /* v434: alleen dekking, geen transform: een transform op het scherm zou de vaste balk tijdens de overgang mee laten schuiven */
+@keyframes fadeo{from{opacity:0}to{opacity:1}}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:var(--nav-bg);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--ln2);box-shadow:0 -6px 24px rgba(0,0,0,.28);display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:50}
 .nav a{flex:1;text-align:center;color:var(--mut);text-decoration:none;font-size:10px;letter-spacing:.02em;font-weight:500;padding:4px 0;cursor:pointer;opacity:.7;transition:opacity .15s ease,color .15s ease}
 .nav a .i{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 16px;margin-bottom:3px;border-radius:15px;line-height:1;transition:background .18s ease}
@@ -999,6 +1002,7 @@ function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMo
 function ymdVan(d){ const x=(d instanceof Date)?d:new Date(d);
   return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
 function vandaagYMD(){ return ymdVan(new Date()); }
+function prevYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo--; if(mo<1){mo=12;y--;} return y+'-'+String(mo).padStart(2,'0'); }   // v434
 function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
 function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
 /* v309: HET POTJEBEDRAG PER CATEGORIE PER MAAND, BEWAARD EN NIET GELEZEN.
@@ -4562,7 +4566,10 @@ function renderDash(){
     const kop=(i>0&&mm!==_vorigeM)?`<div class="hlabel" style="margin:13px 2px 5px">${esc(resMaandLabel(mm))}</div>`:'';
     _vorigeM=mm;
     return kop+`<div class="txl" onclick="openSheet('${x.id}')"><div class="ava" style="background:var(--card2);color:var(--mut)">${c.icon}</div><div class="info"><div class="nm">${esc(txNaam(x))}</div><div class="cat">${d} · ${c.name}</div></div><div class="amt ${x.amount>0?'pos':'neg'}">${x.amount>0?'+':''}${euro(x.amount)}</div></div>`;}).join('');
-  const recentBlock = recent.length?`<div class="homelist"><div class="hl-head"><span>Recent</span><span class="hl-all" onclick="go('tx')">Alle transacties ›</span></div>${txRows}</div>`:'';
+  /* v434: de melding over herkende eigen overboekingen stond in "Nieuw sinds gisteren" op Zien; die kaart is weg van Grip, het
+     nieuwe staat op Home (Recent), dus de melding staat daar boven. */
+  let _em=''; try{ eigenAutoMeldingCheck(); _em=eigenAutoMeldingRegel(); }catch(_){}
+  const recentBlock = (recent.length||_em)?`<div class="homelist"><div class="hl-head"><span>Recent</span><span class="hl-all" onclick="go('tx')">Alle transacties ›</span></div>${_em}${txRows}</div>`:'';
   let modeTop='', modeBot='';
   try{
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
@@ -12054,16 +12061,67 @@ function openUitgeleendLijst(){
     ${niet>0.005?`<div class="small muted" style="margin-top:8px;line-height:1.45">Niet meer terug (${euro0(niet)}) telt als uitgave in de maand van de lening.</div>`:''}
     <div class="small muted" style="margin-top:6px;line-height:1.45">Een lening is geen uitgave en telt niet mee in je budget of potjes. Bedrag = terug + open + niet meer terug.</div></div>`;
   showSheetBg(); }
-/* Nieuw sinds gisteren: de boekingen van gisteren en vandaag, nieuwste eerst, met de melding over herkende eigen overboekingen. */
-const GRIP_NIEUW_MAX=5;
-function gripNieuwKaart(){ const gis=ymdVan(new Date(Date.now()-864e5));
-  let T=[]; try{ T=telbareTx().filter(t=>String(t.date).slice(0,10)>=gis).sort((a,b)=>b.date.localeCompare(a.date)); }catch(_){}
-  let em=''; try{ eigenAutoMeldingCheck(); em=eigenAutoMeldingRegel(); }catch(_){}
-  if(!T.length && !em) return '';
-  return `<div class="card" id="gripNieuw"><div class="hlabel" style="margin:0 0 4px">Nieuw sinds gisteren</div>${em}${T.slice(0,GRIP_NIEUW_MAX).map(t=>`<div class="row" data-nieuwtx="${esc(t.id)}" style="gap:8px;padding:4px 0;cursor:pointer" onclick="openSheet('${esc(t.id)}')"><span class="small" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txNaam(t))} <span style="color:var(--mut2)">· ${esc((CATS[catOf(t)]||{}).name||'')}</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro(t.amount)}</span></div>`).join('')}${T.length>GRIP_NIEUW_MAX?`<div class="small" style="color:var(--mut2);margin-top:2px">en ${T.length-GRIP_NIEUW_MAX} meer · Transacties</div>`:''}</div>`; }
+/* v434: "Nieuw sinds gisteren" (gripNieuwKaart, GRIP_NIEUW_MAX) is weg van Zien; het nieuwe staat op Home (Recent), met de
+   melding over herkende eigen overboekingen erboven. */
+/* ===== v434: SIGNALEN IN ZIEN VOLGEN DE STAND VAN DE CYCLUS =====
+   De lijst Signalen leest dezelfde bron als de symptomen in Begrijpen (gripCyclus: C.sym), dus een weggevallen symptoom (C.leeg,
+   v430: alleen eenmalig door jou) staat ook hier niet. Een signaal staat in de lijst zolang het een OPEN VRAAG heeft (Begrijpen:
+   de oorzaakvraag, een testweek, een voorstel, of een vraag die naar volgende maand schoof; bij na je salaris "Was dat bewust?")
+   of een OPEN KEUZE (Te kiezen of Wacht op oorzaak). Is alles gekozen of beantwoord, dan staat het in EEN ingeklapte regel
+   "Afgehandeld deze maand (N) ›", per signaal met wat je koos. De stip op Kiezen en "N keuzes staan open" blijven C.kies.
+   TERUG: een afgehandeld signaal komt terug als het bedrag na je keuze nog minstens GRIP_TERUG_STIJG (25%) oploopt, of als het in
+   een nieuwe maand weer een open vraag of keuze heeft terwijl je het vorige maand afhandelde; dan staat er "terug: ..." bij.
+   De stand bij je keuze (dag en bedrag) staat in SET.gripAfgehandeld[maand][symptoom]; gripAfgehandeldBewaar() schrijft die bij
+   het tekenen van Grip, de stand zelf (gripSignaalStand) leest alleen. */
+const GRIP_TERUG_STIJG=0.25;
+const GRIP_VRAAG_OPEN=new Set(['vraag','testweek','voorstel','later']);
+function symBedrag(s){ const v=s.bedrag!=null?s.bedrag:(s.p && s.p.bedrag!=null)?s.p.bedrag:(s.x && s.x.bedrag!=null)?s.x.bedrag:s.G?s.G.stijging:null;
+  return (v==null || !isFinite(+v))?null:Math.abs(+v); }
+/* wat er voor dit symptoom nog openstaat: een keuze onder Te kiezen, een onder Wacht op oorzaak, of een vraag in Begrijpen */
+function symOpen(s, C){ const id=s.id, hoort=x=>x.sym===id || x.id===id;
+  const kies=C.kies.some(hoort), wacht=(C.wacht||[]).some(hoort);
+  const X=((C.OV||{}).A||{})[id], vraag=!!(X && GRIP_VRAAG_OPEN.has(X.stand)) || (id==='inkomen:na' && !!C.IV && !C.IV.antwoord);
+  return {kies, wacht, vraag, open:kies||wacht||vraag}; }
+/* wat je koos, in een regel ("alles geaccepteerd", "verhoging verdelen", de titel van je keuze, of de bevestigde oorzaak) */
+function symKeuzeTekst(s, C){ const id=s.id, lc=t=>t?String(t).charAt(0).toLowerCase()+String(t).slice(1):t;
+  if(id==='vast:gestegen' && s.G){ const st=s.G.stijg||[], acc=st.filter(x=>x.geaccepteerd).length; return acc===st.length?'alles geaccepteerd':`${acc} van ${st.length} geaccepteerd`; }
+  const go=(C.gekozenO||[]).filter(o=>o.sym===id); if(go.length) return go.map(o=>lc(String(o.naam).split(' · ')[0])).join(', ');
+  const g=(C.gekozen||[]).find(x=>x.id===id); if(g) return lc((g.k&&g.k.titel)||'gekozen');
+  if(id==='inkomen:na' && C.IV && C.IV.antwoord){ const a=INKOMEN_ANTW.find(x=>x[0]===C.IV.antwoord); return a?lc(a[1]):'beantwoord'; }
+  const X=((C.OV||{}).A||{})[id];
+  if(X){ if(X.stand==='nietklopt') return 'patroon klopt niet';
+    if(X.eenmaligEnkel) return 'eenmalig, telt niet als gedrag';
+    if(X.bevestigd && X.bevestigd.length) return 'oorzaak: '+X.bevestigd.map(b=>(OORZAAK_NAAM[b.soort]||b.soort).toLowerCase()).join(', ');
+    if(X.stand==='vervallen') return 'testweek zonder duidelijk patroon'; }
+  return 'niets te kiezen'; }
+/* de stand per signaal: open (met terug) of afgehandeld (met wat je koos). Alleen lezen. */
+function gripSignaalStand(C){ const m=C.m||thisYM(), vm=prevYM(m), A=(SET.gripAfgehandeld||{}), nu=A[m]||{}, vorig=A[vm]||{};
+  const open=[], af=[];
+  for(const s of C.sym){ const O=symOpen(s, C), r=nu[s.id], rv=vorig[s.id];
+    if(O.open){ open.push({s, O, terug:rv?`terug: opnieuw in ${ymFull(m).split(' ')[0]} · vorige maand ${rv.tekst||'afgehandeld'}`:null}); continue; }
+    const b=symBedrag(s), basis=r?r.bedrag:rv?rv.bedrag:null;
+    if(basis>0 && b!=null && b>=basis*(1+GRIP_TERUG_STIJG)){ open.push({s, O, terug:`terug: ${euro0(b)}, bij je keuze ${euro0(basis)} (+${Math.round((b/basis-1)*100)}%)`, stijg:true}); continue; }
+    af.push({s, tekst:symKeuzeTekst(s, C)}); }
+  return {open, af}; }
+/* de schrijver: bij het tekenen van Grip de stand bij je keuze vastleggen (dag en bedrag), een keer per symptoom per maand. Een
+   symptoom dat in een nieuwe maand afgehandeld blijft (een keuze die doorloopt, zoals een geaccepteerde vaste last) houdt het
+   bedrag van vorige maand als basis. Staat er weer iets open, dan gaat de stand weg, zodat je volgende keuze de nieuwe basis is. */
+function gripAfgehandeldBewaar(C){ const m=C.m||thisYM(), vm=prevYM(m), A=SET.gripAfgehandeld=SET.gripAfgehandeld||{}, vorig=A[vm]||{};
+  const nu=A[m]=A[m]||{}; let w=false;
+  for(const s of C.sym){ const O=symOpen(s, C);
+    if(O.open){ if(nu[s.id]){ delete nu[s.id]; w=true; } continue; }
+    if(!nu[s.id]){ const rv=vorig[s.id]; nu[s.id]={op:vandaagYMD(), bedrag:rv&&rv.bedrag!=null?rv.bedrag:symBedrag(s), tekst:symKeuzeTekst(s, C)}; w=true; }
+    else { const t=symKeuzeTekst(s, C); if(nu[s.id].tekst!==t){ nu[s.id].tekst=t; w=true; } } }
+  if(!Object.keys(nu).length) delete A[m];
+  if(!Object.keys(A).length) delete SET.gripAfgehandeld;
+  if(w) save(); }
+function gripAfToggle(){ window._gripAfOpen=!window._gripAfOpen; renderMaand(); }
 /* Signalen: alleen feiten, elk met "waarom ›" naar hetzelfde symptoom in Begrijpen. Geen knop die iets verandert. */
-function gripSignalenKaart(C){ if(!C.sym.length) return '';
-  return `<div class="card" id="gripSignalen"><div class="hlabel" style="margin:0 0 2px">Signalen</div>${C.sym.map(s=>`<div class="row" data-signaal="${esc(s.id)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${s.x&&s.x.dot?maandDot(s.x.dot):''}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(s.naam)}</span></span><span class="small" data-waarom role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')">waarom ›</span></div>`).join('')}</div>`; }
+function gripSignalenKaart(C){ if(!C.sym.length) return ''; const S=gripSignaalStand(C);
+  const rij=x=>{ const s=x.s; return `<div class="row" data-signaal="${esc(s.id)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${s.x&&s.x.dot?maandDot(s.x.dot):''}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(s.naam)}</span>${x.terug?`<span class="small" data-signaalterug style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(x.terug)}</span>`:''}</span><span class="small" data-waarom role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')">waarom ›</span></div>`; };
+  const afOpen=!!window._gripAfOpen;
+  const af=S.af.length?`<div class="row" data-afgehandeld="${S.af.length}" role="button" style="gap:8px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripAfToggle()"><span class="small" style="flex:1;color:var(--mut)">Afgehandeld deze maand (${S.af.length})</span><span style="color:var(--teal);font-weight:700;display:inline-block;transform:rotate(${afOpen?90:0}deg)">›</span></div>${afOpen?S.af.map(x=>`<div class="row" data-afgehandeldrij="${esc(x.s.id)}" role="button" style="gap:8px;padding:4px 0 4px 10px;cursor:pointer" onclick="gripNaarSymptoom('${esc(x.s.id).replace(/'/g,"\\'")}')"><span class="small" style="flex:1;min-width:0;color:var(--mut)">${esc(x.s.naam)} · ${esc(x.tekst)}</span></div>`).join(''):''}`:'';
+  return `<div class="card" id="gripSignalen" data-signalenopen="${S.open.length}"><div class="hlabel" style="margin:0 0 2px">Signalen</div>${S.open.map(rij).join('')}${!S.open.length?`<div class="small" data-signalengeen style="color:var(--mut2);padding:4px 0 6px">Geen open signalen.</div>`:''}${af}</div>`; }
 /* Kloppen mijn gegevens?: de wachtrij van v425 (hooguit KENNIS_MAX_OPEN), elk een tik naar die vraag. De enige plek op Zien
    waar je iets wijzigt. */
 function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MAX_OPEN); }catch(_){}
@@ -12072,7 +12130,7 @@ function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MA
 function gripSlimRegel(C){ const m=thisYM(), n=C.kies.length;
   return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover style="color:var(--mut)">nog ${maandDagenOver(m)} ${maandDagenOver(m)===1?'dag':'dagen'} in ${esc(ymFull(m).split(' ')[0])}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
 function gripZienHtml(C, V){
-  return gripSlimRegel(C)+salVerdelingMeldingHtml()+gripSalarisKaart()+gripOpenstaandKaart()+gripNieuwKaart()+gripSignalenKaart(C)+gripGegevensKaart();
+  return gripSlimRegel(C)+salVerdelingMeldingHtml()+gripSalarisKaart()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
 }
 /* ===== BEGRIJPEN ===== */
 /* De groepen van maandGroepen() (punt 7 van blok 20) in vier: vast, potjes, zonder potje, Plan-inleg. Potjes buiten de norm
@@ -12347,6 +12405,12 @@ function gripTerugAfgesloten(){
   const kop=`<div class="row" style="justify-content:space-between;align-items:baseline"><span class="hlabel" style="margin:0">${esc(ymFull(ym))} · ${af?'afgesloten':'nog niet afgesloten'}</span>${SB.salaris>0?`<b>${euro0(SB.salaris)} salaris</b>`:''}</div>`;
   const een=(E.length||ur.length)?`<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label)}</span><span class="small" data-benoembron role="button" onclick="openKennis()" style="cursor:pointer;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(BENOEM_BRON[B.bron]||B.bron)}</span></span><span class="small" style="font-weight:700">${euro0(B.bedrag)}</span></div>`).join('')}${ur.map(t=>`<div class="row" data-terugres="${esc(t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:18px;text-align:center">·</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(txNaam(t))}</span><span class="small" style="color:var(--mut2)">uit een reservering betaald · ${esc(dagKort(t.date))}</span></span><span class="small" style="font-weight:700">${euro0(uitReserveringBedrag(t))}</span></div>`).join('')}</div>`:'';
   return `<div class="card" id="gripTerugAfgesloten" data-terugafgesloten="${esc(ym)}">${SB.salaris>0?salarisBalkHtml(SB, kop):kop+'<div class="small muted" style="margin-top:4px">Geen salaris herkend in die maand.</div>'}${een}</div>`; }
+/* v434: de balk zit op de menubalk (de hoogte daarvan in --nav-h) en de opvulling onder elke tab is zijn eigen hoogte plus 16px.
+   GRIP_KOOPBALK_H is de terugval voor de eerste tekening (de echte hoogte wordt daarna gemeten). */
+const GRIP_KOOPBALK_H=71;
+function gripKoopbalkMaat(){ try{ const nav=document.querySelector('.nav'), b=document.querySelector('#s-maand [data-koopbalk]'), g=document.getElementById('gripInhoud');
+  if(nav && nav.offsetHeight) document.documentElement.style.setProperty('--nav-h', nav.offsetHeight+'px');
+  if(b && g && b.offsetHeight) g.style.paddingBottom=(b.offsetHeight+16)+'px'; }catch(_){} }
 function renderMaand(){
   /* v428: GRIP ALS CYCLUS (fase 1). Een vaste bovenkant (gripMeters, gripTabsHtml) en per tab een eigen inhoud; Grip opent
      altijd op Zien (go('maand')). De cyclus (gripCyclus) wordt een keer per render opgehaald: valtOpSignals() schrijft
@@ -12371,11 +12435,13 @@ function renderMaand(){
   } else {
     inhoud=gripTerugblikHtml();
   }
-  gripOpzijBewaar(); gripTeRuimBewaar();
-  /* De koopknop blijft vast onderaan, minstens 16px boven de menubalk (sticky, .grip-koop) */
-  $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}">${inhoud}</div>
-    <button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop style="margin-top:10px" onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button>
-    <div style="height:8px"></div>`;
+  gripOpzijBewaar(); gripTeRuimBewaar(); try{ gripAfgehandeldBewaar(C); }catch(_){}
+  /* v434: DE KOOPKNOP IS EEN VASTE BALK (.grip-koopbalk) die direct op de menubalk aansluit, met een dichte achtergrond, dus er
+     schuift geen inhoud zichtbaar onder. Elke tab krijgt onderaan een opvulling van de hoogte van die balk plus 16px
+     (gripKoopbalkMaat), zodat de laatste kaart helemaal leesbaar is als je naar beneden scrolt. */
+  $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}" style="padding-bottom:${GRIP_KOOPBALK_H+16}px">${inhoud}</div>
+    <div class="grip-koopbalk" data-koopbalk><button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button></div>`;
+  gripKoopbalkMaat();
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
 }
 /* ===== v388: GRIP DEEL 2: BEGRIJPEN, KIEZEN EN TERUGBLIK =====
@@ -30565,7 +30631,9 @@ const GRIP_OUD=[
   ['Zien: de kaart Let op (gripLetOpKaart)', 'Zien: Signalen (feiten, "waarom ›") en Kiezen: Te kiezen (de handeling met het signaal als reden)', 'gripCyclus'],
   ['Zien: "nog N ›" achter Let op (openGripLetOpLijst)', 'Kiezen: Te kiezen toont alles, zonder maximum', 'gripKiezenNieuw'],
   ['Zien: Kloppen mijn gegevens? (regel of in de kop van Let op)', 'Zien: eigen kaart met de wachtrij van hooguit 3 vragen', 'gripGegevensKaart'],
-  ['Zien: melding herkende eigen overboekingen (eigenAutoMeldingRegel)', 'Zien: Nieuw sinds gisteren', 'gripNieuwKaart'],
+  ['Zien: melding herkende eigen overboekingen (eigenAutoMeldingRegel)', 'Home: boven Recent (v434)', 'eigenAutoMeldingRegel'],
+  ['Zien: Nieuw sinds gisteren (gripNieuwKaart, v428)', 'Home: Recent (v434: weg van Grip)', 'renderDash'],
+  ['Zien: Signalen als een lijst van alle symptomen (v428)', 'Zien: Signalen met open vraag of keuze, en "Afgehandeld deze maand (N) ›" (v434)', 'gripSignaalStand'],
   ['Zien: "Er is nog te weinig ingesteld"', 'Zien: onderaan, zelfde poort', 'gripZienHtml'],
   ['Begrijpen: de patroonkaart (boom, oorzaak en signalen)', 'Begrijpen: het symptoom van het patroon (gripSymptoomDrill)', 'gripPatroonBoom'],
   ['Begrijpen: ‹ › tussen de patronen', 'Begrijpen: de lijst "Waarom gebeurt het?"', 'gripBegrijpenLijst'],
@@ -30584,7 +30652,7 @@ const GRIP_OUD=[
   ['Terugblik: Eenmalig, telt niet als gedrag', 'Terugblik: de afgesloten maand (vorige maand) met uit een reservering betaald; de lopende maand in de eerste kaart', 'gripTerugAfgesloten'],
   ['Terugblik: Nog niet bepaald', 'Terugblik: eigen kaart', 'gripTerugblikHtml'],
   ['Kiezen: stip op de tab', 'Kiezen: stip zolang er keuzes openstaan (het aantal onder Te kiezen)', 'gripStapOpen'],
-  ['De koopknop', 'Elke tab: vast onderaan, minstens 16px boven de menubalk', 'renderMaand']];
+  ['De koopknop', 'Elke tab: een vaste balk op de menubalk (v434), de knop 16px boven de menubalk, elke tab met opvulling eronder', 'gripKoopbalkMaat']];
 function diagGripCyclus(){
   const L=['GRIP-CYCLUS (v428): per oud element waar het nu staat · alleen lezen'];
   const C=gripCyclusLees(), m=thisYM(), verloren=[];
@@ -30694,6 +30762,20 @@ function diagOorzaken(){
       const ander=C.sym.filter(y=>y.id!==z.id && y.naam && (String(z.naam).includes(y.naam) || String(z.sub||'').includes(y.naam)));
       if(/data-patroon=|data-patbewijs/.test(h) || ander.length) fout.push(`${z.id}${ander.length?' noemt '+ander.map(y=>y.naam).join(', '):' toont een patroonblok'}`); }
     L.push(`  potje-symptoom met een ander symptoom als kop of patroonblok: ${fout.length?'JA · '+fout.join(' · '):'geen'}`); }
+  /* v434: Zien volgt de cyclus. De ids komen uit de getekende kaart (de afgehandelde regels uitgeklapt) en uit de lijst in
+     Begrijpen, zodat de controle leest wat er op het scherm staat en niet wat de functie erachter zegt. */
+  { let V=null; try{ V=maandVooruit(); }catch(_){}
+    const ids=(h, a)=>[...String(h).matchAll(new RegExp(a+'="([^"]*)"','g'))].map(x=>x[1].replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"));
+    const af0=window._gripAfOpen; let zh=''; try{ window._gripAfOpen=true; zh=gripSignalenKaart(C); } finally { window._gripAfOpen=af0; }
+    let bh=''; try{ bh=gripBegrijpenLijst(C, V); }catch(_){}
+    const zOpen=ids(zh,'data-signaal'), zAf=ids(zh,'data-afgehandeldrij'), beg=new Set(ids(bh,'data-symptoom')), S=gripSignaalStand(C), afIds=new Set(S.af.map(x=>x.s.id));
+    L.push('', `ZIEN (v434): ${zOpen.length} open · ${zAf.length} afgehandeld deze maand`);
+    for(const x of S.open) L.push(`  open        ${x.s.id} · ${x.s.naam} · ${[x.O.kies?'keuze':'', x.O.wacht?'wacht op oorzaak':'', x.O.vraag?'vraag':''].filter(Boolean).join(', ')||'-'}${x.terug?' · '+x.terug:''}`);
+    for(const x of S.af){ const r=((SET.gripAfgehandeld||{})[m]||{})[x.s.id]; L.push(`  afgehandeld ${x.s.id} · ${x.s.naam} · ${x.tekst}${r?` · sinds ${r.op}${r.bedrag!=null?' bij '+Math.round(r.bedrag):''}`:' · nog niet vastgelegd'}${symBedrag(x.s)!=null?' · nu '+Math.round(symBedrag(x.s)):''}`); }
+    const zonder=zOpen.concat(zAf).filter(id=>!beg.has(id)), dubbel=zOpen.filter(id=>afIds.has(id)), weg=(C.leeg||[]).filter(x=>zOpen.includes(x.id)||zAf.includes(x.id));
+    L.push(`  signaal in Zien zonder symptoom in Begrijpen: ${zonder.length?'JA · '+zonder.join(' · '):'geen'}`);
+    L.push(`  afgehandeld signaal in de open lijst: ${dubbel.length?'JA · '+dubbel.join(' · '):'geen'}`);
+    L.push(`  weggevallen symptoom in Zien: ${weg.length?'JA · '+weg.map(x=>x.id).join(' · '):'geen'}${(C.leeg||[]).length?` (weggevallen: ${C.leeg.map(x=>x.naam).join(', ')})`:''}`); }
   return L; }
 /* v432 (6): BLOK 23, LATEN STAAN PER REKENING. Per betaalrekening de vaste lasten (post en bedrag), de potjes (aandeel en bedrag),
    contant, de buffer, het laagste punt en het resultaat; de onttrekkingen per rekening per maand; en vijf controles. Alleen lezen. */

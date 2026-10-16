@@ -97,7 +97,8 @@ test.describe('E7 · een overboeking tussen eigen rekeningen telt nooit als uitg
     await zonderPotje(page, id);
     await voeg(page, 'From Leefgeld to Reservering', -60);
     await voeg(page, 'From Reservering to Leefgeld', 40);   // een bijschrijving zonder herkenning was al intern: telt niet in n
-    await page.evaluate(() => { go('maand'); });
+    /* v434: de melding stond in "Nieuw sinds gisteren" op Zien; die kaart is weg van Grip, de melding staat op Home boven Recent */
+    await page.evaluate(() => { go('dash'); render(); });
     const m = page.locator('[data-eigenautomelding]');
     await expect(m).toBeVisible();
     const st = await page.evaluate(() => SET.eigenAutoMelding);
@@ -106,10 +107,10 @@ test.describe('E7 · een overboeking tussen eigen rekeningen telt nooit als uitg
     expect(t).toContain('2 overboekingen tussen je eigen rekeningen herkend · telden eerder als uitgave (€210)');
     await m.click();
     await expect(page.locator('#eigenNamen [data-eigenautoblok]')).toBeVisible();
-    await page.evaluate(() => { closeSheet(); go('maand'); });
+    await page.evaluate(() => { closeSheet(); go('dash'); render(); });
     await expect(page.locator('[data-eigenautomelding]')).toHaveCount(0);
     await voeg(page, 'From Main to Buffer Nieuw', -30);
-    await page.evaluate(() => { go('maand'); });
+    await page.evaluate(() => { go('dash'); render(); });
     await expect(page.locator('[data-eigenautomelding]')).toHaveCount(0);   // eenmalig
   });
 });
