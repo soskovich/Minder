@@ -11207,8 +11207,9 @@ function gripCyclus(SIG){
     if(p.id==='spaargeld'){
       /* v430 (R8): de betaalrekening is een symptoom over je hele salaris; de potjes die erin boven eindigen zijn elk een eigen
          symptoom (sig:<potje>), met hun eigen oorzaken en keuzes. */
-      sym.push({id:'pat:'+p.id, bron:'patroon', pid:p.id, p, naam:p.naam, sub:p.bewijs||'', k:null});
-      for(const g of (p.sig||[])) if(g.soort==='potje' && g.k && !sym.some(z=>z.k===g.k)) sym.push({id:'sig:'+g.k, bron:'signaal', pid:p.id, naam:`${g.naam} boven je potje`, sub:`${euro0(g.bedrag)} erboven · in ${p.naam}`, k:g.k});
+      /* v431 (4c): een symptoom noemt in zijn naam en sub geen ander symptoom; het verband staat onderaan als "telt ook mee in" */
+      sym.push({id:'pat:'+p.id, bron:'patroon', pid:p.id, p, naam:p.naam, sub:`${euro0(p.bedrag)} uit je spaargeld · ${(p.ont||[]).length}× opgenomen`, k:null});
+      for(const g of (p.sig||[])) if(g.soort==='potje' && g.k && !sym.some(z=>z.k===g.k)) sym.push({id:'sig:'+g.k, bron:'signaal', pid:p.id, naam:`${g.naam} boven je potje`, sub:`${euro0(g.bedrag)} erboven`, bedrag:g.bedrag, k:g.k});
       continue; }
     sym.push({id:'pat:'+p.id, bron:'patroon', pid:p.id, p, naam:p.naam, sub:p.bewijs||'', k:pk?pk.k:null}); }
   for(const x of LZ){ if(GRIP_LETOP_TERUG.has(x.soort) || x.soort==='patroon') continue;
@@ -11216,7 +11217,7 @@ function gripCyclus(SIG){
   /* v430 fase 3: vaste lasten gestegen (oorzaak zeker uit je boekingen) en na je salaris (een vraag "Was dat bewust?") */
   let G3=null, N3=null; try{ G3=vastGestegenData(); }catch(_){} try{ N3=naJeSalarisData(); }catch(_){}
   const G3open=G3?G3.stijg.filter(x=>!x.geaccepteerd):[];
-  if(G3 && G3.stijg.length) sym.push({id:'vast:gestegen', bron:'vast', naam:'Vaste lasten gestegen', sub:`${euro0(G3.medVoor)} → ${euro0(G3.medNa)} per maand · zonder woning en studieschuld`, k:null, G:G3});
+  if(G3 && G3.stijg.length) sym.push({id:'vast:gestegen', bron:'vast', naam:'Vaste lasten gestegen', sub:`${euro0(G3.totVoor)} → ${euro0(G3.totNa)} per maand · ${G3.stijging>=0?'+':'−'}${euro0(Math.abs(G3.stijging))} · zonder woning en studieschuld`, k:null, G:G3});
   if(N3) sym.push({id:'inkomen:na', bron:'inkomen', naam:'Na je salaris', sub:N3.geenNa?`vast inkomen +${euro0(N3.d)} (+${N3.pct}%) vanaf ${f3MN(N3.ym)}`:naJeSalarisTekst(N3), k:null, N:N3});
   /* keuzes: te ruim herzien, de actieregel bij je bank, een reservering voor wat terugkomt, de patronen zonder keuze, en de
      handelingen uit Let op met hun signaal als reden */
@@ -11231,7 +11232,7 @@ function gripCyclus(SIG){
   let BR=[]; try{ BR=benoemTerugVoorstellen(); }catch(_){}
   for(const x of BR){ const kk=esc(x.key).replace(/'/g,"\\'");
     kies.push({id:'benoem:'+x.key, bron:'benoem', naam:`${x.naam} komt terug · reservering?`, reden:`${x.partij} · ${euro0(-x.t.amount)} op ${dagKort(x.t.date)} · ${BENOEM_BRON[x.A.bron]||x.A.bron} · voorstel ${euro0(-x.t.amount)} per jaar`, act:`benoemResVoorstel('${kk}')`, x}); }
-  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, sym:'pat:'+p.id, bron:'patroon', p, naam:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
+  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, sym:'pat:'+p.id, bron:'patroon', p, naam:p.id==='spaargeld'?GRIP_SPAAR_KEUZE:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
   /* De handelingen van een signaal binnen een patroon (tot v428 een tik op die tak in Begrijpen, gripSigTik): een potje boven
      zijn grens (bijstellen, volgende maand anders, grens, zo laten) en inleg vóór je fundament (doorgaan of stilzetten). */
   let BVv=[]; try{ BVv=belegVragen(m); }catch(_){}
@@ -11296,7 +11297,7 @@ const OORZAAK_MAX_VRAGEN=3, OORZAAK_MAX=4, TESTWEEK_DAGEN=7, TESTWEEK_MIN_TIK=4,
    van v429 viel weg: hij hield Vices met een mediaan van EUR 95 op EUR 20 buiten). Verdeling: hetzelfde andere potje in >=3 van de
    4 maanden. Gewoonte: >=8 kleine aankopen in >=2 van de 3 maanden. Een dagdeel pas vanaf 5 boekingen met een tijd. Salaris
    opgedeeld: na vast, potjes en opzij blijft minder dan 5% van je salaris over. */
-const OORZAAK_TOETS={budgetMaanden:4, budgetBoven:3, budgetFactor:1.5, verdelingDeel:0.7, verdelingMaanden:3, eenmaligDeel:0.5, salarisDagen:7, salarisDeel:0.5, salarisMaanden:2, gewoonteN:8, gewoonteMax:15, gewoonteMaanden:2, gelegenheidDeel:0.4, dagdeelMin:5, opgedeeldDeel:0.05};
+const OORZAAK_TOETS={budgetMaanden:4, budgetBoven:3, budgetFactor:1.5, verdelingDeel:0.7, verdelingMaanden:3, eenmaligDeel:0.5, salarisDagen:7, salarisDeel:0.5, salarisMaanden:2, gewoonteN:8, gewoonteMax:15, gewoonteMaanden:2, gelegenheidDeel:0.4, dagdeelMin:5, opgedeeldDeel:0.05, opgedeeldMaanden:2};
 const OORZAAK_SOORT=['opgedeeld','budget','verdeling','eenmalig','salaris','gewoonte','gelegenheid','gevoel'];
 const OORZAAK_NAAM={opgedeeld:'Salaris opgedeeld', budget:'Budget past niet', verdeling:'Verdeling', eenmalig:'Eenmalig', salaris:'Salaris-effect', gewoonte:'Gewoonte', gelegenheid:'Gelegenheid', gevoel:'Gevoel'};
 /* de opties van de vraag, in gewone taal */
@@ -11362,13 +11363,13 @@ function oorzaakAnalyse(s, V){
   const MN=ym=>MNAMES[+ym.slice(5,7)-1];
   let budgetMediaan=null;
   /* R8: SALARIS OPGEDEELD. De salarisbalk van blok 20 (salarisBalk): na vast, potjes en opzij blijft minder dan 5% van je salaris
-     over. De lopende maand (geboekt plus verwacht) als die een salaris heeft, anders de laatste afgeronde. */
-  if(rek){ const D=oorzaakSalData(); let r=null; if(D) r=[D.Rc].concat(D.R.slice(0,-1).reverse()).find(x=>D.tot(x,'salaris')>0.005)||null;
-    if(r){ const SB=salarisBalk(D, r), sal=SB.salaris, rest=SB.rest5, pct=Math.round(rest/sal*100), vuurt=rest<OORZAAK_TOETS.opgedeeldDeel*sal;
-      T.push({soort:'opgedeeld', vuurt, sterkte:'zeker', rest:Math.round(rest), getallen:{maand:r.ym+(r===D.Rc?' (verwacht)':''), salaris:Math.round(sal), vast:Math.round(D.tot(r,'vast')), potjes:Math.round(D.tot(r,'pot')), opzij:Math.round(D.tot(r,'opzij')), rest:Math.round(rest), pct},
-        bewijs:`na vast, potjes en opzij blijft ${euro0(rest)} over van je salaris van ${euro0(sal)} in ${MN(r.ym)}${r===D.Rc?' (verwacht)':''} (${pct}%)`,
-        niet:`na vast, potjes en opzij blijft ${euro0(rest)} over (${pct}%, de grens is ${Math.round(OORZAAK_TOETS.opgedeeldDeel*100)}%)`}); }
-    else T.push({soort:'opgedeeld', vuurt:false, sterkte:'zeker', getallen:{}, bewijs:'', niet:'geen salaris herkend'}); }
+     over. Sinds v431 op de afgeronde maanden (opgedeeldData()), niet op de lopende. */
+  if(rek){ const Z=opgedeeldData();
+    if(Z){ const rij=Z.M.map(x=>`${MN(x.ym)} ${x.rest<0?'−':''}${euro0(Math.abs(x.rest))}`).join(' · ');
+      T.push({soort:'opgedeeld', vuurt:Z.vuurt, sterkte:'zeker', rest:Z.M[Z.M.length-1].rest, getallen:{maanden:Z.M.map(x=>`${x.ym} salaris ${x.sal} rest ${x.rest} (${x.pct}%)`).join(' · '), onder:`${Z.n} van ${Z.M.length}`, verschoven:Z.verschoven||'-'},
+        bewijs:`na vast, potjes en opzij blijft minder dan ${Math.round(OORZAAK_TOETS.opgedeeldDeel*100)}% van je salaris over in ${Z.n} van de ${Z.M.length} afgeronde maanden · rest per maand: ${rij}${Z.verschoven?' · '+Z.verschoven:''}`,
+        niet:`minder dan ${Math.round(OORZAAK_TOETS.opgedeeldDeel*100)}% over in ${Z.n} van de ${Z.M.length} afgeronde maanden (nodig ${OORZAAK_TOETS.opgedeeldMaanden}) · rest per maand: ${rij}`}); }
+    else T.push({soort:'opgedeeld', vuurt:false, sterkte:'zeker', getallen:{}, bewijs:'', niet:'geen salaris herkend in de afgeronde maanden'}); }
   /* 1. budget past niet (v430, R3): >=3 van de laatste 4 afgeronde maanden boven het budget EN de mediaan minstens 1,5x het budget */
   if(!rek && k && (+((SET.budgets||{})[k])||0)>0){ const eerste=TX.reduce((a,t)=>!a||t.date<a?t.date:a,'').slice(0,7);   // een maand voor je eerste boeking is geen meting
     const M4=[4,3,2,1].map(i=>valtOpYmPlus(m,-i)).filter(ym=>ym>=eerste).map(ym=>Object.assign({ym}, oorzaakUitBud(k, ym, V)));
@@ -11608,7 +11609,20 @@ function oorzaakAfspraakZet(key, soort){ const C=gripCyc(); let V=null; try{ V=m
   save(); keuzeKlaar(`${T.naam} · afspraak`, herstel); }
 /* v430 (R8): DE KEUZE BIJ DE BETAALREKENING: opzij verlagen of een buffer laten staan, met het gevolg vooraf. Opzij verlagen zet je
    spaarinleg (dezelfde instelling als Plan); een buffer is een afspraak met jezelf. Beide worden een afspraak in Al gekozen. */
-function opzijKeuzeData(){ const D=oorzaakSalData(); if(!D) return null; const r=[D.Rc].concat(D.R.slice(0,-1).reverse()).find(x=>D.tot(x,'salaris')>0.005); if(!r) return null;
+/* v431 (3a): SALARIS OPGEDEELD OP DE AFGERONDE MAANDEN. De salarisbalk van blok 20 per maand (salarisBalk), over de laatste drie
+   afgeronde maanden met een salaris: minder dan 5% rest in minstens OORZAAK_TOETS.opgedeeldMaanden (2) daarvan is zeker. De
+   lopende maand telt niet mee: die is nog niet om. (3b) Is je salarisdatum verschoven (de datums uit blok 20, punt 1), dan zegt een
+   regel dat erbij: een maand met een vroege en een late betaling, of geen, leest anders. */
+function opgedeeldData(){ const D=oorzaakSalData(); if(!D) return null;
+  const A=D.R.slice(0,-1).filter(x=>(+x.salaris||0)>0.005), M3=A.slice(-3); if(!M3.length) return null;
+  const M=M3.map(r=>{ const SB=salarisBalk(D, r), sal=SB.salaris, rest=Math.round(SB.rest5); return {ym:r.ym, r, sal:Math.round(sal), rest, pct:sal>0?Math.round(rest/sal*100):0, onder:rest<OORZAAK_TOETS.opgedeeldDeel*sal}; });
+  const n=M.filter(x=>x.onder).length;
+  const dag=r=>{ const d=(r.salTx||[]).map(t=>+String(t.date).slice(8,10)).sort((a,b)=>a-b); return d.length?d[0]:null; };
+  const dagen=A.map(dag).filter(x=>x!=null); let verschoven='';
+  if(dagen.length>=3){ const oud=mediaan(dagen.slice(0, Math.max(dagen.length-3,1))), nu=dag(A[A.length-1]);
+    if(nu!=null && Math.abs(nu-oud)>=7) verschoven=`salaris kwam eerst rond de ${Math.round(oud)}e, nu op de ${nu}e`; }
+  return {M, n, vuurt:n>=OORZAAK_TOETS.opgedeeldMaanden, verschoven}; }
+function opzijKeuzeData(){ const D=oorzaakSalData(); if(!D) return null; const Zo=opgedeeldData(); const r=Zo?Zo.M[Zo.M.length-1].r:null; if(!r) return null;
   const SB=salarisBalk(D, r), sal=SB.salaris, rest=Math.round(SB.rest5), doel=Math.round(OORZAAK_TOETS.opgedeeldDeel*sal);
   let inleg=0; try{ inleg=Math.round(monthlySavingTarget()); }catch(_){}
   const minder=Math.max(Math.ceil(Math.max(doel-rest,0)/5)*5, 5), buffer=Math.max(Math.ceil(doel/5)*5, 50);
@@ -11648,20 +11662,39 @@ function fase3Sal(){ const s=thisYM()+'|'+_dataGen; if(window._f3Sal && window._
   let D=null; try{ D=salarisData(9); }catch(_){} window._f3Sal={s, D}; return D; }
 const f3MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
 /* (1) vaste lasten */
+/* v431: HET MAANDBEDRAG VAN EEN VASTE POST is zijn laatste termijnbedrag, omgerekend naar een maand via de frequentie
+   (4-wekelijks x13/12, per kwartaal /3, per jaar /12), en niet de mediaan van maandtotalen: Shurgard EUR 71 per 4 weken is
+   EUR 77 per maand, ook in een maand met twee termijnen. Zonder schema-item (een betaling) is het de laatste betaling. */
+function postFactor(s){ if(!s) return 1; if(s.cadans==='4w') return 13/12; if(s.cadans==='maand') return 1; return 1/(+s.intervalM||1); }
+function postMaandBedrag(s, amt){ return (amt!=null?amt:Math.abs(+(s&&s.amount)||0))*postFactor(s); }
+/* v431: VASTE LASTEN GESTEGEN, EEN BRON. Per post het maandbedrag voor en na (postMaandBedrag()); het totaal voor en na is de som
+   van die bedragen, dus de stijging bovenaan is per constructie nieuw + gestegen - gestopt. Een post die jij stopte of opzegde
+   (postStatus() 'gestopt' door jou, ook een opgezegde die afliep) telt nooit als nieuw of gestegen: hij staat onder gestopt met
+   het bedrag dat vrijkomt. Nieuw is een post alleen als hij in de laatste afgeronde maand betaald is of de volgende termijn
+   verwacht wordt (postStatus() actief of loopt af); anders is het een gegevensvraag in Zien ("afgelopen of komt terug?"). */
 function vastGestegenData(){ const D=fase3Sal(); if(!D) return null; const A=D.R.slice(0,-1).slice(-6); if(A.length<6) return null;
   const voor=A.slice(0,3), na=A.slice(3); let WK=null; try{ WK=woningKeuze(D.R).wkey; }catch(_){}
   const eerste=k=>{ const r=A.find(x=>x.postNaam[k]); return r?r.postNaam[k]:null; };
   const keys=[...new Set(A.flatMap(r=>Object.keys(r.posten)))].filter(k=>k!==WK && eerste(k) && catOf(eerste(k))!=='studie');
-  const tot=r=>keys.reduce((a,k)=>a+(+r.posten[k]||0),0);
-  const P=[]; for(const k of keys){ const t=eerste(k), vV=voor.map(r=>+r.posten[k]||0), vN=na.map(r=>+r.posten[k]||0), mV=mediaan(vV), mN=mediaan(vN);
-    let status=null, verschil=0;
-    if(vV.every(v=>v<0.005) && vN.some(v=>v>0.005)){ status='nieuw'; verschil=mediaan(vN.filter(v=>v>0.005)); }
-    else if(mV>0.005 && mN>=mV*(1+VAST_STIJG.deel) && mN-mV>=VAST_STIJG.euro){ status='gestegen'; verschil=mN-mV; }
-    else if(mV>0.005 && vN.every(v=>v<0.005)){ status='gestopt'; verschil=-mV; }
+  let SCH=[]; try{ SCH=recurringSchedule(true).filter(x=>x.type==='fixed'); }catch(_){}
+  const laatsteIn=(k, L)=>{ let t=null; for(const r of L) for(const x of ((r.postTx||{})[k]||[])) if(!t || x.date>t.date) t=x; return t; };
+  const P=[], vragen=[]; let totVoor=0, totNa=0;
+  for(const k of keys){ const t=eerste(k), vV=voor.map(r=>+r.posten[k]||0), vN=na.map(r=>+r.posten[k]||0), sch=SCH.find(x=>x.key===k)||null;
+    const st=postStatus(k), doorJou=st.door==='jij' && st.status==='gestopt';
+    const tV=laatsteIn(k, voor), tN=laatsteIn(k, na), tA=tN||tV;
+    const mB=x=>x?Math.round(postMaandBedrag(sch, Math.abs(x.amount))):0;
+    const inV=vV.some(v=>v>0.005), inN=vN.some(v=>v>0.005), verwacht=st.status==='actief' || st.status==='afloop';
+    let status=null, vB=0, nB=0;
+    if(doorJou){ status='gestopt'; vB=mB(tA); nB=0; }
+    else if(!inV && inN){ if(vN[2]>0.005 || verwacht){ status='nieuw'; nB=mB(tN); } else { vragen.push({key:k, naam:titleCase(cleanMerch(t.name)||t.name||k), cat:catOf(t), na:vN.map(Math.round), laatste:tN?tN.date.slice(0,10):''}); continue; } }
+    else if(inV && !inN && !verwacht){ status='gestopt'; vB=mB(tV); }
+    else { vB=inV?mB(tV):mB(tN); nB=inN?mB(tN):vB;
+      if(vB>0 && nB>=vB*(1+VAST_STIJG.deel) && nB-vB>=VAST_STIJG.euro) status='gestegen'; else vB=nB; }
+    totVoor+=vB; totNa+=nB;
     if(!status) continue;
-    P.push({key:k, naam:titleCase(cleanMerch(t.name)||t.name||k), cat:catOf(t), status, voor:vV.map(Math.round), na:vN.map(Math.round), mV:Math.round(mV), mN:Math.round(mN), verschil:Math.round(verschil), geaccepteerd:(SET.vastAccept||{})[k]||null}); }
-  const totVoor=voor.map(tot), totNa=na.map(tot);
-  return {voor:voor.map(r=>r.ym), na:na.map(r=>r.ym), totVoor:totVoor.map(Math.round), totNa:totNa.map(Math.round), medVoor:Math.round(mediaan(totVoor)), medNa:Math.round(mediaan(totNa)), posten:P, stijg:P.filter(p=>p.status!=='gestopt'), woning:WK}; }
+    P.push({key:k, naam:titleCase(cleanMerch(t.name)||t.name||k), cat:catOf(t), status, door:doorJou?'jij':'', voor:vV.map(Math.round), na:vN.map(Math.round), mV:vB, mN:nB, termijn:Math.round(Math.abs((tA||{}).amount||0)), cadans:postCadansTxt(sch)||'per maand', verschil:nB-vB, geaccepteerd:(SET.vastAccept||{})[k]||null}); }
+  const ord={nieuw:0, gestegen:1, gestopt:2}; P.sort((a,b)=>ord[a.status]-ord[b.status] || Math.abs(b.verschil)-Math.abs(a.verschil));
+  return {voor:voor.map(r=>r.ym), na:na.map(r=>r.ym), totVoor, totNa, stijging:totNa-totVoor, posten:P, stijg:P.filter(p=>p.status!=='gestopt'), gestopt:P.filter(p=>p.status==='gestopt'), vragen, woning:WK}; }
 function openVastPostKeuze(key){ window._vpk={key, optie:null, bron:null}; renderVastPostKeuze(); showSheetBg(); }
 function vastPostBronnen(p){ const B=SET.budgets||{}; let rz={}; try{ rz=catSpendMap(thisYM())||{}; }catch(_){}
   return kennisPotjes().filter(k=>k!==p.cat && (+B[k]||0)-(+rz[k]||0)>=p.verschil).map(k=>({id:'pot:'+k, k, naam:(CATS[k]||{}).name||k, bud:Math.round(+B[k]||0)})).concat([{id:'budget', naam:'het maandbudget'}]); }
@@ -11695,17 +11728,30 @@ function inkomenStijging(){ const D=fase3Sal(); if(!D) return null; const R=D.R,
     const mV=mediaan(voor.map(val)), mN=mediaan(na.map(val)), d=mN-mV;
     if(mV>0 && d>=INKOMEN_STIJG.euro && d>=INKOMEN_STIJG.deel*mV && (!best || d>best.d)) best={ym:R[w].ym, w, voor:voor.map(r=>r.ym), na:na.map(r=>r.ym), mV:Math.round(mV), mN:Math.round(mN), d:Math.round(d), pct:Math.round(d/mV*100)}; }
   return best; }
-/* de variabele uitgaven van een maand: potjes en zonder potje (zonder studieschuld) plus contant, zonder wat jij eenmalig noemde */
-function naSalarisMaand(r){ const g={}; let tot=0; const cats=new Set(Object.keys(r.potjes).concat(Object.keys(r.zonder)));
-  for(const c of cats){ if(c==='studie') continue; const v=(+r.potjes[c]||0)+(+r.zonder[c]||0)-eenmaligInCat(c, r.ym); tot+=v; for(const [id,,ks] of NA_SALARIS_GROEP) if(ks.includes(c)) g[id]=(g[id]||0)+v; }
-  const kas=+((r.bDeel||{}).kas)||0; tot+=kas; g[CONTANT_CAT]=(g[CONTANT_CAT]||0)+kas; return {tot, g}; }
+/* de variabele uitgaven van een maand: potjes en zonder potje (zonder studieschuld) plus contant, zonder wat jij eenmalig noemde.
+   v431: wat in geen van de drie groepen valt is de vierde, "Overige potjes" (NA_SALARIS_REST), zodat de groepen samen het totaal zijn. */
+const NA_SALARIS_REST='overige';
+function naSalarisMaand(r){ const g={}, rc={}; let tot=0; const cats=new Set(Object.keys(r.potjes).concat(Object.keys(r.zonder)));
+  for(const c of cats){ if(c==='studie') continue; const v=(+r.potjes[c]||0)+(+r.zonder[c]||0)-eenmaligInCat(c, r.ym); tot+=v; let in3=false;
+    for(const [id,,ks] of NA_SALARIS_GROEP) if(ks.includes(c)){ g[id]=(g[id]||0)+v; in3=true; }
+    if(!in3){ g[NA_SALARIS_REST]=(g[NA_SALARIS_REST]||0)+v; rc[c]=(rc[c]||0)+v; } }
+  const kas=+((r.bDeel||{}).kas)||0; tot+=kas; g[CONTANT_CAT]=(g[CONTANT_CAT]||0)+kas; return {tot, g, rc}; }
 function naJeSalarisData(){ const I=inkomenStijging(); if(!I) return null; const D=fase3Sal(), cur=thisYM();
+  /* v431: alleen afgeronde maanden na de verhoging; de lopende maand telt pas mee als hij is afgerond */
   const voorR=I.voor.map(ym=>D.R.find(r=>r.ym===ym)), naR=I.na.filter(ym=>ym!==cur).map(ym=>D.R.find(r=>r.ym===ym));
   if(!naR.length) return Object.assign({}, I, {geenNa:true});
-  const gem=L=>{ const M=L.map(naSalarisMaand), o={tot:M.reduce((a,x)=>a+x.tot,0)/M.length, g:{}}; for(const [id] of NA_SALARIS_GROEP) o.g[id]=M.reduce((a,x)=>a+(x.g[id]||0),0)/M.length; return o; };
-  const V0=gem(voorR), V1=gem(naR), extra=Math.round(V1.tot-V0.tot);
-  return Object.assign({}, I, {naUit:naR.map(r=>r.ym), voorTot:Math.round(V0.tot), naTot:Math.round(V1.tot), extra, extraPct:I.d>0?Math.round(extra/I.d*100):0,
-    groepen:NA_SALARIS_GROEP.map(([id,naam])=>({id, naam, voor:Math.round(V0.g[id]||0), na:Math.round(V1.g[id]||0), verschil:Math.round((V1.g[id]||0)-(V0.g[id]||0))}))}); }
+  const ids=NA_SALARIS_GROEP.map(x=>x[0]).concat([NA_SALARIS_REST]);
+  const gem=L=>{ const M=L.map(naSalarisMaand), o={tot:M.reduce((a,x)=>a+x.tot,0)/M.length, g:{}, rc:{}}; for(const id of ids) o.g[id]=M.reduce((a,x)=>a+(x.g[id]||0),0)/M.length;
+    for(const x of M) for(const c in x.rc) o.rc[c]=(o.rc[c]||0)+x.rc[c]/M.length; return o; };
+  const V0=gem(voorR), V1=gem(naR), voorTot=Math.round(V0.tot), naTot=Math.round(V1.tot), extra=naTot-voorTot;
+  /* EEN AFRONDING: elke groep voor en na op hele euro's, de vierde is het totaal min de drie, en het verschil is na min voor; dus
+     de som van de groepen is per constructie het totaal (en de som van de verschillen de extra uitgaven) */
+  const G3=NA_SALARIS_GROEP.map(([id,naam])=>({id, naam, voor:Math.round(V0.g[id]||0), na:Math.round(V1.g[id]||0)}));
+  const vb=Object.entries(V1.rc).filter(([,v])=>v>0.5).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([c])=>((CATS[c]||{}).name||c).toLowerCase());
+  const rest={id:NA_SALARIS_REST, naam:`Overige potjes${vb.length?` (${vb.join(', ')}, …)`:''}`, voor:voorTot-G3.reduce((a,g)=>a+g.voor,0), na:naTot-G3.reduce((a,g)=>a+g.na,0)};
+  const groepen=G3.concat([rest]).map(g=>Object.assign(g, {verschil:g.na-g.voor}));
+  return Object.assign({}, I, {naUit:naR.map(r=>r.ym), voorTot, naTot, extra, extraPct:I.d>0?Math.round(extra/I.d*100):0, groepen,
+    basis:`op basis van ${naR.length} volle ${naR.length===1?'maand':'maanden'} na je verhoging (${naR.map(r=>f3MN(r.ym)).join(', ')})`}); }
 const INKOMEN_ANTW=[['bewust','Bewust'],['vanzelf','Vanzelf gegaan'],['weetniet','Weet ik niet']];
 function inkomenVraagKey(I){ return 'inkomen|'+I.ym; }
 function inkomenBewustZet(keuze){ const I=inkomenStijging(); if(!I || !INKOMEN_ANTW.some(x=>x[0]===keuze)) return; const key=inkomenVraagKey(I), m=thisYM();
@@ -11933,6 +11979,8 @@ function gripPatroonBoom(p){ const N=p.sig.length;
     <div data-patboom style="margin:2px 0 0 4px">${p.sig.map(sigRij).join('')}</div>
     <div class="small" data-patbewijs style="margin-top:6px;line-height:1.45"><b>Gezien:</b> ${esc(p.bewijs)}</div></div>`; }
 const GRIP_OORZAAK_OPEN='oorzaak nog niet bepaald';
+/* v431 (3c): onder Kiezen staat bij de betaalrekening een handeling en niet de naam van het symptoom */
+const GRIP_SPAAR_KEUZE='Niets meer uit je spaargeld, of het terugzetten';
 function gripSymMaandTekst(s, V){ const M=gripSymMaanden(s, V); if(!M) return ''; return M.ms.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(M.v[i])}${i===M.ms.length-1&&M.lopend?'*':''}`).join(' · '); }
 function gripBegrijpenLijst(C, V){
   /* v429: per symptoom de mogelijke oorzaken en de stand (zeker, een vraag, testweek, eenmalig); de kop zegt hoeveel vragen er
@@ -11951,26 +11999,45 @@ function gripSymptoomDrill(C, V, id){
   if(!s) return terug+`<div class="card"><div class="small muted">Dit signaal staat er niet meer.</div></div>`;
   if(s.bron==='vast') return terug+gripVastGestegenBlok(s, C);
   if(s.bron==='inkomen') return terug+gripNaSalarisBlok(s, C);
-  let p=s.p||null; if(!p && s.k) p=C.P.find(q=>(q.sig||[]).some(g=>g.k===s.k))||null;
-  const kies=C.kies.find(x=>x.sym===s.id) || C.kies.find(x=>x.id===s.id) || (p?C.kies.find(x=>x.id==='pat:'+p.id):null);   // v429: alleen een keuze onder Te kiezen (niet Wacht op oorzaak)
+  /* v431 (4): EEN SYMPTOOM TOONT ALLEEN ZICHZELF. Een potje-symptoom (een potje boven zijn budget, ook als signaal binnen de
+     betaalrekening) draagt geen patroonblok, geen uitsplitsing en geen "Gezien"-regel van een ander symptoom: de kop met het bedrag
+     erboven, de maandstaafjes, de oorzaken, de vraag en "naar keuze". Telt het potje ook mee in een breder symptoom, dan staat er
+     onderaan een link "telt ook mee in". De betaalrekening toont het bedrag uit spaargeld en de onttrekkingen per datum. */
+  const p=(s.p && s.p.soort!=='potje')?s.p:null, potSym=!!s.k && !p;
+  const potBedrag=potSym?(s.bedrag!=null?s.bedrag:(s.p?s.p.bedrag:null)):null;
+  const kies=C.kies.find(x=>x.sym===s.id) || C.kies.find(x=>x.id===s.id) || (s.p?C.kies.find(x=>x.id==='pat:'+s.p.id):null);   // v429: alleen een keuze onder Te kiezen (niet Wacht op oorzaak)
+  const ook=potSym?gripTeltOokMee(s, C):[];
   const extra=s.soort==='belegwissel'?`<div class="small" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openBeleggenVoorwaarden()">De voorwaarden voor beleggen ›</div>`:'';
   return terug+`<div class="card gm-stage" id="gripSymptoom" data-symdrill="${esc(s.id)}"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">${esc(s.naam)}</div>${s.sub?gripSub(esc(s.sub)):''}
+    ${potBedrag!=null&&potBedrag>0?`<div data-symkop style="margin-top:6px;font-weight:800;font-size:var(--fs-lg)">${euro0(potBedrag)} erboven</div>`:''}
     ${gripSymBalken(gripSymMaanden(s, V))}
-    ${p?`<div style="margin-top:10px">${gripPatroonBoom(p)}</div>`:''}
+    ${p&&p.soort==='spaargeld'?gripOnttrekkingen(p):p?`<div style="margin-top:10px">${gripPatroonBoom(p)}</div>`:''}
     <div data-symoorzaak>${(C.OV&&C.OV.A[s.id])?oorzaakBlok(C.OV.A[s.id], C):`<div class="small" data-geenoorzaak style="margin-top:10px;line-height:1.45">Dit signaal gaat over je gegevens en niet over gedrag: er hoort geen oorzaakvraag bij. De handeling staat onder Te kiezen.</div>`}</div>${extra}
-    ${kies?`<div class="small" data-symnaarkiezen data-naarkeuze role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarKeuze('${esc(kies.id).replace(/'/g,"\\'")}')">naar keuze · ${esc(kies.naam)} ›</div>`:''}</div>`; }
+    ${kies?`<div class="small" data-symnaarkiezen data-naarkeuze role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarKeuze('${esc(kies.id).replace(/'/g,"\\'")}')">naar keuze · ${esc(kies.naam)} ›</div>`:''}
+    ${ook.map(z=>`<div class="small" data-teltookmee="${esc(z.id)}" role="button" style="margin-top:8px;color:var(--teal);cursor:pointer" onclick="gripNaarSymptoom('${esc(z.id).replace(/'/g,"\\'")}')">telt ook mee in: ${esc(z.naam)} ›</div>`).join('')}</div>`; }
+/* v431 (4b): de bredere symptomen waar een potje ook in meetelt: een patroon (de betaalrekening) met dit potje als signaal, en na je
+   salaris (alle variabele potjes). Een link, verandert niets. */
+function gripTeltOokMee(s, C){ const uit=[];
+  for(const z of C.sym) if(z.id!==s.id && z.p && z.p.soort!=='potje' && (z.p.sig||[]).some(g=>g.k===s.k)) uit.push({id:z.id, naam:z.naam});
+  const N=C.sym.find(z=>z.id==='inkomen:na'); if(N && s.k!=='studie' && (CATS[s.k]||{}).type==='expense' && !isFixedCat(s.k)) uit.push({id:N.id, naam:N.naam});
+  return uit; }
+/* v431 (4d): de onttrekkingen van de betaalrekening per datum */
+function gripOnttrekkingen(p){ const L=p.ont||[];
+  return `<div data-onttrekkingen style="margin-top:10px"><div class="hlabel" style="margin:0 0 2px">Uit je spaargeld deze maand · ${euro0(p.bedrag)}</div>${L.map(o=>`<div class="row" data-onttrekking="${esc(o.date)}" style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1">${esc(dagKort(o.date))}</span><span class="small" style="font-weight:700">${euro(o.bedrag)}</span></div>`).join('')}</div>`; }
 /* v430 fase 3: de rij in Begrijpen en het symptoom zelf voor vaste lasten gestegen en na je salaris */
 function gripFase3Rij(s, C){ const IV=C.IV;
   const rechts=s.bron==='vast'?'zeker ›':!IV?'›':IV.stand==='beantwoord'?'beantwoord ›':IV.stand==='vraag'?'1 vraag ›':`vraag in ${MNAMES[+nextYM(thisYM()).slice(5,7)-1]}`;
   const links=s.bron==='vast'?'oorzaak zeker uit je boekingen':'Was dat bewust?';
   return `<div class="row" data-symptoom="${esc(s.id)}" data-symstand="${s.bron==='vast'?'bevestigd':IV?IV.stand:''}" role="button" style="gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id)}')"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(s.naam)}</span>${gripSub(`${esc(s.sub)} · <span data-oorzaakopen>${links}</span>`)}</span><span class="small" data-symrechts style="white-space:nowrap;color:var(--teal);font-weight:700">${rechts}</span></div>`; }
 function gripVastGestegenBlok(s, C){ const G=s.G; if(!G) return '';
-  const st={nieuw:'nieuw', gestegen:'gestegen', gestopt:'gestopt'};
-  const kol=(ms, vs)=>ms.map((ym,i)=>`${f3MN(ym)} ${euro0(vs[i])}`).join(' · ');
+  /* v431: een bron. Bovenaan het totaal voor en na als som van de posten (postMaandBedrag()), en de stijging is per constructie
+     de som van de regels: nieuw + gestegen - gestopt. Per post het laatste termijnbedrag en wat dat per maand is. */
+  const pm=p=>`${euro0(p.termijn)} ${esc(p.cadans)}${p.cadans!=='per maand'?` = ${euro0(p.status==='gestopt'?p.mV:p.mN)} per maand`:''}`;
+  const rij=p=>`<div class="row" data-vastpostrij="${esc(p.key)}" data-vaststatus="${p.status}" data-vastbedrag="${p.verschil}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(p.naam)}${p.geaccepteerd?' · geaccepteerd':''}</span>${gripSub(p.status==='gestegen'?`${euro0(p.mV)} → ${euro0(p.mN)} per maand · laatste termijn ${pm(p)}`:p.status==='gestopt'?`${p.door==='jij'?'gestopt door jou':'niet meer betaald'} · ${pm(p)} komt vrij`:`nieuw · ${pm(p)}`)}</span><span class="small" style="font-weight:700;white-space:nowrap">${p.verschil>=0?'+':'−'}${euro0(Math.abs(p.verschil))}/mnd</span></div>`;
+  const groep=(st, kop)=>{ const L=G.posten.filter(p=>p.status===st); return L.length?`<div class="hlabel" data-vastgroep="${st}" style="margin:10px 0 2px">${kop}</div>${L.map(rij).join('')}`:''; };
   return `<div class="card gm-stage" id="gripSymptoom" data-symdrill="vast:gestegen"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">Vaste lasten gestegen</div>
-    <div class="small" data-vastvoorna style="margin-top:6px;line-height:1.5">voor: ${esc(kol(G.voor, G.totVoor))}<br>na: ${esc(kol(G.na, G.totNa))}<br><b>${euro0(G.medVoor)} → ${euro0(G.medNa)} per maand</b> (mediaan), zonder woning en studieschuld</div>
-    <div class="hlabel" style="margin:10px 0 2px">Per post</div>
-    ${G.posten.map(p=>`<div class="row" data-vastpostrij="${esc(p.key)}" data-vaststatus="${p.status}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(p.naam)} · ${st[p.status]}${p.geaccepteerd?' · geaccepteerd':''}</span>${gripSub(`${esc(kol(G.voor, p.voor))} → ${esc(kol(G.na, p.na))}`)}</span><span class="small" style="font-weight:700;white-space:nowrap">${p.verschil>=0?'+':'−'}${euro0(Math.abs(p.verschil))}/mnd</span></div>`).join('')}
+    <div class="small" data-vastvoorna data-vasttotvoor="${G.totVoor}" data-vasttotna="${G.totNa}" data-vaststijging="${G.stijging}" style="margin-top:6px;line-height:1.5"><b>${euro0(G.totVoor)} → ${euro0(G.totNa)} per maand · ${G.stijging>=0?'+':'−'}${euro0(Math.abs(G.stijging))}</b><br>${esc(G.voor.map(f3MN).join(', '))} tegen ${esc(G.na.map(f3MN).join(', '))} · per post het laatste termijnbedrag per maand · zonder woning en studieschuld</div>
+    ${groep('nieuw','Nieuw')}${groep('gestegen','Gestegen')}${groep('gestopt','Gestopt')}
     <div class="hlabel" style="margin:10px 0 2px">Oorzaak · zeker uit je boekingen</div>
     <div class="small" data-vastoorzaak style="line-height:1.45">${esc(G.stijg.map(p=>`${p.naam} ${p.status==='nieuw'?'is nieuw':'is gestegen'}`).join(', '))}. Er hoort geen vraag bij: per post kies je in Kiezen accepteren of nakijken.</div>
     ${G.stijg.some(p=>!p.geaccepteerd)?`<div class="small" data-symnaarkiezen role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarKeuze('vastpost:${esc(G.stijg.find(p=>!p.geaccepteerd).key).replace(/'/g,"\\'")}')">naar keuze ›</div>`:''}</div>`; }
@@ -11981,7 +12048,8 @@ function gripNaSalarisBlok(s, C){ const N=s.N, IV=C.IV; if(!N) return '';
   return `<div class="card gm-stage" id="gripSymptoom" data-symdrill="inkomen:na"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">Na je salaris</div>
     <div class="small" data-inkomenstijging style="margin-top:6px;line-height:1.5">Je vaste inkomen ging vanaf ${esc(ymFull(N.ym))} van ${euro0(N.mV)} naar ${euro0(N.mN)}: <b>+${euro0(N.d)} (+${N.pct}%)</b> · mediaan ${esc(N.voor.map(f3MN).join(', '))} tegen ${esc(N.na.map(f3MN).join(', '))}</div>
     ${N.geenNa?`<div class="small muted" style="margin-top:6px">Nog geen afgeronde maand na de verhoging: de uitgaven voor en na staan er zodra die er is.</div>`:`<div class="small" data-najesalaris style="margin-top:8px;font-weight:700;line-height:1.45">${esc(naJeSalarisTekst(N))}</div>
-    <div class="small muted" style="margin-top:2px">variabele uitgaven per maand ${euro0(N.voorTot)} → ${euro0(N.naTot)} · zonder woning en studieschuld, met contant, zonder eenmalig</div>
+    <div class="small muted" data-nasalbasis style="margin-top:2px">${esc(N.basis)}</div>
+    <div class="small muted" data-nasaltotaal style="margin-top:2px">variabele uitgaven per maand ${euro0(N.voorTot)} → ${euro0(N.naTot)} · zonder woning en studieschuld, met contant, zonder eenmalig</div>
     ${N.groepen.map(g=>`<div class="row" data-nasalgroep="${g.id}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1">${esc(g.naam)}</span><span class="small" style="white-space:nowrap">${euro0(g.voor)} → ${euro0(g.na)} <b>${g.verschil>=0?'+':'−'}${euro0(Math.abs(g.verschil))}</b></span></div>`).join('')}`}
     ${vraag}
     <div class="small" data-symnaarkiezen role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarKeuze('inkomen:verdeel')">naar keuze · Verhoging verdelen ›</div></div>`; }
@@ -12160,10 +12228,11 @@ function gripPatronenRuw(){
     const T=S.uitTx.slice().sort((a,b)=>a.date.localeCompare(b.date)), sal=gripSalarisVoor(T[0].date);
     const dag=sal?Math.round((new Date(T[0].date.slice(0,10)+'T00:00:00')-new Date(sal.date.slice(0,10)+'T00:00:00'))/864e5):null;
     const sig=[{soort:'onttrekking', naam:'Uit spaargeld', bedrag:Math.round(S.uitExact), n:T.length, data:T.map(t=>t.date)}];
+    const ont=T.map(t=>({date:String(t.date).slice(0,10), bedrag:Math.round(Math.abs(+t.amount||0)*100)/100}));   // v431: de onttrekkingen per datum, voor het symptoom zelf
     for(const x of boven){ sig.push(potSig(x)); gebruikt.add(x.k); }
     let vorig=null; try{ vorig=spaarStortStand(prev); }catch(_){}
     const twee=!!(vorig && vorig.uit>0) || sig.some(s=>s.soort==='potje' && s.nr>=2);
-    out.push({id:'spaargeld', soort:'spaargeld', naam:dag==null?'Betaalrekening op · salarisdatum onbekend':`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'} na salaris`, salaris:sal?sal.date.slice(0,10):null, sig, twee,
+    out.push({id:'spaargeld', soort:'spaargeld', naam:dag==null?'Betaalrekening op · salarisdatum onbekend':`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'} na salaris`, salaris:sal?sal.date.slice(0,10):null, sig, ont, twee,
       bedrag:Math.round(S.uitExact), raakt:'budget en doelen',
       bewijs:`${T.length}× uit je spaarrekening (${T.map(t=>gripDag(t.date)).join(', ')} ${MNAMES[+m.slice(5,7)-1]})`+sig.filter(s=>s.soort==='potje'&&s.nr>=2).map(s=>` · ${s.naam} ${s.nr} mnd boven`).join('')});
   }
@@ -24745,6 +24814,7 @@ function gegevensVragen(){ const out=[];
   for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant', qkey:'restant|'+v.l.id}, v));   // v423
   for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop', qkey:'poststop|'+v.key, datum:v.dag}, v));   // v422
   for(const v of uitResVragen()) out.push(Object.assign({soort:'uitres', qkey:'uitres|'+v.key}, v));   // v429: tot v428 in Let op
+  for(const v of vastAfgelopenVragen()) out.push(Object.assign({soort:'vastafgelopen', qkey:'vastafgelopen|'+v.key, datum:v.laatste}, v));   // v431
   for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
   /* v425: wat Minder alleen van jou kan weten */
   const bron=[kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
@@ -24773,6 +24843,11 @@ function postNaStopVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){ return
 function uitResVragen(){ let M={}; try{ M=postStatusMap(); }catch(_){}
   return uitResOpen().map(key=>{ const P=M[key]||postStatus(key);
     return {key, naam:P.naam||titleCase(cleanMerch(key)||key), bedrag:P.bedrag||0, det:P.bedrag?`${euro0(P.bedrag)} ${P.cadansTxt||''}`.replace(/\s+$/,''):'', laatste:P.laatste||''}; }); }
+/* v431: een vaste post die in de laatste drie afgeronde maanden voor het eerst betaald is, maar in de laatste afgeronde maand niet
+   en waarvan geen termijn meer verwacht wordt (Infomedics: jul 46, aug 46, sep 0). Niet nieuw, en de app beslist niet: "afgelopen
+   of komt terug?". Afgelopen zet de post op gestopt (postZet), komt terug op actief bij deze laatste betaling; dan telt hij als nieuw. */
+function vastAfgelopenVragen(){ let G=null; try{ G=vastGestegenData(); }catch(_){} if(!G) return [];
+  return G.vragen.map(v=>{ let P={}; try{ P=postStatus(v.key)||{}; }catch(_){} return Object.assign({}, v, {bedrag:Math.max(...v.na, 0), cadansTxt:P.cadansTxt||''}); }); }
 function postNaStopJa(key, dag){ postZet(key, 'afloop', '', dag); try{ if((SET.postStatus||{})[key]){ SET.postStatus[key].vervangerVraag=true; save(); render(); } }catch(_){} }   // v425: daarna "komt er een vervanger?"
 function postNaStopNee(key){ postZet(key, 'actief'); }
 /* v424: ONBEKENDE GROTE UITGAVEN BENOEMEN, ALLEEN MET BRON (gevraagd door de gebruiker). Een uitgave van BENOEM_MIN (100) of meer
@@ -25214,7 +25289,7 @@ function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
 /* een vraag in een regel (het scherm hierboven en blok 20) */
 function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).slice(0,10)):'';
   const T={wissel:()=>`${q.n} boekingen op eigen rekening zonder bewijs`, lening:()=>`${euro(q.t.amount)} van ${benoemPartij(q.t)} terugbetaling?`, restant:()=>`${q.l.naam}: nog open of niet meer terug?`,
-    poststop:()=>`${q.naam}: was dat de laatste betaling?`, uitres:()=>`${q.naam}: gestopt of uit reservering?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
+    poststop:()=>`${q.naam}: was dat de laatste betaling?`, vastafgelopen:()=>`${q.naam}: afgelopen of komt terug?`, uitres:()=>`${q.naam}: gestopt of uit reservering?`, benoem:()=>q.laag==='a'?`${euro(q.bedrag)} aan ${q.partij}: ${q.label}, eenmalig of komt terug?`:`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, uit:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, in:()=>`${euro(q.bedrag)} van ${q.partij}: wat was dit?`,
     vastink:()=>`${q.partij}: vast inkomen?`, vast:()=>`${euro(q.bedrag)} per ${q.cad} aan ${q.partij}: wat is dit?`, vervanger:()=>`${q.partij}: komt er een vervanger?`, vervangerwie:()=>`${q.nieuwNaam}: de vervanger van ${q.partij}?`,
     woning:()=>`${q.partij}: je woonhuur of hypotheek?`, tikkie:()=>`${euro(q.bedrag)} aan ${tikkieNaam(q.partij)}: wat was dit?`, opname:()=>`${euro(q.bedrag)} contant: waar ging het heen?`};
   return (T[q.soort]?T[q.soort]():q.soort)+d; }
@@ -25280,6 +25355,10 @@ function openGegevensVragen(focus){
       return `<div data-gegevensvraag="poststop" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)} \u00b7 gestopt, maar betaald op ${esc(dagKort(q.dag))}. Was dat de laatste betaling?</div>
       <div class="small muted" style="margin-top:2px">${euro0(q.bedrag)} \u00b7 ja: opgezegd, loopt af, en daarna telt hij niet meer mee \u00b7 nee: hij loopt nog en wordt weer verwacht</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn" style="flex:1" data-poststopja onclick="postNaStopJa('${kk}','${esc(q.dag)}')">Ja, laatste</button><button class="btn sec" style="flex:1" data-poststopnee onclick="postNaStopNee('${kk}')">Nee, loopt nog</button></div></div>`; }
+    if(q.soort==='vastafgelopen'){ const kk=esc(q.key).replace(/'/g,"\\'");   // v431
+      return `<div data-gegevensvraag="vastafgelopen" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)}: afgelopen of komt terug?</div>
+      <div class="small muted" style="margin-top:2px">nieuw sinds kort, ${esc(q.na.map(euro0).join(' \u00b7 '))} in de laatste drie maanden${q.laatste?`, laatst op ${esc(dagKort(q.laatste))}`:''} \u00b7 afgelopen: telt niet meer mee \u00b7 komt terug: een nieuwe vaste last</div>
+      <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1" data-vastafgelopen="gestopt" onclick="postZet('${kk}','gestopt')">Afgelopen</button><button class="btn sec" style="flex:1" data-vastafgelopen="actief" onclick="postZet('${kk}','actief')">Komt terug</button></div></div>`; }
     if(q.soort==='uitres'){ const kk=esc(q.key).replace(/'/g,"\\'");   // v429: tot v428 in Let op (openUitResVraag)
       return `<div data-gegevensvraag="uitres" data-post="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${esc(q.naam)}: gestopt, of betaal je hem uit een reservering?</div>
       <div class="small muted" style="margin-top:2px">${q.det?esc(q.det)+' \u00b7 ':''}telt nu niet in nog te betalen \u00b7 gestopt: ook niet meer in wat een potje nodig heeft \u00b7 uit reservering: alles blijft zoals het is</div>
@@ -30334,15 +30413,16 @@ function diagGripCyclus(){
   return L; }
 /* v430: blok 22 voor vaste lasten gestegen en na je salaris: de toets met de getallen, de oorzaak, de vraag en de keuze */
 function diagFase3(s, C){ const L=[];
-  if(s.bron==='vast'){ const G=s.G; L.push(`  toets: per post (zonder woning${G.woning?' '+G.woning:''} en studieschuld) mediaan ${G.voor.join(', ')} tegen ${G.na.join(', ')}; gestegen bij minstens ${Math.round(VAST_STIJG.deel*100)}% en EUR ${VAST_STIJG.euro}, nieuw zonder betaling ervoor`);
-    L.push(`  totaal per maand: voor ${G.totVoor.join('/')} (mediaan ${G.medVoor}) · na ${G.totNa.join('/')} (mediaan ${G.medNa})`);
-    for(const p of G.posten) L.push(`  ${p.status.padEnd(8)} ${p.naam} (${p.key}) · ${p.voor.join('/')} -> ${p.na.join('/')} · mediaan ${p.mV} -> ${p.mN} · ${p.verschil>=0?'+':''}${p.verschil}${p.geaccepteerd?' · geaccepteerd '+p.geaccepteerd.op:''}`);
+  if(s.bron==='vast'){ const G=s.G; L.push(`  toets: per post (zonder woning${G.woning?' '+G.woning:''} en studieschuld) het laatste termijnbedrag per maand, ${G.voor.join(', ')} tegen ${G.na.join(', ')}; gestegen bij minstens ${Math.round(VAST_STIJG.deel*100)}% en EUR ${VAST_STIJG.euro}; nieuw zonder betaling ervoor en betaald in de laatste afgeronde maand of verwacht; door jou gestopt staat onder gestopt`);
+    L.push(`  totaal per maand (som van de posten, laatste termijn per maand): voor ${G.totVoor} · na ${G.totNa} · stijging ${G.stijging>=0?'+':''}${G.stijging}`);
+    for(const p of G.posten) L.push(`  ${p.status.padEnd(8)} ${p.naam} (${p.key})${p.door?' · door jou':''} · maanden ${p.voor.join('/')} -> ${p.na.join('/')} · laatste termijn ${p.termijn} ${p.cadans} · per maand ${p.mV} -> ${p.mN} · ${p.verschil>=0?'+':''}${p.verschil}${p.geaccepteerd?' · geaccepteerd '+p.geaccepteerd.op:''}`);
+    for(const v of G.vragen) L.push(`  vraag    ${v.naam} (${v.key}) · ${v.na.join('/')} · niet betaald in de laatste afgeronde maand en geen termijn verwacht: afgelopen of komt terug?`);
     L.push('  bevestigd: zeker uit je boekingen · geen vraag');
     L.push(`  keuze: ${C.kies.filter(k=>k.sym===s.id).map(k=>k.naam).join(' | ')||'geen (alles geaccepteerd)'}`); return L; }
   const N=s.N, IV=C.IV;
   L.push(`  toets: vast inkomen (blok 20) vanaf ${N.ym}: mediaan ${N.voor.join(', ')} ${N.mV} tegen ${N.na.join(', ')} ${N.mN} · +${N.d} (+${N.pct}%) · drempel ${Math.round(INKOMEN_STIJG.deel*100)}% en EUR ${INKOMEN_STIJG.euro}: AF`);
   if(N.geenNa) L.push('  na je salaris: nog geen afgeronde maand na de verhoging');
-  else { L.push(`  variabele uitgaven (zonder woning en studieschuld, met contant, zonder eenmalig): voor ${N.voorTot} tegen na ${N.naTot} (${N.naUit.join(', ')}) · ${naJeSalarisTekst(N)}`);
+  else { L.push(`  variabele uitgaven (zonder woning en studieschuld, met contant, zonder eenmalig): voor ${N.voorTot} tegen na ${N.naTot} (${N.naUit.join(', ')}) · ${naJeSalarisTekst(N)} · ${N.basis}`);
     for(const g of N.groepen) L.push(`    ${g.naam}: ${g.voor} -> ${g.na} (${g.verschil>=0?'+':''}${g.verschil})`); }
   L.push(`  vraag "Was dat bewust?": ${IV?IV.stand+(IV.antwoord?' · antwoord '+IV.antwoord:''):'-'}`);
   L.push(`  keuze: ${C.kies.filter(k=>k.sym===s.id).map(k=>k.naam).join(' | ')||''}${(C.gekozenO||[]).filter(k=>k.sym===s.id).map(k=>' gekozen: '+k.naam).join('')}`);
@@ -30377,7 +30457,7 @@ function diagOorzaken(){
     { let r=null; try{ let V=null; try{ V=maandVooruit(); }catch(_){} r=symptoomLeeg(s, V); }catch(_){} if(r) fouten.eenmalig.push(`${s.id}: eenmalig ${r.eenmalig}, rest ${r.rest}`); } }
   if(!C.sym.length) L.push('', 'geen symptomen');
   /* v430: inkomen gestegen zonder symptoom (geen afgeronde maand erna) staat in het symptoom; vaste lasten zonder stijging ook hier */
-  if(!C.sym.some(z=>z.bron==='vast')){ let G=null; try{ G=vastGestegenData(); }catch(_){} L.push('', `vaste lasten gestegen: ${G?`niet (voor ${G.medVoor}, na ${G.medNa} per maand, geen post minstens ${Math.round(VAST_STIJG.deel*100)}% en EUR ${VAST_STIJG.euro} hoger of nieuw)`:'niet te rekenen (minder dan 6 afgeronde maanden)'}`); }
+  if(!C.sym.some(z=>z.bron==='vast')){ let G=null; try{ G=vastGestegenData(); }catch(_){} L.push('', `vaste lasten gestegen: ${G?`niet (voor ${G.totVoor}, na ${G.totNa} per maand, geen post minstens ${Math.round(VAST_STIJG.deel*100)}% en EUR ${VAST_STIJG.euro} hoger of nieuw)`:'niet te rekenen (minder dan 6 afgeronde maanden)'}`); }
   if(!C.sym.some(z=>z.bron==='inkomen')) L.push('', `inkomen gestegen: niet (geen maand met een mediaan minstens ${Math.round(INKOMEN_STIJG.deel*100)}% en EUR ${INKOMEN_STIJG.euro} boven de ${INKOMEN_STIJG.voor} maanden ervoor)`);
   L.push('', 'KLOPTE DE OORZAAK? (keuzes van vorige maand, symptoom voor tegen nu)');
   if(!(C.TC||[]).length) L.push('  geen oorzaak-keuze van vorige maand met een symptoom om te vergelijken');
@@ -30388,6 +30468,22 @@ function diagOorzaken(){
   L.push(`  symptoom alleen uit een als eenmalig bevestigd bedrag (alle soorten): ${fouten.eenmalig.length?'JA · '+fouten.eenmalig.join(' · '):'geen'}`);
   L.push(`  Overig of een potje zonder budget als bron van een verdeling: ${fouten.overig.length?'JA · '+fouten.overig.join(' · '):'nergens'}`);
   L.push(`  inkomen in de salaris-toets gelijk aan blok 20: ${fouten.salaris.length?'NEE · '+fouten.salaris.join(' · '):'ja'}`);
+  /* v431: de vier controles van de reparatie na v430 op het toestel */
+  { let G=null; try{ G=vastGestegenData(); }catch(_){}
+    if(G){ const som=G.posten.reduce((a,p)=>a+p.verschil,0);
+      L.push(`  vaste lasten: som van de regels (nieuw + gestegen - gestopt) ${som} tegen de stijging van het totaal ${G.stijging} (${G.totVoor} -> ${G.totNa}): ${som===G.stijging?'gelijk':'VERSCHILT'}`);
+      const fout=G.posten.filter(p=>p.status!=='gestopt' && (()=>{ const st=postStatus(p.key); return st.door==='jij' && st.status==='gestopt'; })());
+      L.push(`  gestopte post (door jou) als nieuw of gestegen: ${fout.length?'JA · '+fout.map(p=>p.naam).join(' · '):'geen'}`); }
+    else L.push('  vaste lasten: niet te rekenen (minder dan 6 afgeronde maanden)'); }
+  { let N=null; try{ N=naJeSalarisData(); }catch(_){}
+    if(N && !N.geenNa){ const sv=N.groepen.reduce((a,g)=>a+g.voor,0), sn=N.groepen.reduce((a,g)=>a+g.na,0), sx=N.groepen.reduce((a,g)=>a+g.verschil,0);
+      L.push(`  na je salaris: som van de groepen ${sv} -> ${sn} (${sx>=0?'+':''}${sx}) tegen het totaal ${N.voorTot} -> ${N.naTot} (${N.extra>=0?'+':''}${N.extra}): ${sv===N.voorTot && sn===N.naTot && sx===N.extra?'gelijk':'VERSCHILT'}`); }
+    else L.push('  na je salaris: geen verhoging met een afgeronde maand erna'); }
+  { let V=null; try{ V=maandVooruit(); }catch(_){} const fout=[];
+    for(const z of C.sym){ if(!z.k || (z.p && z.p.soort!=='potje')) continue; let h=''; try{ h=gripSymptoomDrill(C, V, z.id); }catch(_){}
+      const ander=C.sym.filter(y=>y.id!==z.id && y.naam && (String(z.naam).includes(y.naam) || String(z.sub||'').includes(y.naam)));
+      if(/data-patroon=|data-patbewijs/.test(h) || ander.length) fout.push(`${z.id}${ander.length?' noemt '+ander.map(y=>y.naam).join(', '):' toont een patroonblok'}`); }
+    L.push(`  potje-symptoom met een ander symptoom als kop of patroonblok: ${fout.length?'JA · '+fout.join(' · '):'geen'}`); }
   return L; }
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
