@@ -122,7 +122,8 @@ test.describe('c · Grip', () => {
     await I.boot(page); await page.evaluate(() => go('maand'));
     const r = await page.evaluate(() => { const f = document.getElementById('gripKoopcheck'), ids = [...document.getElementById('s-maand').children].map((e) => e.id).filter(Boolean);
       return { id: ids[ids.length - 1], t: f.innerText, oc: f.getAttribute('onclick') }; });
-    expect(r.id).toBe('gripKoopcheck');
+    expect(r.id).toBe('gripKoopbalk');   // v434: de knop staat in de vaste balk, als laatste element
+    expect(await page.evaluate(() => document.getElementById('gripKoopbalk').contains(document.getElementById('gripKoopcheck')))).toBe(true);
     expect(r.t).toContain('Ik wil iets kopen');
     expect(r.oc).toBe('openBuy()');
   });

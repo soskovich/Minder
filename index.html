@@ -12093,7 +12093,7 @@ function symKeuzeTekst(s, C){ const id=s.id, lc=t=>t?String(t).charAt(0).toLower
     if(X.eenmaligEnkel) return 'eenmalig, telt niet als gedrag';
     if(X.bevestigd && X.bevestigd.length) return 'oorzaak: '+X.bevestigd.map(b=>(OORZAAK_NAAM[b.soort]||b.soort).toLowerCase()).join(', ');
     if(X.stand==='vervallen') return 'testweek zonder duidelijk patroon'; }
-  return 'niets te kiezen'; }
+  return 'alleen een feit, niets te kiezen'; }
 /* de stand per signaal: open (met terug) of afgehandeld (met wat je koos). Alleen lezen. */
 function gripSignaalStand(C){ const m=C.m||thisYM(), vm=prevYM(m), A=(SET.gripAfgehandeld||{}), nu=A[m]||{}, vorig=A[vm]||{};
   const open=[], af=[];
@@ -12440,7 +12440,7 @@ function renderMaand(){
      schuift geen inhoud zichtbaar onder. Elke tab krijgt onderaan een opvulling van de hoogte van die balk plus 16px
      (gripKoopbalkMaat), zodat de laatste kaart helemaal leesbaar is als je naar beneden scrolt. */
   $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}" style="padding-bottom:${GRIP_KOOPBALK_H+16}px">${inhoud}</div>
-    <div class="grip-koopbalk" data-koopbalk><button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button></div>`;
+    <div class="grip-koopbalk" id="gripKoopbalk" data-koopbalk><button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button></div>`;
   gripKoopbalkMaat();
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
 }
