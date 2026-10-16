@@ -12008,7 +12008,7 @@ function gripSymptoomDrill(C, V, id){
   const kies=C.kies.find(x=>x.sym===s.id) || C.kies.find(x=>x.id===s.id) || (s.p?C.kies.find(x=>x.id==='pat:'+s.p.id):null);   // v429: alleen een keuze onder Te kiezen (niet Wacht op oorzaak)
   const ook=potSym?gripTeltOokMee(s, C):[];
   const extra=s.soort==='belegwissel'?`<div class="small" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openBeleggenVoorwaarden()">De voorwaarden voor beleggen ›</div>`:'';
-  return terug+`<div class="card gm-stage" id="gripSymptoom" data-symdrill="${esc(s.id)}"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">${esc(s.naam)}</div>${s.sub?gripSub(esc(s.sub)):''}
+  return terug+`<div class="card gm-stage" id="gripSymptoom" data-symdrill="${esc(s.id)}"><div class="hlabel" style="margin:0">Symptoom</div><div style="font-weight:800;line-height:1.3;margin-top:2px">${esc(s.naam)}</div>${s.sub && !(potBedrag>0)?gripSub(esc(s.sub)):''}
     ${potBedrag!=null&&potBedrag>0?`<div data-symkop style="margin-top:6px;font-weight:800;font-size:var(--fs-lg)">${euro0(potBedrag)} erboven</div>`:''}
     ${gripSymBalken(gripSymMaanden(s, V))}
     ${p&&p.soort==='spaargeld'?gripOnttrekkingen(p):p?`<div style="margin-top:10px">${gripPatroonBoom(p)}</div>`:''}

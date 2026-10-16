@@ -151,7 +151,8 @@ test.describe('v428 · Grip als cyclus', () => {
     await page.click(`[data-symptoom="${pat.id}"]`);
     const d = await page.evaluate(() => ({ m: [...document.querySelectorAll('[data-symmaand]')].map(e => e.dataset.symmaand), lijn: !!document.querySelector('[data-budgetlijn]'), boom: !!document.querySelector('#gripSymptoom [data-patboom]'), terug: !!document.querySelector('[data-symterug]'), oorzaak: document.querySelector('[data-symoorzaak]').innerText, knoppen: [...document.querySelectorAll('#gripSymptoom button')].filter(b => !b.closest('[data-oorzaakvraag]')).length }));   // v429: alleen de oorzaakvraag draagt knoppen
     expect(d.m).toEqual(['2026-07', '2026-08', '2026-09', '2026-10']);
-    expect(d.lijn).toBe(true); expect(d.boom).toBe(true); expect(d.terug).toBe(true); expect(d.knoppen).toBe(0);
+    /* v431 (4a): een potje-symptoom toont alleen zichzelf, zonder patroonboom */
+    expect(d.lijn).toBe(true); expect(d.boom).toBe(false); expect(d.terug).toBe(true); expect(d.knoppen).toBe(0);
     expect(d.oorzaak).toMatch(/mogelijke oorzaken/i);   // v429
     await page.click('[data-symterug]');
     expect(await page.evaluate(() => !!document.querySelector('#gripSymptomen'))).toBe(true);

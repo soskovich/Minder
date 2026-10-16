@@ -139,7 +139,13 @@ test.describe('6 · beleggen', () => {
 test.describe('7 · de patroonkaart als boom', () => {
   test('de oorzaak als knoop met het bedrag rechts, de signalen als takken, bewijs en klopt/niet blijven', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));   // v428: de boom staat in de drill van het symptoom
+    /* v431 (4d): het symptoom van de betaalrekening toont het bedrag en de onttrekkingen per datum, zonder boom; de boom staat er
+       nog voor een patroon dat geen potje en geen betaalrekening is (beleggen). De vorm van de boom wordt hier op dezelfde functie
+       getoetst, buiten het scherm. */
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));
+    expect(await page.locator('#gripSymptoom [data-patboom]').count()).toBe(0);
+    expect(await page.evaluate(() => [...document.querySelectorAll('#gripSymptoom [data-onttrekking]')].map(e => e.innerText.replace(/\s+/g, ' ')))).toEqual(['6 okt €300,00', '9 okt €400,00']);
+    await page.evaluate(() => { const d = document.createElement('div'); d.id = 'boomTest'; d.style.width = '358px'; d.innerHTML = gripPatroonBoom(gripPatronen()[0]); document.querySelector('#gripSymptoom').appendChild(d); });
     expect(await tekst(page, '[data-patoorzaak]')).toMatch(/Betaalrekening op na ~12 dagen na salaris[\s\S]*€700[\s\S]*uit spaargeld/);
     /* v428: de takken in de drill dragen geen tik en geen pijl meer (Begrijpen verandert niets), dus het bedrag is de laatste span */
     const t = await page.evaluate(() => [...document.querySelectorAll('[data-patboom] [data-patsig]')].map(r => { const b = r.querySelector('[data-boomlijn]').style; const sp = r.querySelectorAll(':scope > span');
@@ -149,6 +155,7 @@ test.describe('7 · de patroonkaart als boom', () => {
     expect(t.every(x => x.bedragRechts)).toBe(true);
     expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
     /* v430 (R1): klopt/niet is opgegaan in de ene vraag van het symptoom ("Dit patroon klopt niet") */
+    await page.evaluate(() => document.querySelector('#boomTest').remove());
     expect(await page.locator('#gripSymptoom [data-vraagoptie="nietklopt"]').count()).toBe(1);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(sw).toBeLessThanOrEqual(390);

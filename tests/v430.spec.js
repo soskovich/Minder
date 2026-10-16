@@ -196,11 +196,13 @@ test.describe('v430 · R8 de betaalrekening', () => {
   });
   test('R8b. minder dan 5% over na vast, potjes en opzij is zeker; de keuze gaat alleen over opzij en een buffer, met het gevolg vooraf', async ({ page }) => {
     await K.boot(page, { opnames: OPN });
-    await page.evaluate(() => { go('maand'); const X = gripCyclusLees().OV.A['pat:spaargeld'], o = X.toetsen.find(t => t.soort === 'opgedeeld'); SET.savingMode = 'amount'; SET.savingAmount = Math.round(monthlySavingTarget() + o.rest - 20); save(); renderMaand(); });
+    /* v431 (3a): de toets loopt op de afgeronde maanden; in augustus en september gaat er zoveel naar boodschappen dat er minder dan 5%
+       van het salaris overblijft (2 van 3) */
+    await page.evaluate(() => { for (const d of ['2026-08-26', '2026-09-26']) { const t = { id: 'v431op' + d, date: d, amount: -5000, acc: 'NL01MAIN0000001111', name: 'Albert Heijn', desc: 'BEA ALBERT HEIJN GROOT', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); OVR[t.id] = 'boodschappen'; TX.push(t); } save(); go('maand'); });
     const r = await page.evaluate(() => { const C = gripCyclusLees(), X = C.OV.A['pat:spaargeld']; return { stand: X.stand, bev: X.bevestigd.map(b => b.soort), bewijs: X.toetsen[0].bewijs, kies: C.kies.filter(k => k.sym === 'pat:spaargeld').map(k => [k.id, k.naam]) }; });
     expect(r.bev).toContain('opgedeeld');
     expect(r.stand).toBe('bevestigd');
-    expect(r.bewijs).toMatch(/^na vast, potjes en opzij blijft €\d+ over/);
+    expect(r.bewijs).toMatch(/^na vast, potjes en opzij blijft minder dan 5% van je salaris over in [23] van de 3 afgeronde maanden · rest per maand: jul [−€\d.]+ · aug −€[\d.]+ · sep −€[\d.]+/);
     expect(r.kies.map(k => k[0])).toContain('oorz:pat:spaargeld:opzij');
     for (const k of r.kies) expect(k[1]).not.toMatch(/Vices|Uit eten/);
     await page.evaluate(() => openOpzijKeuze('pat:spaargeld'));
@@ -240,7 +242,7 @@ test.describe('v430 · fase 3', () => {
     const N = await page.evaluate(() => { const N = naJeSalarisData(); return { ym: N.ym, d: N.d, pct: N.pct, extra: N.extra, tekst: naJeSalarisTekst(N), groepen: N.groepen.map(g => g.id) }; });
     expect(N).toMatchObject({ ym: '2026-09', d: 1752, pct: 51 });
     expect(N.tekst).toBe(`van je verhoging van €1.752 ging €${N.extra.toLocaleString('nl-NL')} (${Math.round(N.extra / 1752 * 100)}%) naar extra uitgaven`);
-    expect(N.groepen).toEqual(['vices+uiteten', 'contant', 'online+overig']);
+    expect(N.groepen).toEqual(['vices+uiteten', 'contant', 'online+overig', 'overige']);   // v431 (2a): de vierde groep
     let C = await cyc(page);
     expect(C.IV.stand).toBe('later');   // drie symptoomvragen gaan voor
     /* een vraag die deze maand al gesteld is houdt zijn plek (zoals bij een symptoom); dan staat hij open */

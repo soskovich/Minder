@@ -17,9 +17,11 @@ test.describe('v388 begrijpen', () => {
     expect(P[0].naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(P[0].sig).toEqual(['onttrekking:', 'potje:uiteten']);
     expect(P[0].bewijs).toBe('2× uit je spaarrekening (6, 9 okt)');
-    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));   // v428: de patroonboom staat in de drill van het symptoom
-    expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
-    expect(await page.locator('[data-patsig="onttrekking"]').innerText()).toContain('€700');
+    /* v431 (4d): het symptoom draagt het bedrag uit spaargeld en de onttrekkingen per datum, zonder de potjes (die zijn eigen symptomen) */
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));
+    expect(await page.locator('#gripSymptoom [data-patbewijs]').count()).toBe(0);
+    expect(await tekst(page, '[data-onttrekkingen] .hlabel')).toContain('€700');
+    expect(await page.locator('#gripSymptoom [data-onttrekking]').count()).toBe(2);
   });
   test('zonder onttrekking is een potje boven een eigen patroon, en er is geen spaargeld-patroon', async ({ page }) => {
     await grip(page);
@@ -49,9 +51,9 @@ test.describe('v388 begrijpen', () => {
     const p = await page.evaluate(() => gripPatronen()[0]);
     expect(p.naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(p.vorigeReden).toBeUndefined();
-    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));
-    expect(await tekst(page, '[data-patnaam]')).toBe('Betaalrekening op na ~12 dagen na salaris');
-    expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
+    expect(p.bewijs).toBe('2× uit je spaarrekening (6, 9 okt)');
+    await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));   // v431: het symptoom draagt de naam die de app ziet, zonder patroonblok
+    expect(await page.locator('#gripSymptoom').innerText()).toContain('Betaalrekening op na ~12 dagen na salaris');
   });
   test('de dagen tellen vanaf de laatste salarisbetaling op of voor de eerste onttrekking, en zonder salaris staat dat er', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });   // eerste onttrekking 6 okt, salaris 24 sep: 12 dagen
@@ -165,7 +167,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     await page.click('#gripTeKiezen [data-kies="sig:2026-10|uiteten"]');
     expect(await page.locator('#gripLetOpSheet .valtop-open').count()).toBe(1);
     await page.evaluate(() => { closeSheet(); gripNaarSymptoom('pat:spaargeld'); });
-    expect(await page.locator('#gripSymptoom [data-patsig="onttrekking"]').count()).toBe(1);
+    expect(await page.locator('#gripSymptoom [data-onttrekking]').count()).toBe(2);   // v431 (4d): de onttrekkingen per datum
   });
   test('Let op draagt geen potje meer dat al signaal van een patroon is', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
