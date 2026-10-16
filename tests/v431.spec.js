@@ -83,9 +83,12 @@ test.describe('v431 · 3 salaris opgedeeld', () => {
     const lees = () => page.evaluate(() => { const o = gripCyclusLees().OV.A['pat:spaargeld'].toetsen.find(t => t.soort === 'opgedeeld'); return { vuurt: o.vuurt, onder: o.getallen.onder, bewijs: o.vuurt ? o.bewijs : o.niet }; });
     await zet('2026-09-26');
     expect(await lees()).toMatchObject({ vuurt: false, onder: '1 van 3' });
-    /* de lopende maand telt niet: ook een tekort in oktober maakt hem niet zeker */
+    /* de lopende maand telt niet: ook met een salaris en een tekort in oktober is hij niet zeker */
+    await page.evaluate(() => { const t = { id: 'v431salokt', date: '2026-10-02', amount: 5216, acc: 'NL01MAIN0000001111', name: 'Werkgever', desc: 'SALARIS LOON', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); });
     await zet('2026-10-08');
+    expect(await page.evaluate(() => oorzaakSalData().R.slice(-1)[0].salaris)).toBeGreaterThan(0);   // de invoer: oktober heeft een salaris
     expect(await lees()).toMatchObject({ vuurt: false, onder: '1 van 3' });
+    expect(await page.evaluate(() => opgedeeldData().M.map(x => x.ym))).toEqual(['2026-07', '2026-08', '2026-09']);
     await zet('2026-08-26');
     const r = await lees();
     expect(r).toMatchObject({ vuurt: true, onder: '2 van 3' });

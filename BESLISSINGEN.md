@@ -16,6 +16,20 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v431` · Een totaal en zijn regels komen uit dezelfde getallen, en een symptoom praat alleen over zichzelf.** Gemeten op het toestel (blok 20 en 22 van v430):
+  - Vaste lasten gestegen telde Bolcom als nieuw, terwijl jij hem stopte. Infomedics telde als nieuw (jul 46, aug 46, sep 0).
+  - De regels telden niet op tot de stijging bovenaan. Het totaal was een mediaan van maandtotalen; de regels waren een mediaan per post.
+  - De vier groepen van Na je salaris sloten niet op het totaal.
+
+  Keuze:
+  - Per post het laatste termijnbedrag omgerekend naar een maand, en het totaal als de som daarvan. De stijging ís dan de som van de regels.
+  - Wat jij stopte telt nooit als nieuw.
+  - Een post die niet meer betaald en niet verwacht wordt, is een vraag aan jou en geen nieuwe last.
+
+  Salaris opgedeeld:
+  - Toetst op afgeronde maanden: een maand die nog loopt, is nog niet opgedeeld.
+  - De pagina van een potje noemt het patroon van de betaalrekening niet meer. Het verband staat er als link, zodat je per symptoom één verhaal leest.
+  - Valkuil: een bedrag als mediaan over maanden mist een 4-wekelijkse post met twee termijnen in één maand. Het laatste termijnbedrag maal de frequentie niet.
 - **`v430` · Een oorzaak is pas zeker als een tweede verklaring het niet ook is.** Gemeten op het toestel (blok 22 van v429): Vices
   kreeg "verdeling zeker" met Overig als bron, terwijl Overig geen eigen budget heeft en dus per constructie altijd ruimte lijkt te
   hebben; en "budget past niet" faalde op een spreiding-eis die een potje van EUR 20 met maanden van 60 tot 140 nooit haalt. De toetsen

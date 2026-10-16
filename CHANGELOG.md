@@ -1637,3 +1637,28 @@ staan als symptoom terwijl hij eenmalig was bevestigd, en juli en augustus hadde
   `v428`, `v429`, `boven-verwacht-eind` (R8: binnen het spaargeld-patroon is Boodschappen een eigen symptoom en noemen de
   keuzes van het patroon geen potje), `ontdubbeling-schermen` (een signaal in de betaalrekening staat een keer in Te kiezen en
   Wacht samen). De groep Contant van Na je salaris leest `CONTANT_CAT` (`geennorm-hardcode`).
+
+## v431: reparatie na v430 op het toestel (blok 20 en 22, screenshot Vices, 16 okt)
+
+Geen nieuwe functies.
+
+- **Vaste lasten gestegen**:
+  - Het bedrag per post is het laatste termijnbedrag per maand (`postMaandBedrag()`). Shurgard EUR 71 per 4 weken is EUR 77.
+  - Het totaal voor en na is de som van die bedragen, dus de stijging is nieuw + gestegen - gestopt.
+  - Een post die jij stopte of opzegde staat onder gestopt, met wat vrijkomt.
+  - Nieuw geldt alleen bij een betaling in de laatste afgeronde maand of een verwachte termijn. Anders volgt de gegevensvraag "afgelopen of komt terug?".
+  - Teststand: Shurgard +77, Nikki +47, Health Club gestopt -42, stijging +82.
+- **Na je salaris**:
+  - Er is een vierde groep "Overige potjes (…)". De groepen samen zijn het totaal, in een afronding.
+  - De basisregel noemt de volle maanden na de verhoging.
+- **Salaris opgedeeld**:
+  - De toets loopt op de laatste drie afgeronde maanden: zeker in 2 van 3, met de rest per maand in het bewijs.
+  - Is de salarisdatum verschoven, dan staat dat in het bewijs.
+  - Onder Kiezen staat bij de betaalrekening "Niets meer uit je spaargeld, of het terugzetten".
+- **Een symptoom toont alleen zichzelf**:
+  - Een potje-symptoom heeft de kop "EUR X erboven". Het patroonblok, de uitsplitsing en "Gezien" zijn weg.
+  - Onderaan staat "telt ook mee in: … ›".
+  - De betaalrekening toont het bedrag uit spaargeld en de onttrekkingen per datum.
+- **Blok 22**: vier controles erbij (som vaste lasten, som groepen, gestopt als nieuw, potje-symptoom).
+- **Specs**: nieuw `v431.spec.js`. Gemigreerd: `grip-correcties` (de boom wordt getoetst op de functie, niet meer op de betaalrekening), `grip-kring-deel2`, `v428`, `v430` (R8b op de afgeronde maanden, de vierde groep).
+- `sw.js` naar `minder-v431`.
