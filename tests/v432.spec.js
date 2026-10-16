@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 const S = require('./v432-stand');
 const { MAIN, LEEF, SPAAR } = S;
 const add = (page, rows) => page.evaluate(rows => { for (const [acc, d, a, n, ds, cat] of rows) { const t = { id: 'v432' + acc.slice(-4) + d + n + a, date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; } save(); }, rows);
-const P = page => page.evaluate(() => { window._rekV = null; const P = rekVoorstel(); return { ok: P.ok, salaris: P.salaris, som: P.som, opzij: P.opzij, plan: P.plan, BR: P.BR, kas: P.kas, totVast: P.totVast, totPot: P.totPot, vastNiet: P.vastNiet.map(x => [x.naam, x.reden]),
+const P = page => page.evaluate(() => { window._rekV = null; const P = rekVoorstel(); return { ok: P.ok, salaris: P.salaris, som: P.som, opzij: P.opzij, plan: P.plan, BR: P.BR, kas: P.kasP, totVast: P.totVast, totPot: P.totPot, vastNiet: P.vastNiet.map(x => [x.naam, x.reden]),
   rek: P.rekAlle.map(r => ({ acc: r.acc, naam: r.naam, vast: r.vast.map(x => [x.naam, Math.round(x.bedrag)]), vastS: r.vastS, potS: r.potS, kasS: r.kasS, kasAandeel: r.kasAandeel, pot: Object.fromEntries(r.potDelen.map(p => [p.k, p.aandeel])), verwacht: r.verwacht, buffer: r.buffer, bm: r.bufMaanden.map(x => x.v), laten0: r.laten0, laten: r.laten, laagst: r.laagst, tekort: r.tekort, termijnen: r.termijnen, saldo: r.saldo, herberekend: r.herberekend })) }; });
 
 test.describe('v432 · 1. uitgave per rekening', () => {
@@ -72,7 +72,7 @@ test.describe('v432 · 2. laten staan per rekening', () => {
   test('2a. de periode loopt van de salarisdatum tot de dag voor het volgende salaris', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => { const P = rekVoorstel(); return [P.start, P.eind, P.dagen]; });
-    expect(r).toEqual(['2026-10-24', '2026-11-23', 31]);
+    expect(r).toEqual(['2026-10-26', '2026-11-23', 29]);   // v435: 24 okt is een zaterdag, dus de verwachte storting is maandag 26 okt
   });
   test('2b. gestopt, opgezegd en uit reservering tellen niet; de Plan-inleg is het budget en niet de spaarinleg (v433)', async ({ page }) => {
     await S.boot(page);
@@ -101,10 +101,11 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     await S.boot(page);
     await add(page, ['2023-11-05', '2024-11-05', '2025-11-05'].map(d => [LEEF, d, -1200, 'Verzekeraar Jaar', 'SEPA INCASSO VERZEKERAAR JAAR', 'verzekering']));
     const r = await P(page), l = r.rek.find(x => x.acc === LEEF);
-    expect(l.vast.find(v => v[0] === 'Verzekeraar Jaar')[1]).toBe(100);   // per maand: 1200 / 12
+    expect(l.vast.find(v => v[0] === 'Verzekeraar Jaar')[1]).toBe(1200);   // v435: een termijn in de periode telt helemaal (niet 1200 / 12)
     expect(l.termijnen.map(t => t.date)).toContain('2026-11-05');        // maar de termijn valt in de periode
-    expect(l.tekort).toBeGreaterThan(0);
-    expect(l.laten).toBe(Math.ceil((l.laten0 + l.tekort) / 50 - 1e-9) * 50);
+    /* v435: de hele termijn zit nu in verwacht, dus de saldolijn komt niet meer onder nul en er is geen tekort-ophoging */
+    expect(l.vastS).toBeGreaterThanOrEqual(1200);
+    expect(l.tekort).toBe(0);
     expect(l.laagst).toBeGreaterThanOrEqual(0);
   });
   test('2f/g. opzij is salaris min de som, de Plan-inleg apart; met een bekend saldo staat er wat er over moet', async ({ page }) => {
@@ -115,7 +116,8 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
     expect(d).toMatch(/laten staan \d+ \+ opzij \d+ = \d+ tegen salaris \d+: sluit/);
     const l = r.rek.find(x => x.acc === LEEF);
-    expect(d).toContain(`nodig na je salaris ${l.laten}, staat er nu 180, overboeken ${l.laten - 180}`);
+    /* v435 (3): overboeken rekent alleen op de dag van de storting; daarvoor het verwachte saldo op de verwachte storting */
+    expect(d).toMatch(new RegExp(`verwacht saldo op 26 okt: -?EUR [\\d.]+ · overboeken dan ±EUR [\\d.]+`));
   });
 });
 
@@ -192,31 +194,7 @@ test.describe('v432 · 4. Kiezen: zo verdeel je je salaris', () => {
   });
 });
 
-test.describe('v432 · 5. Terugblik', () => {
-  const SV = { op: '2026-10-16', ym: '2026-10', rek: { [MAIN]: 1150, [LEEF]: 1050 }, opzij: 3016, plan: 2200, salaris: 5216, salAcc: MAIN, start: '2026-10-24', eind: '2026-11-23', voor: { ont: {}, laagst: { [MAIN]: 67, [LEEF]: 325 } }, teLaag: {}, antwoord: {} };
-  test('5a. pas een maand na Akkoord', async ({ page }) => {
-    await S.boot(page, { dag: '2026-11-10', set: { salVerdeling: SV } });
-    expect(await page.evaluate(() => salVerdelingTerug())).toBeNull();
-  });
-  test('5b. per rekening onttrekkingen voor tegen na en laagste saldo verwacht tegen werkelijk; geld terug geeft een vraag, Ja rekent opnieuw', async ({ page }) => {
-    await S.boot(page, { dag: '2026-11-17', set: { salVerdeling: SV } });
-    await add(page, [[MAIN, '2026-10-24', 5216, 'Werkgever', 'SALARIS LOON'], [LEEF, '2026-10-30', -3000, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN', 'boodschappen'],
-      [SPAAR, '2026-11-10', -200, 'Eigen overboeking', 'OVERBOEKING NAAR LEEFGELD', 'intern'], [LEEF, '2026-11-10', 200, 'Eigen overboeking', 'OVERBOEKING VAN SPAREN', 'intern']]);
-    await page.evaluate(() => { go('maand'); window._gripTab = 'terugblik'; renderMaand(); });
-    const rij = await page.locator(`[data-salvterugrek="${LEEF}"]`).innerText();
-    expect(rij).toContain('onttrekkingen €450 → €200');
-    expect(rij).toMatch(/laagste saldo verwacht €325, werkelijk -?€[\d.]+/);
-    await expect(page.locator(`[data-salvvraag="${LEEF}"]`)).toContainText('Was het bedrag te laag?');
-    const voor = await P(page);
-    await page.locator('[data-salvja]').click();
-    const na = await P(page);
-    const l = na.rek.find(x => x.acc === LEEF);
-    expect(l.herberekend).toBe(true);
-    expect(Math.round(l.verwacht)).toBe(3000);
-    expect(l.laten).toBeGreaterThan(voor.rek.find(x => x.acc === LEEF).laten);
-    await expect(page.locator('[data-salvvraag]')).toHaveCount(0);
-  });
-});
+/* v435: "Was het bedrag te laag?" (5a/5b) is vervangen door moment 2 (einde periode); zie v435.spec.js */
 
 test.describe('v432 · 6. blok 23', () => {
   test('6. blok 23 per rekening en de vijf controles', async ({ page }) => {
@@ -224,7 +202,7 @@ test.describe('v432 · 6. blok 23', () => {
     const d = await page.evaluate(() => { const b = DIAG_BLOKKEN.find(b => b.lees === diagRekVerdeling); return b ? [b.titel, b.lees().join('\n')] : null; });
     expect(d[0]).toMatch(/^Laten staan per rekening/);
     const t = d[1];
-    expect(t).toMatch(/\nLeefgeld\n  vaste lasten 0\n  potjes \d+: /);
+    expect(t).toMatch(/\nLeefgeld\n  vaste lasten 0 \(termijnen in de periode\)\n  potjes \d+: /);
     expect(t).toMatch(/LATEN STAAN \d+/);
     expect(t).toMatch(/ONTTREKKINGEN PER REKENING PER MAAND\n  Leefgeld 2026-09 1050 \(3×: 2026-09-08, 2026-09-15, 2026-09-20\) · de grootste/);
     expect(t).toMatch(/: sluit\n.*: sluit\n.*: gelijk\n(  onttrekkingen 20\d\d-\d\d: per rekening samen \d+ tegen blok 20 punt 4 \d+: gelijk\n){3}  Plan-inleg 280 tegen blok 20 punt 7 \(inleg in Plan: budget\) 280: gelijk\n  gestopte of opgezegde post die meetelt: geen/);
