@@ -142,8 +142,11 @@ async function sigKaart(page, k) {
      heeft. Zonder oorzaak staat hij onder Wacht op oorzaak; dan beantwoordt de helper de vraag in Begrijpen langs de route
      van de app (oorzaakKies en oorzaakBevestig, met gevoel: die oorzaak is er altijd), zodat de kaart erachter dezelfde blijft. */
   if (r.inPatroon && !(await page.locator(`#s-maand [data-kies="sig:${r.id}"]`).count())) {
-    await page.evaluate((k) => { const p = gripPatronen().find((p) => (p.sig || []).some((g) => g.k === k));
-      const sid = 'pat:' + p.id; oorzaakKies(sid, 'gevoel'); oorzaakBevestig(sid); go('maand'); gripKiesTab('kiezen'); }, k);
+    /* v430: binnen de betaalrekening (spaargeld) is het potje een eigen symptoom (sig:<potje>); de helper beantwoordt de vraag
+       van het symptoom waar de keuze onder wacht */
+    await page.evaluate(({ k, id }) => { const p = gripPatronen().find((p) => (p.sig || []).some((g) => g.k === k));
+      const w = (gripCyclusLees().wacht || []).find((x) => x.id === 'sig:' + id), sid = w && w.sym ? w.sym : 'pat:' + p.id;
+      oorzaakKies(sid, 'gevoel'); oorzaakBevestig(sid); go('maand'); gripKiesTab('kiezen'); }, { k, id: r.id });
   }
   const sel = r.inPatroon ? `#s-maand [data-kies="sig:${r.id}"]` : `#s-maand [data-kies="lo:sig:${r.id}"]`;
   await page.locator(sel).click();

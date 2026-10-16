@@ -94,7 +94,7 @@ test.describe('5 · Kiezen opgeschoond', () => {
     expect(await page.locator('#gripInhoud [data-afsprakenlater]').count()).toBe(0);
     expect(await page.locator('#gripInhoud [data-kiesnu]').count()).toBe(0);
     expect(await tekst(page, '[data-kiezen]')).not.toContain('Kies voor');
-    await page.evaluate(() => gripOordeelZet('spaargeld', true)); await tab(page, 'kiezen');
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); }); await tab(page, 'kiezen');   // v430: een oorzaak bevestigt ook het patroon
     await page.click('[data-kiesrij="spaargeld"]');
     expect(await page.locator('#gripKeuzeSheet').count()).toBe(1);
     // de afspraken staan in het logboek
@@ -148,8 +148,8 @@ test.describe('7 · de patroonkaart als boom', () => {
     expect(t.map(x => x.laatst)).toEqual([false, true]);   // de laatste tak stopt halverwege
     expect(t.every(x => x.bedragRechts)).toBe(true);
     expect(await tekst(page, '[data-patbewijs]')).toBe('Gezien: 2× uit je spaarrekening (6, 9 okt)');
-    await tab(page, 'kiezen');   // v428: klopt/niet staat bij de keuze in Kiezen
-    expect(await page.locator('[data-kiesoordeel="spaargeld"] button:has-text("klopt")').count()).toBe(1);
+    /* v430 (R1): klopt/niet is opgegaan in de ene vraag van het symptoom ("Dit patroon klopt niet") */
+    expect(await page.locator('#gripSymptoom [data-vraagoptie="nietklopt"]').count()).toBe(1);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(sw).toBeLessThanOrEqual(390);
   });

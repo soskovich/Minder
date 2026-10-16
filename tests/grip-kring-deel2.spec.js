@@ -28,12 +28,12 @@ test.describe('v388 begrijpen', () => {
   });
   test('"niet" vraagt een reden zonder voorkeuze, de reden wordt bewaard, en hij weegt mee in de maand erna', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await tab(page, 'kiezen');   // v428: klopt/niet staat bij de keuze in Kiezen
-    await page.click('[data-kiesoordeel="spaargeld"] button:has-text("niet")');
-    expect(await page.locator('[data-patreden]').count()).toBe(4);
-    expect(await page.locator('[data-patreden].on').count()).toBe(0);
+    /* v430 (R1): "niet" is "Dit patroon klopt niet" in de ene vraag van het symptoom, met dezelfde redenen; Bevestigen schrijft */
+    await page.evaluate(() => { gripKiesTab('begrijpen'); gripNaarSymptoom('pat:spaargeld'); oorzaakKies('pat:spaargeld', 'nietklopt'); });
+    expect(await page.locator('[data-vraagreden]').count()).toBe(4);
+    expect(await page.locator('[data-vraagreden].on').count()).toBe(0);
     expect(await page.evaluate(() => (SET.gripOordeel || {})['2026-10'])).toBeUndefined();   // openen schrijft niets
-    await page.click('[data-patreden="tekort"]');
+    await page.click('[data-vraagreden="tekort"]'); await page.click('[data-vraagbevestig]');
     expect(await page.evaluate(() => SET.gripOordeel['2026-10'].spaargeld)).toMatchObject({ klopt: false, reden: 'tekort' });
     // een maand later: dezelfde oorzaak draagt jouw reden als naam
     await page.evaluate(() => { SET.gripOordeel = { '2026-09': SET.gripOordeel['2026-10'] }; save(); });
@@ -45,7 +45,7 @@ test.describe('v388 begrijpen', () => {
     await grip(page, { opnames: OPNAMES });
     await page.evaluate(() => { SET.gripOordeel = { '2026-09': { spaargeld: { klopt: false, reden: 'impuls', op: '2026-09-20' } } }; save(); renderMaand(); });
     expect(await page.evaluate(() => gripPatronen()[0].naam)).toBe('Impulsaankopen');
-    await tab(page, 'kiezen'); await page.click('[data-kiesoordeel="spaargeld"] button:has-text("klopt")');
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); });   // v430 (R1): een oorzaak bevestigt ook het patroon
     const p = await page.evaluate(() => gripPatronen()[0]);
     expect(p.naam).toBe('Betaalrekening op na ~12 dagen na salaris');
     expect(p.vorigeReden).toBeUndefined();
@@ -65,7 +65,7 @@ test.describe('v388 begrijpen', () => {
   test('klopt rondt Begrijpen af met een ✓ zodra elk patroon een oordeel heeft', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     expect(await page.locator('[data-griptab="begrijpen"][data-afgerond]').count()).toBe(0);
-    await tab(page, 'kiezen'); await page.click('[data-kiesoordeel="spaargeld"] button:has-text("klopt")');
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); });   // v430 (R1): een oorzaak bevestigt ook het patroon
     expect(await page.locator('[data-griptab="begrijpen"][data-afgerond]').count()).toBe(1);
   });
 });
@@ -74,31 +74,30 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   test('een rij per patroon met nu en voortgang, en de stip op Kiezen zolang er een stap openstaat', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     expect(await page.locator('[data-griptab="kiezen"] [data-stapopen]').count()).toBe(1);
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); });   // v430: de keuze staat pas onder Te kiezen met een oorzaak
     await tab(page, 'kiezen');
     expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('open');   // v428: Te kiezen telt wat open staat
     expect(await page.locator('[data-kiesvoortgang]').getAttribute('data-tekiezen')).toBe(String(await page.evaluate(() => gripCyc().kies.length)));
   });
   test('de sheet: niets voorgekozen, ≈ per optie, bevestigen pas na een keuze en de meetlat', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
-    expect(await page.locator('[data-gripoptie]').count()).toBe(3);
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen; v430: met een oorzaak
+    expect(await page.locator('[data-gripoptie]').count()).toBe(2);   // v430 (R8): geen opties over een potje
     expect(await page.locator('[data-keuzebevestig]').isDisabled()).toBe(true);
     expect(await page.locator('[data-keuzebrug], [data-meetlat]').count()).toBe(0);   // niets voorgekozen
     expect(await page.evaluate(() => window._gripK.optie)).toBeNull();
-    expect(await page.locator('[data-effect="Budget"]').first().innerText()).toContain('≈ −€67');
+    expect(await page.locator('[data-effect="Budget"]').first().innerText()).toContain('=');
     expect(await page.locator('[data-gripoptie="terug"] [data-effect="Doelen"]').innerText()).toContain('≈ +€700');
     await page.click('[data-gripoptie="grens"]');
     expect(await page.locator('[data-keuzebevestig]').isDisabled()).toBe(true);   // de meetlat is nog niet bevestigd
-    expect(await page.locator('[data-latregel]').allInnerTexts()).toEqual(['• geen geld uit je spaargeld na 10 okt', '• Uit eten & café ≤ €55']);
-    // bridge vóór (gestippeld) en ná: Uit eten gaat van +67 naar 0
+    expect(await page.locator('[data-latregel]').allInnerTexts()).toEqual(['• geen geld uit je spaargeld na 10 okt']);   // v430 (R8): zonder de potjes
     expect(await page.locator('[data-keuzebrug] [data-voor]').count()).toBeGreaterThan(0);
-    expect(await tekst(page, '[data-keuzeboven]')).toBe('budget €1.614 onder → €1.681 onder');   // v398: tegen het maandbudget (3325 - 1711), niet meer het eerlijke budget
     expect(await page.evaluate(() => (SET.gripKeuze || {})['2026-10'])).toBeUndefined();
     await page.click('[data-latok]');
     await page.click('[data-keuzebevestig]');
     const k = await page.evaluate(() => SET.gripKeuze['2026-10'].spaargeld);
     expect(k).toMatchObject({ optie: 'grens', schuift: false });
-    expect(k.lat.map(r => r.soort)).toEqual(['onttrekking', 'potmax']);
+    expect(k.lat.map(r => r.soort)).toEqual(['onttrekking']);
     await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     expect(await page.locator('[data-kiesrij="spaargeld"]').getAttribute('data-kiesstand')).toBe('gekozen');   // v428: onder Al gekozen deze maand
     expect(await page.locator('#gripTeKiezen [data-kiesrij="spaargeld"]').count()).toBe(0);
@@ -108,15 +107,16 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
     expect(await tekst(page, '[data-loggripkeuze]')).toContain('Niets meer uit je spaargeld');
   });
   test('de meetlat is aan te passen voordat je bevestigt', async ({ page }) => {
-    await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
+    /* v430 (R8): de betaalrekening heeft geen grens per potje meer; een potje-patroon wel */
+    await grip(page);
+    await page.evaluate(() => { oorzaakKies('pat:pot:uiteten', 'gevoel'); oorzaakBevestig('pat:pot:uiteten'); openGripKeuze('pot:uiteten'); });
     await page.click('[data-gripoptie="grens"]'); await page.click('[data-lataanpas]');
-    await page.fill('[data-latmax="1"]', '70'); await page.click('[data-latok]'); await page.click('[data-keuzebevestig]');
-    expect(await page.evaluate(() => SET.gripKeuze['2026-10'].spaargeld.lat[1].max)).toBe(70);
+    await page.fill('[data-latmax="0"]', '70'); await page.click('[data-latok]'); await page.click('[data-keuzebevestig]');
+    expect(await page.evaluate(() => SET.gripKeuze['2026-10']['pot:uiteten'].lat[0].max)).toBe(70);
   });
   test('een optie die pas volgende maand werkt zegt dat, en telt als schuiven', async ({ page }) => {
-    await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { gripOordeelZet('spaargeld', true); openGripKeuze('spaargeld'); });   // v391: eerst bevestigen
+    await grip(page);   // v430 (R8): "minder sparen" is een optie van een potje-patroon
+    await page.evaluate(() => { oorzaakKies('pat:pot:uiteten', 'gevoel'); oorzaakBevestig('pat:pot:uiteten'); openGripKeuze('pot:uiteten'); });
     await page.click('[data-gripoptie="sparen"]');
     expect(await tekst(page, '[data-keuzelater]')).toContain('Werkt vanaf november');
     expect(await page.locator('[data-geenlat]').innerText()).toContain('geschoven');
@@ -146,6 +146,7 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   });
   test('moment: bij salaris (datum) of maandag (datum); een stap die blijft liggen krijgt een neutrale regel', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); });   // v430: de stap staat pas open met een oorzaak
     await tab(page, 'kiezen');
     expect(await tekst(page, '[data-kiesmoment]')).toMatch(/^bij salaris \(\d+ (okt|nov)\) ›$/);   // v391: geen vóór
     await page.evaluate(() => { SET.gripMoment = 'week'; save(); renderMaand(); });

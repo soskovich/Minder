@@ -63,19 +63,21 @@ test.describe('3 · overig in potjes', () => {
 });
 
 test.describe('7 en 9 · de regels in Kiezen', () => {
-  test('het bedrag draagt een label, en zonder oordeel staat er "eerst bevestigen ›" naar Begrijpen', async ({ page }) => {
+  test('het bedrag draagt een label, en zonder oorzaak wacht de keuze met "bepaal oorzaak ›" naar Begrijpen', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
     await tab(page, 'kiezen');
-    expect(await tekst(page, '[data-kiesrij="spaargeld"] [data-kiesbedrag]')).toBe('€700 eruit');
-    /* v428: zonder oordeel staat de vraag "klopt dit patroon?" in de rij zelf (data-kiesbevestig), en de rij opent niets */
-    expect(await page.locator('[data-kiesrij="spaargeld"][data-kiesbevestig] [data-kiesoordeel="spaargeld"]').count()).toBe(1);
-    await page.click('[data-kiesrij="spaargeld"] [data-kiesbedrag]');
-    expect(await page.evaluate(() => ({ tab: gripTab(), sheet: !!document.getElementById('gripKeuzeSheet') }))).toEqual({ tab: 'kiezen', sheet: false });
+    /* v430 (R1): "Klopt dit patroon?" is opgegaan in de ene vraag van het symptoom; zonder oorzaak staat de keuze onder Wacht op oorzaak */
+    expect(await page.locator('#gripTeKiezen [data-kiesrij="spaargeld"]').count()).toBe(0);
+    expect(await page.locator('#gripWachtOorzaak [data-wachtoorzaak="pat:spaargeld"] [data-bepaaloorzaak]').count()).toBe(1);
     // ook rechtstreeks opent de keuze niet, en bevestigen schrijft niets
     await page.evaluate(() => { openGripKeuze('spaargeld'); window._gripK = { pid: 'spaargeld', optie: 'grens', lat: [], latOk: true }; gripKeuzeZet(); });
     expect(await page.evaluate(() => (SET.gripKeuze || {})['2026-10'])).toBeUndefined();
-    // na "niet" (ook een oordeel) wel
-    await page.evaluate(() => { gripOordeelZet('spaargeld', false, 'impuls'); gripKiesTab('kiezen'); });
+    // "Dit patroon klopt niet" is ook een antwoord, maar vraagt geen gedrag: er komt geen keuze
+    await page.evaluate(() => { oorzaakKies('pat:spaargeld', 'nietklopt'); oorzaakBevestig('pat:spaargeld'); gripKiesTab('kiezen'); });
+    expect(await page.locator('[data-kiesrij="spaargeld"], [data-wachtoorzaak="pat:spaargeld"]').count()).toBe(0);
+    // een oorzaak wel: dan staat de rij er met het bedrag en zijn label, en opent hij de keuze
+    await page.evaluate(() => { oorzaakNietKloptTerug('pat:spaargeld'); oorzaakKies('pat:spaargeld', 'opgedeeld'); oorzaakBevestig('pat:spaargeld'); gripKiesTab('kiezen'); });
+    expect(await tekst(page, '[data-kiesrij="spaargeld"] [data-kiesbedrag]')).toBe('€700 eruit');
     expect(await page.locator('[data-kiesrij="spaargeld"][data-kiesbevestig]').count()).toBe(0);
     await page.click('[data-kiesrij="spaargeld"]');
     expect(await page.locator('#gripKeuzeSheet').count()).toBe(1);

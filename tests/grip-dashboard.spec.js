@@ -249,7 +249,7 @@ test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt ee
 
 test('o. een signaal zonder eigen tegel wordt een regel onder Let op, en die opent de kaart die er was', async ({ page }) => {
   await stand(page, UITSET, { extraTx: [...UIT, { id: 'u10', date: '2026-10-03', amount: -90, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }] });
-  await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
+  await page.evaluate(() => { closeSheet(); go('maand'); oorzaakKies('pat:pot:uiteten', 'gevoel'); oorzaakBevestig('pat:pot:uiteten'); gripKiesTab('kiezen'); });   // v429/v430: de gedragskeuzes staan er met een oorzaak
   /* v388: het potje is een signaal van het patroon "Uit eten & café boven je potje" in Begrijpen, en staat daarom niet
      meer onder Let op (verplaatsen is geen kopiëren); een tik op het signaal opent dezelfde kaart. */
   /* v408: wel een VERWIJZING naar dat patroon ("Uit eten & café · zit in patroon n ›"), zonder eigen handeling */

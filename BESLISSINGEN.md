@@ -16,6 +16,14 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v430` · Een oorzaak is pas zeker als een tweede verklaring het niet ook is.** Gemeten op het toestel (blok 22 van v429): Vices
+  kreeg "verdeling zeker" met Overig als bron, terwijl Overig geen eigen budget heeft en dus per constructie altijd ruimte lijkt te
+  hebben; en "budget past niet" faalde op een spreiding-eis die een potje van EUR 20 met maanden van 60 tot 140 nooit haalt. De toetsen
+  vragen nu herhaling (3 van 4 maanden voor verdeling, 1,5 keer voor budget), want een maand is geen patroon. Eenmalig door jou gaat
+  voor alles: een antwoord dat in een toets toch weer meetelt, is een antwoord dat de app niet heeft gehoord. VALKUIL: een symptoom
+  dat na het weghalen van eenmalig leeg is moet verdwijnen met zijn keuzes, anders staat er een keuze zonder symptoom. Tweede valkuil:
+  de betaalrekening is geen potje en heeft dus geen potje-oorzaken; zijn keuzes gaan over opzij en buffer, niet over Vices. De
+  terugcheck krijgt zijn vraagplek eerst, want hij is aan de maand gebonden en een symptoom-vraag kan wachten.
 - **`v429` · Geen gedragskeuze zonder oorzaak.** Gevraagd als fase 2 van de cyclus. Waarom: een keuze als "minder Vices" zonder
   te weten waarom het gebeurt is een opdracht en geen keuze, en een budget herzien terwijl het een gewoonte is lost niets op. De
   toetsen staan in een functie (`oorzaakAnalyse()`) zodat Begrijpen, Kiezen en blok 22 hetzelfde zeggen. Wat zeker uit de data

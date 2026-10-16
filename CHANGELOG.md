@@ -1603,3 +1603,35 @@ Gevraagd door de gebruiker als vervolg op v398.
 - **Gemigreerde specs**: `grip-v413`, `grip-v414`, `grip-v415` (de uitres-vraag uit `gegevensVragen()`), `beslis-sheet.js` (`sigKaart()`
   beantwoordt de oorzaakvraag langs de route van de app als het signaal wacht), `v428` (oorzaakteksten, Wacht op oorzaak, keuze na
   oorzaak, knoppen alleen in de oorzaakvraag), `v425` (groep Oorzaken), `betaaldatum-veld` (`dagdeelVan()` leest `t.betaalTijd`).
+
+## v430: Grip-cyclus fase 3, de oorzaak-toetsen gerepareerd en vier nieuwe symptomen
+Gevraagd door de gebruiker na blok 22 op het toestel (v429): Vices kreeg "verdeling zeker" met Overig als bron, Zorg EUR 159 bleef
+staan als symptoom terwijl hij eenmalig was bevestigd, en juli en augustus hadden geen salaris in de toets.
+- **R1, een vraag per symptoom**: opties zijn de oorzaken, "Weet ik niet" en "Dit patroon klopt niet" (`oorzaakBevestig(sid)` met
+  `nietklopt` schrijft `SET.gripOordeel` klopt false met een reden). Een oorzaak kiezen bevestigt ook het patroon; "Klopt dit
+  patroon?" is weg uit Wacht op oorzaak (`gripOordeelInline()` niet meer in de rij). Terugzetten: `oorzaakNietKloptTerug()`.
+- **R2, verdeling**: zeker alleen als hetzelfde andere potje in minstens 3 van de 4 afgeronde maanden 70% van de overschrijding onder
+  budget bleef. Overig, `geenNorm`, vaste en potjes zonder budget zijn nooit een bron. Alleen in de lopende maand is mogelijk.
+- **R3, budget past niet**: zeker bij 3 van 4 maanden boven EN een mediaan van minstens 1,5 keer het budget; de spreiding-eis vervalt.
+  Kiezen draagt dan "<potje>: budget naar EUR <mediaan>" (herzien-sheet met dat voorstel, `openPotHerzien(k, voorstel)`) en "minder
+  uitgeven" wacht op een gedragsoorzaak.
+- **R4, eenmalig door jou** gaat voor alles en telt in geen toets mee (`eenmaligInCat()`, `oorzaakUitBud()`); een symptoom dat
+  daardoor leeg is verdwijnt met zijn keuzes (`symptoomLeeg()`), ook een lek-symptoom.
+- **R5** het salaris in de toets is dat van blok 20 (`oorzaakSalData()`, met holding). **R6** gewoonte waarschijnlijk bij 8 aankopen
+  onder EUR 15 in 2 van de 3 maanden. **R7** een dagdeel vanaf 5 boekingen met een tijd; gevoel "blijkt alleen uit je antwoord of een
+  testweek".
+- **R8, de betaalrekening**: "salaris opgedeeld" (rest onder 5% van het salaris, zeker) en salaris-effect over alle variabele
+  uitgaven; de potjes binnen dat patroon zijn eigen symptomen (`sig:<potje>`). Keuzes alleen opzij verlagen of een buffer laten staan
+  (`openOpzijKeuze()`), met het gevolg vooraf.
+- **Vaste lasten gestegen** (`vastGestegenData()`): mediaan 3 maanden voor tegen de laatste 3, zonder woning en studieschuld, vanaf
+  10% en EUR 10, of nieuw; oorzaak zeker; per post accepteren met een bron of nakijken (`openVastPostKeuze()`, `SET.vastAccept`).
+- **Inkomen gestegen en Na je salaris** (`inkomenStijging()`, `naJeSalarisData()`): 3 maanden na tegen 5 ervoor, 25% en EUR 250;
+  "van je verhoging van EUR X ging EUR Y (Z%) naar extra uitgaven" met drie groepen; vraag "Was dat bewust?" (telt in de 3); keuze
+  "Verhoging verdelen" met het Plan-gevolg vooraf (`openVerhogingVerdelen()`).
+- **Klopte de oorzaak?** in de Terugblik (`oorzaakTerugcheck()`): 50% kleiner lijkt te kloppen, anders Ja/Nee; Nee heropent de vraag
+  met "eerder gedacht" (`oorzaakoud|`). Het resultaat staat bovenaan Kiezen onder Mee. **Verhouding met je salaris** over 6 maanden.
+- **Blok 22**: per nieuwe oorzaak de getallen, en de controles Overig nooit als bron, geen symptoom met alleen eenmalig (alle soorten),
+  inkomen gelijk aan blok 20. Spec `v430.spec.js`. `sw.js` naar `minder-v430`.
+- **Gemigreerde specs**: `beslis-sheet.js` (`sigKaart()` beantwoordt het symptoom waar de keuze onder wacht), `grip-correcties`,
+  `grip-kiezen-v391`, `grip-kring-deel2` (nietklopt via de oorzaakvraag; meetlat en sparen op het potje-patroon), `grip-dashboard`,
+  `v428`, `v429`.

@@ -141,7 +141,7 @@ test.describe('v428 · Grip als cyclus', () => {
     await boot(page);
     await tab(page, 'begrijpen');
     const L = await page.evaluate(() => [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => ({ id: e.dataset.symptoom, t: e.innerText })));
-    const sym = L.filter(x => x.id !== 'vast');
+    const sym = L.filter(x => x.id !== 'vast' && x.id !== 'vast:gestegen' && x.id !== 'inkomen:na');   // v430: die twee hebben een eigen rij (zeker uit je boekingen, Was dat bewust?)
     expect(sym.length).toBeGreaterThan(3);
     /* v429: "oorzaak nog niet bepaald" is de stand met mogelijke oorzaken en hun vraag geworden; een symptoom over je gegevens
        zegt dat het geen oorzaakvraag heeft */
@@ -191,16 +191,14 @@ test.describe('v428 · Grip als cyclus', () => {
     expect(tik).toBe(act);
   });
 
-  test('3. Kiezen: een patroon zonder oordeel vraagt "Klopt dit patroon?" (tot v428 in Begrijpen); klopt maakt de keuze open', async ({ page }) => {
+  test('3. Kiezen: een patroon zonder oorzaak wacht; de ene vraag in Begrijpen (v430: met "Dit patroon klopt niet") maakt de keuze open', async ({ page }) => {
     await boot(page);
     await tab(page, 'kiezen');
-    const id = await page.evaluate(() => document.querySelector('[data-kiesoordeel]').dataset.kiesoordeel);
-    await page.locator(`[data-kiesoordeel="${id}"] button`).first().click();
-    expect(await page.evaluate(id => gripOordeel(id).klopt, id)).toBe(true);
-    expect(await page.evaluate(id => !!document.querySelector(`[data-kiesoordeel="${id}"]`), id)).toBe(false);
-    /* v429: zonder bevestigde oorzaak staat het patroon onder Wacht op oorzaak; met een oorzaak (hier via de vraag in
-       Begrijpen) staat hij onder Te kiezen en opent de tik de keuze-sheet */
+    /* v430 (R1): "Klopt dit patroon?" staat niet meer in Kiezen: hij is opgegaan in de ene vraag van het symptoom */
+    expect(await page.locator('[data-kiesoordeel]').count()).toBe(0);
+    const id = await page.evaluate(() => document.querySelector('#gripWachtOorzaak [data-wachtoorzaak^="pat:"]').dataset.wachtoorzaak.slice(4));
     await page.evaluate(id => { oorzaakKies('pat:' + id, 'gevoel'); oorzaakBevestig('pat:' + id); gripKiesTab('kiezen'); }, id);
+    expect(await page.evaluate(id => gripOordeel(id).klopt, id)).toBe(true);   // een oorzaak kiezen bevestigt ook het patroon
     await page.evaluate(id => document.querySelector(`#gripTeKiezen [data-kiesrij="${id}"] .row`).click(), id);
     expect(await page.evaluate(() => !!document.querySelector('#sheetBg.show'))).toBe(true);
   });

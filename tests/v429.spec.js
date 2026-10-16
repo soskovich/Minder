@@ -27,7 +27,7 @@ test.describe('v429 · 0. opruimen', () => {
     const routes = await page.evaluate(() => { const t = TX.find(x => catOf(x) === 'zorg' && x.amount === -159), K = SET.kennis; SET.kennis = {}; const leeg = eenmaligBevestigd(t);
       SET.eenmaligOk = { [t.id]: { op: '2026-10-10' } }; const ok = eenmaligBevestigd(t); SET.eenmaligOk = {}; SET.kennis = K; return { leeg, ok }; });
     expect(routes).toEqual({ leeg: '', ok: 'eenmalig bevestigd' });
-    expect(await page.evaluate(() => diagOorzaken().join('\n'))).toContain('symptoom alleen uit een als eenmalig bevestigd bedrag: geen');
+    expect(await page.evaluate(() => diagOorzaken().join('\n'))).toContain('symptoom alleen uit een als eenmalig bevestigd bedrag (alle soorten): geen');   // v430
   });
   test('0b. "gestopt of uit reservering?" is een gegevensvraag in Zien (wachtrij van 3), geen symptoom', async ({ page }) => {
     await V.boot(page);
@@ -73,7 +73,7 @@ test.describe('v429 · 1. mogelijke oorzaken per symptoom', () => {
     for (const x of r.filter(x => !x.ok)) expect(x.X).toBeNull();
     expect(r.filter(x => !x.ok).map(x => x.id)).toEqual(expect.arrayContaining(['lo:contant:']));
   });
-  test('budget past niet: >=3 van 4 boven en elke maand binnen 20% van de mediaan is zeker; anders niet', async ({ page }) => {
+  test('budget past niet (v430, R3): >=3 van 4 boven en een mediaan van minstens 1,5x het budget is zeker; anders niet', async ({ page }) => {
     await V.boot(page);
     await add(page, ['2026-06-12', '2026-07-12', '2026-08-12', '2026-09-12'].map((d, i) => [d, -[80, 84, 76, 80][i], 'Kringloop', 'KRINGLOOP WINKEL', 'goededoel']));
     await page.evaluate(() => { SET.budgets = Object.assign({}, SET.budgets, { goededoel: 50 }); save(); });
@@ -81,21 +81,22 @@ test.describe('v429 · 1. mogelijke oorzaken per symptoom', () => {
     expect(a.toets.budget[0]).toBe(true);
     expect(a.bev).toContainEqual(['budget', 'boekingen']);
     expect(a.oorzaken[0][0]).toBe('budget'); expect(a.oorzaken[0][1]).toBe('zeker');
-    /* een maand buiten de 20%: niet zeker, en de reden staat erbij */
+    /* v430: de spreiding telt niet meer (een maand ver buiten de mediaan houdt hem zeker); een mediaan onder 1,5x het budget wel niet */
     await add(page, [['2026-08-20', -60, 'Kringloop Extra', 'KRINGLOOP EXTRA', 'goededoel']]);
+    expect((await ana(page, 'goededoel')).toets.budget[0]).toBe(true);
+    await page.evaluate(() => { SET.budgets.goededoel = 60; save(); });
     const b = await ana(page, 'goededoel');
-    expect(b.toets.budget[0]).toBe(false); expect(b.toets.budget[1]).toMatch(/aug wijkt meer dan 20% af/);
+    expect(b.toets.budget[0]).toBe(false); expect(b.toets.budget[1]).toMatch(/mediaan €82 is 1,4× je budget/);
   });
-  test('verdeling: een ander potje 70% of meer van de overschrijding onder budget is zeker, met het potje in het bewijs', async ({ page }) => {
+  test('verdeling (v430, R2): alleen in de lopende maand is mogelijk, niet zeker; het potje staat in het bewijs', async ({ page }) => {
     await V.boot(page);
     const x = await X(page, 'lo:krap:abonnement');
     expect(x.toets.verdeling).toBe(true);
-    expect(x.bev).toContainEqual(['verdeling', 'boekingen']);
+    expect(x.oorzaken).toContainEqual(['verdeling', 'mogelijk']);
+    expect(x.bev).not.toContainEqual(['verdeling', 'boekingen']);
     const bew = await page.evaluate(() => gripCyclusLees().OV.A['lo:krap:abonnement'].toetsen.find(t => t.soort === 'verdeling').bewijs);
-    expect(bew).toMatch(/bleef Online shopping €\d+ onder budget, tegen €\d+ erboven hier/);
-    /* zeker uit de data: geen vraag, de rest heet "niet gevraagd" */
-    expect(x.stand).toBe('bevestigd');
-    expect(x.oorzaken.filter(o => o[0] !== 'verdeling').every(o => o[1] === 'niet gevraagd')).toBe(true);
+    expect(bew).toMatch(/^alleen in okt: Online shopping blijft €\d+ onder budget, tegen €\d+ erboven hier$/);
+    expect(x.stand).not.toBe('bevestigd');
   });
   test('eenmalig: een boeking van 50% of meer is waarschijnlijk, en zeker pas als jij hem bevestigt; dan telt het symptoom niet als gedrag', async ({ page }) => {
     await V.boot(page);
@@ -103,11 +104,11 @@ test.describe('v429 · 1. mogelijke oorzaken per symptoom', () => {
     expect(x.oorzaken).toContainEqual(['eenmalig', 'waarschijnlijk']);
     expect(x.bev).toEqual([]);
     await page.evaluate(() => { const t = TX.filter(u => catOf(u) === 'boodschappen' && u.date.startsWith('2026-10')).sort((a, b) => a.amount - b.amount)[0]; SET.eenmaligOk = { [t.id]: { op: '2026-10-10' } }; save(); });
+    /* v430 (R4): eenmalig door jou gaat voor alles: zonder dat bedrag is het symptoom leeg en valt het weg, met zijn keuzes */
     x = await X(page, 'pat:pot:boodschappen');
-    expect(x.bev).toEqual([['eenmalig', 'jij']]);
-    expect(x.eenmaligEnkel).toBe(true);
-    const k = await page.evaluate(() => { const C = gripCyclusLees(); return { te: C.kies.filter(y => y.sym === 'pat:pot:boodschappen').length, wacht: C.wacht.filter(y => y.sym === 'pat:pot:boodschappen').length }; });
-    expect(k).toEqual({ te: 0, wacht: 0 });   // geen keuze: telt niet als gedrag
+    expect(x).toBeNull();
+    const k = await page.evaluate(() => { const C = gripCyclusLees(); return { leeg: C.leeg.map(z => z.id), te: C.kies.filter(y => y.sym === 'pat:pot:boodschappen').length, wacht: C.wacht.filter(y => y.sym === 'pat:pot:boodschappen').length }; });
+    expect(k).toEqual({ leeg: ['pat:pot:boodschappen'], te: 0, wacht: 0 });   // geen keuze: telt niet als gedrag
   });
   test('salaris-effect: de helft of meer in de 7 dagen na je salaris, in 2 van 3 maanden', async ({ page }) => {
     await V.boot(page);
@@ -156,7 +157,7 @@ test.describe('v429 · 2. een vraag per symptoom', () => {
     await page.evaluate(() => gripNaarSymptoom('pat:pot:vices'));
     const v = page.locator('#gripSymptoom [data-oorzaakvraag]');
     await expect(v).toHaveCount(1);
-    expect(await v.locator('[data-vraagoptie]').evaluateAll(e => e.map(x => x.dataset.vraagoptie))).toEqual(['gelegenheid', 'gevoel', 'weetniet']);
+    expect(await v.locator('[data-vraagoptie]').evaluateAll(e => e.map(x => x.dataset.vraagoptie))).toEqual(['gelegenheid', 'gevoel', 'weetniet', 'nietklopt']);   // v430 (R1): "Dit patroon klopt niet" hoort bij de ene vraag
     expect(await v.locator('[data-vraagbevestig]').isDisabled()).toBe(true);
     const budget0 = await page.evaluate(() => JSON.stringify(SET.budgets));
     await v.locator('[data-vraagoptie="gevoel"]').click();
@@ -276,13 +277,17 @@ test.describe('v429 · 4. Kiezen: alleen keuzes met een oorzaak', () => {
   });
   test('budget past niet geeft budget herzien, verdeling geeft budget verschuiven tussen de twee potjes', async ({ page }) => {
     await V.boot(page);
-    const k = await page.evaluate(() => gripCyclusLees().kies.find(x => x.id === 'oorz:cat:abonnement:verdeling'));
-    expect(k.act).toBe("openPotjeBijstel('abonnement','shopping')");
-    expect(k.naam).toBe('Abonnementen: budget verschuiven van Online shopping');
+    /* v430 (R2): verdeling geeft pas een keuze als hij zeker is (hetzelfde potje in 3 van de 4 maanden) */
+    await page.evaluate(() => { SET.budgetHist = {}; for (const ym of ['2026-06', '2026-07', '2026-08', '2026-09']) SET.budgetHist[ym] = Object.assign({}, SET.budgets, { uiteten: 1000 }); save(); });
+    const k = await page.evaluate(() => { const x = oorzaakAnalyse({ id: 'test:vices', k: 'vices', naam: 'Vices' }, maandVooruit()); return oorzaakKeuzes(x).find(o => o.soort === 'verdeling'); });
+    expect(k.act).toBe("openPotjeBijstel('vices','uiteten')");
+    expect(k.naam).toBe('Vices: budget verschuiven van Uit eten & café');
     await add(page, ['2026-06-12', '2026-07-12', '2026-08-12', '2026-09-12', '2026-10-05'].map((d, i) => [d, -[80, 84, 76, 80, 80][i], 'Kringloop', 'KRINGLOOP WINKEL', 'goededoel']));
     await page.evaluate(() => { SET.budgets = Object.assign({}, SET.budgets, { goededoel: 50 }); save(); });
     const b = await page.evaluate(() => { const x = oorzaakAnalyse({ id: 'test:kleding', k: 'goededoel', naam: 'Kleding' }, maandVooruit()); return oorzaakKeuzes(x).map(o => [o.soort, o.naam]); });
-    expect(b).toContainEqual(['budget', 'Goede doelen: budget herzien']);
+    expect(b).toContainEqual(['budget', 'Goede doelen: budget naar €80']);   // v430 (R3): naar de mediaan
+    /* verdeling is hier ook zeker, en dat sluit de vraag: dan wacht er geen "minder uitgeven" (v430.spec R3b toetst die zonder) */
+    expect(b.map(x => x[0])).not.toContain('minder');
   });
 });
 
@@ -296,22 +301,21 @@ test.describe('v429 · 5. blok 22', () => {
     expect(await page.evaluate(() => localStorage.getItem(Object.keys(localStorage).find(k => /minder/i.test(k)) || ''))).toBe(voor);
     expect(B).toContain('pat:pot:vices · Vices boven je potje');
     expect(B).toMatch(/AF +Gevoel · mogelijk/);
-    expect(B).toMatch(/- +Budget past niet · niet · 3 van 4 boven/);
-    expect(B).toContain('bevestigd: Verdeling (uit je boekingen)');
+    expect(B).toMatch(/AF +Budget past niet · zeker · 3 van de laatste 4 maanden boven je budget van €20, mediaan €95/);   // v430 (R3)
     expect(B).toMatch(/stand: testweek · testweek 2026-10-10 t\/m 2026-10-16, loopt, nog 7 d, 0 tikken/);
-    expect(B).toMatch(/keuze: wacht: Vices boven je potje/);
+    expect(B).toMatch(/keuze: te kiezen: Vices: budget naar €95 · wacht: Vices boven je potje/);   // v430 (R3)
     expect(B).toContain('over je gegevens, niet over gedrag');
     expect(B).toContain('oorzaakvragen deze maand 1 <= 3: ja');
     expect(B).toContain('gedragskeuze onder Te kiezen zonder bevestigde oorzaak: geen');
-    expect(B).toContain('symptoom alleen uit een als eenmalig bevestigd bedrag: geen');
+    expect(B).toContain('symptoom alleen uit een als eenmalig bevestigd bedrag (alle soorten): geen');
   });
   test('Begrijpen: de symptoomrij zegt hoeveel oorzaken en de stand; de kop telt de vragen; past op 390x844', async ({ page }) => {
     await V.boot(page);
     await tab(page, 'begrijpen');
     const r = await page.evaluate(() => ({ kop: document.querySelector('[data-vragenmaand]').innerText, vices: document.querySelector('[data-symptoom="pat:pot:vices"]').innerText, ab: document.querySelector('[data-symptoom="lo:krap:abonnement"]').innerText, sw: document.documentElement.scrollWidth }));
     expect(r.kop).toBe('3 vragen open · 0 van 3 gesteld deze maand');
-    expect(r.vices).toMatch(/2 mogelijke oorzaken[\s\S]*1 vraag ›/);
-    expect(r.ab).toMatch(/1 al zeker[\s\S]*zeker ›/);
+    expect(r.vices).toMatch(/3 mogelijke oorzaken · 1 al zeker[\s\S]*1 vraag ›/);   // v430 (R3): budget zeker, de vraag blijft
+    expect(r.ab).toMatch(/2 mogelijke oorzaken[\s\S]*vraag in nov/);   // v430 (R2): verdeling is alleen nog mogelijk
     expect(r.sw).toBeLessThanOrEqual(390);
   });
 });
