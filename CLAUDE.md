@@ -7778,6 +7778,11 @@ De spec pint nu 15 september en staat in de lijst van `vaste-testdag.spec.js`. D
 van `v299`/`v310` op de rand van een VENSTER in plaats van een maandgrens, en dezelfde vorm kan nog in
 elke spec zitten die een vaste maand naast een venster vanaf vandaag legt.
 
+**Onstabiel onder last, gemeten bij `v432`:** `telbare-cache.spec.js` "Grip en de budget-editor blijven onder de grens" eist
+Grip onder 250 ms. Op dezelfde fixture meet `v431` (ac9e0a2) 191 tot 286 ms en `v432` 186 tot 239 ms per render; de v432-functies
+draaien op Grip zonder bevestigde oorzaak niet (`rekVoorstel()` 0 keer). In de volle suite met 2 workers valt hij af en toe; los is hij
+groen. Dit is ruis rond de grens, geen regressie. Wie de grens herziet, meet hem op het toestel.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
