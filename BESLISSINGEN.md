@@ -16,6 +16,13 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v432` · Minder rekent per betaalrekening uit wat er moet blijven staan, en verplaatst zelf niets.** Gevraagd door de gebruiker: bij Betaalrekening op met de oorzaak salaris opgedeeld is de keuze "Zo verdeel je je salaris". `rekVoorstel()` is de ene bron (Kiezen, Begrijpen, blok 23).
+  - Een vaste last hoort bij de rekening van zijn laatste betaling. Potjes en contant gaan naar rato van wat er per rekening afging.
+  - Laten staan is verwacht (vast per maand, potjes x aandeel uit `maandVooruit()`, contant uit blok 20) plus een buffer (p75 min mediaan, minstens EUR 50), naar boven op EUR 50.
+  - **Valkuil**: een saldolijn zonder termijnen op hun datum kan per constructie niet onder nul komen (verwacht + buffer daalt gelijkmatig naar de buffer). Het tekort ontstaat alleen bij een termijn die in de periode valt en meer kost dan zijn maanddeel (een kwartaal- of jaarpost, of twee 4-wekelijkse termijnen).
+  - **Valkuil**: `maandVooruit()` telt wat er deze maand al uitging mee in de verwachting. Bij Ja op "te laag" is het nieuwe bedrag daarom het hoogste van de verwachting en de werkelijke uitgaven, niet de werkelijke uitgaven alleen.
+  - **Valkuil**: een overboeking tussen twee eigen betaalrekeningen kan een uitgavencategorie dragen. Hij blijft buiten aandeel en buffer omdat hij als paar wordt herkend, niet op zijn categorie.
+  - Akkoord legt een afspraak en `SET.salVerdeling` vast. Op de salarisdag staat er alleen een melding, en een maand later een terugblik met een vraag.
 - **`v431` · Een totaal en zijn regels komen uit dezelfde getallen, en een symptoom praat alleen over zichzelf.** Gemeten op het toestel (blok 20 en 22 van v430):
   - Vaste lasten gestegen telde Bolcom als nieuw, terwijl jij hem stopte. Infomedics telde als nieuw (jul 46, aug 46, sep 0).
   - De regels telden niet op tot de stijging bovenaan. Het totaal was een mediaan van maandtotalen; de regels waren een mediaan per post.

@@ -203,15 +203,18 @@ test.describe('v430 · R8 de betaalrekening', () => {
     expect(r.bev).toContain('opgedeeld');
     expect(r.stand).toBe('bevestigd');
     expect(r.bewijs).toMatch(/^na vast, potjes en opzij blijft minder dan 5% van je salaris over in [23] van de 3 afgeronde maanden · rest per maand: jul [−€\d.]+ · aug −€[\d.]+ · sep −€[\d.]+/);
-    expect(r.kies.map(k => k[0])).toContain('oorz:pat:spaargeld:opzij');
+    /* v432: met een voorstel per betaalrekening is de keuze "Zo verdeel je je salaris"; opzij verlagen of een buffer blijft de keuze
+       zonder voorstel, en de sheet zelf is ongewijzigd */
+    expect(r.kies.map(k => k[0])).toContain('oorz:pat:spaargeld:salverdeling');
+    expect(r.kies.find(k => k[0] === 'oorz:pat:spaargeld:salverdeling')[1]).toBe('Zo verdeel je je salaris');
     for (const k of r.kies) expect(k[1]).not.toMatch(/Vices|Uit eten/);
     await page.evaluate(() => openOpzijKeuze('pat:spaargeld'));
     await expect(page.locator('[data-opzijbevestig]')).toBeDisabled();
     await page.locator('[data-opzijoptie="buffer"]').click();
     await expect(page.locator('[data-opzijgevolg]')).toContainText('op je betaalrekening staan');
     await page.locator('[data-opzijbevestig]').click();
-    const g = await page.evaluate(() => gripCyclusLees().gekozenO.map(o => o.id));
-    expect(g).toContain('oorz:pat:spaargeld:opzij');
+    const g = await page.evaluate(() => afsprakenLijst().filter(a => a.key === 'oorz:pat:spaargeld').map(a => a.oorzaak));
+    expect(g).toContain('opzij');
   });
 });
 

@@ -1662,3 +1662,31 @@ Geen nieuwe functies.
 - **Blok 22**: vier controles erbij (som vaste lasten, som groepen, gestopt als nieuw, potje-symptoom).
 - **Specs**: nieuw `v431.spec.js`. Gemigreerd: `grip-correcties` (de boom wordt getoetst op de functie, niet meer op de betaalrekening), `grip-kring-deel2`, `v428`, `v430` (R8b op de afgeronde maanden, de vierde groep).
 - `sw.js` naar `minder-v431`.
+
+## v432: voorstel per betaalrekening, laten staan en opzij (gevraagd door de gebruiker)
+
+Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig is tot het volgende salaris. Het bewijs komt uit de rekening waar elke boeking echt van afging.
+
+- **Uitgave per rekening** (`rekVoorstel()`, een bron, ook blok 23):
+  - Betaalrekeningen zijn je eigen actieve rekeningen zonder spaar- en reserveringsrekening.
+  - Een vaste last hoort bij de rekening van zijn laatste betaling.
+  - Potjes en zonder potje gaan naar rato van de 3 afgeronde maanden per rekening. Contant gaat naar rato van de opnames.
+  - Een overboeking tussen eigen betaalrekeningen is geen uitgave, maar telt als binnenkomend.
+- **Laten staan** (de periode loopt van de salarisdatum tot de dag voor het volgende salaris):
+  - Laten staan is verwacht + buffer (p75 min mediaan over 6 maanden, minstens EUR 50), naar boven op EUR 50.
+  - Verwacht is vast per maand, potjes x aandeel en contant x aandeel.
+  - Gestopt, opgezegd, uit reservering, eenmalig en de Plan-inleg tellen niet mee.
+  - Een saldolijn verhoogt het bedrag met een tekort als een termijn in de periode valt.
+  - Opzij is salaris min de som. Met een bekend saldo: "nodig na je salaris, staat er nu, overboeken".
+- **Begrijpen** (Betaalrekening op):
+  - De onttrekkingen per ontvangende rekening per maand, de grootste met "hier komt het tekort vandaan".
+  - Per rekening: wat er na je salaris naartoe ging tegen wat er werkelijk afging.
+- **Kiezen**:
+  - De keuze heet "Zo verdeel je je salaris" (`openSalVerdeling()`). Per rekening het gevolg vooraf, en Opzij met Plan apart.
+  - Drie gelijke knoppen: Akkoord, Bedragen aanpassen (live) en Niet nu. Na Akkoord "Pas je automatische salarisverdeling hierop aan".
+  - Op de salarisdag staat de melding "Salaris binnen: …" in Zien.
+- **Terugblik** (`salVerdelingTerug()`):
+  - Een maand na Akkoord: per rekening de onttrekkingen voor en na, en het laagste saldo verwacht en werkelijk.
+  - Ging er geld terug, dan volgt de vraag "Was het bedrag te laag?". Ja rekent opnieuw met de werkelijke uitgaven.
+- **Blok 23** (`diagRekVerdeling()`): per rekening de berekening en de onttrekkingen, plus vijf controles.
+- **Specs**: nieuw `v432.spec.js` met fixture `v432-stand.js` (een tweede betaalrekening Leefgeld). `v430` R8b is gemigreerd (de keuze is nu "Zo verdeel je je salaris"; de opzij-sheet zelf blijft getoetst). `sw.js` naar `minder-v432`.
