@@ -137,7 +137,8 @@ test.describe('d · de wissel van de buffer voor beleggen', () => {
     await page.evaluate(() => { go('maand'); });
     const r = await page.evaluate(() => { const L = gripLetOpItems(maandRegels(), valtOpSignals(thisYM()), belegVragen ? belegVragen() : []);
       return { L: L.map((x) => x.soort), item: L.find((x) => x.soort === 'belegwissel'),
-        sig: [...document.querySelectorAll('#gripSignalen [data-signaal]')].map((e) => e.dataset.signaal), W: beleggenWissel() }; });
+        /* v434: een feit zonder vraag of keuze staat onder "Afgehandeld deze maand" (uitgeklapt gelezen) */
+        sig: (window._gripAfOpen = true, renderMaand(), [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map((e) => e.dataset.signaal || e.dataset.afgehandeldrij)), W: beleggenWissel() }; });
     expect(r.W).toEqual({ nu: 2, vlg: 3, ym: '2026-11' });
     expect(r.item.naam).toBe('Buffer voor beleggen: 3 maanden vanaf november');
     expect(r.item.sub).toBe('nu 2, volgt je ondergrens');
@@ -156,7 +157,8 @@ test.describe('d · de wissel van de buffer voor beleggen', () => {
       SET.potOpen = {}; ks.forEach((k, i) => { const id = 'po' + i; TX.push({ id, date: '2026-10-03', amount: -40, acc: TX[0].acc, name: 'Test ' + k, desc: 'TEST ' + k, typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
         categorize(TX[TX.length - 1]); TX[TX.length - 1].id = id; OVR[id] = k; SET.potOpen[k] = { op: '2026-10-01' }; });
       save(); go('maand');
-      const sig = [...document.querySelectorAll('#gripSignalen [data-signaal]')].map((e) => e.dataset.signaal);
+      window._gripAfOpen = true; renderMaand();   // v434: de wissel is een feit zonder keuze, dus afgehandeld
+      const sig = [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map((e) => e.dataset.signaal || e.dataset.afgehandeldrij);
       gripKiesTab('kiezen');
       return { ks, kaart: [...document.querySelectorAll('#gripTeKiezen [data-letop]')].map((e) => e.dataset.letop), sig }; });
     expect(r.ks.length).toBe(2);   // de invoer draagt het geval

@@ -55,7 +55,7 @@ test('b. meters, tabs en Zien: wat van Grip verdween staat er niet meer', async 
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const g = await grip(page);
-  expect(g.blokken).toEqual(['gripMeters', 'gripTabs', 'gripInhoud', 'gripKoopcheck']);
+  expect(g.blokken).toEqual(['gripMeters', 'gripTabs', 'gripInhoud', 'gripKoopbalk']);   // v434: de koopknop staat in een vaste balk
   for (const weg of ['Vraagt een beslissing', 'Vraagt aandacht', 'Staat goed', 'Voorwaarden voor beleggen', 'afsluiten', 'Wat je met overschrijdingen deed', 'Er is niets dat vastloopt', 'Vanaf november'])
     expect(g.tekst.toUpperCase()).not.toContain(weg.toUpperCase());
   const ids = await page.evaluate(() => ['afsluitKaart', 'afgeslotenRegel', 'valtOpGrip', 'afsprakenKaart', 'gripTegels', 'gripDezeMaand'].filter((i) => document.querySelector('#s-maand #' + i)));

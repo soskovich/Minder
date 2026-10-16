@@ -70,15 +70,17 @@ test.describe('v428 · Grip als cyclus', () => {
     expect(await page.evaluate(() => document.querySelectorAll('#uitgeleendLijst [data-uitgeleendrij]').length)).toBe(1);
   });
 
-  test('1d/1e. Nieuw sinds gisteren en Signalen: alleen feiten, elk "waarom ›" opent hetzelfde symptoom in Begrijpen', async ({ page }) => {
+  test('1d/1e. Signalen: alleen feiten, elk "waarom ›" opent hetzelfde symptoom in Begrijpen (v434: Nieuw sinds gisteren staat niet meer op Zien)', async ({ page }) => {
     await boot(page);
-    expect(await page.locator('#gripNieuw').innerText()).toContain('Albert Heijn');
+    await expect(page.locator('#gripNieuw')).toHaveCount(0);
     const sig = await page.evaluate(() => [...document.querySelectorAll('#gripSignalen [data-signaal]')].map(e => ({ id: e.dataset.signaal, tik: [...e.querySelectorAll('[onclick]')].map(x => x.getAttribute('onclick')) })));
-    const C = await page.evaluate(() => gripCyclusLees().sym.map(s => s.id));
-    expect(sig.map(s => s.id)).toEqual(C);
+    /* v434: de open lijst is wat nog een vraag of keuze heeft; open plus afgehandeld is de cyclus */
+    const C = await page.evaluate(() => { const C = gripCyclusLees(), S = gripSignaalStand(C); return { open: S.open.map(x => x.s.id), alle: S.open.concat(S.af).map(x => x.s.id).sort(), sym: C.sym.map(s => s.id).sort() }; });
+    expect(sig.map(s => s.id)).toEqual(C.open);
+    expect(C.alle).toEqual(C.sym);
     for (const s of sig) { expect(s.tik.length).toBe(1); expect(s.tik[0]).toMatch(/^gripNaarSymptoom\(/); }
     expect(await page.evaluate(() => document.querySelectorAll('#gripSignalen button, #gripSignalen .btn').length)).toBe(0);
-    for (const id of C.slice(0, 4)) {
+    for (const id of C.open.slice(0, 4)) {
       const d = await page.evaluate(id => { window._gripTab = 'zien'; renderMaand(); document.querySelector(`#gripSignalen [data-signaal="${CSS.escape(id)}"] [data-waarom]`).click();
         return { t: document.querySelector('#gripInhoud').dataset.griptabinhoud, drill: (document.querySelector('[data-symdrill]') || {}).dataset }; }, id);
       expect(d.t).toBe('begrijpen'); expect(d.drill.symdrill).toBe(id);
