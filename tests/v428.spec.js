@@ -116,7 +116,7 @@ test.describe('v428 · Grip als cyclus', () => {
       return { st: Br.stappen.map(s => s.label), som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, Br.budget), P: V.projectie, meter: gripMeterBudget(V).verwacht,
         kol: document.querySelectorAll('#gripGroepBrug [data-brugstap]').length, kop: document.querySelector('#gripGroepKaart').innerText, zien: document.querySelector('#gripBrug') }; });
     expect(r.som).toBe(r.P); expect(r.meter).toBe(r.P);
-    expect(r.st[0]).toBe('budget'); expect(r.st[1]).toBe('vast'); expect(r.st[r.st.length - 1]).toBe('verwacht'); expect(r.st[r.st.length - 2]).toBe('z. potje');
+    expect(r.st[0]).toBe('budget'); expect(r.st[1]).toBe('vast'); expect(r.st[r.st.length - 1]).toBe('verwacht'); expect(r.st[2]).toBe('zonder potje');   // v438: budget · vast · zonder potje · N boven · N onder · verwacht
     expect(r.st.some(l => / onder$/.test(l))).toBe(true);
     expect(r.kol).toBeLessThanOrEqual(7);
     expect(r.kop).toMatch(/Waar zit de €[\d.]+\?/);
@@ -133,7 +133,7 @@ test.describe('v428 · Grip als cyclus', () => {
       const rows = [...document.querySelectorAll('#gripGroepen [data-groep]')].map(e => ({ k: e.dataset.groep, b: +e.dataset.groepbudget, v: +e.dataset.groepverwacht }));
       const z = document.querySelector('[data-zonderreserveringen]');
       return { rows, B: V.budget, P: V.projectie, y: z ? +z.dataset.zonderreserveringen : null, verw: Math.round(V.projectie) - Math.round(V.budget) + TR.reduce((a, x) => a + x.teRuim, 0), n: TR.length }; });
-    expect(r.rows.map(x => x.k)).toEqual(['vast', 'potjes', 'zonder', 'inleg']);
+    expect(r.rows.map(x => x.k)).toEqual(['vast', 'zonder', 'boven', 'onder']);   // v438: de indeling van de brug; zonder inleg in deze stand geen rij Plan-inleg
     expect(Math.abs(r.rows.reduce((a, x) => a + x.b, 0) - r.B)).toBeLessThanOrEqual(2);
     expect(Math.abs(r.rows.reduce((a, x) => a + x.v, 0) - r.P)).toBeLessThanOrEqual(2);
     expect(r.n).toBeGreaterThan(0); expect(Math.round(r.y)).toBe(Math.round(r.verw));

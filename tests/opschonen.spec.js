@@ -37,16 +37,16 @@ test.describe('a · Home', () => {
     expect(await page.locator('#sheet [data-contantrij]').count()).toBe(0);
     expect(await page.locator('#sheet').innerText()).not.toContain('contant');
   });
-  test('Nog te ontvangen is de berekening van de oude tegel, met een nette naam', async ({ page }) => {
+  /* v438: Nog te ontvangen staat niet meer op Home; dezelfde berekening en de nette naam staan in de sheet Verwacht eind */
+  test('Nog te ontvangen is de berekening van de oude tegel, met een nette naam (in de sheet Verwacht eind)', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('dash'));
-    const r = await page.evaluate(() => ({ v: +document.getElementById('homeOntvangen').dataset.ontvangen, due: Math.round(monthLiquidity().incDue),
-      t: document.getElementById('homeOntvangen').innerText }));
+    const r = await page.evaluate(() => { openVerwachtEind(); const e = document.querySelector('#verwachtEindSheet [data-veterm="inkomen"]'); return { v: +e.dataset.bedrag, due: Math.round(monthLiquidity().incDue), t: e.innerText }; });
     expect(r.v).toBe(r.due); expect(r.v).toBe(5216);
-    expect(r.t).not.toContain('nog niets binnen');   // v378: het bedrag staat er een keer, en zegt dat al
+    expect(r.t).not.toContain('nog niets binnen');
   });
   test('"Skf ." heet "Skf": een losse punt achter de naam valt weg', async ({ page }) => {
-    await P.boot(page); await page.evaluate(() => go('dash'));
-    const t = await page.locator('[data-ontvangenwie]').innerText();
+    await P.boot(page); await page.evaluate(() => { go('dash'); openVerwachtEind(); });
+    const t = await page.locator('#verwachtEindSheet [data-veterm="inkomen"]').innerText();
     expect(t).toContain('(Skf)'); expect(t).not.toMatch(/Skf \./);
   });
   test('verplaatst en niet gekopieerd: de tegels ontvangen, sparen en contant staan niet meer op Inzichten', async ({ page }) => {
@@ -54,9 +54,9 @@ test.describe('a · Home', () => {
     /* v382: Inzichten draagt geen tegels meer; ontvangen, sparen en contant staan er in geen enkele vorm */
     const r = await page.evaluate(() => ({ tegels: document.querySelectorAll('#s-ins [data-instegel]').length, t: document.getElementById('s-ins').innerText }));
     expect(r.tegels).toBe(0);
-    expect(r.t).not.toMatch(/te ontvangen|te sparen|contant/i);
+    expect(r.t).not.toMatch(/te ontvangen|te sparen|contant/i);   // v438: de kaart Verwacht saldo eind noemt geen van drie
     await page.evaluate(() => go('dash'));
-    expect(await page.locator('#homeOntvangen').count()).toBe(1);
+    expect(await page.locator('#homeOntvangen').count()).toBe(0);   // v438: ook niet meer op Home
   });
   for (const vp of [{ width: 360, height: 800 }, { width: 390, height: 844 }]) {
     test(`Home past op een scherm op ${vp.width}x${vp.height}`, async ({ page }) => {

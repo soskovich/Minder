@@ -71,8 +71,7 @@ test.describe('b. een tik op de stap', () => {
   test('vaste lasten opent de sheet vaste lasten, en openen schrijft niets', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await tik(page, '#gripGroepBrug [data-brugstap="overig"][data-brugk="vast"]');   // v428: de stap vast opent per groep
-    await page.click('#gripGroepen [data-groep="vast"]');
+    await tik(page, '#gripGroepBrug [data-brugstap="overig"][data-brugk="vast"]');   // v438: de staaf vast opent de sheet vaste lasten zelf
     expect(await page.evaluate(() => !!document.getElementById('gripVast'))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
@@ -80,8 +79,7 @@ test.describe('b. een tik op de stap', () => {
   test('zonder potje opent geboekt en verwacht, met de volle lijst eronder', async ({ page }) => {
     await Zes.boot(page); await grip(page);
     /* v408: bij ruimtegebrek zit zonder potje in "n boven"; de tik daarop toont hem, met dezelfde ingang naar zijn sheet */
-    await tik(page, '#gripGroepBrug [data-brugstap="zonder"]');   // v428: per groep, en daar zonder potje
-    await page.click('#gripGroepen [data-groep="zonder"]');
+    await tik(page, '#gripGroepBrug [data-brugstap="zonder"]');   // v438: de staaf zonder potje opent zijn sheet zelf
     expect(await page.evaluate(() => !!document.getElementById('zonderPotjeSheet'))).toBe(true);
     expect(await page.evaluate(() => !!document.querySelector('#zonderPotjeSheet [data-allepotjes]'))).toBe(true);
   });

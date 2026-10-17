@@ -77,8 +77,9 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.cap).toBe(600);
     expect([a.eta, b.eta]).toEqual([14, 9]);   // planVooruit(): het noodfonds is vijf maanden eerder vol
     expect(b.safe).toBe(a.safe);              // wat uit het potje gaat, gaat naar nog te sparen
-    /* v436: het vastgelegde maandbudget van oktober blijft 3.375; de verlaging staat als stap wijzigingen in de brug */
-    expect(b.brug.split(' ').slice(0, 2)).toEqual(['budget:3375', 'wijzigingen:-200']);
+    /* v438: het vastgelegde maandbudget van oktober blijft 3.375; geen staaf "wijzigingen": Sport staat tegen zijn vastgelegde budget
+       en de spaarinleg is geen inleg in Plan, dus de brug blijft zoals hij was */
+    expect(b.brug).toBe('budget:3375 Vices:83 Boodschappen:61 ruimte:-1122 vaste lasten:0 zonder potje:275 okt:2672');
   });
   test('maandbudget verlagen: veilig te besteden stijgt met het bedrag, Plan gelijk', async ({ page }) => {
     await boot(page, OPT);
@@ -91,9 +92,9 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.tot).toBe(3175);
     expect(b.safe).toBe(a.safe + 200);
     expect([b.cap, b.eta]).toEqual([a.cap, a.eta]);
-    /* v436: de brug begint bij het vastgelegde budget en de verlaging is een eigen stap; met zeven kolommen valt Boodschappen
-       in de ruimte (DEZEMAAND_KOL) */
-    expect(b.brug).toBe('budget:3375 wijzigingen:-200 Vices:83 ruimte:-861 vaste lasten:0 zonder potje:275 okt:2672');
+    /* v438: de brug begint bij het vastgelegde budget en heeft geen staaf "wijzigingen": Sport staat tegen zijn vastgelegde budget,
+       dus een verlaging die je uitgaven niet verandert laat de brug zoals hij was */
+    expect(b.brug).toBe('budget:3375 Vices:83 Boodschappen:61 ruimte:-1122 vaste lasten:0 zonder potje:275 okt:2672');
   });
   test('verdeeld over twee, en het logboek noemt de bestemming', async ({ page }) => {
     await boot(page, OPT);

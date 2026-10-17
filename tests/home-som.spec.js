@@ -11,12 +11,14 @@ const BONUS = { irregularIncome: [{ id: 'b1', naam: 'Bonus', ym: '2026-10', amou
 async function home(page, o) { await I.boot(page, o); await page.evaluate(() => { go('dash'); renderDash(); }); }
 
 test.describe('a · Home: volgorde en het saldoblok', () => {
-  test('de volgorde is saldo, nog te ontvangen, vrij te besteden, verwacht eind', async ({ page }) => {
+  /* v438: "Nog te ontvangen" staat niet meer op Home (gevraagd door de gebruiker); de volgorde is saldo, vrij te besteden, verwacht eind */
+  test('de volgorde is saldo, vrij te besteden, verwacht eind, en Nog te ontvangen staat er niet', async ({ page }) => {
     await home(page);
-    const y = await page.evaluate(() => ['[data-saldoblok]', '#homeOntvangen', '[data-vrij]', '[data-verwachteind]']
+    const y = await page.evaluate(() => ['[data-saldoblok]', '[data-vrij]', '[data-verwachteind]']
       .map((s) => { const e = document.querySelector('#s-dash ' + s); return e ? e.getBoundingClientRect().top : null; }));
     expect(y.every((v) => v != null)).toBe(true);
     for (let i = 1; i < y.length; i++) expect(y[i]).toBeGreaterThan(y[i - 1]);
+    expect(await page.locator('#homeOntvangen').count()).toBe(0);
   });
   test('het saldoblok heeft precies een tikplek, en de regel bank en contant staat niet meer op Home', async ({ page }) => {
     await home(page, { set: OUD });
@@ -57,37 +59,37 @@ test.describe('b · bijgewerkt-label', () => {
   });
 });
 
-test.describe('c · Nog te ontvangen', () => {
-  test('het bedrag staat een keer, met de bron, zonder "nog niets binnen"', async ({ page }) => {
+/* v438: het inkomen dat nog komt staat in de sheet "Verwacht eind" (dezelfde bron, monthLiquidity().incDue), de verwachte bonus in de
+   kaart "Verwacht saldo eind <maand>" op Inzichten */
+const veInkomen = page => page.evaluate(() => { openVerwachtEind(); const r = document.querySelector('#verwachtEindSheet [data-veterm="inkomen"]'); const v = { v: +r.dataset.bedrag, t: r.innerText }; closeSheet(); return v; });
+test.describe('c · Nog te ontvangen (v438: in de sheet Verwacht eind en op Inzichten)', () => {
+  test('het bedrag staat een keer, met de bron', async ({ page }) => {
     await home(page);
-    const r = await page.evaluate(() => { const e = document.getElementById('homeOntvangen');
-      return { t: e.innerText, v: +e.dataset.ontvangen, due: monthLiquidity().incDue, bonus: !!e.querySelector('[data-bonusverwacht]') }; });
-    expect(r.v).toBe(5216); expect(r.v).toBe(r.due);
-    expect((r.t.match(/€5\.216/g) || []).length).toBe(1);
-    expect(r.t).not.toContain('nog niets binnen');
+    const r = await veInkomen(page);
+    expect(r.v).toBe(5216); expect(r.v).toBe(await page.evaluate(() => monthLiquidity().incDue));
     expect(r.t).toContain('Werkgever');
-    expect(r.bonus).toBe(false);
   });
-  test('een verwachte bonus is een grijze regel en telt niet mee in het bedrag of in vrij te besteden', async ({ page }) => {
+  test('een verwachte bonus is een grijze regel op Inzichten en telt niet mee in vrij te besteden of verwacht eind', async ({ page }) => {
     await home(page);
     const zonder = await page.evaluate(() => ({ safe: safeToSpend().safe, eind: maandVerloop().eind }));
     await home(page, { set: BONUS });
-    const r = await page.evaluate(() => { const e = document.getElementById('homeOntvangen'); const b = e.querySelector('[data-bonusverwacht]');
-      return { v: +e.dataset.ontvangen, b: b && b.innerText, safe: safeToSpend().safe, eind: maandVerloop().eind }; });
-    expect(r.v).toBe(5216);
-    expect(r.b).toBe('+ €2.500 bonus · telt mee zodra binnen');
+    const r = await page.evaluate(() => { go('ins'); const b = document.querySelector('#insSaldoEind [data-insbonus]');
+      return { b: b && b.innerText, safe: safeToSpend().safe, eind: maandVerloop().eind }; });
+    expect((await veInkomen(page)).v).toBe(5216);
+    expect(r.b).toBe('+ bonus €2.500 · eenmalig · telt mee zodra binnen');
     expect(r.safe).toBe(zonder.safe); expect(r.eind).toBe(zonder.eind);
   });
   test('een deel van het salaris binnen verlaagt het bedrag', async ({ page }) => {
     await home(page, { extraTx: [{ id: 'sd1', date: '2026-10-05', amount: 2000, name: 'Werkgever', desc: 'SALARIS LOON' }] });
-    expect(+(await page.locator('#homeOntvangen').getAttribute('data-ontvangen'))).toBe(3216);
+    expect((await veInkomen(page)).v).toBe(3216);
   });
-  test('alles binnen en geen bonus verwacht: geen regel; met een bonus wel', async ({ page }) => {
+  test('alles binnen en geen bonus verwacht: geen inkomen meer en geen bonusregel; met een bonus wel de regel', async ({ page }) => {
     const sal = [{ id: 'sd1', date: '2026-10-05', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' }];
     await home(page, { extraTx: sal });
-    expect(await page.locator('#homeOntvangen').count()).toBe(0);
+    expect((await veInkomen(page)).v).toBe(0);
+    expect(await page.evaluate(() => { go('ins'); return document.querySelectorAll('#insSaldoEind [data-insbonus]').length; })).toBe(0);
     await home(page, { extraTx: sal, set: BONUS });
-    expect(await page.locator('#homeOntvangen [data-bonusverwacht]').count()).toBe(1);
+    expect(await page.evaluate(() => { go('ins'); return document.querySelectorAll('#insSaldoEind [data-insbonus]').length; })).toBe(1);
   });
 });
 

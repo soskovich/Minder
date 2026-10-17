@@ -57,8 +57,7 @@ test('c: het geboekte deel is de som van de boekingen in blok 19', async ({ page
   /* v428: in de groepbrug staat zonder potje altijd als eigen stap; de tik opent de sheet per groep, en de regel zonder potje
      opent dezelfde sheet als voorheen */
   await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
-  await page.locator('#gripGroepBrug [data-brugstap="zonder"]').click();
-  await page.locator('#gripGroepen [data-groep="zonder"]').click();
+  await page.locator('#gripGroepBrug [data-brugstap="zonder"]').click();   // v438: de staaf zonder potje opent zijn sheet zelf
   await expect(page.locator('#zonderPotjeSheet [data-zondergeboekt]')).toHaveAttribute('data-zondergeboekt', String(S.st.geboekt));
   await expect(page.locator('#zonderPotjeSheet [data-zonderverwacht]')).toHaveAttribute('data-zonderverwacht', String(S.st.verwacht));
   await expect(page.locator('#zonderPotjeSheet')).toContainText(`€${S.st.geboekt} geboekt`);

@@ -14,11 +14,12 @@ const grip = async page => { await page.setViewportSize({ width: 390, height: 84
 test.describe('A · onder de drempel', () => {
   /* v428: de brug op Grip staat in Begrijpen ("Waar zit de EUR X?") en zet elk potje dat boven eindigt los, ook onder de drempel;
      de noot van v393 (op de oude Zien-brug) staat niet meer op Grip. Wat blijft: geen signaal, geen patroon, geen eigen regel. */
-  test('Vices +EUR 5 staat in de groepbrug als eigen stap, zonder noot en zonder signaal (v428)', async ({ page }) => {
+  /* v438: de potjes erboven zijn EEN staaf "N boven" (gevraagd door de gebruiker); Vices telt daarin mee en staat in de sheet erachter */
+  test('Vices +EUR 5 telt mee in de staaf "N boven" van de groepbrug, zonder noot en zonder signaal (v428/v438)', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => gripKiesTab('begrijpen'));
     const r = await page.evaluate(() => { const V = maandVooruit(), x = V.potjes.find(p => p.k === 'vices');
-      const st = document.querySelector('#gripGroepBrug [data-brugstap="potje"][data-brugk="vices"]');
+      const st = document.querySelector('#gripGroepBrug [data-brugk="boven"]') && brugIndeling(V).g('boven').pots.some(p => p.k === 'vices');
       return { over: Math.round(x.overR), uit: potjeUitschieter(x), stap: !!st, noten: document.querySelectorAll('#gripInhoud [data-brugnoot]').length,
         regels: document.querySelectorAll('[data-onderdrempel]').length, sig: [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => e.innerText).join('|') }; });
     expect(r.over).toBe(5); expect(r.uit).toBe(false);

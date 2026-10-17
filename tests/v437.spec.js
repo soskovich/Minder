@@ -77,7 +77,7 @@ test.describe('v437 · 2. wijzigingen deze maand', () => {
     expect(r.tot).toBe(40); expect(r.rijen.sort()).toEqual(['Huur 77', 'Verzekeringen -37']);
     await page.evaluate(() => openBudgetWijz());
     const t = await page.locator('#budgetWijzSheet').innerText();
-    expect(t).toMatch(/Huur \+?€77|Huur\s+\+€77/); expect(t).toMatch(/Verzekeringen\s+−€37/); expect(t).toMatch(/samen\s+\+€40/);
+    expect(t).toMatch(/Huur\s+forecast €0\s+\+€77/); expect(t).toMatch(/Verzekeringen\s+forecast €0\s+−€37/);   // v438: met het effect op de forecast expect(t).toMatch(/samen\s+\+€40/);
     expect(t).not.toMatch(/inleg in Plan/); expect(t).not.toMatch(/€280/);
   });
 });
@@ -86,7 +86,8 @@ test.describe('v437 · 3. het budget per groep is het vastgelegde budget per gro
   test('3. de brug, de salariskaart en per groep lezen hetzelfde vastgelegde budget per groep; de wijzigingen staan apart', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Q = gripGroepenVier(V), T = salarisTabelData(V), P = Math.round(V.projectie);
-      const tb = Object.fromEntries(T.rijen.map(x => [x.k, Math.round(x.b)]));
+      /* v438: de salariskaart heeft de indeling van de brug (vast, zonder potje, boven, onder, inleg); potjes = boven + onder */
+      const tb0 = Object.fromEntries(T.rijen.map(x => [x.k, x.b])), tb = { vast: Math.round(tb0.vast), potjes: Math.round((tb0.boven || 0) + (tb0.onder || 0)), inleg: Math.round(tb0.inleg) };
       return { Q: { vast: Math.round(Q.vast.b), potjes: Math.round(Q.potjes.b), inleg: Math.round(Q.inleg.b) }, tb, som: T.som, onder: P - V.budget, meter: gripMeterBudget(V).verschil, inlD: T.rijen.find(x => x.k === 'inleg').d }; });
     expect(r.tb).toEqual(r.Q); expect(r.inlD).toBe(0);
     expect(r.som).toBe(r.onder); expect(Math.abs(r.som - r.meter)).toBeLessThanOrEqual(1);
@@ -96,48 +97,51 @@ test.describe('v437 · 3. het budget per groep is het vastgelegde budget per gro
     if (await sal.count()) await expect(sal.locator('[data-budgetwijz]')).toHaveAttribute('data-budgetwijz', '40');
     await page.evaluate(() => openGripGroepen());
     const pg = await page.evaluate(() => [...document.querySelectorAll('#gripGroepen [data-groep]')].map(e => [e.dataset.groep, +e.dataset.groepbudget]));
-    expect(Object.fromEntries(pg)).toMatchObject({ vast: r.Q.vast, potjes: r.Q.potjes, inleg: r.Q.inleg });
-    expect(pg.reduce((a, x) => a + x[1], 0)).toBe(3375);
+    const pgo = Object.fromEntries(pg); pgo.potjes = (pgo.boven || 0) + (pgo.onder || 0);
+    expect(Math.abs(pgo.vast - r.Q.vast)).toBeLessThanOrEqual(1); expect(Math.abs(pgo.potjes - r.Q.potjes)).toBeLessThanOrEqual(1); expect(pgo.inleg).toBe(r.Q.inleg);
+    expect(Math.abs(pg.reduce((a, x) => a + x[1], 0) - 3375)).toBeLessThanOrEqual(2);   // per rij afgerond
     await expect(page.locator('#gripGroepen [data-budgetwijz]')).toHaveAttribute('data-budgetwijz', '40');
   });
 });
 
 test.describe('v437 · 4. een brug', () => {
-  test('4a. de brug in Begrijpen en die van de keuze-sheet: vastgelegd budget, de groepen, de wijzigingen als laatste stap, de forecast', async ({ page }) => {
+  /* v438: GEEN STAAF "WIJZIGINGEN" MEER (gevraagd door de gebruiker): elke groep staat tegen zijn vastgelegde budget en de wijziging zit in
+     de forecast van die groep. Deze test hield de vorm van v437 vast (de wijzigingen als laatste stap) en is daarop gemigreerd. */
+  test('4a. de brug in Begrijpen en die van de keuze-sheet: vastgelegd budget, de groepen tegen het vastgelegde budget, de forecast', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), B = gripGroepBrug(V), Z = gripZienBrug(V), P = Math.round(V.projectie);
       const soort = Br => Br.stappen.map(s => s.soort), som = Br => Br.stappen.slice(0, -1).reduce((a, s) => a + s.waarde, 0);
-      return { B: soort(B), Z: soort(Z), bw: B.stappen.find(s => s.soort === 'wijz').waarde, zw: Z.stappen.find(s => s.soort === 'wijz').waarde, b0: B.stappen[0].waarde, z0: Z.stappen[0].waarde, sB: som(B), sZ: som(Z), P };
+      return { B: soort(B), Z: soort(Z), b0: B.stappen[0].waarde, z0: Z.stappen[0].waarde, sB: som(B), sZ: som(Z), P };
     });
-    for (const k of ['B', 'Z']) { const s = r[k]; expect(s[0]).toBe('begin'); expect(s[s.length - 1]).toBe('eind'); expect(s[s.length - 2]).toBe('wijz'); }
-    expect([r.b0, r.z0]).toEqual([3375, 3375]); expect([r.bw, r.zw]).toEqual([40, 40]);
+    for (const k of ['B', 'Z']) { const s = r[k]; expect(s[0]).toBe('begin'); expect(s[s.length - 1]).toBe('eind'); expect(s).not.toContain('wijz'); }
+    expect([r.b0, r.z0]).toEqual([3375, 3375]);
     expect([r.sB, r.sZ]).toEqual([r.P, r.P]);
-    /* de groepen in de brug staan tegen het budget van nu: zonder de wijzigingen-stap is hun som de forecast min het budget van nu */
-    const g = await page.evaluate(() => { const V = maandVooruit(), B = gripGroepBrug(V), Q = gripGroepenVier(V), W = maandGroepen(V).wijz;
-      const vast = B.stappen.find(s => s.k === 'vast').waarde, wv = W.filter(x => /^vast/.test(x.n)).reduce((a, x) => a + x.d, 0);
-      return { groepen: B.stappen.slice(1, -1).filter(s => s.soort !== 'wijz').reduce((a, s) => a + s.waarde, 0), doel: Math.round(V.projectie) - V.budgetNu, vast, vastV: Math.round(Q.vast.v - Q.vast.b - wv), wv }; });
-    expect(g.groepen).toBe(g.doel); expect(g.wv).toBe(77); expect(Math.abs(g.vast - g.vastV)).toBeLessThanOrEqual(1);
+    /* de staaf vast is de forecast tegen het VASTGELEGDE budget van vast: de geaccepteerde +77 telt niet nog een keer */
+    const g = await page.evaluate(() => { const V = maandVooruit(), B = gripGroepBrug(V), Q = gripGroepenVier(V);
+      return { vast: B.stappen.find(s => s.k === 'vast').waarde, vastV: Math.round(Q.vast.v - Q.vast.b) }; });
+    expect(Math.abs(g.vast - g.vastV)).toBeLessThanOrEqual(1);
   });
-  test('4b. een uitschieter zoals Boodschappen houdt een eigen stap en valt niet weg in de rest', async ({ page }) => {
+  test('4b. een uitschieter zoals Boodschappen staat in "1 boven" (Begrijpen) en los in de keuze-sheet', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), u = uitschieters(V).find(x => x.k === 'boodschappen');
-      const st = Br => (Br.stappen.find(s => s.soort === 'potje' && s.k === 'boodschappen') || {}).waarde;
-      return { u: u && Math.round(u.overR), B: st(gripGroepBrug(V)), Z: st(gripZienBrug(V)) }; });
-    expect(r.u).toBeGreaterThan(25); expect(r.B).toBe(r.u); expect(r.Z).toBe(r.u);
+      const B = gripGroepBrug(V), Z = gripZienBrug(V);
+      return { u: u && Math.round(u.overR), B: (B.stappen.find(s => s.k === 'boven') || {}).waarde, bl: (B.stappen.find(s => s.k === 'boven') || {}).label, Z: (s => s ? s.waarde - (s.bij || 0) : null)(Z.stappen.find(s => s.soort === 'potje' && s.k === 'boodschappen')) }; });   // v415: een kleine samengevoegde stap schuift erbij (bij)
+    expect(r.u).toBeGreaterThan(25); expect(r.B).toBe(r.u); expect(r.bl).toBe('1 boven'); expect(r.Z).toBe(r.u);
     await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
     const t = await page.locator('#gripGroepBrug').innerText();
-    expect(t.replace(/­/g, '')).toMatch(/Boodschappen/); expect(t).toMatch(/wijzigingen/);
+    expect(t).toMatch(/1 boven/); expect(t).not.toMatch(/wijzigingen/);
   });
 });
 
 test.describe('v437 · 5. blok 20, regel MAANDBUDGET', () => {
   test('5. vastgelegd totaal en per groep, de wijzigingen, de forecast en vier controles die kloppen', async ({ page }) => {
     await boot(page);
-    const L = await blok20(page), i = L.findIndex(l => /^MAANDBUDGET \(v436\/v437\)/.test(l)), B = L.slice(i, i + 25).join('\n');
+    const L = await blok20(page), i = L.findIndex(l => /^MAANDBUDGET \(v436\/v437\/v438\)/.test(l)), B = L.slice(i, i + 40).join('\n');
     expect(i).toBeGreaterThan(-1);
     expect(B).toMatch(/vastgelegd €3\.375 op 01-10 .*potjes €3\.095 · waarvan Plan-inleg €280/);
     expect(B).toMatch(/wijzigingen deze maand \(alleen forecast\): samen \+€40/);
-    expect(B).toMatch(/vastgelegd per groep: vast €[\d.]+ · potjes €[\d.]+ · zonder potje €0 · Plan-inleg €280/);
+    expect(B).toMatch(/per groep \(vastgelegd budget · forecast · verschil\):\n    vast: €[\d.]+ · €[\d.]+ · /);
+    expect(B).toMatch(/    Plan-inleg: €280 · €280 · €0/);
     expect(B).toMatch(/CONTROLE som van de groepen = vastgelegd: €3\.375 tegen €3\.375 → klopt/);
     expect(B).toMatch(/CONTROLE Plan-inleg een keer geteld: .*→ klopt/);
     expect(B).toMatch(/CONTROLE onder budget = vastgelegd - forecast: .*→ klopt/);

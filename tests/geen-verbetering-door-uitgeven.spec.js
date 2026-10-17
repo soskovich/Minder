@@ -167,7 +167,8 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
     });
     expect(r.tg['Nog te betalen · vast']).toBe(r.fixDue);
     // v365: ontvangen staat op Home, sparen op Plan
-    expect(await page.evaluate(() => { go('dash'); return +document.getElementById('homeOntvangen').dataset.ontvangen; })).toBe(r.incDue);
+    /* v438: nog te ontvangen staat in de sheet Verwacht eind (dezelfde bron), niet meer op Home */
+    expect(await page.evaluate(() => { go('dash'); openVerwachtEind(); return +document.querySelector('#verwachtEindSheet [data-veterm="inkomen"]').dataset.bedrag; })).toBe(r.incDue);
     /* v308: hier stond r.bron, de tempo-som. Het getal op die regel is sinds v250 de AFTREKKING,
        en die twee waren hetzelfde zolang een potje met ruimte zijn hele onbestede deel in de
        tempo-som droeg. De vierde tegel leest dus varBudget min gebruikt. */
