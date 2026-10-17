@@ -7849,6 +7849,21 @@ naar DRIE, en dat is dezelfde reden als bij `v299`: tussen negen bekende rode va
 meer op. `index.html` is niet aangeraakt, en de dagen-conventie van `v257` blijft los daarvan staan: die
 vraag gaat over de app en deze over de fixture.
 
+**Onstabiel, oorzaak gemeten, NIET IN DE APP: een deadlock van Chromium in deze VM** (`v439`, gemeten op verzoek van
+de gebruiker). `een-definitie-variabel.spec.js` "een overschreden potje: drie plekken en het scherm" blijft af en toe in
+`page.evaluate` hangen tot de timeout, ook op `main` (dus van voor `v439`). GEMETEN in een reeks probes van 250 tot 1000
+runs per variant: de body hangt 1,5 tot 3 procent van de keren, en de RENDERER STAAT DAN STIL in `futex_do_wait` met nul
+CPU-seconden (de GPU-process ook). Het is geen lus in de app: `Runtime.terminateExecution` en `Debugger.pause` (met de
+debugger vooraf aan) halen er niets uit, en `console.log` per stap laat zien dat hij op verschillende stappen kan stoppen.
+UITGESLOTEN, elk met een tegenmeting van dezelfde orde: de vaste klok van `pinDag` (14 tegen 14 van 500), V8 op een
+GC-thread (`--single-threaded-gc`), de GPU (`--disable-gpu`, `--in-process-gpu`), de fade-animatie van `.screen`, de
+`backdrop-filter` van `.card`, parallelle workers (ook met een worker 5 van 400) en de binary (`headless_shell` en de
+volle `chromium`, allebei build 1194). WAT HET UITLOKT: eerst ongeveer 25 ms rekenwerk, dan een layout van Inzichten;
+alleen rekenen (`textContent`) of alleen `go('ins')` met een layout hangt niet (0 van 350 en 0 van 1200). DE OMGEVING
+WIJKT AF: Playwright 1.61 verwacht build 1228 (Chrome 149) en `/opt/pw-browsers/chromium_headless_shell-1228` is een
+symlink naar de `headless_shell` van build 1194. Wie dit oppakt begint daar (een browser die bij Playwright hoort) en
+niet in `index.html`. Tot dan telt een hang van DEZE test in de volle suite als bekend, mits hij los opnieuw groen draait.
+
 **Onstabiel, oorzaak gemeten, eigen ronde:** `diag-entry-merge.spec.js` "blok 8 noemt welke groep uit een
 eerdere sync komt" valt ongeveer een op de vier keer (GEMETEN 3 van 4 groen in vier runs achter elkaar, en
 ook rood op `HEAD`). HET ZIJN TWEE TESTS EN NIET EEN, en dat is bij `v315` gemeten en niet aangenomen: ook
