@@ -118,7 +118,7 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
     await boot(page);
     const t = await scherm(page, 'ins');
     // v382: de maandkaart heet "Maandbudget <maand>" en draagt "EUR X van EUR Y"
-    expect(t).toMatch(/Maandbudget \w+ €[\d.]+ van €[\d.]+/i);
+    expect(t).toMatch(/Maandbudget \w+ (vast sinds \d+ \w+ )?€[\d.]+ van €[\d.]+/i);   // v436: het label vast sinds
     expect(t).not.toMatch(/inkomen-limiet/);
   });
 });

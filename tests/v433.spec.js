@@ -22,7 +22,8 @@ test.describe('v433 · 1. Plan-inleg', () => {
     await page.evaluate(() => { SET.savingAmount = 900; save(); });
     expect((await P(page)).plan).toBe(280);
     await page.evaluate(() => { planInlegZet('res', 500); });
-    expect(await plan20(page)).toBe(500);
+    /* v436: punt 7 houdt het vastgelegde bedrag van oktober; het voorstel voor de komende periode telt de wijziging mee */
+    expect(await plan20(page)).toBe(280);
     expect((await P(page)).plan).toBe(500);
   });
   test('1b. opzij is "Plan EUR 280 + vrij sparen", en onder de Plan-inleg "past niet"', async ({ page }) => {

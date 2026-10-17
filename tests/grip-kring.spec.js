@@ -92,7 +92,8 @@ test.describe('v387 meters', () => {
     expect(r.M.ruim).toBe(948);
     expect(r.M.pct).toBe(Math.round(r.V.p / r.V.b * 100));
     expect(r.M.verschil).toBe(Math.round(r.V.p) - Math.round(r.V.b));
-    await page.click('[data-meter="budget"]');
+    /* v436: een tik op de Budget-meter opent de brug in Begrijpen; de meter-sheet opent vanuit de kop van die brug */
+    await page.evaluate(() => openGripMeter('budget'));
     expect(await page.locator('[data-meterbudget]').innerText()).toContain(`€${Math.round(r.V.b).toLocaleString('nl-NL')}`);
     expect(await page.locator('[data-meterruim]').evaluateAll(e => e.map(x => x.dataset.meterruim))).toEqual(['huur', 'vervoer']);
   });

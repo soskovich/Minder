@@ -56,12 +56,12 @@ async function boot(page, payload) {
 }
 
 test.describe('a · het hoofdscherm', () => {
-  test('zes regels als subpagina, geen uitklapblokken', async ({ page }) => {
+  test('zeven regels als subpagina (v436: Potjes erbij), geen uitklapblokken', async ({ page }) => {
     await boot(page, fixture());
     const r = await page.evaluate(() => { openSetSub(null); const el = document.getElementById('s-set');
       return { rijen: [...el.querySelectorAll('[data-setrij]')].map(x => x.dataset.setrij), tekst: el.innerText, html: el.innerHTML }; });
-    expect(r.rijen).toEqual(['inkomen', 'bank', 'spelregels', 'herkenning', 'coach', 'gegevens']);
-    for (const n of ['Inkomen', 'Bank & rekeningen', 'Spelregels', 'Herkenning', 'Coach & weergave', 'Gegevens & privacy']) expect(r.tekst).toContain(n);
+    expect(r.rijen).toEqual(['inkomen', 'bank', 'spelregels', 'potjes', 'herkenning', 'coach', 'gegevens']);
+    for (const n of ['Inkomen', 'Bank & rekeningen', 'Spelregels', 'Potjes', 'Herkenning', 'Coach & weergave', 'Gegevens & privacy']) expect(r.tekst).toContain(n);
     expect(r.html).not.toMatch(/▼|▲|toggleSet\(/);
     expect(r.tekst).toContain('Minder · veilig & lokaal');
     // een subpagina heeft een weg terug en de inhoud van die ene regel

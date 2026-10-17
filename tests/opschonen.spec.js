@@ -187,20 +187,11 @@ test.describe('d · Inzichten', () => {
     const st = await page.evaluate(() => maandStaaf('2026-09'));
     expect(D.uit).toBe(Math.round(st.spend)); expect(D.budget).toBe(Math.round(st.budget));
   });
-  /* v382: de patronen staan weer op de pagina, als tegels (hooguit vier); een tik opent het patroon in een sheet met
-     dezelfde inhoud als insPatronenKaart() voor dat ene patroon. */
-  test('de patronen staan als tegels op de pagina en openen als sheet met dezelfde inhoud', async ({ page }) => {
+  /* v436: de patroontegels zijn van Inzichten verdwenen; het label staat bij de signalen in Zien, uit dezelfde bron. */
+  test('de patronen staan niet meer als tegels op de pagina', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
-    const verwacht = await page.evaluate(() => insPatronen('alle').slice(0, 4).map((p) => p.soort));
-    expect(verwacht.length).toBeGreaterThan(0);
-    const tegels = await page.evaluate(() => [...document.querySelectorAll('#s-ins #insPatronen .ins-pt[data-patroon]')].map((e) => e.dataset.patroon));
-    expect(tegels).toEqual(verwacht);
-    await page.locator('#s-ins #insPatronen .ins-pt[data-patroon]').first().click();
-    const r = await page.evaluate(() => ({ soort: document.querySelector('#insPatroonSheet').dataset.patroon,
-      zelfde: document.querySelector('#insPatroonSheet').innerHTML === (() => { const d = document.createElement('div');
-        d.innerHTML = insPatronenKaart([insPatronen('alle')[0]]).replace('class="card" id="insPatronen"', 'id="insPatroonDetail"'); return d.innerHTML; })() }));
-    expect(r.soort).toBe(verwacht[0]);
-    expect(r.zelfde).toBe(true);
+    expect(await page.evaluate(() => insPatronen('alle').length)).toBeGreaterThan(0);   // invoermeting: er zijn patronen
+    expect(await page.locator('#s-ins #insPatronen, #s-ins .ins-pt').count()).toBe(0);
   });
   // v382: weg, 'tegen je potje: de EUR 0-groep' las de keuzekaart en de drilldown (openInsAlle, [data-insnulgroep]); die zijn weg
   // v382: weg, 'tegen vorige maanden: alleen precies EUR 0 verschil' las de keuzekaart (insKeuzeZet, openInsAlle); die is weg

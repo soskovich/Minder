@@ -111,9 +111,10 @@ test.describe('c · de kaart past zich aan', () => {
 test.describe('e · geen handeling op Inzichten', () => {
   /* v382: de ingangen van de nieuwe vorm. Elk opent een sheet, wisselt een weergave (de verschuivingen, het filter)
      of verwijst naar Grip. */
-  const MAG = ['openInsFilter', 'openInsTegel', 'openInsZonder', 'openWeekSheet', 'openWekelijks', 'openInsPatroon',
+  const MAG = ['openInsFilter', 'openInsTegel', 'openInsZonder', 'openWeekSheet', 'openWekelijks', 'openBudgetWijz',
     'verschuivingToggle', 'verschuivingKies', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
-  const MAG_SHEET = MAG.concat(['closeSheet', 'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet', 'openInsPotje', 'openSheet', 'wekKies']);
+  const MAG_SHEET = MAG.concat(['openWeekUitleg', 'openSetSub', 'closeSheet',   // v436: de uitleg van de week wijst naar Instellingen → Potjes
+    'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet', 'openInsPotje', 'openSheet', 'wekKies']);
   /* DE UITZONDERING, met reden: in de sheet "Welke potjes zijn wekelijks?" schrijft "Bevestigen" (wekBevestig)
      SET.potWekelijks. Dat is een instelling en geen handeling op je geld: hij beweegt geen geld en zet geen grens, hij
      kiest alleen wat de weektegel optelt, en het is de keuze van de gebruiker in v382 dat die keuze op Inzichten staat.
@@ -124,7 +125,8 @@ test.describe('e · geen handeling op Inzichten', () => {
     await open(page); await kies(page);
     await page.evaluate(() => verschuivingToggle());
     const r = await page.evaluate((src) => { const f = new Function('root', 'return (' + src + ')(root)'); return f(document.getElementById('s-ins')); }, aanroepen.toString());
-    for (const x of ['openInsFilter', 'openInsTegel', 'openWeekSheet', 'openInsPatroon', 'verschuivingToggle', 'verschuivingKies'])
+    // v436: de patroontegels (openInsPatroon) zijn weg; het label staat bij de signalen in Zien
+    for (const x of ['openInsFilter', 'openInsTegel', 'openWeekSheet', 'verschuivingToggle', 'verschuivingKies'])
       expect(r, x + ' staat werkelijk op het scherm').toContain(x);
     expect(r.filter((x) => !MAG.includes(x))).toEqual([]);
     expect(await page.$$eval('#s-ins .btn, #s-ins button', (e) => e.length)).toBe(0);
@@ -146,12 +148,12 @@ test.describe('e · geen handeling op Inzichten', () => {
       const uit = []; const sh = () => { uit.push(...f(document.getElementById('sheet'))); closeSheet(); };
       for (const k of ['uitgegeven', 'potjes', 'vast', 'ontvangen', 'sparen', 'cash']) { openInsTegel(k); sh(); }
       openInsZonder(); sh(); openInsPotje('uiteten'); sh(); openWeekSheet(); sh();
-      for (let i = 0; i < (window._insPats || []).length; i++) { openInsPatroon(i); sh(); }
+      openWeekUitleg(); sh();
       openWekelijks(); wekKies('uiteten', false); uit.push(...f(document.getElementById('sheet'))); closeSheet();
       verschuivingToggle(); verschuivingKies(0);
       openInsFilter(); const filt = f(document.getElementById('sheet')); closeSheet();
       Storage.prototype.setItem = orig;
-      return { uit, filt, schrijf, gelijk: voor === localStorage.getItem('minder_set'), npat: (window._insPats || []).length };
+      return { uit, filt, schrijf, gelijk: voor === localStorage.getItem('minder_set'), npat: insPatronen('alle').length };
     }, aanroepen.toString());
     expect(r.npat).toBe(4);
     expect(r.schrijf).toBe(0); expect(r.gelijk).toBe(true);
@@ -167,7 +169,8 @@ test.describe('e · geen handeling op Inzichten', () => {
       const keys = new Set([...Object.keys(voor), ...Object.keys(na)]);
       return [...keys].filter((k) => JSON.stringify(voor[k]) !== JSON.stringify(na[k])).sort();
     });
-    expect(r.filter((k) => !['potWekelijks', 'weekStand'].includes(k))).toEqual([]);
+    // v436: wekGekozen legt vast dat de keuze een keer gevraagd is (niet opnieuw vragen na herladen)
+    expect(r.filter((k) => !['potWekelijks', 'weekStand', 'wekGekozen'].includes(k))).toEqual([]);
     expect(r).toContain('potWekelijks');
   });
   test('de oude stand-kaart, "Wat opvalt", "Nog deze maand" en de vorm van v359 staan er niet meer', async ({ page }) => {
@@ -182,24 +185,21 @@ test.describe('f · zonder patronen', () => {
   // v382: weg, het kop-inzicht ("een zin in euro's ... met de teller naar de patronen"); het kop-inzicht is vervallen.
   test('zonder drie afgeronde maanden zegt het scherm dat eerlijk, zonder tegels', async ({ page }) => {
     await open(page, { vanaf: '2026-08-01' });
-    const r = await page.evaluate(() => { const e = document.getElementById('insPatronen'); return { n: e.dataset.patronen, txt: e.innerText, tegels: document.querySelectorAll('.ins-pt').length }; });
-    expect(r.n).toBe('0');
+    const r = await page.evaluate(() => { const e = document.querySelector('[data-inshistorie]'); return { txt: e && e.innerText, n: document.querySelectorAll('[data-inshistorie]').length, tegels: document.querySelectorAll('.ins-pt, #insPatronen').length }; });
+    expect(r.n).toBe(1);
     expect(r.txt).toBe('Nog geen patronen: na drie maanden boekingen ziet de app wat bij jou gewoon is.');
     expect(r.tegels).toBe(0);
   });
 });
 
 test.describe('g · de vier patronen', () => {
-  /* v382: de patronen staan als tegels op het scherm (#insPatronen .ins-pt); een tik opent de uitleg in een sheet
-     (#insPatroonSheet), met dezelfde insPatronenKaart() als tot nu. */
-  test('elk patroon met wat er gebeurt, gezien in, en de verwijzing naar Grip', async ({ page }) => {
+
+
+  /* v436: de patroontegels zijn weg van Inzichten. insPatronen() blijft de bron, en het label ervan staat bij het signaal
+     in Zien (gripPatroonInfo). De detectie zelf (wat er gebeurt, gezien in) wordt hier op de bron getoetst. */
+  test('elk patroon met wat er gebeurt en gezien in, op de bron', async ({ page }) => {
     await open(page);
-    const tegels = await page.$$eval('#insPatronen .ins-pt', (e) => e.map((x) => x.dataset.patroon));
-    const P = await page.evaluate(() => (window._insPats || []).map((_, i) => { openInsPatroon(i); const e = document.querySelector('#insPatroonSheet [data-patroon]');
-      const o = { s: e.dataset.patroon, k: e.dataset.patk,
-        h: e.querySelector('.ins-pat-h').innerText, t: e.querySelector('.ins-pat-h').nextElementSibling.innerText, b: e.querySelector('[data-patbron]').innerText, g: !!e.querySelector('[data-insgrip]'),
-        dot: e.querySelector('.ins-pat-tg i').style.background }; closeSheet(); return o; }));
-    expect(tegels).toEqual(P.map((p) => p.s));
+    const P = await page.evaluate(() => insPatronen('alle').map((p) => ({ s: p.soort, k: p.k, h: p.naam, t: p.tekst, b: 'gezien in: ' + p.bron.filter(Boolean).join(', '), g: !!p.grip })));
     expect(P.map((p) => p.s)).toEqual(['herhaalt', 'structureel', 'nieuw', 'herstelt']);
     expect(P[0].t).toBe('In september €194 boven je potje; je noemde het toen een uitzondering. Oktober loopt weer voor: verwacht €130 erboven.');
     expect(P[0].b).toBe('gezien in: het logboek van september, de vooruitblik van oktober');
@@ -210,18 +210,15 @@ test.describe('g · de vier patronen', () => {
     expect(P[2].b).toBe('gezien in: één boeking');
     expect(P[3].t).toBe('In september €84 boven je potje. Oktober loopt achter: €49 in 7 dagen, gewoonlijk €79.');
     expect(P.map((p) => p.g)).toEqual([true, true, true, false]);
-    expect(P.map((p) => p.dot)).toEqual(['var(--red)', 'var(--amber)', 'var(--blue)', 'var(--green)']);
   });
-  test('de labels zijn rustig: geen hoofdletters en geen gekleurd vlak', async ({ page }) => {
-    await open(page); await page.click('#insPatronen .ins-pt');
-    const r = await page.evaluate(() => { const e = document.querySelector('#insPatroonSheet .ins-pat-tg'); const cs = getComputedStyle(e); return { tt: cs.textTransform, bg: cs.backgroundColor, txt: e.innerText }; });
-    expect(r.tt).toBe('none'); expect(r.bg).toBe('rgba(0, 0, 0, 0)'); expect(r.txt).toBe('herhaalt zich');
-  });
-  test('bijsturen op Grip opent Grip, met het potje erbij', async ({ page }) => {
-    await open(page); await page.click('#insPatronen .ins-pt[data-patroon="herhaalt"]');
-    await page.click('#insPatroonSheet [data-insgrip]');
-    expect(await page.evaluate(() => ({ s: document.querySelector('.screen.active').id, p: window._gripPotje, open: document.getElementById('sheetBg').classList.contains('show') })))
-      .toEqual({ s: 's-maand', p: 'uiteten', open: true });
+  test('Inzichten draagt geen patroontegels meer, Zien draagt het label uit dezelfde bron', async ({ page }) => {
+    await open(page);
+    expect(await page.locator('#s-ins #insPatronen, #s-ins .ins-pt').count()).toBe(0);
+    const L = await page.evaluate(() => { const I = gripPatroonInfo(); return { lab: Object.fromEntries(Object.entries(I.lab).map(([k, v]) => [k, v.soort])), herstel: I.herstel.map((x) => x.k) }; });
+    const P = await page.evaluate(() => insPatronen('alle').map((p) => p.soort + ':' + p.k));
+    for (const [k, so] of Object.entries(L.lab)) expect(P).toContain(so + ':' + k);
+    for (const k of L.herstel) expect(P).toContain('herstelt:' + k);
+    expect(L.herstel.length).toBeGreaterThan(0);
   });
   test('de drempel van structureel: onder anderhalf keer het potje is het geen patroon', async ({ page }) => {
     // gewoonlijk 121: bij een potje van 80 is het 41 erboven, onder de EUR 50; bij 70 is het 51 erboven
@@ -343,7 +340,7 @@ test.describe('k · hoogtes op 360 en 390px', () => {
       await page.evaluate(() => verschuivingToggle());   // ook open loopt hij niet over
       const r = await page.evaluate(() => { const s = document.getElementById('s-ins'); const b = (id) => { const e = document.getElementById(id); const q = e.getBoundingClientRect(); return { top: Math.round(q.top + scrollY), h: Math.round(q.height) }; };
         const over = [...s.querySelectorAll('*')].filter((e) => { const q = e.getBoundingClientRect(); return q.width > 0 && (q.right > innerWidth + 0.5 || q.left < -0.5); }).length;
-        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, maand: b('insMaand'), week: b('insWeek'), pat: b('insPatronen'), versch: b('insVersch'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
+        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, maand: b('insMaand'), week: b('insWeek'), versch: b('insVersch'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
       console.log(w, JSON.stringify(r));
       expect(r.over).toBe(0); expect(r.sw).toBeLessThanOrEqual(r.cw);
       expect(r.maand.top + r.maand.h).toBeLessThanOrEqual(r.vouw);

@@ -20,7 +20,7 @@ const huurNaar = async (page, bestem, bedrag = 400) => {
   await page.click(`[data-teruimbestem="${bestem}"]`);
 };
 const stand = page => page.evaluate(() => { const V = maandVooruit(), SP = maandSplitsing(thisYM());
-  return { bud: Math.round(V.budget), proj: Math.round(V.projectie), vast: SP.vastePotjes.map(x => x.k), ins: insMaandStand().B,
+  return { bud: Math.round(V.budget), nu: Math.round(V.budgetNu), proj: Math.round(V.projectie), vast: SP.vastePotjes.map(x => x.k), ins: insMaandStand().B,
     inleg: JSON.parse(JSON.stringify(SET.planInleg || {})), oud: SET.overboek, safe: safeToSpend().safe }; });
 const boek = (page, acc, d, a) => page.evaluate(({ acc, d, a }) => { const t = { id: 'b' + d + a, date: d, amount: a, acc, name: 'Eigen overboeking', desc: 'OVERBOEKING ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
   categorize(t); TX.push(t); OVR[t.id] = 'intern'; save(); }, { acc, d, a });
@@ -68,14 +68,15 @@ test.describe('1 · een inleg in Plan, geen regel in het budget', () => {
     expect(await page.locator('[data-planinlegopslaan]').isDisabled()).toBe(true);
     await page.fill('[data-planinlegveld]', '200');
     const g = await page.locator('[data-planinleggevolg]').innerText();
-    expect(g).toContain('Beleggen €300 → €200/mnd'); expect(g).toContain('Maandbudget op Grip €3.325 → €3.225');
+    expect(g).toContain('Beleggen €300 → €200/mnd'); expect(g).toContain('deze maand: forecast €2.011 → €1.911 · maandbudget €3.225 vanaf november');   // v436: het maandbudget van oktober ligt vast
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
     expect(voor).toContain('"beleg":{"bedrag":300');   // openen en typen schrijven niets
     await page.click('[data-planinlegopslaan]');
-    expect((await stand(page)).bud).toBe(3225);
+    /* v436: oktober ligt vast op 3.325; het budget van nu (vanaf november) gaat mee */
+    expect((await stand(page)).bud).toBe(3325); expect((await stand(page)).nu).toBe(3225);
     await page.click('[data-planinleg="beleg"]'); await page.click('[data-planinlegweg]');
     const n = await stand(page);
-    expect(n.inleg.beleg).toBeUndefined(); expect(n.bud).toBe(3025); expect(n.proj).toBe(1711);
+    expect(n.inleg.beleg).toBeUndefined(); expect(n.bud).toBe(3325); expect(n.nu).toBe(3025); expect(n.proj).toBe(1711);
     expect(await page.locator('[data-planinlegblok]').count()).toBe(0);
     expect(await page.evaluate(() => (SET.overboekActie || {}).beleg)).toBeUndefined();
   });

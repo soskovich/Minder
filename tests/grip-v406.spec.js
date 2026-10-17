@@ -53,12 +53,15 @@ test.describe('A1 · een regel per potje dat vaker boven budget eindigt', () => 
     expect(r.bronnen).toEqual(['pot:huur', 'pot:vervoer', 'budget']);   // de te ruime potjes die het verschil dragen, en het maandbudget
     expect(r.vices).toBe(125);   // (171 + 94 + 96) / 3 = 120,3, op vijf naar boven
     expect(r.huur).toBe(r.huur0 - 105); expect(r.B1).toBe(r.B0);
-    expect(r.gevolg).toContain('Maandbudget'); expect(r.gevolg).toContain('blijft');
+    /* v436: het gevolg noemt de forecast van deze maand en het maandbudget vanaf november, en dat budget is gelijk */
+    expect(r.gevolg).toMatch(/deze maand: forecast/); expect(r.gevolg).toContain(`maandbudget €${r.B0.toLocaleString('nl-NL')} vanaf november`);
   });
   test('uit het maandbudget: het maandbudget stijgt met het verschil', async ({ page }) => {
     await S.boot(page);
-    const r = await page.evaluate(() => { const B0 = Math.round(maandVooruit().budget); openPotHerzien('vices'); potHerzienKies('a'); window._ph.bron = 'budget'; renderPotHerzien(); potHerzienBevestig(); return { B0, B1: Math.round(maandVooruit().budget) }; });
-    expect(r.B1 - r.B0).toBe(105);
+    const r = await page.evaluate(() => { const B0 = Math.round(maandVooruit().budget); openPotHerzien('vices'); potHerzienKies('a'); window._ph.bron = 'budget'; renderPotHerzien(); potHerzienBevestig();
+      const V = maandVooruit(); return { B0, B1: Math.round(V.budget), nu: Math.round(V.budgetNu) }; });
+    /* v436: het vastgelegde maandbudget van deze maand blijft; het budget van nu (en dus dat van volgende maand) stijgt */
+    expect(r.B1).toBe(r.B0); expect(r.nu - r.B0).toBe(105);
   });
   test('lager: een bestemming is verplicht; laten staan haalt de regel deze maand weg', async ({ page }) => {
     await S.boot(page);

@@ -105,8 +105,8 @@ test.describe('c · niets anders verandert', () => {
     // v382: renderIns() tekent het filter, de maandkaart, de weektegel, de patroontegels en de verschuivingen;
     // de tegels, het kop-inzicht, de grafiek en de keuzekaart zijn weg, in elke modus.
     const src = (await kaalUit(page, 'renderIns')).replace(/\s+/g, ' ');
-    for (const f of ['insFilterKnop(', 'insMaandKaart(', 'insWeekTegel(', 'insPatroonTegels(', 'insVerschuiving(']) expect(src).toContain(f);
-    for (const f of ['insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).not.toContain(f);
+    for (const f of ['insFilterKnop(', 'insMaandKaart(', 'insWeekTegel(', 'insVerschuiving(']) expect(src).toContain(f);
+    for (const f of ['insPatroonTegels(', 'insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).not.toContain(f);
   });
 
   test('Rustig past op 360px zonder overflow', async ({ page }) => {
