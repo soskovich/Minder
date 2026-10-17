@@ -34,7 +34,10 @@ function geenSaldo() {
   p.minder_set = JSON.stringify(s);
   return p;
 }
-const home = (page) => page.evaluate(() => { go('dash'); return $('#s-dash').innerText || ''; });
+/* v439: de dagbedrag-regel staat niet meer op Home (vrij te besteden is daar weg); hij bestaat nog als vrijPerDagLine() voor
+   blok 3. `home` geeft daarom de tekst van Home plus die regel los gerenderd, en de toetsen over de drie staten blijven staan. */
+const home = (page) => page.evaluate(() => { go('dash'); const d = document.createElement('div'); d.innerHTML = vrijPerDagLine();
+  document.body.appendChild(d); const t = d.innerText; d.remove(); return ($('#s-dash').innerText || '') + '\n' + t; });
 
 test.describe('a - de drie staten van het dagbedrag', () => {
   test('alles bekend: het bedrag staat er, zonder reden-regel', async ({ page }) => {
@@ -100,7 +103,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
     const i = regels.findIndex((x) => x.indexOf(REDEN) >= 0);
     expect(i).toBeGreaterThan(-1);
     expect(regels[i]).toMatch(/^Geen bedrag per dag/);   // niets ervoor op dezelfde regel
-    expect(regels[i - 1]).toMatch(/vrij te besteden|€[\d.]+ ›/);   // v367: direct onder de groene regel vrij te besteden
+    expect(i).toBe(regels.length - 1);   // v439: niet op Home, alleen de los gerenderde regel draagt hem
   });
 
   for (const w of [360, 390]) {

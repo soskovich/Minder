@@ -11,21 +11,11 @@ async function boot(page, scherm) {
 }
 
 test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
-  test('"vrij te besteden" op Home legt zichzelf uit (v367)', async ({ page }) => {
+  /* v439: vrij te besteden staat niet meer op Home (gevraagd door de gebruiker); de uitleg blijft in JARGON */
+  test('"vrij te besteden" staat niet meer op Home, de uitleg blijft bestaan', async ({ page }) => {
     await boot(page, 'dash');
-    const term = page.locator('#s-dash .homehero .jrg');
-    await expect(term).toHaveCount(1);
-    expect(await term.innerText()).toBe('vrij te besteden');
-    expect(await term.evaluate((e) => getComputedStyle(e).borderBottomStyle)).toBe('dotted');
-
-    await term.click();
-    await page.waitForSelector('#tipPop.show');
-    const tip = await page.locator('#tipPop').innerText();
-    /* v378: de uitleg noemt dezelfde posten als de opbouw-sheet, en eindigt op de route ernaartoe */
-    expect(tip).toContain('salaris dat nog komt');
-    expect(tip).toContain('wat je deze maand nog spaart');
-    expect(tip).toContain('Zo kom je op');
-    expect(await page.locator('#sheetBg.show').count()).toBe(0);      // geen sheet mee-geopend
+    expect(await page.locator('#s-dash .homehero .jrg').count()).toBe(0);
+    expect(await page.evaluate(() => JARGON.veiligtebesteden)).toContain('salaris dat nog komt');
   });
 
   // v144: "Nog deze maand" stond op Vooruitblik en op Inzichten; alleen de Inzichten-hero bleef.
@@ -42,7 +32,9 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
 
   test('de uitleg is toetsenbord-bereikbaar en sluit weer', async ({ page }) => {
     await boot(page, 'dash');
-    const term = page.locator('#s-dash .homehero .jrg');
+    /* v439: Home draagt geen term meer; dezelfde jrg() los gerenderd */
+    await page.evaluate(() => { const d = document.createElement('div'); d.id = 'jrgTest'; d.innerHTML = jrg('veiligtebesteden', 'vrij te besteden'); document.getElementById('s-dash').appendChild(d); });
+    const term = page.locator('#jrgTest .jrg');
     expect(await term.getAttribute('tabindex')).toBe('0');
     expect(await term.getAttribute('role')).toBe('button');
     await term.focus();

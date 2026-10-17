@@ -148,13 +148,15 @@ test.describe('b · de regel', () => {
     expect(h).not.toMatch(/doel|target|streak|op koers|gehaald/i);
   });
 
-  test('de regel staat bij het bestaande veilig-te-besteden-getal', async ({ page }) => {
+  /* v439: vrij te besteden en dit dagbedrag staan niet meer op Home (gevraagd door de gebruiker); de regel bestaat nog voor blok 3 */
+  test('de regel staat niet meer op Home', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('dash'));
     const hero = await page.locator('#s-dash .homehero').first().innerText();
     const t = await regel(page);
-    if (t) expect(hero).toContain(t);
-    expect(await page.locator('#s-dash .homehero').count()).toBe(1);   // geen eigen kaart erbij
+    expect(t).toBeTruthy();
+    expect(hero).not.toContain(t);
+    expect(await page.locator('#s-dash [data-vrijdag]').count()).toBe(0);
   });
 });
 

@@ -163,11 +163,13 @@ test('d4 zonder uitgesloten incasso in een terugkerend potje staat er geen kaart
   expect(n).toBe(0);
 });
 
-test('e1 Home toont het lagere veilig te besteden, met het bedrag per dag', async ({page})=>{
+/* v439: vrij te besteden staat niet meer op Home; hetzelfde getal staat in de opbouw-sheet en in vrijPerDag() */
+test('e1 het lagere veilig te besteden, met het bedrag per dag', async ({page})=>{
   await bootStand(page);
-  const t=await page.evaluate(()=>{ go('dash'); renderDash(); return document.querySelector('#s-dash').innerText; });
-  expect(t).toContain('€524');
-  expect(t).toContain('€19 per dag · nog 28 dagen');   // v367: onder vrij te besteden
+  const r=await page.evaluate(()=>{ const V=vrijPerDag(); openSafeToSpend(); return {t:document.querySelector('#sheet').innerText, safe:Math.round(safeToSpend().safe), dag:vrijDagTekst(V)}; });
+  expect(r.safe).toBe(524);
+  expect(r.t).toContain('€524');
+  expect(r.dag).toBe('€19 per dag · nog 28 dagen');
 });
 
 test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page})=>{
