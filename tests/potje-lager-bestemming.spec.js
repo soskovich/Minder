@@ -56,7 +56,7 @@ test.describe('b · elke bestemming boekt door', () => {
     await open(page);
     await vul(page, 'pot:vices', '200');
     await expect(page.locator('#potFormGevolg')).toContainText('Vices €50 → €250');
-    await expect(page.locator('#potFormGevolg')).toContainText('Je maandbudget blijft €3.375');
+    await expect(page.locator('#potFormGevolg')).toContainText('maandbudget €3.375 vanaf november');   // v436: oktober ligt vast
     await page.click('[data-potformsave]');
     const b = await meet(page);
     expect(await page.evaluate(() => [SET.budgets.sport, SET.budgets.vices])).toEqual([400, 250]);
@@ -77,20 +77,23 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.cap).toBe(600);
     expect([a.eta, b.eta]).toEqual([14, 9]);   // planVooruit(): het noodfonds is vijf maanden eerder vol
     expect(b.safe).toBe(a.safe);              // wat uit het potje gaat, gaat naar nog te sparen
-    expect(b.brug.split(' ')[0]).toBe('budget:3175');
+    /* v436: het vastgelegde maandbudget van oktober blijft 3.375; de verlaging staat als stap wijzigingen in de brug */
+    expect(b.brug.split(' ').slice(0, 2)).toEqual(['budget:3375', 'wijzigingen:-200']);
   });
   test('maandbudget verlagen: veilig te besteden stijgt met het bedrag, Plan gelijk', async ({ page }) => {
     await boot(page, OPT);
     const a = await meet(page);
     await open(page);
     await vul(page, 'verlagen', '200');
-    await expect(page.locator('#potFormGevolg')).toContainText('Je maandbudget gaat van €3.375 naar €3.175');
+    await expect(page.locator('#potFormGevolg [data-potbudgetwijz]')).toContainText(/^Deze maand: forecast .* · maandbudget €3\.175 vanaf november\.$/);   // v436
     await page.click('[data-potformsave]');
     const b = await meet(page);
     expect(b.tot).toBe(3175);
     expect(b.safe).toBe(a.safe + 200);
     expect([b.cap, b.eta]).toEqual([a.cap, a.eta]);
-    expect(b.brug).toBe('budget:3175 Vices:83 Boodschappen:61 ruimte:-922 vaste lasten:0 zonder potje:275 okt:2672');
+    /* v436: de brug begint bij het vastgelegde budget en de verlaging is een eigen stap; met zeven kolommen valt Boodschappen
+       in de ruimte (DEZEMAAND_KOL) */
+    expect(b.brug).toBe('budget:3375 wijzigingen:-200 Vices:83 ruimte:-861 vaste lasten:0 zonder potje:275 okt:2672');
   });
   test('verdeeld over twee, en het logboek noemt de bestemming', async ({ page }) => {
     await boot(page, OPT);

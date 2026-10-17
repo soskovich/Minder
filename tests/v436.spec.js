@@ -5,9 +5,13 @@
    GECONSTRUEERD EN NIET GEMETEN: de boekingen en logs van het toestel staan alleen daar. */
 const { test, expect } = require('@playwright/test');
 const S = require('./v436-stand');
+const I = require('./inzichten-stand');
+const { pinDatum } = require('./vaste-dag');
 const { MAIN, LEEF } = S;
 const boot = async (page, o) => { await page.setViewportSize({ width: 390, height: 844 }); await S.boot(page, o); };
 const add = (page, rows) => page.evaluate(rows => { for (const [acc, d, a, n, ds, cat] of rows) { const t = { id: 'v436' + acc.slice(-4) + d + n + a, date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; } TX.sort((a, b) => a.date.localeCompare(b.date)); window._rekV = null; save(); }, rows);
+/* de fixture zet bij elke navigatie zijn localStorage terug (addInitScript); een echte herlaad bewaart wat de app opsloeg */
+const herlaad = async page => { const snap = await page.evaluate(() => { save(); return Object.assign({}, localStorage); }); await page.addInitScript(s => { for (const k in s) localStorage.setItem(k, s[k]); }, snap); await page.reload(); await page.waitForFunction(() => typeof maandVooruit === 'function' && TX.length > 0); };
 const wekelijks = page => page.evaluate(() => { SET.potWekelijks = { boodschappen: true, vices: true, uiteten: true }; SET.wekGekozen = { op: '2026-10-10' }; SET.weekStand = null; save(); });
 
 test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
@@ -34,8 +38,8 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     expect(r.rij).toMatchObject({ d: 100, keuze: 'test', op: '2026-10-17' });
     /* de maandwissel: het budget van nu wordt het vastgelegde budget van november */
     await page.evaluate(() => { SET.budgetMonth = '2026-10'; save(); });
-    await page.clock.setFixedTime(new Date('2026-11-02T12:00:00'));
-    await page.reload(); await page.waitForFunction(() => typeof maandVooruit === 'function');
+    await pinDatum(page, '2026-11-02');
+    await herlaad(page);
     const n = await page.evaluate(() => ({ nov: SET.maandBudget['2026-11'], okt: SET.maandBudget['2026-10'].totaal, w: maandBudgetWijz('2026-11').tot }));
     expect(n.okt).toBe(3375);
     expect(n.nov).toMatchObject({ totaal: 3515, inleg: 280, bron: 'maandwissel', op: '2026-11-01' });
@@ -77,7 +81,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
   test('1e. oktober herstellen: zonder vastlegging is het het budget van nu min de gelogde wijzigingen; bij de boot met logs wordt het opgeslagen', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => [!!(SET.maandBudget || {})['2026-10'], maandBudgetVast().totaal, maandBudgetVast().herstel.length])).toEqual([false, 3375, 2]);
-    await page.reload(); await page.waitForFunction(() => typeof maandVooruit === 'function');
+    await herlaad(page);
     const r = await page.evaluate(() => SET.maandBudget['2026-10']);
     expect(r).toMatchObject({ totaal: 3375, inleg: 280, bron: 'herstel', op: '2026-10-01' });
     expect(r.potjes).toMatchObject({ huur: 700, verzekering: 335, vervoer: 870 });
@@ -105,11 +109,11 @@ test.describe('v436 · 2. Deze week', () => {
     await expect(page.locator('#insWeek[data-weekkies]')).toBeVisible();
     await page.evaluate(() => { openWekelijks(); for (const k of wekKandidaten()) wekKies(k, ['boodschappen', 'vices', 'uiteten'].includes(k)); wekBevestig(); });
     await expect(page.locator('#insWeek[data-weekkies]')).toHaveCount(0);
-    await page.reload(); await page.waitForFunction(() => typeof renderIns === 'function');
+    await herlaad(page);
     await page.evaluate(() => { go('ins'); renderIns(); });
     await expect(page.locator('#insWeek[data-weekbedrag]')).toBeVisible();
-    for (const d of ['2026-10-18T12:00:00', '2026-10-20T12:00:00']) {
-      await page.clock.setFixedTime(new Date(d)); await page.reload(); await page.waitForFunction(() => typeof renderIns === 'function');
+    for (const d of ['2026-10-18', '2026-10-20']) {
+      await pinDatum(page, d); await herlaad(page);
       await page.evaluate(() => { SET.budgets.cadeaus = 50; CATS.cadeaus = CATS.cadeaus || { name: 'Cadeaus', type: 'expense', color: '#999', icon: '' }; go('ins'); renderIns(); });
       expect(await page.evaluate(() => wekOpen().length)).toBe(0);
       await expect(page.locator('#insWeek[data-weekkies]')).toHaveCount(0);
@@ -155,6 +159,28 @@ test.describe('v436 · 3. Patronen', () => {
     expect(await page.evaluate(() => insPatronen('alle').filter(p => p.soort === 'nieuw').length)).toBe(0);
     expect(await page.evaluate(() => gripPatroonInfo().lab.vervoer || null)).toBe(null);
   });
+  /* 3c, op de stand van Inzichten (die draagt herhaalt, structureel, nieuw en herstelt): herstelt zich is een positief signaal,
+     met een groene stip, zonder keuze en zonder "waarom ›", en na GRIP_HERSTEL_DAGEN dagen staat hij onder Afgehandeld. */
+  test('3b/3c. Zien: herhaalt draagt "herhaalt zich · Ne maand" met het bedrag; herstelt is groen zonder keuze en gaat na 7 dagen naar Afgehandeld', async ({ page }) => {
+    await I.boot(page);
+    await page.evaluate(() => { go('maand'); gripKiesTab('zien'); renderMaand(); });
+    const k = await page.evaluate(() => gripPatroonInfo().herstel.map(x => x.k));
+    expect(k.length).toBeGreaterThan(0);
+    const rij = page.locator(`[data-herstelt="${k[0]}"]`);
+    await expect(rij).toHaveCount(1);
+    await expect(rij).toContainText('herstelt zich');
+    expect(await rij.locator('[data-waarom]').count()).toBe(0);
+    expect(await rij.evaluate(e => getComputedStyle(e.querySelector('span span span')).color === (() => { const d = document.createElement('i'); d.style.color = 'var(--green)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })())).toBe(true);
+    const lab = await page.evaluate(() => Object.values(gripPatroonInfo().lab).find(x => x.soort === 'herhaalt'));
+    expect(lab.t).toMatch(/^herhaalt zich · \d+e maand$/); expect(lab.b).toMatch(/^[a-z]{3} \+€\d+$/);
+    /* de eerste dag staat vast (SET.herstelGezien); zeven dagen later is hij afgehandeld */
+    const op = await page.evaluate(k => SET.herstelGezien[thisYM()][k], k[0]);
+    expect(op).toBe(await page.evaluate(() => vandaagYMD()));
+    await page.evaluate(k => { const d = new Date(vandaagYMD() + 'T12:00'); d.setDate(d.getDate() - GRIP_HERSTEL_DAGEN); SET.herstelGezien[thisYM()][k] = ymdVan(d); save(); renderMaand(); }, k[0]);
+    await expect(page.locator(`[data-herstelt="${k[0]}"]`)).toHaveCount(0);
+    await page.evaluate(() => gripAfToggle());
+    await expect(page.locator(`[data-afgehandeldrij="herstelt:${k[0]}"]`)).toContainText('herstelt zich sinds');
+  });
 });
 
 test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
@@ -181,11 +207,11 @@ test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
 });
 
 test.describe('v436 · 5. de salariskaart tegen het budget', () => {
-  test('5a/5d. de tabel: vast, potjes, Plan-inleg, buiten (geen budget), opzij (—); som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
+  test('5a/5d. de tabel: vast, potjes, Plan-inleg, buiten (geen budget), opzij (–); som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
     await boot(page); await page.evaluate(() => { go('maand'); renderMaand(); });
     const R = await page.locator('#gripSalaris [data-saltabel]').evaluateAll(es => es.map(e => [e.dataset.saltabel, e.dataset.salverschil == null ? null : +e.dataset.salverschil, e.innerText.replace(/\s+/g, ' ')]));
     expect(R.map(x => x[0])).toEqual(['vast', 'potjes', 'inleg', 'buiten', 'opzij']);
-    expect(R[3][2]).toMatch(/geen budget/); expect(R[4][2]).toMatch(/—/);
+    expect(R[3][2]).toMatch(/geen budget/); expect(R[4][2]).toMatch(/–$/);   // een kort streepje: de huisstijl kent geen gedachtestreepje
     const som = R.filter(x => x[1] != null).reduce((a, x) => a + x[1], 0);
     const m = await page.evaluate(() => { const V = maandVooruit(); return { v: gripMeterBudget(V).verschil, d: Math.round(V.projectie) - 3375 }; });
     expect(som).toBe(m.v); expect(som).toBe(m.d);

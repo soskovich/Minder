@@ -47,17 +47,18 @@ test.describe('v428 · Grip als cyclus', () => {
   test('1b. "Je salaris in oktober": vast, potjes, buiten, opzij en rest uit salarisData (blok 20), samen het salaris', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const D = salarisData(1), SB = salarisBalk(D, D.Rc);
-      const dom = Object.fromEntries([...document.querySelectorAll('#gripSalaris [data-saldeel]')].map(e => [e.dataset.saldeel, +e.dataset.salbedrag]));
+      /* v436: de legenda onder de balk is vervangen door de tabel tegen het budget; de balk zelf draagt de delen */
+      const dom = Object.fromEntries([...document.querySelectorAll('#gripSalaris [data-salseg]')].map(e => [e.dataset.salseg, +e.dataset.salbedrag]));
       return { dom, SB: Object.fromEntries(SB.delen.map(d => [d.k, Math.round(d.v)])), sal: Math.round(SB.salaris), kop: document.querySelector('#gripSalaris [data-salkop]').innerText,
         som: SB.delen.reduce((a, d) => a + d.v, 0), vast: D.tot(D.Rc, 'vast'), pot: D.tot(D.Rc, 'pot'), opzij: D.tot(D.Rc, 'opzij'), buiten: D.Rc.buiten, rest5: SB.rest5 }; });
-    expect(Object.keys(r.dom)).toEqual(['vast', 'potjes', 'buiten', 'opzij', 'rest']);
-    expect(r.dom).toEqual(r.SB);
+    expect(Object.keys(r.dom)).toEqual(['vast', 'potjes', 'buiten', 'opzij', 'rest'].filter(k => r.SB[k] > 0));   // v436: de balk toont de positieve delen
+    expect(r.dom).toEqual(Object.fromEntries(Object.entries(r.SB).filter(([, v]) => v > 0)));
     expect(r.sal).toBe(5216); expect(r.kop).toBe('€5.216');
     expect(Math.abs(r.som - r.sal)).toBeLessThan(0.01);
     expect(Math.round(r.rest5 - r.buiten)).toBe(r.dom.rest);   // punt 5 van blok 20 rekent zonder buiten
     /* dezelfde getallen als blok 20 punt 6 (percentages) */
     const b20 = await page.evaluate(() => diagSalarisVerdeling().find(l => l.startsWith('  okt*:') && l.includes('%')));
-    const pct = await page.evaluate(() => [...document.querySelectorAll('#gripSalaris [data-saldeel]')].map(e => e.innerText.split('\n').pop()));
+    const pct = await page.evaluate(() => { const D = salarisData(1), SB = salarisBalk(D, D.Rc); return SB.delen.map(d => d.pct + '%'); });
     expect(b20).toContain(`${pct[0]} | ${pct[1]} | ${pct[3]}`);
   });
 

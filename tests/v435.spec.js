@@ -170,11 +170,14 @@ test.describe('v435 · 4/5/6. de momenten', () => {
     expect(await page.locator(`[data-m1rek="${LEEF}"] [data-m1gevolg]`).innerText()).toMatch(/laagste saldo wordt dan -€[\d.]+ op .* · boek €\d+ over/);
   });
   test('5. tussendoor: een signaal als een rekening voor de volgende storting op nul komt, een keer per periode, opnieuw bij meer dan EUR 100 erbij', async ({ page }) => {
-    await boot(page);
+    /* v436: alleen in een periode die begon met een Akkoord (hier de periode van september), en dan EEN kaart met per rekening
+       een regel. Zonder Akkoord geen waarschuwing (v436.spec.js 4a). */
+    await boot(page, { set: { salVerdeling: SV({ salYM: '2026-09', start: '2026-09-24', ym: '2026-09' }) } });
     await page.evaluate(() => { go('maand'); renderMaand(); });
-    const w = page.locator(`[data-saltekort="${LEEF}"]`);
-    await expect(w).toContainText(/Leefgeld komt rond \d+ okt op €0/);
-    await expect(w).toContainText(/nodig €\d+ tot je volgende salaris · (kan van Salarisrekening \(€[\d.]+ boven de buffer\)|uit je spaargeld)/);
+    const w = page.locator(`#salTekort[data-saltekort*="${LEEF}"]`);
+    await expect(w.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText(/Leefgeld · op €0 (rond \d+ okt|nu)/);
+    await expect(w.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText(/nodig €\d+/);
+    await expect(w).toContainText(/kan uit: .*spaargeld · Minder verplaatst niets/);
     /* een dag later met hetzelfde tekort: geen signaal; met meer dan EUR 100 erbij: weer */
     const t = await page.evaluate(acc => salTekortData().find(x => x.acc === acc).tekort, LEEF);
     await page.evaluate(([acc, t]) => { SET.salTekort['2026-09-24'][acc] = { op: '2026-10-15', tekort: t - 50 }; save(); renderMaand(); }, [LEEF, t]);

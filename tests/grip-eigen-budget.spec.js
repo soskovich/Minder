@@ -194,8 +194,10 @@ test.describe('B · de te-ruim-sheet', () => {
     const g = await page.evaluate(() => Object.fromEntries(['potje', 'bestem', 'budget', 'verwacht', 'meter', 'nogruim'].map(k => [k, (document.querySelector(`[data-gevolg${k}]`) || {}).innerText || null])));
     expect(g.potje).toBe('Huur €700 → €400');
     expect(g.bestem).toBe('Plan · sparen +€300/mnd · inleg in Plan');   // v399: een inleg in Plan
-    expect(g.budget).toBe('Maandbudget €3.325 blijft');
-    expect(g.verwacht).toBe('Verwacht oktober €1.711 → €2.011');
+    /* v436: het maandbudget van deze maand ligt vast; de keuze werkt deze maand alleen door in de forecast en is het
+       budget vanaf de 1e van volgende maand. Budget en verwacht zijn daarom EEN regel. */
+    expect(g.budget).toBe('deze maand: forecast €1.711 → €2.011 · maandbudget €3.325 vanaf november');
+    expect(g.verwacht).toBe(g.budget);
     expect(g.meter).toBe(`Budget-meter 51% → ${Math.round(2011 / 3325 * 100)}% · €1.314 onder`);
     expect(g.nogruim).toBe('Nog €258 ruimer dan nodig (€142). Je keuze blijft staan; volgende maand toetst Minder opnieuw.');
     expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €400 zetten', reden: '' });

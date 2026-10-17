@@ -136,44 +136,46 @@ test.describe('c · het weekbedrag', () => {
       TX.push(t); categorize(t); save(); const R = weekRekensom(); return { a, b: R.weken[2].bedrag, dagen: R.dim - R.weken[2].van + 1, d: R.weken[2].dagen }; });
     expect(r.a - r.b).toBe(Math.round(200 / r.dagen * r.d));
   });
-  /* v383 (gevraagd door de gebruiker): de ring is het deel dat op is; boven het weekbedrag is hij vol in oker met het
-     echte percentage, en het grote getal is "-EUR X" in oker met "boven je weekbedrag van EUR Y". Nooit de vorm van "nog". */
+  /* v436 (gevraagd door de gebruiker): de tegel zegt "Deze week · ma–zo", groot "nog EUR X", daarnaast "van EUR Y · N dagen te
+     gaan", en eronder welke potjes erover zijn. Geen ring meer. "nog" in de tegel is de som van de weekbedragen min de som
+     van wat er uit is. */
   const amber = (page) => page.evaluate(() => { const d = document.createElement('div'); d.style.color = 'var(--amber)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; });
-  test('binnen het weekbedrag: groot het bedrag dat over is, de ring het deel dat op is', async ({ page }) => {
+  test('binnen het weekbedrag: groot nog EUR X, daarnaast van EUR Y en de dagen, en de som van de potjes', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     const w = page.locator('#insWeek');
-    const r = await w.evaluate((e) => ({ b: +e.dataset.weekbedrag, nog: +e.dataset.weeknog, uit: +e.dataset.weekuit, ring: +e.querySelector('[data-weekring]').dataset.weekring, groot: e.querySelector('.ins-wk-v').textContent, regel: e.querySelector('.ins-wk-s').textContent, pct: e.querySelector('.ins-ring span').textContent }));
-    expect(r.nog).toBeGreaterThan(0); expect(r.uit).toBeGreaterThan(0);
-    expect(r.ring).toBe(Math.round(r.uit / r.b * 100));
-    expect(r.pct).toBe(r.ring + '%');
-    expect(r.groot).not.toMatch(/nog/); expect(r.groot).toMatch(/^€/);
-    expect(r.regel).toMatch(/^nog te besteden · van €/);
+    const r = await w.evaluate((e) => ({ b: +e.dataset.weekbedrag, nog: +e.dataset.weeknog, uit: +e.dataset.weekuit, groot: e.querySelector('.ins-wk-v').textContent, van: e.querySelector('[data-weekvan]').textContent, kop: e.querySelector('.ins-wk-c').textContent, ring: e.querySelectorAll('[data-weekring]').length }));
+    const P = await page.evaluate(() => { const N = weekNu(false); return { bed: N.potjes.reduce((a, x) => a + x.bedrag, 0), uit: N.potjes.reduce((a, x) => a + x.uit, 0) }; });
+    expect(r.nog).toBeGreaterThan(0); expect(r.uit).toBeGreaterThan(0); expect(r.ring).toBe(0);
+    expect(r.b).toBe(P.bed); expect(Math.round(r.nog)).toBe(Math.round(P.bed - P.uit));
+    expect(r.groot).toBe('nog €' + Math.round(r.nog).toLocaleString('nl-NL'));
+    expect(r.van).toMatch(new RegExp('^van €' + r.b.toLocaleString('nl-NL').replace('.', '\\.') + ' · \\d+ dag(en)? te gaan$'));
+    expect(r.kop).toMatch(/^Deze week · \d+–\d+ [a-z]{3}$/);   // maandag tot en met zondag
     expect(await w.getAttribute('data-weekover')).toBeNull();
   });
-  test('boven het weekbedrag: ring vol in oker met het echte percentage, groot -EUR X in oker', async ({ page }) => {
+  test('boven het weekbedrag: groot EUR X erover in oker, en welke potjes erover zijn', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     await page.evaluate(() => { const t = { id: 'veel1', date: '2026-10-09', amount: -900, acc: TX[0].acc, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       TX.push(t); categorize(t); save(); render(); go('ins'); });
     const w = page.locator('#insWeek');
     expect(await w.getAttribute('data-weekover')).not.toBeNull();
-    const r = await w.evaluate((e) => ({ b: +e.dataset.weekbedrag, nog: +e.dataset.weeknog, uit: +e.dataset.weekuit, ring: e.querySelector('[data-weekring]').dataset.weekring, op: +e.querySelector('[data-weekring]').dataset.weekop, bg: e.querySelector('[data-weekring]').style.background, groot: e.querySelector('.ins-wk-v').textContent, gk: getComputedStyle(e.querySelector('.ins-wk-v')).color, regel: e.querySelector('.ins-wk-s').textContent, pct: e.querySelector('.ins-ring span').textContent }));
+    const r = await w.evaluate((e) => ({ nog: +e.dataset.weeknog, groot: e.querySelector('.ins-wk-v').textContent, gk: getComputedStyle(e.querySelector('.ins-wk-v')).color, over: e.querySelector('[data-weekerover]').textContent }));
     expect(r.nog).toBeLessThan(0);
-    expect(r.ring).toBe('100');
-    expect(r.op).toBe(Math.round(r.uit / r.b * 100)); expect(r.op).toBeGreaterThan(100);
-    expect(r.pct).toBe(r.op + '%');
-    expect(r.bg).toContain('--amber');
-    expect(r.groot).toBe('-€' + (-r.nog).toLocaleString('nl-NL'));
+    expect(r.groot).toBe('€' + Math.round(-r.nog).toLocaleString('nl-NL') + ' erover');
     expect(r.gk).toBe(await amber(page));
-    expect(r.regel).toBe('boven je weekbedrag van €' + r.b.toLocaleString('nl-NL'));
-    expect(await w.innerText()).not.toMatch(/nog te besteden|\bnog €/);
+    expect(r.over).toMatch(/erover: .*Boodschappen/);
   });
-  test('de tik opent de rekensom', async ({ page }) => {
+  test('de tik opent het weekoverzicht per potje, en de uitleg staat achter Hoe werkt dit', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     await page.locator('#insWeek').click();
-    const t = await page.locator('#weekSheet').innerText();
-    expect(t).toContain('Wekelijkse potjes oktober');
-    expect(+(await page.locator('#weekSheet').getAttribute('data-weekbedrag'))).toBe(+(await page.locator('#insWeek').getAttribute('data-weekbedrag')));
-    expect(t).toMatch(/Week 1 · do 1 – zo 4 okt · 4 dagen/);
+    const sh = page.locator('#weekSheet');
+    expect(+(await sh.getAttribute('data-weekbedrag'))).toBe(+(await page.locator('#insWeek').getAttribute('data-weekbedrag')));
+    const P = await page.$$eval('#weekSheet [data-weekpot]', (e) => e.map((x) => ({ b: +x.dataset.weekpotbedrag, u: +x.dataset.weekpotuit, nog: x.querySelector('[data-weekpotnog]').textContent })));
+    expect(P.length).toBeGreaterThan(0);
+    for (const x of P) expect(x.nog).toMatch(x.u > x.b ? /erover$/ : /^nog €/);
+    expect(Math.round(+(await sh.getAttribute('data-weeknog')))).toBe(Math.round(P.reduce((a, x) => a + x.b - x.u, 0)));
+    expect(await page.locator('#weekSheet [data-weektx]').count()).toBeGreaterThan(0);
+    await page.locator('[data-weekhoe]').click();
+    expect(await page.locator('#weekUitleg').innerText()).toContain('Een week loopt van maandag tot en met zondag');
   });
 });
 
@@ -286,35 +288,23 @@ test.describe('f · weg van Inzichten', () => {
   });
 });
 
-test.describe('g · patronen als tegels', () => {
+/* v436: de patroontegels zijn weg van Inzichten; het label staat bij het signaal in Zien (gripPatroonInfo, dezelfde bron). */
+test.describe('g · patronen als label in Zien', () => {
   test('herhaalt telt de maanden op rij boven het potje', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
+    const twee = await page.evaluate(() => (gripPatroonInfo().lab.uiteten || {}).t);
+    expect(twee).toBe('herhaalt zich · 2e maand');
     await page.evaluate(() => { const t = { id: 'aug1', date: '2026-08-15', amount: -400, acc: TX[0].acc, name: 'Restaurant Aug', desc: 'BEA, BETAALPAS RESTAURANT AUG', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
-      TX.push(t); categorize(t); OVR[t.id] = 'uiteten'; save(); render(); go('ins'); });
-    const k = await page.evaluate(() => { const e = document.querySelector('#insPatronen .ins-pt[data-patroon="herhaalt"] .ins-pt-k'); return e ? e.textContent : null; });
-    expect(k).toBe('3e maand');
+      TX.push(t); categorize(t); OVR[t.id] = 'uiteten'; save(); });
+    const L = await page.evaluate(() => gripPatroonInfo().lab.uiteten);
+    expect(L.t).toBe('herhaalt zich · 3e maand'); expect(L.b).toMatch(/^sep \+€194$/);
   });
-  test('hooguit vier, met chip, kerngetal en een regel; een tik opent de uitleg met bijsturen op Grip', async ({ page }) => {
+  test('nieuw deze maand en herstelt zich staan in Zien, en Inzichten draagt geen tegels', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
-    const t = await page.evaluate(() => [...document.querySelectorAll('#insPatronen .ins-pt')].map((e) => ({ s: e.dataset.patroon, k: e.querySelector('.ins-pt-k').textContent, d: e.querySelector('.ins-pt-d').textContent })));
-    expect(t.length).toBeLessThanOrEqual(4); expect(t.length).toBeGreaterThan(0);
-    const h = t.find((x) => x.s === 'herhaalt'); expect(h.k).toBe('2e maand'); expect(h.d).toMatch(/Uit eten & café · sep \+€194/);
-    const n = t.find((x) => x.s === 'nieuw'); expect(n.d).toMatch(/^[^·]+ · eerste keer$/);   // v383: partij · eerste keer, zonder categorie
-    const r = t.find((x) => x.s === 'herstelt'); expect(r.k).toMatch(/^−€/); expect(r.d).toMatch(/gewoonlijk €\d+/);
-    for (const x of t) expect(x.d).not.toMatch(/verwacht/);
-    await page.locator('#insPatronen .ins-pt[data-patroon="herhaalt"]').click();
-    await expect(page.locator('#insPatroonSheet [data-insgrip]')).toHaveCount(1);
-  });
-  /* v383: een patroontegel draagt hooguit twee regels tekst onder het kerngetal; de categorie van een nieuwe partij staat
-     in de sheet en niet op de tegel. */
-  for (const w of [360, 390]) test(`op ${w}px heeft elke patroontegel hooguit twee regels, en de sheet noemt de categorie`, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: 844 });
-    await boot(page, '2026-10-10'); await kies(page);
-    const r = await page.evaluate(() => [...document.querySelectorAll('#insPatronen .ins-pt-d')].map((e) => { const lh = parseFloat(getComputedStyle(e).lineHeight); return Math.round(e.getBoundingClientRect().height / lh); }));
-    expect(r.length).toBeGreaterThan(0);
-    for (const n of r) expect(n).toBeLessThanOrEqual(2);
-    await page.locator('#insPatronen .ins-pt[data-patroon="nieuw"]').click();
-    expect(await page.locator('#insPatroonSheet').innerText()).toMatch(/Vervoer/);
+    expect(await page.locator('#s-ins .ins-pt, #s-ins #insPatronen').count()).toBe(0);
+    const I = await page.evaluate(() => { const I = gripPatroonInfo(); return { soorten: Object.values(I.lab).map((x) => x.soort), herstel: I.herstel.length, nieuw: Object.values(I.lab).find((x) => x.soort === 'nieuw') }; });
+    expect(I.soorten).toContain('nieuw'); expect(I.nieuw.t).toBe('nieuw deze maand');
+    expect(I.herstel).toBeGreaterThan(0);
   });
 });
 

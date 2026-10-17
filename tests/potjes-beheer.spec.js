@@ -163,7 +163,7 @@ test.describe('huur omlaag vanaf een gekozen maand', () => {
     const r = await page.evaluate(() => ({ h: SET.budgets.huur, sep: maandPotjes('2026-09').B.huur, V: maandVooruit() }));
     expect(r.h).toBeUndefined();
     expect(r.sep).toBe(750);
-    expect(r.V.budget).toBe(1925);
+    expect(r.V.budget).toBe(2675); expect(r.V.budgetNu).toBe(1925);   // v436: oktober ligt vast, de verlaging geldt vanaf november als budget
     expect(r.V.projectie).toBe(2672);
   });
   test('een geplande maand gaat bij de maandwissel in, ook over een overgeslagen maand', async ({ page }) => {
