@@ -1092,17 +1092,48 @@ function maandBudgetNu(ym){
 }
 /* De logs van deze maand, oud naar nieuw: {op, k, d, keuze, bron}. d is wat het potje (of de inleg, k='~inleg') erbij kreeg. */
 function maandBudgetLogs(ym){ const L=[], inM=x=>String(x||'').slice(0,7)===ym, catNaam=n=>{ n=String(n||'').toLowerCase(); for(const k in CATS) if((CATS[k].name||'').toLowerCase()===n) return k; return null; };
-  for(const x of (SET.budgetWijzLog||[])) if(inM(x.op)) L.push({op:x.op, k:x.k, d:(+x.naar||0)-(+x.van||0), keuze:x.keuze||'budget aangepast', bron:'budgetWijzLog', id:x.id});
-  const gelogd=new Set((SET.budgetWijzLog||[]).filter(x=>inM(x.op)).map(x=>x.id).filter(Boolean));
-  for(const x of (SET.potHerzienLog||[])){ if(!inM(x.op) || gelogd.has('ph:'+x.op+':'+x.k)) continue; const d=(+x.naar||0)-(+x.van||0); L.push({op:x.op, k:x.k, d, keuze:'herzien', bron:'potHerzienLog'});
-    const m=/^(uit|naar) (.+)$/.exec(String(x.bron||'')), o=m?catNaam(m[2]):null; if(o) L.push({op:x.op, k:o, d:-d, keuze:`herzien ${x.naam||''}`.trim(), bron:'potHerzienLog'}); }
-  for(const x of (SET.teRuimLog||[])){ if(!inM(x.op) || gelogd.has('tr:'+x.op+':'+x.k)) continue; L.push({op:x.op, k:x.k, d:(+x.naar||0)-(+x.van||0), keuze:'te ruim verlaagd', bron:'teRuimLog'}); }
-  for(const key in (SET.vastAccept||{})){ const x=SET.vastAccept[key]; if(!x || !inM(x.op) || gelogd.has('va:'+key)) continue;
+  /* v437: EEN WIJZIGING TELT EEN KEER. Sinds v436 schrijft elke wijziging zijn eigen regel in SET.budgetWijzLog (via
+     budgetVoorWijz); de oudere logs (herzien, te ruim, vaste last geaccepteerd, inleg in Plan) beschrijven dezelfde handeling
+     nog eens. Een oudere log telt daarom alleen als er op die dag geen v436-regel voor hetzelfde potje (of de inleg) staat;
+     tot v437 werd alleen op een id ontdubbeld dat budgetVoorWijz nooit meegaf, en dan telde een aangepaste inleg twee keer.
+     EEN VERPLAATSING NAAR DE INLEG IN PLAN (te ruim of herzien met als bestemming Plan, reservering of beleggen) is geen
+     wijziging: het maandbudget blijft gelijk en de inleg zit al in het budget. Geen van beide kanten wordt teruggedraaid. */
+  const BW=(SET.budgetWijzLog||[]).filter(x=>inM(x.op)), bw=new Set(BW.map(x=>x.op+'|'+x.k)), heeft=(op,k)=>bw.has(op+'|'+k);
+  const gelogd=new Set(BW.map(x=>x.id).filter(Boolean)), inlegNaam=new Set(Object.values(PLANINLEG_NAAM).map(n=>String(n).toLowerCase()));
+  for(const x of BW){ if(x.k==='~inleg'){ if(x.verplaatst && x.verplaatst!=='~budget')
+        /* het deel van de verlaging van het bronpotje dat naar de inleg ging: dat deel draait niet terug */
+        L.push({op:x.op, k:x.verplaatst, d:(+x.naar||0)-(+x.van||0), keuze:'deel naar de inleg in Plan (verplaatsing, telt niet)', bron:'verplaatst', comp:true});
+      continue; }
+    L.push({op:x.op, k:x.k, d:(+x.naar||0)-(+x.van||0), keuze:x.keuze||'budget aangepast', bron:'budgetWijzLog', id:x.id}); }
+  for(const x of (SET.potHerzienLog||[])){ if(!inM(x.op) || gelogd.has('ph:'+x.op+':'+x.k) || heeft(x.op, x.k)) continue;
+    const m=/^(uit|naar) (.+)$/.exec(String(x.bron||'')); if(m && m[1]==='naar' && inlegNaam.has(m[2].toLowerCase())) continue;
+    const d=(+x.naar||0)-(+x.van||0); L.push({op:x.op, k:x.k, d, keuze:'herzien', bron:'potHerzienLog'});
+    const o=m?catNaam(m[2]):null; if(o && !heeft(x.op, o)) L.push({op:x.op, k:o, d:-d, keuze:`herzien ${x.naam||''}`.trim(), bron:'potHerzienLog'}); }
+  for(const x of (SET.teRuimLog||[])){ if(!inM(x.op) || gelogd.has('tr:'+x.op+':'+x.k) || heeft(x.op, x.k)) continue;
+    const soorten=String(x.bestemSoort||'').split('+').filter(Boolean); if(soorten.length && soorten.every(z=>PLANINLEG_NAAM[z])) continue;
+    L.push({op:x.op, k:x.k, d:(+x.naar||0)-(+x.van||0), keuze:'te ruim verlaagd', bron:'teRuimLog'}); }
+  for(const key in (SET.vastAccept||{})){ const x=SET.vastAccept[key]; if(!x || !inM(x.op) || gelogd.has('va:'+key) || heeft(x.op, x.cat)) continue;
     L.push({op:x.op, k:x.cat, d:+x.bedrag||0, keuze:`${titleCase(cleanMerch(key)||key)} geaccepteerd`, bron:'vastAccept'});
-    if(x.bron && x.bron!=='budget') L.push({op:x.op, k:x.bron, d:-(+x.bedrag||0), keuze:`${titleCase(cleanMerch(key)||key)} geaccepteerd`, bron:'vastAccept'}); }
-  for(const x of (SET.planInlegLog||[])){ if(!inM(x.op) || gelogd.has('pi:'+x.op+':'+x.soort)) continue; L.push({op:x.op, k:'~inleg', d:(+x.naar||0)-(+x.van||0), keuze:`inleg ${PLANINLEG_NAAM[x.soort]||x.soort}`, bron:'planInlegLog'}); }
+    if(x.bron && x.bron!=='budget' && !heeft(x.op, x.bron)) L.push({op:x.op, k:x.bron, d:-(+x.bedrag||0), keuze:`${titleCase(cleanMerch(key)||key)} geaccepteerd`, bron:'vastAccept'}); }
+  for(const r of maandInlegWijz(ym)) L.push(r);
   return L.sort((a,b)=>String(a.op).localeCompare(String(b.op)));
 }
+/* v437: DE INLEG IN PLAN IS EEN KEER GETELD, IN HET BUDGET VAN DE 1E. Een wijziging deze maand is hij alleen als JIJ het bedrag in
+   Plan aanpaste (planInlegZet, de enige schrijver van SET.planInlegLog): per soort het bedrag van nu min het bedrag voor je eerste
+   aanpassing van deze maand, en min wat er daarna als verplaatsing uit een potje bij kwam. Een verplaatsing (te ruim, herzien, de
+   reservering in Plan) is nooit een wijziging. Tot v437 telde de herstel-regel elke inleg-log op, en een inleg die je weghaalde en
+   via een verplaatsing terugzette (of die twee keer gelogd stond) kwam er dan een tweede keer bij: EUR 3.655 in plaats van EUR 3.375.
+   Eén regel per soort met k '~inleg', d = de wijziging; de herstel-regel en de lijst lezen hem zoals elke andere log. */
+function maandInlegWijz(ym){ const inM=x=>String(x||'').slice(0,7)===ym, I=SET.planInleg||{}, uit=[];
+  const Z=(SET.planInlegLog||[]).filter(x=>inM(x.op) && x.soort);
+  const BWv=(SET.budgetWijzLog||[]).filter(x=>inM(x.op) && x.k==='~inleg' && x.verplaatst);
+  const soorten=[...new Set(Z.map(x=>x.soort))];
+  for(const so of soorten){ const zs=Z.filter(x=>x.soort===so), eerste=zs[0], laatste=zs[zs.length-1];
+    const nu=(I[so] && +I[so].bedrag>0 && (I[so].vanaf||'')<=ym)?Math.round(+I[so].bedrag):0;
+    const verpl=BWv.filter(x=>(x.soort?x.soort===so:soorten.length===1) && String(x.op)>=String(eerste.op)).reduce((a,x)=>a+((+x.naar||0)-(+x.van||0)),0);
+    const d=Math.round(nu-(+eerste.van||0)-verpl); if(!d) continue;
+    uit.push({op:laatste.op, k:'~inleg', d, keuze:`inleg ${PLANINLEG_NAAM[so]||so} aangepast`, bron:'planInlegLog', soort:so}); }
+  return uit; }
 function maandBudgetHerstel(ym){ const N=maandBudgetNu(ym), P=Object.assign({}, N.potjes), stappen=maandBudgetLogs(ym); let inleg=N.inleg;
   for(const x of stappen.slice().reverse()){ if(x.k==='~inleg') inleg-=x.d; else { const v=Math.round((+P[x.k]||0)-x.d); if(v>0) P[x.k]=v; else delete P[x.k]; } }
   inleg=Math.max(Math.round(inleg),0); const s=Object.values(P).reduce((a,v)=>a+v,0);
@@ -1128,13 +1159,21 @@ function maandBudgetVast(ym){ ym=ym||thisYM(); const M=SET.maandBudget||{};
   const H=maandBudgetHerstel(ym);
   return {totaal:H.totaal, potjes:H.potjes, inleg:H.inleg, op:ym+'-01', bron:H.stappen.length?'herstel':'eerste', herstel:H.stappen.length?H.stappen.map(x=>({op:x.op, k:x.k, d:Math.round(x.d), keuze:x.keuze})):undefined, opgeslagen:false};
 }
+/* v437: EEN KEER BIJ HET LADEN: een vastlegging van de lopende maand die uit de herstel-regel kwam (bron herstel of eerste, niet de
+   maandwissel) wordt opnieuw uitgerekend met de regel van v437, want de oude regel kon de inleg in Plan twee keer tellen. De oude
+   waarde staat in SET.mb437 (blok 20 noemt hem). Een vastlegging van de maandwissel is het budget van de 1e zelf en blijft staan. */
+function maandBudget437(){ if(SET.mb437) return false; const ym=thisYM(), M=SET.maandBudget||{}, x=M[ym];
+  SET.mb437={op:vandaagYMD()}; if(!x || x.bron==='maandwissel') return true;
+  const H=maandBudgetHerstel(ym); SET.mb437.voor={ym, totaal:x.totaal, inleg:x.inleg};
+  Object.assign(x, {totaal:H.totaal, potjes:H.potjes, inleg:H.inleg, herstel:H.stappen.length?H.stappen.map(y=>({op:y.op, k:y.k, d:Math.round(y.d), keuze:y.keuze})):undefined, v437:true});
+  return true; }
 /* Vlak voor een wijziging in de lopende maand: eerst vastleggen, dan de log (voor het label in de lijst). */
-function budgetVoorWijz(k, van, naar){ try{ maandBudgetZorg(thisYM()); budgetWijzLog(k, van, naar); }catch(_){} }
+function budgetVoorWijz(k, van, naar, id, extra){ try{ maandBudgetZorg(thisYM()); budgetWijzLog(k, van, naar, id, extra); }catch(_){} }
 /* De wijzigingen deze maand: per potje (en de inleg) het budget van nu min het vastgelegde. Datum en keuze komen uit de laatste
    log van dat potje deze maand; zonder log "budget aangepast". De rijen tellen per constructie op tot `tot`. */
 function maandBudgetWijz(ym){ ym=ym||thisYM(); const V=maandBudgetVast(ym); if(!V) return {tot:0, rijen:[], vast:null};
   const N=maandBudgetNu(ym), L=maandBudgetLogs(ym), rijen=[];
-  const laatste=k=>{ for(let i=L.length-1;i>=0;i--) if(L[i].k===k) return L[i]; return null; };
+  const laatste=k=>{ for(let i=L.length-1;i>=0;i--) if(L[i].k===k && !L[i].comp) return L[i]; return null; };
   const ks=new Set([...Object.keys(N.potjes), ...Object.keys(V.potjes||{})]);
   for(const k of ks){ const d=(+N.potjes[k]||0)-(+(V.potjes||{})[k]||0); if(!d) continue; const l=laatste(k);
     rijen.push({k, naam:(CATS[k]||{}).name||k, d, op:l?l.op:null, keuze:l?l.keuze:'budget aangepast'}); }
@@ -1144,8 +1183,8 @@ function maandBudgetWijz(ym){ ym=ym||thisYM(); const V=maandBudgetVast(ym); if(!
 }
 /* De log van een wijziging in de lopende maand (potPlanZet en planInlegZet schrijven hem; de keuze komt van de aanroeper via
    window._bwKeuze, anders "budget aangepast"). Alleen voor het label van de lijst: het bedrag komt uit het verschil. */
-function budgetWijzLog(k, van, naar, id){ van=Math.round(+van||0); naar=Math.round(+naar||0); if(van===naar) return;
-  (SET.budgetWijzLog=SET.budgetWijzLog||[]).push({op:vandaagYMD(), k, van, naar, keuze:window._bwKeuze||'budget aangepast', id:id||undefined}); }
+function budgetWijzLog(k, van, naar, id, extra){ van=Math.round(+van||0); naar=Math.round(+naar||0); if(van===naar) return;
+  (SET.budgetWijzLog=SET.budgetWijzLog||[]).push(Object.assign({op:vandaagYMD(), k, van, naar, keuze:window._bwKeuze||'budget aangepast', id:id||undefined}, extra||{})); }
 /* Het gevolg vóór bevestigen: "deze maand: forecast EUR X -> EUR Y · maandbudget EUR B vanaf <volgende maand>". `pas` voert de
    wijziging in het geheugen uit (zoals de bevestiging, zonder save()); daarna gaat alles terug. */
 function budgetWijzGevolg(pas){ const m=thisYM(); let P0=null, P1=null, B1=null;
@@ -9161,11 +9200,17 @@ function planInlegBlok(){
 function planInlegVoeg(soort, bedrag, van){
   if(!PLANINLEG_NAAM[soort] || !(bedrag>0)) return;
   const I=SET.planInleg=SET.planInleg||{}, ym=thisYM();
-  budgetVoorWijz('~inleg', +((I[soort]||{}).bedrag)||0, (+((I[soort]||{}).bedrag)||0)+bedrag);   // v436
+  /* v437: komt het geld uit een potje dat in dezelfde handeling lager ging, dan is het een verplaatsing en geen wijziging */
+  const vanaf=van && (SET.budgetWijzLog||[]).some(x=>x.op===vandaagYMD() && x.k===van && !x.verplaatst && (+x.naar||0)<(+x.van||0))?van:null;
+  budgetVoorWijz('~inleg', +((I[soort]||{}).bedrag)||0, (+((I[soort]||{}).bedrag)||0)+bedrag, null, {soort, verplaatst:vanaf||'~budget'});   // v436; v437: een toevoeging is nooit een wijziging
+  /* v437: een verplaatsing schuift ook in het VASTGELEGDE budget mee (het potje lager, de inleg hoger, het totaal gelijk), zodat ze
+     ook na de vastlegging geen wijziging deze maand is */
+  if(vanaf){ const MB=(SET.maandBudget||{})[ym]; if(MB && MB.potjes && (+MB.potjes[vanaf]||0)>=bedrag){ MB.potjes[vanaf]=Math.round(MB.potjes[vanaf]-bedrag); if(!(MB.potjes[vanaf]>0)) delete MB.potjes[vanaf];
+    MB.inleg=Math.round((+MB.inleg||0)+bedrag); (MB.verplaatst=MB.verplaatst||[]).push({op:vandaagYMD(), van:vanaf, soort, bedrag:Math.round(bedrag)}); } }
   if(!I[soort] || !(+I[soort].bedrag>0)){ const g=soort==='plan'?null:inlegGemeten(soort, valtOpYmPlus(ym,-1));
     I[soort]={bedrag:0, vanaf:ym, op:vandaagYMD(), basis:soort==='plan'?null:Math.max(g||0,0), van:[]}; }
   I[soort].bedrag=Math.round((+I[soort].bedrag||0)+bedrag);
-  if(van && !I[soort].van.includes(van)) I[soort].van.push(van);
+  if(van){ I[soort].van=Array.isArray(I[soort].van)?I[soort].van:[]; if(!I[soort].van.includes(van)) I[soort].van.push(van); }   // v437: een inleg zonder lijst (migratie) viel hier om
   if(soort==='plan'){ let cur=0; try{ cur=Math.round(monthlySavingTarget()); }catch(_){} SET.savingMode='amount'; SET.savingAmount=cur+bedrag; }
   overboekActieZet(soort);
 }
@@ -9174,7 +9219,7 @@ function planInlegZet(soort, nieuw){
   const I=SET.planInleg||{}, x=I[soort]; if(!x) return;
   nieuw=Math.max(Math.round(+nieuw||0),0); const oud=Math.round(+x.bedrag||0); if(nieuw===oud) return;
   if(soort==='plan'){ let cur=0; try{ cur=Math.round(monthlySavingTarget()); }catch(_){} SET.savingMode='amount'; SET.savingAmount=Math.max(cur+nieuw-oud,0); }
-  budgetVoorWijz('~inleg', oud, nieuw);   // v436: vóór de wijziging ligt het maandbudget vast
+  budgetVoorWijz('~inleg', oud, nieuw, 'pi:'+vandaagYMD()+':'+soort, {soort});   // v436: vóór de wijziging ligt het maandbudget vast (v437: met id, de planInlegLog telt dan niet nog eens)
   (SET.planInlegLog=SET.planInlegLog||[]).push({soort, van:oud, naar:nieuw, op:vandaagYMD()});
   if(nieuw>0){ x.bedrag=nieuw; overboekActieZet(soort); }
   else { delete I[soort]; if(SET.overboekActie) delete SET.overboekActie[soort]; }
@@ -10792,7 +10837,6 @@ function gripZienBrug(V, TR){
   for(const [tl, zl] of [[true,true],[true,false],[false,true],[false,false]]){ M=maak(boven.length, tl, zl); if(M.kol<=DEZEMAAND_KOL) break; }
   while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1, false, false);
   const {los, R}=M, stappen=[{soort:'begin', label:'budget', waarde:Bud}];
-  if(R['~wijz']) stappen.push({soort:'wijz', label:'wijzigingen', titel:'wijzigingen deze maand (alleen forecast)', waarde:R['~wijz']});
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:brugKort(x.k, x.naam), titel:x.naam, waarde:R[x.k], aard:x.aard});
   { const zg=R['~zonderG']||0, zv=R['~zonderV']||0;
     if(zg||zv) stappen.push({soort:'zonder', label:'z. potje', waarde:zg+zv, deel:zg, geboekt:zg, verwacht:zv, titel:`zonder potje · ${euro0(zg)} geboekt · ${euro0(zv)} verwacht`}); }
@@ -10813,11 +10857,13 @@ function gripZienBrug(V, TR){
   for(const ov of [ovB, ovO]){ const w=ov.waarde; if(!w || Math.abs(w)>=BRUG_KLEIN) continue;
     /* v417: nooit bij "z. potje": dat is een getal (V.zonder) met een eigen bron, en een opgeschoven euro maakte het 206
        naast 168 geboekt + 37 verwacht (GEMELD op het toestel). Zonder andere stap aan die kant blijft overig staan. */
-    const mid=stappen.slice(1).filter(st=>st.waarde && st.soort!=='zonder' && Math.sign(st.waarde)===Math.sign(w));
+    const mid=stappen.slice(1).filter(st=>st.waarde && st.soort!=='zonder' && st.soort!=='wijz' && Math.sign(st.waarde)===Math.sign(w));
     if(!mid.length) continue; const doel=mid[mid.length-1];   // de dichtstbijzijnde: de laatste ervoor, want overig staat achteraan
     doel.waarde+=w; doel.bij=(doel.bij||0)+w; doel.titel=`${doel.titel||doel.label} \u00b7 ${w>0?'+':'−'}${euro0(Math.abs(w))} uit ${ov.label}`; if(ov.noot){ doel.noot=ov.noot; ov.noot=null; } ov.waarde=0; ov.opgeschoven=w; }
   if(ovB.waarde) stappen.push(ovB);
   if(ovO.waarde || (!ovB.waarde && !ovB.opgeschoven && !ovO.opgeschoven)) stappen.push(ovO);
+  /* v437: de wijzigingen van deze maand als laatste stap voor de forecast, in dezelfde volgorde als de brug in Begrijpen */
+  if(R['~wijz']) stappen.push({soort:'wijz', label:'wijzigingen', titel:'wijzigingen deze maand (alleen forecast)', waarde:R['~wijz']});
   stappen.push({soort:'eind', label:'verwacht', waarde:P, breed:1.3});
   let run=Bud; const lv=[Bud, P];
   for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
@@ -12393,7 +12439,7 @@ function gripSalarisKaart(){ let D=null; try{ D=salarisData(1); }catch(_){ retur
   return `<div class="card" id="gripSalaris" data-salaris="${Math.round(SB.salaris)}">${salarisBalkHtml(SB, kop, true)}
     <div data-saltabelkop style="display:grid;grid-template-columns:1.3fr 1fr .8fr 1.2fr;gap:4px;padding:6px 0 3px;font-size:var(--fs-xs);color:var(--mut2)"><span></span><span style="text-align:right">verwacht</span><span style="text-align:right">% salaris</span><span style="text-align:right">t.o.v. budget</span></div>
     ${rijen}
-    <div class="row" data-salsom="${som}" style="justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)"><b class="small">samen ${som<0?`${euro0(-som)} onder`:som>0?`${euro0(som)} boven`:'op'} budget</b><span class="small" data-salbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div></div>`;
+    <div class="row" data-salsom="${som}" style="justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)"><b class="small">samen ${som<0?`${euro0(-som)} onder`:som>0?`${euro0(som)} boven`:'op'} budget</b><span class="small" data-salbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${budgetWijzRegel()}</div>`;
 }
 /* Openstaand: wat je uitleende en nog open staat (loanStand(), de bron van de leningsheet en blok 20). */
 function gripOpenLeningen(){ return loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar').map(l=>({l, S:loanStand(l)})).filter(x=>x.S && x.S.open>0.005); }
@@ -12516,32 +12562,42 @@ function gripGroepenVier(V){ const G=maandGroepen(V), g=n=>G.g.find(x=>x.n===n)|
    round(budget), dus de stappen sluiten op V.projectie (dezelfde bron als de Budget-meter). */
 function gripGroepBrug(V){
   if(!V || V.onbekend || !(V.budget>0)) return null;
+  /* v437: EEN BRUG, op Grip (Begrijpen) en in de keuze-sheet in dezelfde volgorde: het VASTGELEGDE budget, dan per groep wat er
+     tegen het budget van nu anders uitkomt (vast, de potjes die boven eindigen per potje, de potjes onder samen, zonder potje,
+     de inleg), dan de wijzigingen van deze maand als eigen stap, dan de forecast. De groepen tellen hun wijziging dus niet mee
+     (die staat apart), en samen sluiten de stappen op V.projectie. Een uitschieter (uitschieters(V), zoals Boodschappen +61)
+     houdt een eigen kolom zolang er een is: de kleinste potjes boven gaan eerst samen. */
   const Q=gripGroepenVier(V), Bud=Math.round(V.budget), P=Math.round(V.projectie);
+  const wG=n=>(Q.G.wijz||[]).filter(x=>n.includes(x.n)).reduce((a,x)=>a+x.d,0);
+  const wVast=wG(['vast (potjes)','vast zonder potje']), wPot=wG(['potjes (variabel)','potjes buiten de norm']), wInl=wG(['inleg in Plan']);
   const boven=(V.potjes||[]).filter(x=>(+x.overR||0)>=0.5).sort((a,b)=>(b.overR-a.overR)||(a.naam<b.naam?-1:1));
   const nOnder=(V.potjes||[]).length-boven.length;
-  const ruimte=DEZEMAAND_KOL-4-(Q.inleg.v-Q.inleg.b?1:0);   // budget, vast, onder, zonder, verwacht (eind telt mee in 4+1)
+  const inlD=Q.inleg.v-Q.inleg.b-wInl, heeftW=!!Math.round(V.wijz||0), heeftInl=Math.abs(inlD)>=0.5;
+  const ruimte=DEZEMAAND_KOL-5-(heeftInl?1:0)-(heeftW?1:0);   // budget, vast, onder, zonder, verwacht
   let los=boven, samen=[];
-  if(los.length>ruimte-1){ los=boven.slice(0, Math.max(ruimte-2,0)); samen=boven.slice(los.length); }
-  const potDiff=Q.potjes.v-Q.potjes.b, bovenSom=boven.reduce((a,x)=>a+(+x.overR||0),0);
-  const rauw=[{k:'vast', v:Q.vast.v-Q.vast.b}];
+  if(los.length>ruimte){ los=boven.slice(0, Math.max(ruimte-1,1)); samen=boven.slice(los.length); }
+  const potDiff=Q.potjes.v-Q.potjes.b-wPot, bovenSom=boven.reduce((a,x)=>a+(+x.overR||0),0);
+  const rauw=[{k:'vast', v:Q.vast.v-Q.vast.b-wVast}];
   for(const x of los) rauw.push({k:'pot:'+x.k, v:+x.overR||0});
   if(samen.length) rauw.push({k:'samen', v:samen.reduce((a,x)=>a+(+x.overR||0),0)});
   rauw.push({k:'onder', v:potDiff-bovenSom});
   rauw.push({k:'zonder', v:Q.zonder.v-Q.zonder.b});
-  if(Math.abs(Q.inleg.v-Q.inleg.b)>=0.005) rauw.push({k:'inleg', v:Q.inleg.v-Q.inleg.b});
+  if(heeftInl) rauw.push({k:'inleg', v:inlD});
+  if(heeftW) rauw.push({k:'wijz', v:V.wijz});
   const R=brugAfronden(rauw, P-Bud);
-  const st=[{soort:'begin', label:'budget', waarde:Bud}, {soort:'overig', k:'vast', label:'vast', titel:'vaste lasten', waarde:R.vast}];
+  const st=[{soort:'begin', label:'budget', titel:`budget ${budgetVastTekst(V)}`, waarde:Bud}, {soort:'overig', k:'vast', label:'vast', titel:'vaste lasten', waarde:R.vast}];
   for(const x of los) st.push({soort:'potje', k:x.k, label:brugKort(x.k, x.naam), titel:x.naam, waarde:R['pot:'+x.k]});
   if(samen.length) st.push({soort:'potje', k:'', label:`${samen.length} boven`, titel:opsomming(samen.map(x=>x.naam)), waarde:R.samen});
   st.push({soort:'overig', k:'onder', label:`${nOnder} onder`, titel:`${nOnder} potjes onder hun budget`, waarde:R.onder});
   { const ZS=V.zonderStand, zg=ZS?Math.min(Math.round(ZS.geboekt), R.zonder):R.zonder;   // v402: geboekt dicht, nog verwacht licht
     st.push({soort:'zonder', k:'zonder', label:'z. potje', titel:`zonder potje · ${euro0(zg)} geboekt · ${euro0(R.zonder-zg)} verwacht`, waarde:R.zonder, deel:zg, geboekt:zg, verwacht:R.zonder-zg}); }
   if(R.inleg!=null) st.push({soort:'overig', k:'inleg', label:'inleg', titel:'inleg in Plan', waarde:R.inleg});
+  if(R.wijz!=null) st.push({soort:'wijz', k:'wijz', label:'wijzigingen', titel:'wijzigingen deze maand (alleen forecast)', waarde:R.wijz});
   st.push({soort:'eind', label:'verwacht', waarde:P, breed:1.3});
   let run=Bud; const lv=[Bud, P]; for(const s of st.slice(1,-1)){ run+=s.waarde; lv.push(run); }
   const lo=Math.min(...lv), hi=Math.max(...lv); let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen:st, basis, tik:'gripGroepTik', gap:2, korteLabels:true, verschil:P-Bud, budget:Bud, projectie:P, Q, boven, nOnder}; }
+  return {tegen:'budget', stappen:st, basis, tik:'gripGroepTik', gap:2, korteLabels:true, verschil:P-Bud, budget:Bud, projectie:P, Q, boven, nOnder, los:los.map(x=>x.k)}; }
 function gripGroepTik(){ openGripGroepen(); }
 /* v436: DE REGEL "wijzigingen deze maand (alleen forecast) +EUR X ›" op Inzichten en in Begrijpen (dezelfde functie, een bron)
    en de lijst erachter: datum, keuze, potje, bedrag. Geen wijzigingen: geen regel. */
@@ -12583,8 +12639,9 @@ function renderGripGroepen(){ let V=null; try{ V=maandVooruit(); }catch(_){}
     return `<div class="row" data-groep="${k}" data-groepbudget="${Math.round(G.b)}" data-groepverwacht="${Math.round(G.v)}" role="button" style="gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${tik[k]}"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${n} <span class="small" style="font-weight:400;color:var(--mut2)">budget ${euro0(G.b)} · verwacht ${euro0(G.v)}</span></span>${gripSub(esc(uitleg[k]))}${extra[k]||''}</span><span class="small" data-groepdiff="${d}" style="font-weight:700;white-space:nowrap;color:${d>0?'var(--red)':'var(--txt)'}">${d>0?'+':d<0?'−':''}${euro0(Math.abs(d))}</span>${gripPijl}</div>`; };
   const diff=Math.round(V.projectie)-Math.round(V.budget), som=TR.reduce((a,x)=>a+x.teRuim,0), y=diff+som;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripGroepen"><div style="font-weight:800;font-size:var(--fs-lg)">Wat er achter zit</div>
-    <div class="small muted" style="margin:2px 0 6px">per groep: budget, verwacht en het verschil</div>
+    <div class="small muted" style="margin:2px 0 6px">per groep: budget ${esc(budgetVastTekst(V))}, verwacht en het verschil</div>
     ${rij('vast','Vast',Q.vast)}${rij('potjes','Potjes',Q.potjes)}${rij('zonder','Zonder potje',Q.zonder)}${rij('inleg','Plan-inleg',Q.inleg)}
+    ${budgetWijzRegel()}
     ${TR.length?`<div class="small" data-zonderreserveringen="${y}" style="margin-top:10px;line-height:1.45">Zonder reserveringen en lege delen (${esc(opsomming(TR.map(x=>x.naam)))}) ben je ${euro0(Math.abs(y))} ${y>0?'boven':'onder'}, niet ${euro0(Math.abs(diff))}.</div>`:''}
     <div class="small" data-naarvastelasten role="button" style="margin-top:10px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();gripNaarVast()">Vaste lasten over ${DIAG_SAL_MAANDEN} maanden ›</div>
     <div class="small" data-groepvooruit role="button" style="margin-top:8px;color:var(--teal);font-weight:700;cursor:pointer" onclick="openGripVooruit()">Alle potjes, met wat je deze maand kunt doen ›</div></div>`; }
@@ -30783,7 +30840,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
 /* v428: de balk van een maand: vast, potjes, buiten, opzij en rest, met het bedrag en het deel van het salaris. De rest is
    salaris min de vier delen, zodat de balk sluit op het salaris (punt 5 van blok 20 rekent zonder buiten). */
 /* v436: blok 20, MAANDBUDGET. Leest maandBudgetVast/maandBudgetWijz en de lezers op het scherm; schrijft niets. */
-function diagMaandBudget(V, vk){ const m=thisYM(), L=['', 'MAANDBUDGET (v436): vastgelegd op de 1e, wijzigingen deze maand alleen in de forecast'];
+function diagMaandBudget(V, vk){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/v437): vastgelegd op de 1e met de Plan-inleg erin, wijzigingen deze maand alleen in de forecast'];
   const W=maandBudgetWijz(m), MB=W.vast, dag=d=>d?d.slice(8,10)+'-'+d.slice(5,7):'eerder';
   if(!MB){ L.push('  geen potjes: geen vastgelegd maandbudget (het budget is de inkomen-limiet)'); return L; }
   L.push(`  vastgelegd ${euro0(MB.totaal)} op ${dag(MB.op)} (${MB.bron}${MB.opgeslagen===false?', nog niet opgeslagen: herstel-regel uit de logs':', opgeslagen'+(MB.vastgelegd?' op '+dag(MB.vastgelegd):'')}) · potjes ${euro0(MB.totaal-(+MB.inleg||0))} · waarvan Plan-inleg ${euro0(+MB.inleg||0)}`);
@@ -30792,7 +30849,17 @@ function diagMaandBudget(V, vk){ const m=thisYM(), L=['', 'MAANDBUDGET (v436): v
   L.push(`  wijzigingen deze maand (alleen forecast): samen ${W.tot>0?'+':''}${euro0(W.tot)}${W.rijen.length?'':' (geen)'}`);
   for(const x of W.rijen) L.push(`    ${dag(x.op)} · ${x.keuze} · ${x.naam} ${x.d>0?'+':''}${euro0(x.d)}`);
   L.push(`  budget van nu ${euro0(W.nu.totaal)} = vastgelegd ${euro0(MB.totaal)} + wijzigingen ${euro0(W.tot)}: ${W.nu.totaal===MB.totaal+W.tot?'klopt':'VERSCHILT'} · dit wordt het budget vanaf 1 ${ymFull(nextYM(m)).split(' ')[0]}`);
+  /* v437: de inleg in Plan een keer: het vastgelegde totaal is de potjes plus de inleg, en die inleg is de inleg van nu min een
+     wijziging die jij in Plan deed (maandInlegWijz) */
+  { const pS=Object.values(MB.potjes||{}).reduce((a,v)=>a+(+v||0),0), wi=maandInlegWijz(m).reduce((a,x)=>a+x.d,0);
+    const een=Math.round(pS+(+MB.inleg||0))===Math.round(MB.totaal) && Math.round(+MB.inleg||0)===Math.round(W.nu.inleg-wi);
+    L.push(`  CONTROLE Plan-inleg een keer geteld: potjes ${euro0(pS)} + inleg ${euro0(+MB.inleg||0)} = ${euro0(pS+(+MB.inleg||0))} tegen vastgelegd ${euro0(MB.totaal)} · inleg van nu ${euro0(W.nu.inleg)}${wi?` min jouw wijziging ${wi>0?'+':''}${euro0(wi)}`:''} = ${euro0(W.nu.inleg-wi)} → ${een?'klopt':'VERSCHILT (dubbel geteld)'}`); }
+  if(SET.mb437 && SET.mb437.voor) L.push(`  v437: de vastlegging van ${SET.mb437.voor.ym} is op ${dag(SET.mb437.op)} opnieuw uitgerekend: was ${euro0(SET.mb437.voor.totaal)} (inleg ${euro0(+SET.mb437.voor.inleg||0)}), nu ${euro0(MB.totaal)}`);
   if(!vk || !V || V.onbekend){ L.push('  forecast onbekend (geen drie afgeronde maanden)'); return L; }
+  { let G=null; try{ G=gripGroepenVier(V); }catch(_){}
+    if(G){ const gr=[['vast',G.vast.b],['potjes',G.potjes.b],['zonder potje',G.zonder.b],['Plan-inleg',G.inleg.b]], sg=gr.reduce((a,x)=>a+x[1],0);
+      L.push(`  vastgelegd per groep: ${gr.map(x=>`${x[0]} ${euro0(Math.round(x[1]))}`).join(' · ')}`);
+      L.push(`  CONTROLE som van de groepen = vastgelegd: ${euro0(Math.round(sg))} tegen ${euro0(MB.totaal)} → ${Math.round(sg)===MB.totaal?'klopt':'VERSCHILT'}`); } }
   const fc=Math.round(V.projectie), onder=MB.totaal-fc;
   L.push(`  forecast ${euro0(fc)} · ${onder>=0?'onder':'boven'} budget = vastgelegd ${euro0(MB.totaal)} - forecast ${euro0(fc)} = ${euro0(Math.abs(onder))}`);
   let ins=null, mtr=null, brg=null, p7=null; try{ ins=insMaandStand().Bvast; }catch(_){} try{ mtr=gripMeterBudget(V).budget; }catch(_){}
@@ -30803,7 +30870,8 @@ function diagMaandBudget(V, vk){ const m=thisYM(), L=['', 'MAANDBUDGET (v436): v
   L.push(`  CONTROLE maandbudget op alle schermen = vastgelegd ${euro0(MB.totaal)}: ${sch.map(x=>`${x[0]} ${x[1]==null?'-':euro0(x[1])}`).join(' · ')} → ${ok?'klopt':'VERSCHILT'}`);
   let mv=null; try{ mv=gripMeterBudget(V).verschil; }catch(_){}
   let tv=null; try{ const T=salarisTabelData(V); if(T) tv=T.som; }catch(_){}
-  L.push(`  CONTROLE onder budget = vastgelegd - forecast: ${euro0(onder)} · Budget-meter ${mv==null?'-':euro0(-mv)}${tv==null?'':` · salariskaart samen ${euro0(-tv)}`} → ${mv===-onder&&(tv==null||tv===-onder)?'klopt':'VERSCHILT'}`);
+  L.push(`  CONTROLE onder budget = vastgelegd - forecast: ${euro0(onder)} · Budget-meter ${mv==null?'-':euro0(-mv)} → ${mv===-onder?'klopt':'VERSCHILT'}`);
+  L.push(`  CONTROLE som van de salariskaart-verschillen = onder budget: ${tv==null?'geen salariskaart':`${euro0(-tv)} tegen ${euro0(onder)} → ${tv===-onder?'klopt':'VERSCHILT'}`}`);
   return L; }
 function salarisBalk(D, r){ const tot=(k)=>D.tot(r,k), sal=tot('salaris');
   const delen=[['vast','vast',tot('vast')],['potjes','potjes',tot('pot')],['buiten','buiten',r.buiten],['opzij','opzij',tot('opzij')]];
@@ -32901,7 +32969,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(maandBudget437()) save(); }catch(_){} try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)

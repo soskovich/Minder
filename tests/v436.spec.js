@@ -93,7 +93,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
   test('1f. blok 20 MAANDBUDGET: vastgelegd met datum, de wijzigingen, de forecast, het budget vanaf november en twee controles die sluiten', async ({ page }) => {
     await boot(page);
     const t = await page.evaluate(() => diagSalarisVerdeling().join('\n'));
-    expect(t).toMatch(/MAANDBUDGET \(v436\)/);
+    expect(t).toMatch(/MAANDBUDGET \(v436\/v437\)/);
     expect(t).toMatch(/vastgelegd €3\.375 op 01-10 \(herstel/);
     expect(t).toMatch(/16-10 · Shurgard geaccepteerd · Huur \+€77/);
     expect(t).toMatch(/budget van nu €3\.415 = vastgelegd €3\.375 \+ wijzigingen €40: klopt · dit wordt het budget vanaf 1 november/);

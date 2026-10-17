@@ -16,6 +16,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v437` · De Plan-inleg zit een keer in het vastgelegde budget, en alleen jouw eigen aanpassing in Plan is een wijziging.** Gezien op het toestel op 17 okt: EUR 3.655 met -EUR 240 aan wijzigingen, waar EUR 3.375 en +EUR 40 hoorden.
+  - DE OORZAAK, NAGEBOUWD EN NIET OP HET TOESTEL GEMETEN: een inleg-aanpassing stond in twee logs (de log van v436 en de oudere planInlegLog), en de ontdubbeling rekende op een id die nooit werd meegegeven. De herstel-regel draaide de -280 dus twee keer terug.
+  - WAAROM PER SOORT EN NIET OPTELLEN: optellen van logs is precies wat stuk ging. "Het bedrag van nu min het bedrag voor je eerste aanpassing" kan niet dubbel tellen, ook niet met een toevoeging die nergens gelogd staat.
+  - EEN VERPLAATSING IS GEEN WIJZIGING: geld dat van een potje naar de inleg gaat laat het maandbudget gelijk. Daarom draait de herstel-regel hem niet terug en schuift hij in een opgeslagen vastlegging mee.
+  - DE VALKUIL: een tweede plek die de inleg optelt. Blok 20 controleert dat potjes plus inleg het vastgelegde totaal is, en dat de inleg die van nu is min jouw aanpassing.
 - **`v436` · Het maandbudget van een maand ligt vast; een wijziging in die maand verandert de forecast en geldt als budget vanaf de 1e.** Gevraagd door de gebruiker na 17 okt, toen het budget op Grip EUR 3.415 zei terwijl het op 1 oktober EUR 3.375 was.
   - WAAROM VAST: elke keuze in Kiezen (herzien, vaste last accepteren, verdeling, de editor) verzette het budget zelf, dus "onder budget" bewoog met je eigen keuzes en niet met je uitgaven. Het budget is de maatstaf; wat je deze maand verandert hoort in de forecast.
   - DE RECONSTRUCTIE IS EEN AFLEIDING EN GEEN OPSLAG: zonder record is het het budget van nu min de gelogde wijzigingen van deze maand. De boot slaat hem alleen op als er zulke logs zijn, want een opname op een moment dat een fixture of een import nog muteert zou een wijziging verzinnen (gemeten: +280).
