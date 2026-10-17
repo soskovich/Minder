@@ -84,7 +84,10 @@ test.describe('A · de verwachte bonus', () => {
     await verwacht(page, 2500);
     const b = await bonusBinnen(page, 2310);
     const zonderAntwoord = await liq(page);
-    expect(zonderAntwoord.incDue).toBe(5216 - 2310);         // invoer: zonder antwoord telt hij als gewoon inkomen
+    /* v438: een bijschrijving die op je verwachte bonus lijkt is ook zonder antwoord geen maandinkomen (inkomenEenmalig): nog te
+       ontvangen blijft je salaris. Tot v438 telde hij zonder antwoord als gewoon inkomen (5216 - 2310). */
+    expect(zonderAntwoord.incDue).toBe(5216);
+    expect(await page.evaluate(() => irrKandidaten().length)).toBe(1);   // invoer: de vraag staat nog open
     await page.evaluate(() => { openSafeToSpend(); document.querySelector('#sheet [data-irrja]').click(); });
     const r = await page.evaluate((id) => ({ vlag: SET.onregelmatig[id], kop: document.querySelector('#sheet').innerText.includes('Verdeling van je meevaller'),
       inp: (document.getElementById('mvInp') || {}).value, open: irrVerwachtOpen('2026-10').length, k: irrKandidaten().length }), b.id);

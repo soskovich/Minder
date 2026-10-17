@@ -201,7 +201,7 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
   test('boven eindigende potjes los op grootte, een potje dat eronder blijft valt in de ruimte', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
-      const kleur = [...document.querySelectorAll('#gripGroepBrug [data-brugstap="potje"] i')].map((i) => i.style.background).filter(Boolean);   // v428: de brug in Begrijpen (alleen potjes erboven)
+      const kleur = [...document.querySelectorAll('#gripGroepBrug [data-brugk="boven"] i')].map((i) => i.style.background).filter(Boolean);   // v438: de potjes erboven zijn een staaf "N boven" in Begrijpen
       return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde, s.label]), budget: V.budget, proj: V.projectie, kleur,
         shop: Math.round(V.potjes.find((x) => x.k === 'shopping').overR) }; });
     // invoermeting: Online shopping eindigt onder zijn potje en is de grootste afwijking in absolute zin
@@ -331,7 +331,9 @@ test.describe('g. dynamisch met elke boeking', () => {
       TX.push({ id: 'vic10', date: '2026-10-06', amount: -40, acc: 'NL01MAIN0000001111', name: 'Coffeeshop', desc: 'BEA, BETAALPAS COFFEESHOP DE DAMPKRING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
       TX.forEach(categorize); save(); renderMaand();
       const kaart = +document.querySelector('#gripGroepKaart').dataset.groepbrug;   // v428: de brug in Begrijpen
-      const vices = +document.querySelector('#gripGroepBrug [data-brugstap="potje"]').dataset.brugwaarde;
+      const vices = Math.round(maandVooruit().potjes.find((x) => x.k === 'vices').overR);   // v438: Vices staat in "N boven" in Begrijpen
+      const boven = +document.querySelector('#gripGroepBrug [data-brugk="boven"]').dataset.brugwaarde;
+      if (!(boven >= vices)) return { fout: 'boven ' + boven + ' < vices ' + vices };
       openGripVooruit();
       return { kaart, vices, sheet: +document.getElementById('gripVooruit').dataset.projectie };
     });

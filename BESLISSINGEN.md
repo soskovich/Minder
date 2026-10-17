@@ -16,6 +16,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v438` · Een groep vergelijkt zijn forecast met zijn vastgelegde budget; een wijziging deze maand zit in die forecast, niet in een eigen staaf.** Gezien op het toestel op 17 okt: vast -EUR 195 waar -EUR 118 hoorde (EUR 979 tegen EUR 1.097).
+  - DE OORZAAK: v437 trok de wijziging van de groep af EN zette hem als eigen staaf; de geaccepteerde Shurgard (+77) telde zo een keer te veel bij vast. Een acceptatie verandert de betaling niet, dus ook de forecast niet (`wijzForecastEffect()` meet dat per wijziging).
+  - ZONDER POTJE IS EEN STAAF: alles in een categorie zonder potje, ook een herkende vaste last zonder potje; de verdeling noemt het eenmalige deel.
+  - EEN BONUS IS GEEN SALARIS, OOK NIET VOOR JE ANTWOORD: een bijschrijving die op je verwachte bonus lijkt telt niet als salaris en niet in het maandinkomen; er wordt niets gemarkeerd (v369).
+  - VERWACHT EIND STAAT OP HOME EN OP INZICHTEN: een bewuste uitzondering op "verplaatsen is nooit kopieren", gevraagd door de gebruiker; een bron (`maandVerloop()`).
 - **`v437` · De Plan-inleg zit een keer in het vastgelegde budget, en alleen jouw eigen aanpassing in Plan is een wijziging.** Gezien op het toestel op 17 okt: EUR 3.655 met -EUR 240 aan wijzigingen, waar EUR 3.375 en +EUR 40 hoorden.
   - DE OORZAAK, NAGEBOUWD EN NIET OP HET TOESTEL GEMETEN: een inleg-aanpassing stond in twee logs (de log van v436 en de oudere planInlegLog), en de ontdubbeling rekende op een id die nooit werd meegegeven. De herstel-regel draaide de -280 dus twee keer terug.
   - WAAROM PER SOORT EN NIET OPTELLEN: optellen van logs is precies wat stuk ging. "Het bedrag van nu min het bedrag voor je eerste aanpassing" kan niet dubbel tellen, ook niet met een toevoeging die nergens gelogd staat.

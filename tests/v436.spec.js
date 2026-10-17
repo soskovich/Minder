@@ -64,7 +64,8 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     expect(r.verschil).toBe(r.P - 3375);
     expect([r.b0, r.z0, r.d0]).toEqual([3375, 3375, 3375]);
     expect([r.sB, r.sZ, r.sD]).toEqual([r.P, r.P, r.P]);
-    expect(r.zw).toBe(40); expect(r.dw).toBe(40);
+    /* v438: geen staaf "wijzigingen" meer; elke groep staat tegen zijn vastgelegde budget en de wijziging zit in zijn forecast */
+    expect(r.zw).toBeUndefined(); expect(r.dw).toBeUndefined();
   });
   test('1d. "wijzigingen deze maand (alleen forecast) +EUR 40 ›" op Inzichten en in Begrijpen, en de lijst met datum, keuze, potje, bedrag', async ({ page }) => {
     await boot(page);
@@ -74,7 +75,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
     await page.locator('#gripGroepKaart [data-budgetwijz="40"]').click();
     const L = await page.locator('#budgetWijzSheet [data-budgetwijzrij]').evaluateAll(es => es.map(e => [e.dataset.budgetwijzrij, +e.dataset.v, e.innerText.replace(/\s+/g, ' ')]));
-    expect(L).toEqual([['huur', 77, '16 okt · Shurgard geaccepteerd · Huur +€77'], ['verzekering', -37, '16 okt · herzien · Verzekeringen −€37']]);
+    expect(L).toEqual([['huur', 77, '16 okt · Shurgard geaccepteerd · Huur forecast €0 +€77'], ['verzekering', -37, '16 okt · herzien · Verzekeringen forecast €0 −€37']]);   // v438: met het effect op de forecast
     await expect(page.locator('#budgetWijzSheet')).toContainText('Het nieuwe budget van €3.415 geldt vanaf 1 november');
     expect(L.reduce((a, x) => a + x[1], 0)).toBe(40);
   });
@@ -93,7 +94,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
   test('1f. blok 20 MAANDBUDGET: vastgelegd met datum, de wijzigingen, de forecast, het budget vanaf november en twee controles die sluiten', async ({ page }) => {
     await boot(page);
     const t = await page.evaluate(() => diagSalarisVerdeling().join('\n'));
-    expect(t).toMatch(/MAANDBUDGET \(v436\/v437\)/);
+    expect(t).toMatch(/MAANDBUDGET \(v436\/v437\/v438\)/);
     expect(t).toMatch(/vastgelegd €3\.375 op 01-10 \(herstel/);
     expect(t).toMatch(/16-10 · Shurgard geaccepteerd · Huur \+€77/);
     expect(t).toMatch(/budget van nu €3\.415 = vastgelegd €3\.375 \+ wijzigingen €40: klopt · dit wordt het budget vanaf 1 november/);
@@ -210,8 +211,9 @@ test.describe('v436 · 5. de salariskaart tegen het budget', () => {
   test('5a/5d. de tabel: vast, potjes, Plan-inleg, buiten (geen budget), opzij (–); som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
     await boot(page); await page.evaluate(() => { go('maand'); renderMaand(); });
     const R = await page.locator('#gripSalaris [data-saltabel]').evaluateAll(es => es.map(e => [e.dataset.saltabel, e.dataset.salverschil == null ? null : +e.dataset.salverschil, e.innerText.replace(/\s+/g, ' ')]));
-    expect(R.map(x => x[0])).toEqual(['vast', 'potjes', 'inleg', 'buiten', 'opzij']);
-    expect(R[3][2]).toMatch(/geen budget/); expect(R[4][2]).toMatch(/–$/);   // een kort streepje: de huisstijl kent geen gedachtestreepje
+    /* v438: de indeling van de brug (vast, zonder potje, N boven, N onder, Plan-inleg), dan buiten en opzij */
+    expect(R.map(x => x[0])).toEqual(['vast', 'zonder', 'onder', 'inleg', 'buiten', 'opzij']);   // in deze stand eindigt geen potje erboven
+    expect(R[4][2]).toMatch(/geen budget/); expect(R[5][2]).toMatch(/–$/);   // een kort streepje: de huisstijl kent geen gedachtestreepje
     const som = R.filter(x => x[1] != null).reduce((a, x) => a + x[1], 0);
     const m = await page.evaluate(() => { const V = maandVooruit(); return { v: gripMeterBudget(V).verschil, d: Math.round(V.projectie) - 3375 }; });
     expect(som).toBe(m.v); expect(som).toBe(m.d);
