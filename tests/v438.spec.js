@@ -107,19 +107,20 @@ test('1e. een indeling die niet op de forecast sluit, is VERSCHILT in blok 20', 
   expect(L.find(l => l.includes('CONTROLE budget + verschillen = forecast'))).toMatch(/→ VERSCHILT$/);
 });
 test.describe('v438 · 2. Home', () => {
-  test('2a. Nog te ontvangen staat niet op Home; totaal saldo, vrij te besteden en verwacht eind blijven', async ({ page }) => {
+  test('2a. Nog te ontvangen staat niet op Home; totaal saldo blijft (v439: vrij te besteden en verwacht eind ook weg)', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('dash'));
     await expect(page.locator('#homeOntvangen')).toHaveCount(0);
     await expect(page.locator('#s-dash')).not.toContainText('Nog te ontvangen');
-    for (const sel of ['[data-totaalsaldo]', '[data-vrij]', '[data-verwachteind]']) await expect(page.locator(sel).first(), sel).toBeVisible();
+    await expect(page.locator('[data-totaalsaldo]').first()).toBeVisible();
+    for (const sel of ['[data-vrij]', '[data-verwachteind]']) await expect(page.locator('#s-dash ' + sel), sel).toHaveCount(0);   // v439
   });
 });
 
 test.describe('v438 · 3. Inzichten: saldo eind maand en bonus', () => {
   test('3a. "Verwacht saldo eind oktober" onder de maandkaart, met dezelfde bron als Home, en de bonus als eigen regel', async ({ page }) => {
     await boot(page);
-    const home = await page.evaluate(() => { go('dash'); return +document.querySelector('[data-verwachteind]').dataset.verwachteind; });
+    const home = await page.evaluate(() => maandVerloop().eind);   // v439: niet meer op Home; dezelfde bron
     await page.evaluate(() => go('ins'));
     const k = page.locator('#insSaldoEind');
     await expect(k).toHaveAttribute('data-inssaldoeind', String(home));
@@ -127,9 +128,8 @@ test.describe('v438 · 3. Inzichten: saldo eind maand en bonus', () => {
     await expect(k.locator('[data-insbonus]')).toHaveText('+ bonus €2.500 · eenmalig · telt mee zodra binnen');
     await expect(k.locator('[data-inssaldobonus]')).toHaveAttribute('data-inssaldobonus', String(home + 2500));
     await expect(k.locator('[data-inssaldobonus]')).toContainText('met bonus');
-    /* onder de maandkaart */
-    const volg = await page.evaluate(() => { const c = [...document.querySelectorAll('#s-ins > *')]; return c.indexOf(document.getElementById('insSaldoEind')) - c.indexOf(document.getElementById('insMaand')); });
-    expect(volg).toBe(1);
+    /* v439: binnen de maandkaart, op de plek van de Forecast */
+    expect(await page.evaluate(() => !!document.querySelector('#insMaand #insSaldoEind'))).toBe(true);
     /* past nog op een scherm boven de menubalk */
     const fit = await page.evaluate(() => ({ last: Math.max(...[...document.querySelectorAll('#s-ins > *')].map(e => e.getBoundingClientRect().bottom)), nav: document.querySelector('nav').getBoundingClientRect().top }));
     expect(fit.last).toBeLessThan(fit.nav);

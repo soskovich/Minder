@@ -67,11 +67,11 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     /* v438: geen staaf "wijzigingen" meer; elke groep staat tegen zijn vastgelegde budget en de wijziging zit in zijn forecast */
     expect(r.zw).toBeUndefined(); expect(r.dw).toBeUndefined();
   });
-  test('1d. "wijzigingen deze maand (alleen forecast) +EUR 40 ›" op Inzichten en in Begrijpen, en de lijst met datum, keuze, potje, bedrag', async ({ page }) => {
+  test('1d. "wijzigingen deze maand (alleen forecast) +EUR 40 ›" in Begrijpen (v439: niet meer op Inzichten), en de lijst met datum, keuze, potje, bedrag', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { go('ins'); renderIns(); });
-    await expect(page.locator('#insMaand [data-budgetwijz="40"]')).toContainText('wijzigingen deze maand (alleen forecast)');
-    await expect(page.locator('#insMaand [data-insforecast]')).toContainText('Forecast eind oktober');
+    // v439: op Inzichten zijn de Forecast en de wijzigingen weg (gevraagd door de gebruiker); in Begrijpen staat de regel nog
+    expect(await page.locator('#insMaand [data-budgetwijz], #insMaand [data-insforecast]').count()).toBe(0);
     await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
     await page.locator('#gripGroepKaart [data-budgetwijz="40"]').click();
     const L = await page.locator('#budgetWijzSheet [data-budgetwijzrij]').evaluateAll(es => es.map(e => [e.dataset.budgetwijzrij, +e.dataset.v, e.innerText.replace(/\s+/g, ' ')]));

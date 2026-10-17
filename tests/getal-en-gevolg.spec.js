@@ -157,8 +157,7 @@ test.describe('e · al opgelost in de eenheden-ronde', () => {
     // en de bron is euro0, niet euro
     const src = await page.evaluate(() => saldoBlok.toString());   // v378: het saldo staat in saldoBlok()
     expect(src).toContain('euro0(saldo)');
-    // v367: vrij te besteden staat in de groene regel (vrijRegel), ook in hele euro's
-    expect(await page.evaluate(() => vrijRegel.toString())).toContain('euro0(safe)');
+    // v439: vrij te besteden staat niet meer op Home (vrijRegel() is weg), dus daar valt niets meer te toetsen
   });
 });
 

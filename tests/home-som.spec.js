@@ -11,14 +11,11 @@ const BONUS = { irregularIncome: [{ id: 'b1', naam: 'Bonus', ym: '2026-10', amou
 async function home(page, o) { await I.boot(page, o); await page.evaluate(() => { go('dash'); renderDash(); }); }
 
 test.describe('a · Home: volgorde en het saldoblok', () => {
-  /* v438: "Nog te ontvangen" staat niet meer op Home (gevraagd door de gebruiker); de volgorde is saldo, vrij te besteden, verwacht eind */
-  test('de volgorde is saldo, vrij te besteden, verwacht eind, en Nog te ontvangen staat er niet', async ({ page }) => {
+  /* v439: vrij te besteden en Verwacht eind staan niet meer op Home (gevraagd door de gebruiker); het saldoblok blijft */
+  test('Home draagt het saldoblok, en geen vrij te besteden, verwacht eind of Nog te ontvangen', async ({ page }) => {
     await home(page);
-    const y = await page.evaluate(() => ['[data-saldoblok]', '[data-vrij]', '[data-verwachteind]']
-      .map((s) => { const e = document.querySelector('#s-dash ' + s); return e ? e.getBoundingClientRect().top : null; }));
-    expect(y.every((v) => v != null)).toBe(true);
-    for (let i = 1; i < y.length; i++) expect(y[i]).toBeGreaterThan(y[i - 1]);
-    expect(await page.locator('#homeOntvangen').count()).toBe(0);
+    expect(await page.locator('#s-dash [data-saldoblok]').count()).toBe(1);
+    for (const sel of ['[data-vrij]', '[data-verwachteind]', '#homeOntvangen']) expect(await page.locator('#s-dash ' + sel).count()).toBe(0);
   });
   test('het saldoblok heeft precies een tikplek, en de regel bank en contant staat niet meer op Home', async ({ page }) => {
     await home(page, { set: OUD });
@@ -93,18 +90,7 @@ test.describe('c · Nog te ontvangen (v438: in de sheet Verwacht eind en op Inzi
   });
 });
 
-test.describe('d · de i bij vrij te besteden', () => {
-  test('noemt dezelfde posten als de opbouw en eindigt op de route ernaartoe', async ({ page }) => {
-    await home(page);
-    await page.click('[data-vrij] .jrg');
-    const tip = (await page.locator('#tipPop').innerText()).toLowerCase();
-    for (const w of ['salaris', 'spaarrekening', 'reserveringsrekening', 'vaste lasten', 'potjes', 'spaart']) expect(tip).toContain(w);
-    const safe = await page.evaluate(() => safeToSpend().safe);
-    expect(tip).toContain(('zo kom je op €' + safe.toLocaleString('nl-NL')).toLowerCase());
-    await page.click('#tipPop span[onclick]');
-    await expect(page.locator('#sheet')).toContainText('Zo kom je op');
-  });
-});
+/* d · de i bij vrij te besteden: vervallen bij v439, want vrij te besteden staat niet meer op Home en die i had geen andere plek. */
 
 test.describe('e · Saldo nu', () => {
   test('de rijen tellen op tot de kop en tot Totaal saldo op Home, contant is een eigen rij', async ({ page }) => {
@@ -137,11 +123,12 @@ test.describe('f · Verwacht eind van de maand', () => {
     await home(page, { set: OUD });
     const r = await page.evaluate(() => { const L = monthLiquidity(), V = maandVerloop();
       return { V, som: Math.round(totalBalance().sum) + L.incDue - L.fixDue - varPotjesReserve(thisYM()), proj: L.projected,
-        home: +document.querySelector('[data-verwachteind]').dataset.verwachteind, saldo: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo }; });
-    expect(r.V.eind).toBe(r.som); expect(r.proj).toBe(r.V.eind); expect(r.home).toBe(r.V.eind);
+        saldo: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo,
+        ins: (go('ins'), +document.querySelector('#s-ins [data-inssaldoeind]').dataset.inssaldoeind) }; });
+    expect(r.V.eind).toBe(r.som); expect(r.proj).toBe(r.V.eind); expect(r.ins).toBe(r.V.eind);   // v439: het staat in de maandkaart op Inzichten
     expect(r.V.start).toBe(r.saldo);
     expect(r.V.eind).toBe(14326);   // 12.080 + 5.216 - 817 - 2.153 op deze stand
-    await page.click('[data-verwachteind]');
+    await page.click('#s-ins [data-inssaldoeind]');
     const s = await page.evaluate(() => { const S = document.getElementById('verwachtEindSheet');
       const t = [...S.querySelectorAll('[data-veterm]')].map((e) => ({ k: e.dataset.veterm, v: +e.dataset.bedrag }));
       return { t, eind: +S.querySelector('[data-veeind]').dataset.veeind, tekst: S.innerText }; });
@@ -155,7 +142,8 @@ test.describe('f · Verwacht eind van de maand', () => {
   });
   test('de bonus staat apart en zit niet in de eindstand', async ({ page }) => {
     await home(page, { set: BONUS });
-    await page.click('[data-verwachteind]');
+    await page.evaluate(() => go('ins'));
+    await page.click('#s-ins [data-inssaldoeind]');
     const r = await page.evaluate(() => { const S = document.getElementById('verwachtEindSheet');
       return { eind: +S.querySelector('[data-veeind]').dataset.veeind, bonus: +S.querySelector('[data-vebonus]').dataset.vebonus, V: maandVerloop().eind }; });
     expect(r.eind).toBe(r.V); expect(r.bonus).toBe(r.eind + 2500); expect(r.eind).toBe(14326);
@@ -173,8 +161,9 @@ test.describe('f · Verwacht eind van de maand', () => {
   test('een rekening zonder saldo maakt het onvolledig, en de sheet noemt hem', async ({ page }) => {
     await home(page, { extraTx: [{ id: 'leeg1', date: '2026-10-02', amount: -5, name: 'Bakker', desc: 'BEA, BETAALPAS BAKKER', acc: 'NL01LEEG0000009999' }] });
     expect(await page.evaluate(() => totalBalance().missing)).toBe(1);
-    expect(await page.locator('[data-verwachteind]').innerText()).toContain('onvolledig');
-    await page.click('[data-verwachteind]');
+    await page.evaluate(() => go('ins'));
+    expect(await page.locator('#s-ins [data-inssaldoeind]').innerText()).toContain('onvolledig');
+    await page.click('#s-ins [data-inssaldoeind]');
     await expect(page.locator('[data-veontbreekt]')).toContainText('Zonder bekend saldo');
   });
 });

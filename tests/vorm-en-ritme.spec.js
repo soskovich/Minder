@@ -109,18 +109,17 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
 
   /* v367: het herogetal is het saldo en draagt geen accent; de groene regel vrij te besteden is de ingang naar de opbouw,
      met een chevron. Groen is daar een stand (er is vrij geld), geen teal. */
-  test('het herogetal op Home is het saldo, en de ingang naar de opbouw is de groene regel', async ({ page }) => {
+  test('het herogetal op Home is het saldo, en de groene regel staat er niet meer (v439)', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('dash'));
     const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-dash .hh-big'), v = document.querySelector('#s-dash [data-vrij]');
-      return { grad: el.classList.contains('grad'), tik: el.closest('[data-saldoblok]').getAttribute('onclick') === 'openBalances()', vrij: v.getAttribute('onclick'), pijl: v.innerText.includes('›') };   // v378: de tik staat op het saldoblok
+      const el = document.querySelector('#s-dash .hh-big'), v = document.querySelector('#s-dash [data-vrij]');   // v439: geen groene regel meer
+      return { grad: el.classList.contains('grad'), tik: el.closest('[data-saldoblok]').getAttribute('onclick') === 'openBalances()', vrij: v };   // v378: de tik staat op het saldoblok
     });
     expect(r.grad).toBe(true);    // de klasse draagt het verloop van Aurora; in het standaardthema is het saldo de tekstkleur
     expect(await page.evaluate(() => getComputedStyle(document.querySelector('#s-dash .hh-big')).color)).toBe(await page.evaluate(() => getComputedStyle(document.body).color));
     expect(r.tik).toBe(true);
-    expect(r.vrij).toBe('openSafeToSpend()');
-    expect(r.pijl).toBe(true);
+    expect(r.vrij).toBe(null);
   });
 
   test('Maand en Plan zijn niet aangeraakt', async ({ page }) => {

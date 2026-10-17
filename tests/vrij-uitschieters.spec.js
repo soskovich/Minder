@@ -6,23 +6,16 @@ const I = require('./inzichten-stand');
 const O = require('./opschonen-stand');
 
 test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat eronder', () => {
-  test('de groene regel is safeToSpend(), en het dagbedrag is datzelfde getal door de resterende dagen', async ({ page }) => {
+  /* v439: vrij te besteden staat niet meer op Home (gevraagd door de gebruiker); het saldo blijft het hoofdgetal en de opbouw-sheet
+     blijft bestaan (bereikbaar vanuit de aansluiting van "terug" en de aankoopcheck rekent met hetzelfde bedrag). */
+  test('Home draagt het saldo als hoofdgetal en geen groene regel meer', async ({ page }) => {
     await I.boot(page);
     await page.evaluate(() => go('dash'));
-    const r = await page.evaluate(() => {
-      const S = safeToSpend(), el = document.querySelector('[data-vrij]'), dag = document.querySelector('[data-vrijdag]');
-      return { safe: S.safe, saldo: Math.round(S.saldo), vrij: +el.dataset.vrij, tekst: el.innerText, perDag: +dag.dataset.vrijdag,
-        dagen: maandDagenOver(thisYM()), big: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo,
-        hero: document.querySelector('.homehero').innerText };
-    });
-    expect(r.safe).toBeGreaterThan(0);
-    expect(r.vrij).toBe(r.safe);
+    const r = await page.evaluate(() => ({ saldo: Math.round(safeToSpend().saldo), big: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo,
+      vrij: document.querySelectorAll('#s-dash [data-vrij], #s-dash [data-vrijdag]').length, hero: document.querySelector('.homehero').innerText }));
     expect(r.big).toBe(r.saldo);
-    expect(r.perDag).toBe(Math.round(r.safe / r.dagen));
-    expect(r.tekst).toContain('waarvan vrij te besteden');
-    expect(r.tekst).toContain(`per dag · nog ${r.dagen} dagen`);
-    expect(r.hero).not.toMatch(/deze maand, dus/);
-    expect(r.hero).not.toMatch(/Veilig te besteden/);
+    expect(r.vrij).toBe(0);
+    expect(r.hero).not.toMatch(/vrij te besteden/i);
   });
   test('op de bank plus contant is het totaal', async ({ page }) => {
     await I.boot(page);
@@ -36,10 +29,9 @@ test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat er
     expect(r.contant).toBe(80);
     expect(Math.round(r.bank + r.contant)).toBe(totaal);
   });
-  test('een tik opent de opbouw, en de laatste regel is exact safeToSpend()', async ({ page }) => {
+  test('de opbouw eindigt exact op safeToSpend()', async ({ page }) => {
     await I.boot(page);
-    await page.evaluate(() => go('dash'));
-    await page.click('[data-vrij]');
+    await page.evaluate(() => { go('dash'); openSafeToSpend(); });   // v439: geen tik op Home meer
     const r = await page.evaluate(() => ({ safe: safeToSpend().safe, eind: +document.querySelector('[data-vrijeind]').dataset.vrijeind,
       kop: document.querySelector('[data-vrijkop]').innerText, deling: document.querySelector('[data-vrijdeling]').innerText,
       V: vrijPerDag() }));

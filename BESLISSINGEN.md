@@ -16,6 +16,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 
 ### Wat telt als wat (rekenregels)
 
+- **`v439` · Een getal op een plek: verwacht saldo eind maand op Inzichten, in de maandkaart; Home alleen het saldo.** Gevraagd door de gebruiker op 17 okt. De Forecast op Inzichten zei hetzelfde soort ding als de Budget-meter op Grip, en de wijzigingen-regel hoort bij Begrijpen. Home toonde vrij te besteden en het verwachte eind naast het saldo; die zijn weg.
+  - DE PRIJS: vrij te besteden staat op geen scherm meer. De aankoopcheck rekent er nog mee en de opbouw-sheet is nog bereikbaar vanuit de aansluiting van "terug"; komt de vraag terug, dan is de bron er nog (`safeToSpend()`).
+  - DE VALKUIL: de potje-stap van v174/v321 hing aan het negatieve vrij-getal en is daarom mee verdwenen; een krappe maand wordt op Home niet meer benoemd.
+
 - **`v438` · Een groep vergelijkt zijn forecast met zijn vastgelegde budget; een wijziging deze maand zit in die forecast, niet in een eigen staaf.** Gezien op het toestel op 17 okt: vast -EUR 195 waar -EUR 118 hoorde (EUR 979 tegen EUR 1.097).
   - DE OORZAAK: v437 trok de wijziging van de groep af EN zette hem als eigen staaf; de geaccepteerde Shurgard (+77) telde zo een keer te veel bij vast. Een acceptatie verandert de betaling niet, dus ook de forecast niet (`wijzForecastEffect()` meet dat per wijziging).
   - ZONDER POTJE IS EEN STAAF: alles in een categorie zonder potje, ook een herkende vaste last zonder potje; de verdeling noemt het eenmalige deel.

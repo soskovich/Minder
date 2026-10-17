@@ -4130,24 +4130,8 @@ function vrijPerDagLine(){
   return `<div class="small" data-vrijdag="${V.perDag}" style="color:var(--mut);margin-top:1px">${vrijDagTekst(V)}</div>`;
 }
 function vrijDagTekst(V){ return `${euro0(V.perDag)} per dag \u00b7 nog ${V.dagenResterend} ${V.dagenResterend===1?'dag':'dagen'}`; }
-/* v367: VRIJ TE BESTEDEN IS EEN REGEL ONDER HET SALDO, EN HET SALDO IS HET HOOFDGETAL (gevraagd door de gebruiker,
-   mockup "vrij geld"). Een groot saldo als eerste getal leest als besteedbaar geld; de groene regel eronder houdt het
-   anker eerlijk. Het bedrag is safeToSpend().safe, dezelfde bron als de opbouw-sheet erachter en de aankoopcheck op
-   Grip, en het dagbedrag is datzelfde getal gedeeld door maandDagenOver(): een bron, een noemer. Een tik opent de
-   opbouw (openSafeToSpend()). Onder nul geen dagbedrag maar de regel van v321 (safeKrapRegel()), onder de regel; bij
-   een onvolledig saldo de reden van v206. */
-function vrijRegel(S){
-  let V=null; try{ V=vrijPerDag(); }catch(_){}
-  const safe=Math.round(S.safe), krapRustig=isMode('rustig') && safe<0;
-  const col=safe<0?(krapRustig?'var(--amber)':'var(--red)'):'var(--green)';
-  const binnen=V && V.volledig && V.ruimte>0;
-  const onder=binnen?'':vrijPerDagLine();
-  /* v378: de i noemt dezelfde posten als de opbouw-sheet, en eindigt op de route ernaartoe. */
-  NOTES.veiligtebesteden=`${esc(JARGON.veiligtebesteden)} <span style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="hideTip();openSafeToSpend()">Zo kom je op ${euro0(safe)} \u203a</span>`;
-  return `<div data-vrij="${safe}" role="button" onclick="openSafeToSpend()" style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:12px;cursor:pointer;background:color-mix(in srgb,${col} 10%,transparent);border:1px solid color-mix(in srgb,${col} 28%,transparent)">
-    <div style="flex:1;min-width:0"><div style="font-size:13px;color:${col};font-weight:600">${safe<0?'':'waarvan '}${jrg('veiligtebesteden','vrij te besteden')}</div>${binnen?vrijPerDagLine():''}</div>
-    <div style="font-weight:800;font-size:20px;color:${col};white-space:nowrap;font-variant-numeric:tabular-nums">${euro0(safe)} <span style="font-size:15px">\u203a</span></div></div>${onder}`;
-}
+/* v439: vrijRegel() (waarvan vrij te besteden op Home) is weg, gevraagd door de gebruiker. safeToSpend().safe blijft de bron van de
+   aankoopcheck en van de opbouw-sheet (openSafeToSpend()). */
 // drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
 function openFixedDue(){
   const L=monthLiquidity(); const all=(L.fixDueItems||[]).slice().sort((a,b)=>a.day-b.day);
@@ -4655,42 +4639,19 @@ function renderDash(){
   const S2=safeToSpend(); const sWarn=S2.missing>0;
   // Geen bekend saldo (bv. vlak na een pure bestand-import): dan is het saldo onbekend, geen stellige \u20ac0,00.
   const balKnown=S2.known>0;
-  // Rustig-modus: een tekort blijft zichtbaar, maar niet als groot alarmrood getal. Spiegel, gevolg, keuze.
-  const krapRustig=isMode('rustig') && S2.safe<0;
-  const safeCol=krapRustig?'var(--amber)':(S2.safe<0?'var(--red)':'var(--teal)');
-  /* v174: de volgende stap stond alleen in Rustig, dus Begeleid en Expert kregen het rode getal
-     zonder uitweg - precies omgekeerd aan wat die modusnamen beloven. Zelfde zin, zelfde route,
-     alleen de aanhef verschilt: Rustig dempt het getal en zegt er iets bij, de andere modi tonen
-     het getal en krijgen dezelfde stap. */
-  /* v321: EN ALLEEN ALS ER NOG GEEN POTJE IS. De poort was `safe<0 && balKnown`, dus de regel
-     bood "Maak potje" aan bij iemand die al potjes heeft, en dan belooft hij een handeling die er
-     niet meer is (en de echte stap, een potje VERLAGEN, staat er niet). Wat een krappe maand nu
-     zegt staat een regel hoger, in safeKrapRegel(), met de route naar de post die het zwaarst
-     weegt. `totalBudget()` is de toets en niet `varBudget()`: de vraag is of je al EEN potje hebt,
-     en een terugkerend potje is er ook een. */
-  const krapNote=(S2.safe<0 && balKnown && totalBudget()<=0)
-    /* v321: DE RUSTIG-AANHEF IS HIER VERVALLEN, en dat is een gevolg en geen bijvangst: de regel
-       een plek hoger ZEGT sinds deze ronde wat er aan de hand is ("Je plan vraagt EUR X meer dan er
-       deze maand is"), en "Je zit deze maand krap." ernaast is een tweede formulering van datzelfde
-       feit (v91). Wat van v174 staat is dat elke modus dezelfde volgende stap krijgt, en dat is nu
-       letterlijk dezelfde ZIN in alle drie; wat Rustig apart houdt is de gedempte kleur, en die zit
-       in safeCol en is niet aangeraakt. */
-    ? `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px">E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
-    : '';
+  /* v439: de potje-stap bij een krappe maand (v174/v321) hing aan vrij te besteden, en dat staat niet meer op Home. */
   // Zonder \u00e9\u00e9n bekend saldo rekent safeToSpend met 0. Dat getal dan groot tonen is even onwaar als "totaal saldo \u20ac0,00":
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
   const hero = balKnown
     ? `<div class="homehero" style="cursor:default">
     ${saldoBlok(S2.saldo)}
     ${bankVervalHero()}
-    ${vrijRegel(S2)}
-    ${krapNote}
-    ${verwachtEindRij()}
+    ${''/* v439: vrij te besteden, de potje-stap bij een krappe maand en Verwacht eind staan niet meer op Home (gevraagd door de gebruiker) */}
   </div>`
     : `<div class="homehero" style="cursor:default">
     <div class="hh-lbl">Totaal saldo</div>
     <div class="hh-big" style="color:var(--mut);font-size:26px;letter-spacing:-.4px">onbekend</div>
-    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()">vrij te besteden <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
+    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()"><span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
     <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px;max-width:34em">Je transacties zijn binnen, je saldo nog niet: een bestand bevat dat niet. Zolang we niet weten wat er op je rekening staat, kunnen we ook niet zeggen wat er vrij is. Je uitgaven en potjes werken gewoon.</div>
   </div>`;
   // ---- recente transacties: kale lijst ----
@@ -4781,20 +4742,8 @@ function homeBonusVerwacht(){
   const bedrag=Math.round(V.reduce((s,v)=>s+(+v.amount||0),0));
   return {bedrag, naam: V.length===1?irrNaamKlein(V[0]):'onregelmatig inkomen'};
 }
-const HOME_RIJ='display:flex;align-items:flex-start;gap:10px;border-radius:10px;padding:8px 10px;margin:8px 0 0;background:var(--card);cursor:pointer';
-/* v438: "Nog te ontvangen" staat niet meer op Home (gevraagd door de gebruiker). Home houdt Totaal saldo, waarvan vrij te besteden
-   en Verwacht eind <maand>; het inkomen dat nog komt staat in die laatste sheet (openVerwachtEind) en in de tegel op Inzichten. De
-   verwachte bonus staat sindsdien in de kaart "Verwacht saldo eind <maand>" op Inzichten (insSaldoEindKaart). */
-/* VERWACHT EIND VAN DE MAAND (v378). Het bedrag is maandVerloop().eind, dezelfde bron als monthLiquidity().projected
-   en de dagen van deze maand in liquidityDaily(): er is EEN eindstand van de maand. Bij een saldo dat deels onbekend
-   is staat er "onvolledig" bij, en de sheet noemt welke rekening ontbreekt. */
-function verwachtEindRij(){
-  let V=null; try{ V=maandVerloop(); }catch(_){ return ''; }
-  const mnd=MFULL[+V.ym.slice(5,7)-1].toLowerCase();
-  return `<div data-verwachteind="${V.eind}" role="button" style="${HOME_RIJ};align-items:center" onclick="openVerwachtEind()">
-    <div style="flex:1;min-width:0;font-size:var(--fs-md)">Verwacht eind ${esc(mnd)}</div>
-    <div style="white-space:nowrap;font-weight:700">\u2248 ${euro0(V.eind)}${V.missing>0?' <span class="small muted" style="font-weight:400">\u00b7 onvolledig</span>':''} <span style="color:var(--teal)">\u203a</span></div></div>`;
-}
+/* v439: Verwacht eind <maand> staat niet meer op Home (gevraagd door de gebruiker); het staat als "Verwacht saldo eind <maand>" in de
+   maandkaart op Inzichten (insSaldoEindRegel()), en openVerwachtEind() is de sheet erachter. VERWACHT EIND (v378) is maandVerloop().eind. */
 function openVerwachtEind(){
   let V=null, S=null; try{ V=maandVerloop(); S=safeToSpend(); }catch(_){ return; }
   const mi=+V.ym.slice(5,7)-1, mnd=MFULL[mi].toLowerCase(), dim=new Date(+V.ym.slice(0,4), mi+1, 0).getDate();
@@ -23564,7 +23513,9 @@ function insMaandKaart(P, soort){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const vastLab=soort==='alle'&&S.MBV?` <span class="ins-lock" data-vastsinds="${esc(S.MBV.op)}">vast sinds ${esc(new Date(S.MBV.op+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''))}</span>`:'';
   const inlegTxt=soort==='alle'&&S.inleg>0?`<div class="small" data-insinleg="${S.inleg}" style="color:var(--mut2);margin-top:1px">waarvan Plan-inleg ${euro0(S.inleg)}</div>`:'';
-  const fc=soort==='alle'&&V&&!V.onbekend?`<div class="row" data-insforecast="${Math.round(V.projectie)}" style="justify-content:space-between;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid var(--line)"><span class="small">Forecast eind ${esc(ymFull(m).split(' ')[0])}</span><b data-insgetal>${euro0(Math.round(V.projectie))}</b></div>${budgetWijzRegel()}`:'';
+  /* v439: de Forecast en de regel met de wijzigingen deze maand zijn weg (gevraagd door de gebruiker); op hun plek staat het verwachte
+     saldo eind van de maand met een verwachte bonus (insSaldoEindRegel()), dezelfde bron als de sheet erachter. */
+  const fc=insSaldoEindRegel();
   return `<div class="card" id="insMaand" data-insmaand="nu" data-insuit="${uit}" data-insbudget="${bud}" data-instempoverschil="${dt}">
     <div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}${vastLab}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b> <span class="muted" data-insgetal>van ${euro0(bud)}${soort==='alle'&&S.limiet?' inkomen-limiet':''}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
@@ -23894,15 +23845,18 @@ function renderInsPotje(){
    eind" op Home (maandVerloop().eind, een bron), en een verwacht eenmalig inkomen (een bonus uit SET.irregularIncome die nog niet
    binnen is) als eigen regel die niet meetelt, met het saldo mét bonus eronder. Is de bonus binnen, dan valt de regel weg en zit
    het bedrag in het saldo. Een tik opent dezelfde sheet als op Home: lezen, geen handeling. */
-function insSaldoEindKaart(){ let V=null; try{ V=maandVerloop(); }catch(_){ return ''; }
+/* v439: DEZELFDE INHOUD STAAT IN DE MAANDKAART, op de plek van de Forecast (gevraagd door de gebruiker): geen eigen kaart meer, maar
+   een regel met een lijn erboven, onderaan de maandkaart van de lopende maand. Is de naam van de bonus al "eenmalig ...", dan staat
+   "eenmalig" er niet nog een keer achter. */
+function insSaldoEindRegel(){ let V=null; try{ V=maandVerloop(); }catch(_){ return ''; }
   const mnd=MFULL[+V.ym.slice(5,7)-1].toLowerCase(), Bo=homeBonusVerwacht();
-  return `<div class="card" id="insSaldoEind" data-inssaldoeind="${V.eind}" role="button" style="cursor:pointer;padding:10px 14px" onclick="openVerwachtEind()">
-    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span style="font-size:var(--fs-md)">Verwacht saldo eind ${esc(mnd)}</span><span style="white-space:nowrap;font-weight:800">≈ ${euro0(V.eind)}${V.missing>0?' <span class="small muted" style="font-weight:400">· onvolledig</span>':''} <span style="color:var(--teal)">›</span></span></div>
-    ${Bo?`<div class="small" data-insbonus="${Bo.bedrag}" style="color:var(--mut2);margin-top:3px">+ ${esc(Bo.naam)} ${euro0(Bo.bedrag)} · eenmalig · telt mee zodra binnen</div><div class="small" data-inssaldobonus="${V.eind+Bo.bedrag}" style="color:var(--mut2)">≈ ${euro0(V.eind+Bo.bedrag)} met ${esc(Bo.naam)}</div>`:''}</div>`; }
+  const eenm=Bo&&/eenmalig/i.test(Bo.naam)?'':' · eenmalig';
+  return `<div id="insSaldoEind" data-inssaldoeind="${V.eind}" role="button" style="cursor:pointer;margin-top:8px;padding-top:6px;border-top:1px solid var(--line)" onclick="openVerwachtEind()">
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span class="small">Verwacht saldo eind ${esc(mnd)}</span><span style="white-space:nowrap;font-weight:800">≈ ${euro0(V.eind)}${V.missing>0?' <span class="small muted" style="font-weight:400">· onvolledig</span>':''} <span style="color:var(--teal)">›</span></span></div>
+    ${Bo?`<div class="small" data-insbonus="${Bo.bedrag}" style="color:var(--mut2);margin-top:3px">+ ${esc(Bo.naam)} ${euro0(Bo.bedrag)}${eenm} · telt mee zodra binnen</div><div class="small" data-inssaldobonus="${V.eind+Bo.bedrag}" style="color:var(--mut2)">≈ ${euro0(V.eind+Bo.bedrag)} met ${esc(Bo.naam)}</div>`:''}</div>`; }
 function renderIns(){
   const P=insPeriode(), soort=insSoort();
   $('#s-ins').innerHTML = insFilterKnop(P,soort) + insMaandKaart(P,soort)
-    + (P.key==='nu' ? insSaldoEindKaart() : '')
     + (P.key==='nu' ? insWeekTegel() + insHistorieRegel() : '')   // v436: de patroontegels zijn weg; het label staat bij de signalen op Grip
     + insVerschuiving();
 }
@@ -27026,8 +26980,7 @@ function diagGrendel(){
     L.push('   safeClaims(), wat deze maand nog vraagt, op bedrag: '
       +(cl.length?cl.map(c=>c.key+' '+c.bedrag).join(', '):'(geen claim boven nul)')
       +'   <- savedBal en resBal doen hier niet mee: al opzij gezet');
-    L.push('   "Maak potje" staat er: '+_dV(()=>(ST.safe<0 && ST.known>0 && totalBudget()<=0))
-      +'   <- alleen zonder enig potje; totalBudget(): '+_dV(()=>totalBudget()));
+    L.push('   vrij te besteden, deze zin en "Maak potje" staan sinds v439 niet meer op Home; totalBudget(): '+_dV(()=>totalBudget()));
   }
   L.push('');
   /* v319: EN WAT ER WERKELIJK OPZIJ GING. Tot deze ronde las Plan nergens een boeking, dus de cap

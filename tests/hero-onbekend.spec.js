@@ -90,7 +90,7 @@ test.describe('wél een bekend saldo', () => {
     expect(s.known).toBe(1);
     /* v367: het hoofdgetal is het saldo; vrij te besteden staat in de groene regel eronder */
     expect((await heroBig(page)).trim()).toBe(s.txt);
-    expect(await page.locator('#s-dash [data-vrij]').innerText()).toContain(s.vrij);
+    expect(await page.locator('#s-dash [data-vrij]').count()).toBe(0);   // v439: vrij te besteden staat niet meer op Home
     const hero = (await page.locator('#s-dash .homehero').innerText()).replace(/\s+/g, ' ');
     expect(hero).toContain('Totaal saldo €2.500');
     expect(hero).not.toContain('€2.500,00');

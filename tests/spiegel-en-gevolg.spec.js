@@ -190,42 +190,20 @@ const heroVan = async (page) => {
 };
 
 test.describe('2 · een tekort krijgt in elke modus dezelfde volgende stap', () => {
-  for (const mode of ['rustig', 'begeleid', 'expert']) {
-    test(`${mode}: spiegel, gevolg en keuze`, async ({ page }) => {
-      await boot(page, seed({ mode, saldo: 100 }));
-      const r = await heroVan(page);
-      // spiegel en gevolg: het tekort staat er als feit
-      expect(r.txt, mode).toContain('Je plan vraagt');
-      expect(r.txt, mode).toContain('meer dan er deze maand is');
-      // keuze: de grootste claim draagt een route naar een bestaand scherm
-      expect(r.txt, mode).toContain('De grootste claims');
-      expect(r.routes.length, mode).toBeGreaterThan(1);
-    });
-  }
-
-  test('zonder enig potje is "Maak potje" de stap, in elke modus', async ({ page }) => {
+  /* v439: VRIJ TE BESTEDEN STAAT NIET MEER OP HOME (gevraagd door de gebruiker), en daarmee ook de zin onder een negatief
+     getal en de potje-stap: die hoorden bij dat getal. De zin bestaat nog (safeKrapRegel(), blok 3 van het diagnosescherm) en
+     staat getoetst in inkomen-venster.spec.js. Wat dit blok nu vasthoudt is dat Home in geen modus een tekort-regel draagt. */
+  test('in geen modus staat er een tekort-regel of potje-stap op Home', async ({ page }) => {
     for (const mode of ['rustig', 'begeleid', 'expert']) {
-      await boot(page, seed({ mode, saldo: 100, set: { budgets: {} } }));
-      const r = await heroVan(page);
-      expect(r.txt, mode).toContain('Eén potje geeft je grip op waar het heen gaat.');
-      expect(r.html, mode).toContain('openPotjePick()');
-      expect(r.txt, mode).toContain('Maak potje');
+      for (const set of [undefined, { budgets: {} }]) {
+        await boot(page, seed(set ? { mode, saldo: 100, set } : { mode, saldo: 100 }));
+        expect(await page.evaluate(() => safeToSpend().safe), mode).toBeLessThan(0);
+        const r = await heroVan(page);
+        expect(r.txt, mode).not.toContain('Je plan vraagt');
+        expect(r.txt, mode).not.toContain('Maak potje');
+        expect(r.html, mode).not.toContain('openPotjePick()');
+      }
     }
-  });
-
-  test('Rustig houdt zijn gedempte kleur, en zegt het tekort niet twee keer', async ({ page }) => {
-    await boot(page, seed({ mode: 'rustig', saldo: 100 }));
-    const rustig = await heroVan(page);
-    expect(rustig.html).toContain('var(--amber)');
-    /* v321: de aanhef "Je zit deze maand krap." is vervallen, want de regel erboven zegt datzelfde
-       feit met een bedrag erbij (v91). Wat Rustig apart houdt is de kleur, en die zit in safeCol.
-       DE ASSERTIE IS STERKER DAN DE OUDE: de tekst van Rustig is nu KARAKTER VOOR KARAKTER gelijk
-       aan die van Begeleid, en dat kon de oude vorm niet zeggen. */
-    expect(rustig.txt).not.toContain('Je zit deze maand krap');
-    await boot(page, seed({ mode: 'begeleid', saldo: 100 }));
-    const begeleid = await heroVan(page);
-    expect(begeleid.html).not.toContain('var(--amber)');
-    expect(rustig.txt).toBe(begeleid.txt);
   });
 
   test('zonder tekort staat de stap er niet', async ({ page }) => {

@@ -269,8 +269,11 @@ test('f. de post rekent niets na en leest monthLiquidity()', async ({ page }) =>
 
 /* ---------- g. de zin onder een negatief herogetal ---------- */
 const homeRegel = (page) => page.evaluate(() => {
+  /* v439: de regel staat niet meer op Home (vrij te besteden is daar weg); safeKrapRegel() bestaat nog voor blok 3 van het
+     diagnosescherm (via vrijPerDagLine()), dus de zin wordt hier los gerenderd en de hero apart gelezen */
   go('dash');
-  const d = document.querySelector('.homehero [data-krap]');
+  const w = document.createElement('div'); w.innerHTML = safeKrapRegel(); document.body.appendChild(w);
+  const d = w.querySelector('[data-krap]');
   const hero = document.querySelector('.homehero');
   const S = safeToSpend();
   return {
@@ -346,9 +349,9 @@ test('g. de dagentelling onder het maandgetal is weg', async ({ page }) => {
   const r = await homeRegel(page);
   expect(r.heroTekst).not.toContain('Je ruimte voor deze maand is op');
   expect(r.heroTekst).not.toMatch(/\d+ dagen te gaan/);
-  // en bij een POSITIEVE ruimte staat het dagbedrag er onveranderd wel
+  // en bij een POSITIEVE ruimte geeft vrijPerDagLine() het dagbedrag (v439: niet meer op Home, wel in blok 3)
   await boot(page, { spaarBedrag: 0, geenPotjes: true });
-  const p = await page.evaluate(() => { go('dash'); return { safe: safeToSpend().safe, t: document.querySelector('.homehero').innerText }; });
+  const p = await page.evaluate(() => { const w = document.createElement('div'); w.innerHTML = vrijPerDagLine(); return { safe: safeToSpend().safe, t: w.innerText }; });
   expect(p.safe).toBeGreaterThan(0);
   expect(p.t).toMatch(/per dag/);
 });
@@ -370,38 +373,16 @@ test('g. label en route van een claim staan op een plek, met twee lezers', async
   expect(t).toContain('Nog te sparen deze maand');
 });
 
-/* ---------- h. "Maak potje" alleen zonder potjes ---------- */
-test('h. "Maak potje" staat er niet als je al potjes hebt', async ({ page }) => {
-  await boot(page);
-  const met = await page.evaluate(() => { go('dash'); return { pot: totalBudget(), safe: safeToSpend().safe, t: document.querySelector('.homehero').innerText }; });
-  expect(met.pot).toBeGreaterThan(0);
-  expect(met.safe).toBeLessThan(0);
-  expect(met.t).not.toContain('Maak potje');
-
-  /* zonder enig potje blijft hij staan: dan is het wel de volgende stap. HET SPAARBEDRAG GAAT HIER
-     OMHOOG, en dat is geen truc maar een gevolg: de potjes waren zelf 1.700 van de claims, dus
-     zonder potjes is de stand niet meer krap en zou deze helft de regel in een POSITIEVE maand
-     toetsen. Iets anders moet die claim dragen. */
-  await boot(page, { geenPotjes: true, spaarBedrag: 4300 });
-  const zonder = await page.evaluate(() => { go('dash'); return { pot: totalBudget(), safe: safeToSpend().safe, t: document.querySelector('.homehero').innerText }; });
-  expect(zonder.pot).toBe(0);
-  expect(zonder.safe).toBeLessThan(0);
-  expect(zonder.t).toContain('Maak potje');
-
-  /* EEN TERUGKEREND POTJE IS OOK EEN POTJE, en dat is het geval dat `totalBudget()` van
-     `varBudget()` onderscheidt: varBudget() laat de terugkerende categorieen eruit, dus met alleen
-     een huur-potje is die som nul terwijl je wel degelijk al een potje hebt gemaakt. Zonder dit
-     geval is de keuze voor totalBudget() niet te meten (meetles a). */
-  await boot(page, { geenPotjes: true, spaarBedrag: 4300, set: { budgets: { huur: 1200 } } });
-  const alleenVast = await page.evaluate(() => {
-    go('dash');
-    return { pot: totalBudget(), varB: varBudget(), safe: safeToSpend().safe,
-             t: document.querySelector('.homehero').innerText };
-  });
-  expect(alleenVast.pot).toBeGreaterThan(0);
-  expect(alleenVast.varB).toBe(0);
-  expect(alleenVast.safe).toBeLessThan(0);
-  expect(alleenVast.t).not.toContain('Maak potje');
+/* ---------- h. "Maak potje" ----------
+   v439: de potje-stap hing aan vrij te besteden op Home, en die regel is weg (gevraagd door de gebruiker). Met en zonder potjes
+   staat hij nergens meer op Home. */
+test('h. "Maak potje" staat niet meer op Home, met of zonder potjes', async ({ page }) => {
+  for (const o of [{}, { geenPotjes: true, spaarBedrag: 4300 }]) {
+    await boot(page, o);
+    const t = await page.evaluate(() => { go('dash'); return { safe: safeToSpend().safe, t: document.querySelector('.homehero').innerText }; });
+    expect(t.safe).toBeLessThan(0);   // de invoer is krap: zonder v439 stond de stap er bij geen potjes
+    expect(t.t).not.toContain('Maak potje');
+  }
 });
 
 /* ---------- i. blok 3 drukt het inkomen altijd af ---------- */
@@ -424,7 +405,7 @@ test('i. blok 3 noemt baseIncome(), het venster en incDue, ook bij een vast spaa
   expect(r.t).toContain('VEILIG TE BESTEDEN, PER TERM');
   for (const k of ['savedBal', 'resBal', 'fixDueRecurring', 'reserved', 'saveReserved']) expect(r.t).toContain(k);
   expect(r.t).toContain('sluit aan: JA');
-  expect(r.t).toContain('"Maak potje" staat er: false');
+  expect(r.t).toContain('staan sinds v439 niet meer op Home');
 });
 
 test('i. het blok schrijft niets', async ({ page }) => {
@@ -442,24 +423,11 @@ test('i. het blok schrijft niets', async ({ page }) => {
   expect(r.gelijk).toBe(true);
 });
 
-/* ---------- j. de prijs in pixels ---------- */
-for (const [w, h] of [[360, 640], [390, 844]]) {
-  test(`j. de hero past op ${w}x${h}`, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: h });
-    await boot(page);
-    const r = await page.evaluate(() => {
-      go('dash');
-      const hero = document.querySelector('.homehero');
-      const krap = document.querySelector('.homehero [data-krap]');
-      if (!krap) return { geenKrap: true };
-      const nav = document.querySelector('.nav');
-      return { hero: Math.round(hero.getBoundingClientRect().height),
-               krap: Math.round(krap.getBoundingClientRect().height),
-               bodem: Math.round(krap.getBoundingClientRect().bottom + window.scrollY),
-               vouw: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0) };
-    });
-    expect(r.geenKrap).toBeUndefined();    // de invoer draagt de krappe stand werkelijk
-    console.log(`PX ${w}x${h} hero=${r.hero} krapregel=${r.krap} bodem=${r.bodem} vouw=${r.vouw}`);
-    expect(r.bodem).toBeLessThan(r.vouw);
-  });
-}
+/* ---------- j. de prijs in pixels ----------
+   v439: vervallen; de krappe regel staat niet meer in de hero, dus er is daar geen regel om te meten. Wat blijft: hij staat er niet. */
+test('j. de hero draagt geen krappe regel meer', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(() => { go('dash'); return { safe: safeToSpend().safe, n: document.querySelectorAll('.homehero [data-krap]').length }; });
+  expect(r.safe).toBeLessThan(0);
+  expect(r.n).toBe(0);
+});
