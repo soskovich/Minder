@@ -895,6 +895,14 @@ const ANDER_KW=['REVOLUT','WISE','N26'];   // v420: uit de intern-rij (besluit v
    als lening markeert. Met bewijs dat het je eigen rekening is (je eigen naam, een eigen IBAN, een tegenkant) blijft hij intern. */
 const TIKKIE_KW='TIKKIE';
 function isTikkie(t){ return !!t && String((t.name||'')+' '+(t.desc||'')).toUpperCase().includes(TIKKIE_KW); }
+/* v440 item 6: bij een Tikkie (SEPA iDEAL/Wero) is de tegenpartij-van-record de Tikkie-rekening (in refNums), en de ECHTE
+   aanvrager staat met zijn IBAN in de omschrijving. tikkieIban() haalt die aanvrager-IBAN eruit: de eerste volledige IBAN in
+   de omschrijving waarvan het rekeningdeel niet de Tikkie-rekening is. tegenIbanNums() is de verzameling rekeningdelen van de
+   echte tegenpartij (de aanvrager bij een Tikkie, anders refNums), de ene bron voor een match op IBAN (de woning). */
+function tikkieIban(t){ if(!isTikkie(t)) return ''; const rek=new Set(t.refNums||[]);
+  for(const m of String(t.desc||'').toUpperCase().matchAll(/[A-Z]{2}\d{2}[A-Z0-9]{8,30}/g)){ const num=ibanNum(m[0]); if(num && !rek.has(num)) return m[0]; }
+  return ''; }
+function tegenIbanNums(t){ if(isTikkie(t)){ const a=tikkieIban(t); return new Set(a?[ibanNum(a)]:[]); } return new Set((t&&t.refNums)||[]); }
 /* v421: alleen voor blok 20 ("WISSELT VAN GROEP"): de stand van v419 in het geheugen nagerekend, zonder opslaan. */
 let _SIM419=false;
 const RULES=[
@@ -1172,6 +1180,12 @@ function maandBudgetDeInlegHerstel(){ const D=SET.mbDeInleg; if(!D || !Array.isA
     r.inleg=Math.round(+g.voor.inleg||0); r.totaal=Math.round(+g.voor.totaal||0); r.potjes=Object.assign({}, g.voor.potjes||{});
     if(Array.isArray(g.voor.verplaatst) && g.voor.verplaatst.length) r.verplaatst=g.voor.verplaatst.map(x=>Object.assign({},x)); else delete r.verplaatst; }
   D.hersteld=vandaagYMD(); return true; }
+/* v440: bestaande categorieregels met een afgekapte betaaldienst-staart ("Nathaniel Cathalina via") krijgen die staart eraf,
+   zodat een regel die de gebruiker op een Tikkie zette ook de gewone overboeking van dezelfde naam vangt. Een keer, bij het
+   laden, vóór TX.forEach(categorize). Dezelfde strip als de weergave (viaBetaaldienstWeg), dus geen tweede definitie. */
+function viaRegelMigreer(){ if(SET.mbViaRegel) return false; const R=SET.rules; const geraakt=[];
+  if(Array.isArray(R)) for(const r of R){ const nk=viaBetaaldienstWeg(String(r.kw||'')).toUpperCase().trim(); if(nk && nk!==r.kw){ geraakt.push({voor:r.kw, na:nk}); r.kw=nk; } }
+  SET.mbViaRegel={op:vandaagYMD(), geraakt}; return true; }
 function maandBudget437(){ if(SET.mb437) return false; const ym=thisYM(), M=SET.maandBudget||{}, x=M[ym];
   SET.mb437={op:vandaagYMD()}; if(!x || x.bron==='maandwissel') return true;
   const H=maandBudgetHerstel(ym); SET.mb437.voor={ym, totaal:x.totaal, inleg:x.inleg};
@@ -5011,11 +5025,19 @@ function hideTip(){ try{ const p=document.getElementById('tipPop'); if(p) p.clas
 
 
 /* ----- ACTIEPLAN: concrete, data-gedreven bespaaracties ----- */
-function cleanMerch(s){ return (s||'').replace(/\s+/g,' ')
+/* v440: "via <betaaldienst>" achter een naam eraf. Een bank hangt bij een betaalverzoek de dienst achter de aanvrager
+   ("Nathaniel Cathalina via SEPA iDEAL/Wero"), en soms kapt hij hem af tot een losse "via". Een gedeelde helper, met twee
+   lezers (cleanMerch voor de weergave en de regel, en viaRegelMigreer voor bestaande regels, v104), zodat een Tikkie- en een
+   overboekingsvariant van dezelfde naam dezelfde categorie krijgen. */
+function viaBetaaldienstWeg(s){ return (s||'')
+  .replace(/\s+VIA\s+(SEPA|IDEAL|WERO|TIKKIE|PAYPAL|KLARNA|SOFORT|BANCONTACT|APPLE\s*PAY|GOOGLE\s*PAY)\b[A-Za-z0-9/ .&-]*$/i,'')
+  .replace(/\s+VIA\s*$/i,''); }
+function cleanMerch(s){ let x=(s||'').replace(/\s+/g,' ')
   .replace(/^\s*(BEA|GEA|ECOM)[, ]*/i,'')
   .replace(/\b(GOOGLE PAY|APPLE PAY|BETAALPAS|CONTACTLOOS|VIA TIKKIE)\b/gi,'')
-  .replace(/\bNR[: ].*$/i,'')
-  .replace(/\b(B\.?V\.?|N\.?V\.?|PURMEREND|PURME|AMSTERDAM|ZAANDAM|WEERWAL|KOOIMANPLEIN|HOUTEN|DE MEERN)\b/gi,'')
+  .replace(/\bNR[: ].*$/i,'');
+  x=viaBetaaldienstWeg(x);
+  return x.replace(/\b(B\.?V\.?|N\.?V\.?|PURMEREND|PURME|AMSTERDAM|ZAANDAM|WEERWAL|KOOIMANPLEIN|HOUTEN|DE MEERN)\b/gi,'')
   .replace(/BCK\*|CCV\*|SUMUP ?\*|ZTL\*/gi,'')
   .replace(/[^A-Za-z0-9 &.\-]/g,'').replace(/\s+/g,' ').trim(); }
 /* v350: de naam in Recent op Home: opgeschoond met dezelfde cleanMerch() als elders, de bankomschrijving staat
@@ -24021,6 +24043,7 @@ function loanTotals(){
 // markeren: categorie omzetten én een post in het grootboek. Eén tik is genoeg; de rest is optioneel.
 function markLoan(txId, richting, soort){
   const t=TX.find(x=>x.id===txId); if(!t) return;
+  if(catOf(t)==='huur'){ try{ toast('Dit is je huur, geen lening'); }catch(_){} return; }   // v440 item 6: een huurbetaling wordt nooit een lening of uitgeleend
   const bedrag=Math.round(Math.abs(+t.amount||0)*100)/100; if(!(bedrag>0)) return;   // v420: in centen (Western Union 405,99)
   SET.loans=loans().filter(l=>l.txId!==txId);
   SET.loans.push({id:'l'+Date.now().toString(36)+Math.floor(Math.random()*1e3).toString(36),
@@ -25766,8 +25789,15 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   const zet=(n,k,E)=>{ if(Z[n]) return; if(!kennisGet(k)) kennisZet(k, Object.assign({op:vandaagYMD(), zaad:n}, E)); Z[n]=vandaagYMD(); gedaan=true; };
   const nik=TX.find(t=>t.amount<0 && /^NIKKI\b/.test(recurKey(t)));
   if(nik) zet('nikki', 'vast|'+recurKey(nik), {soort:'vast', partij:benoemPartij(nik), wat:'Voetbalcontributie', potje:kennisCatVan('Kinderen')||catOf(nik), tx:[]});
+  /* v440 item 6: de woning is Nathaniel Cathalina (NL77ABNA0599037806), vanaf okt 2026, EUR 300 per maand rond de 1e, door jou.
+     De sleutel is het rekeningdeel van zijn IBAN, dus zowel de Tikkie (aanvrager-IBAN uit de omschrijving) als de latere gewone
+     overboeking naar diezelfde IBAN valt onder deze woning (woningKeyVan), zonder een extra vraag. Ml Macnack is dan de vorige
+     woning (gestopt aug 2026); zonder een opvolger blijft Macnack gewoon de woning. */
+  const CATH_IBAN='NL77ABNA0599037806', cathNum=ibanNum(CATH_IBAN);
+  const cath=TX.find(t=>t.amount<0 && tegenIbanNums(t).has(cathNum));
   const mac=TX.find(t=>t.amount<0 && /MACNACK/.test(recurKey(t)));
-  if(mac) zet('macnack', 'woning|'+recurKey(mac), {soort:'woning', partij:benoemPartij(mac), wat:'Woonhuur (gestopt)', ja:true, tx:[]});
+  if(mac) zet('macnack', 'woning|'+recurKey(mac), {soort:'woning', partij:benoemPartij(mac), wat:cath?'Woonhuur (vorige woning)':'Woonhuur (gestopt)', ja:true, gestopt:cath?'2026-08':undefined, tx:[]});
+  if(cath) zet('cathalina', 'woning|'+cathNum, {soort:'woning', partij:'Nathaniel Cathalina', iban:CATH_IBAN, wat:'Woonhuur', bedrag:300, dag:1, vanaf:'2026-10', ja:true, tx:[]});
   /* v427: het antwoord "Zorg EUR 159, eenmalig" hoort bij de Tikkie aan Lausa Eriksson (09-10), niet bij een andere boeking van
      EUR 159 (Posh Clinic); een zaad dat op een andere boeking staat wordt een keer weggehaald, en die boeking is weer "nog niet benoemd". */
   const zrg=TX.find(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`));
@@ -25897,7 +25927,12 @@ function kennisVervangerWie(key, nieuw, ja){ const E=kennisGet('vervanger|'+key)
   save(); keuzeKlaar(ja?E.wat:'Niet de vervanger', herstel); }
 
 /* ---- e. WONING: jij wijst hem aan; de grootste vaste post in Huur is alleen een voorstel ---- */
-function kennisWoningKey(){ for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='woning' && E.ja) return k.slice(7); return null; }
+function kennisWoningKey(){ for(const [k,E] of Object.entries(SET.kennis||{})) if(E && E.soort==='woning' && E.ja && !E.gestopt) return k.slice(7); return null; }
+/* v440 item 6: onder welke woning-sleutel hoort deze boeking. Match op IBAN (het rekeningdeel van de tegenpartij, bij een
+   Tikkie de aanvrager), anders de naam (recurKey). Zo vallen een Tikkie en een gewone overboeking naar dezelfde IBAN samen. */
+function woningKeyVan(t){ const ibs=tegenIbanNums(t);
+  for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.soort!=='woning' || !E.iban) continue; if(ibs.has(ibanNum(E.iban))) return k.slice(7); }
+  return recurKey(t); }
 function kennisWoningVoorstel(){ let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed' && s.cat==='huur' && +s.amount>=KENNIS_MIN); }catch(_){}
   R=R.filter(s=>!kennisGet('woning|'+s.key)).sort((a,b)=>b.amount-a.amount); return R[0]||null; }
 function kennisWoningVragen(){ if(kennisWoningKey()) return []; const s=kennisWoningVoorstel(); if(!s) return [];
@@ -30813,8 +30848,11 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
       if(geenNorm(c) || !isUitgave(t, B)){ const g=!geenNorm(c)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm';
         buiten+=geld; bDeel[g]+=geld; bTx.push({t, v:geld}); bSoort.push({t, g, v:geld}); continue; }
       buiten+=geld-vn; bDeel.uitres+=geld-vn; if(Math.abs(geld-vn)>=0.005) bSoort.push({t, g:'uitres', v:geld-vn});
-      /* v420: de woning per partij, uit alles wat in Huur als vast telt (een post of het vaste potje) */
-      if(c==='huur' && (isFixed(t) || potHeelVast(c))){ const k=recurKey(t); woning[k]=(woning[k]||0)+vn; wNaam[k]=wNaam[k]||t; }
+      /* v420: de woning per partij, uit alles wat in Huur als vast telt (een post of het vaste potje); v440: of wat op IBAN
+         bij een woning uit "Wat Minder van jou weet" hoort (woningKeyVan), zodat een huur-Tikkie en de gewone overboeking
+         naar dezelfde IBAN samen onder de woning vallen en samen uit "uitgaven zonder woning" blijven */
+      const wk=woningKeyVan(t), wKennis=(kennisGet('woning|'+wk)||{}).soort==='woning';
+      if(c==='huur' && (isFixed(t) || potHeelVast(c) || wKennis)){ woning[wk]=(woning[wk]||0)+vn; wNaam[wk]=wNaam[wk]||t; }
       if(isFixed(t)){ const k=recurKey(t); posten[k]=(posten[k]||0)+vn; postNaam[k]=postNaam[k]||t; (postTx[k]=postTx[k]||[]).push(t); }
       else if(potHeelVast(c)) vastPot[c]=(vastPot[c]||0)+vn;
       else if((+B[c]||0)>0) potjes[c]=(potjes[c]||0)+vn;
@@ -33030,7 +33068,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(maandBudgetDeInleg()) save(); }catch(_){} try{ if(maandBudget437()) save(); }catch(_){} try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(maandBudgetDeInleg()) save(); }catch(_){} try{ if(viaRegelMigreer()) save(); }catch(_){} try{ if(maandBudget437()) save(); }catch(_){} try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
