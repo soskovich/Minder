@@ -69,13 +69,15 @@ test.describe('a - Inzichten voor en na', () => {
     expect(t).toMatch(/uitgegeven/i);
     // v382: de tegels zijn weg; de maandkaart draagt de budgetstand in zijn kop: uitgegeven van je maandbudget,
     // uit dezelfde totals() als voorheen. Het percentage van v208 blijft vervallen.
-    const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), T = totals(thisYM());
+    /* v440 sectie 8: de kop van de maandkaart gaat over je potjes (potjes-uitgave van het potjesdeel); de vaste lasten
+       staan als context eronder. insMaandStand.uit blijft de hele uitgave, maar de kaart leidt met de potjes. */
+    const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), S = insMaandStand();
       return { stand: k.dataset.insmaand, uit: +k.dataset.insuit, bud: +k.dataset.insbudget, kop: k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g, ' '),
-        spendNorm: Math.round(T.spendNorm), budget: Math.round(T.budget) }; });
+        puit: Math.round(S.potjes + S.zonder), potDeel: S.potDeel }; });
     expect(r.stand).toBe('nu');
-    expect(r.uit).toBe(r.spendNorm);
-    expect(r.bud).toBe(r.budget);
-    expect(r.kop).toMatch(/€[\d.]+ van €[\d.]+/);
+    expect(r.uit).toBe(r.puit);
+    expect(r.bud).toBe(r.potDeel);
+    expect(r.kop).toMatch(/€[\d.]+ van €[\d.]+ potjes/);
     expect(r.kop).not.toMatch(/%/);
   });
 

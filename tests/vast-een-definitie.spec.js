@@ -59,9 +59,9 @@ test('A: de terugvalpost in een vast potje telt als nog vast, niet in je potjes 
   const r = await page.evaluate(() => { const S = insMaandStand(); return { nogVast: S.nogVast, fixDue: Math.round(monthLiquidity().fixDue), huurPot: S.potRijen.find((x) => x.k === 'huur') || null }; });
   expect(r.nogVast).toBe(r.fixDue + 137);
   expect(r.huurPot).toBeNull();
-  // de sheet achter "Nog te gaan · vast" draagt dezelfde regels, en ze tellen op tot het getal
+  // v440 sectie 8: de vaste lasten staan als context onder de kaart ([data-insvast], tik opent de vast-sheet)
   await page.evaluate(() => go('ins'));
-  await page.locator('[data-insleg="nogvast"]').click();
+  await page.locator('#insMaand [data-insvast]').click();
   const s = await page.locator('#insTegelSheet[data-instegelsheet="vast"]').evaluate((e) => ({ w: +e.dataset.inswaarde, rijen: [...e.querySelectorAll('[data-insrij]')].map((x) => +x.dataset.insrij), t: e.innerText }));
   expect(s.w).toBe(r.nogVast);
   expect(s.rijen.reduce((a, x) => a + x, 0)).toBe(r.nogVast);

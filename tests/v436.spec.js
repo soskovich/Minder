@@ -22,7 +22,10 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     expect(r).toEqual({ V: 3095, nu: 3135, wijz: 40, meter: 3095, ins: 3095, brug: 3095, p7: 3095, sal: 3095, bron: 'herstel' });
     await page.evaluate(() => { go('ins'); renderIns(); });
     const k = await page.locator('#insMaand').innerText();
-    expect(k).toMatch(/van €3\.095/);
+    /* v440 sectie 8: de Inzichten-maandkaart leidt met je POTJES (potjes-uitgave van het potjesdeel), niet meer met het hele
+       budget. Het vastgelegde budget €3.095 staat op V.budget, de Budget-meter, de brug, blok 20 en de salariskaart (zie het
+       r-object hierboven, ins = insMaandStand().Bvast = 3095); de kaart toont het als "vast sinds 1 okt". */
+    expect(k).toMatch(/van €[\d.]+ potjes/);
     expect(k).toMatch(/vast sinds 1 okt/);
     expect(k).not.toMatch(/Plan-inleg/);   // v440: geen Plan-inleg meer in het budget
     expect(k).not.toMatch(/3\.375|3\.415/);

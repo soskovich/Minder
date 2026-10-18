@@ -28,7 +28,9 @@ test.describe('a · de maandkaart van 7 oktober', () => {
     const r = await page.evaluate(() => { const M = insMaandStand(); return { b: Math.round(totals(thisYM()).budget), M }; });
     const k = await kaart(page);
     expect(r.b).toBe(3376);
-    expect(+k.insbudget).toBe(r.b); expect(+k.insuit).toBe(r.M.uit);
+    /* v440 sectie 8: de kop gaat over je potjes (potjes-uitgave van het potjesdeel); de v327-eigenschap
+       (budget = uitgegeven + nog in potjes + nog te betalen) blijft op insMaandStand. */
+    expect(+k.insbudget).toBe(r.M.potDeel); expect(+k.insuit).toBe(Math.round(r.M.potjes + r.M.zonder));
     expect(r.M.uit + r.M.nogVast + r.M.nogPot).toBe(r.b);
     expect(r.M.boven).toBe(0);
   });
@@ -81,7 +83,10 @@ test.describe('b · het tempo telt een vaste last op zijn datum', () => {
     const r = await page.evaluate(() => { const s = document.getElementById('insTegelSheet');
       return { w: +s.dataset.inswaarde, delen: [...s.querySelectorAll('[data-insrij]')].map((e) => +e.dataset.insrij),
         tempo: +s.querySelector('[data-instempo]').dataset.instempo, tdelen: [...s.querySelectorAll('[data-instempodeel]')].map((e) => +e.dataset.instempodeel), M: insMaandStand() }; });
-    expect(r.w).toBe(uit);
+    /* v440 sectie 8: de kop van de kaart toont je potjes (puit); de uitgegeven-sheet achter de kop toont de HELE
+       maanduitgave (M.uit = vast + potjes + zonder) en het volle trap-tempo, en telt daar intern op. */
+    expect(uit).toBe(Math.round(r.M.potjes + r.M.zonder));
+    expect(r.w).toBe(r.M.uit);
     expect(r.delen.reduce((a, b) => a + b, 0)).toBe(r.w);
     expect(r.tdelen.reduce((a, b) => a + b, 0)).toBe(r.tempo);
     expect(r.tempo).toBe(r.M.tempo);

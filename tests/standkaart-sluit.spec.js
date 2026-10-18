@@ -108,18 +108,20 @@ test('b4 de lijst achter "nog te betalen" zegt dat Shurgard in zijn potje telt',
   expect(t).toMatch(/IN EEN POTJE · TELT DAAR[\s\S]*Shurgard NL[\s\S]*uit je potje Huur/i);
 });
 
-test('c1 de maandkaart toont €2.380 nog in potjes, zonder dagbedrag (v367)', async ({page})=>{
+test('c1 de maandkaart toont €2.380 nog in potjes, zonder dagbedrag (v367/v440 sectie 8)', async ({page})=>{
   await bootStand(page);
-  /* v382: de tegels zijn weg; "nog in potjes" is de rij [data-insleg="nogpot"] in de legenda van de maandkaart,
-     en uitgegeven staat in de kop ([data-insuit]). go() hertekent niet als het scherm al de bron is (v280) */
-  const t=await page.evaluate(()=>{ go('ins'); renderIns(); const k=document.querySelector('#insMaand');
+  /* v382: de tegels zijn weg; "nog in potjes" is de rij [data-insleg="nogpot"] in de legenda van de maandkaart.
+     v440 sectie 8: de kop gaat over je potjes (potjes-uitgave van het potjesdeel), niet meer over het hele budget;
+     de vaste lasten staan als context eronder. go() hertekent niet als het scherm al de bron is (v280) */
+  const t=await page.evaluate(()=>{ go('ins'); renderIns(); const k=document.querySelector('#insMaand'), S=insMaandStand();
     const pot=k.querySelector('[data-insleg="nogpot"]');
-    return {pot:pot?pot.innerText.replace(/\s+/g,' '):'', potv:pot?+pot.dataset.v:null, uit:+k.dataset.insuit, kop:k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g,' ')}; });
+    return {pot:pot?pot.innerText.replace(/\s+/g,' '):'', potv:pot?+pot.dataset.v:null, uit:+k.dataset.insuit, puit:Math.round(S.potjes+S.zonder), kop:k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g,' ')}; });
   expect(t.potv).toBe(2380);
   expect(t.pot).toMatch(/in potjes €2\.380/);
   expect(t.pot).not.toMatch(/per dag/);
-  expect(t.uit).toBe(175);
-  expect(t.kop).toMatch(/€175 van €3\.375/);
+  expect(t.uit).toBe(t.puit);                         // de kop is de potjes-uitgave
+  expect(t.kop).toMatch(/€[\d.]+ van €[\d.]+ potjes/);
+  expect(t.kop).not.toMatch(/€3\.375/);               // niet meer het hele budget in de kop
 });
 
 /* v413: de vraag per post met de vlag uit reservering (groep a) kan de regel onder "nog N" duwen; dan staat hij in de

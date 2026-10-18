@@ -197,11 +197,12 @@ test.describe('d · het trap-tempo', () => {
     expect(r.vastSom).toBeLessThanOrEqual(r.B);
     expect(r.tempo).toBe(r.B);
   });
-  test('de streep op de balk staat op het tempo, en het verschil in de kop klopt', async ({ page }) => {
+  /* v440 sectie 8: de streep en de kop gaan alleen over je potjes (potTempo, potjes+zonder tegen het potjesdeel). */
+  test('de streep op de balk staat op het potjes-tempo, en het verschil in de kop klopt', async ({ page }) => {
     await boot(page, '2026-10-10');
     const r = await page.evaluate(() => { const M = insMaandStand(); const k = document.querySelector('#insMaand').dataset; return { M, tempo: +document.querySelector('[data-instempo]').dataset.instempo, dt: +k.instempoverschil }; });
-    expect(r.tempo).toBe(r.M.tempo);
-    expect(r.dt).toBe(r.M.uit - r.M.tempo);
+    expect(r.tempo).toBe(r.M.potTempo);                              // de streep staat op het potjes-tempo, niet op vast+potjes
+    expect(r.dt).toBe((r.M.potjes + r.M.zonder) - r.M.potTempo);     // het verschil is de potjes-uitgave min het potjes-tempo
     expect(r.M.potTempo).toBe(Math.round(r.M.potDeel * 10 / 31));
   });
   test('een potje loopt lineair, met het patroon als grijze stip', async ({ page }) => {
@@ -218,12 +219,16 @@ test.describe('d · het trap-tempo', () => {
 });
 
 test.describe('e · de maandkaart', () => {
-  test('de drie delen van uitgegeven tellen op tot de kop, en de balk draagt vijf soorten', async ({ page }) => {
+  /* v440 sectie 8: de kop is de potjes-uitgave (potjes + zonder potje); de vaste lasten staan in de context eronder, niet in
+     de balk. De balk draagt dus potjes, zonder potje en nog in potjes. insMaandStand.uit blijft de hele uitgave (= spendNorm). */
+  test('de kop is de potjes-uitgave, en de balk draagt potjes, zonder potje en nog in potjes', async ({ page }) => {
     await boot(page, '2026-10-10');
-    const r = await page.evaluate(() => { const M = insMaandStand(); return { M, spend: Math.round(totals(thisYM()).spendNorm), segs: [...document.querySelectorAll('#insMbBalk [data-insseg]')].map((e) => e.dataset.insseg) }; });
-    expect(r.M.vast + r.M.potjes + r.M.zonder).toBe(r.M.uit);
+    const r = await page.evaluate(() => { const M = insMaandStand(); const k = document.querySelector('#insMaand').dataset;
+      return { M, puit: +k.insuit, spend: Math.round(totals(thisYM()).spendNorm), segs: [...document.querySelectorAll('#insMbBalk [data-insseg]')].map((e) => e.dataset.insseg) }; });
+    expect(r.M.vast + r.M.potjes + r.M.zonder).toBe(r.M.uit);          // insMaandStand.uit is de hele uitgave
     expect(Math.abs(r.M.uit - r.spend)).toBeLessThanOrEqual(1);
-    expect(r.segs).toEqual(['vast', 'potjes', 'zonder', 'nogvast', 'nogpot']);
+    expect(r.puit).toBe(r.M.potjes + r.M.zonder);                      // de kop is alleen de potjes
+    expect(r.segs).toEqual(['potjes', 'zonder', 'nogpot']);            // geen vast/nogvast meer in de balk
   });
   test('in potjes opent de potjeslijst, zonder potje de boekingen', async ({ page }) => {
     await S.boot(page, { dag: '2026-10-10', extraTx: [{ id: 'kap1', date: '2026-10-08', amount: -45, name: 'Kapper Jan', desc: 'BEA, BETAALPAS KAPPER JAN' }] });

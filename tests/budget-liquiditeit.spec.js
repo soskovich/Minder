@@ -56,13 +56,15 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     expect(e.varRoom).toBe(1480);       // de rest = basis voor het dag-/weektempo
   });
 
-  test('budgetkaart toont het potjes-totaal, niet de limiet', async ({ page }) => {
+  test('budgetkaart toont het potjesdeel, niet de limiet', async ({ page }) => {
     await open(page);
     await page.evaluate(() => go('ins'));
     const t = await text(page, '#s-ins');
-    /* v382: de grafiek is weg; het budget staat in de kop van de maandkaart ("van €2.400", [data-insbudget]). */
-    expect(await page.locator('#insMaand').getAttribute('data-insbudget')).toBe('2400');
-    expect(await text(page, '#insMaand [data-insmaandkop]')).toContain('van €2.400');
+    /* v382: de grafiek is weg; het budget staat in de kop van de maandkaart. v440 sectie 8: de kop gaat over je potjes, dus
+       de noemer is het potjesDEEL (potDeel = budget min de vaste lasten), niet het hele potjes-totaal en niet de limiet. */
+    const potDeel = await page.evaluate(() => insMaandStand().potDeel);
+    expect(+(await page.locator('#insMaand').getAttribute('data-insbudget'))).toBe(potDeel);
+    expect(await text(page, '#insMaand [data-insmaandkop]')).toContain('van €' + potDeel.toLocaleString('nl-NL') + ' potjes');
     /* v178: de limiet-spiegel was een oordeel over je plan en verhuisde naar Maand; v228 liet hem
        daar vervallen (tests/vaststellen-zonder-gevolg.spec.js). De limiet zelf blijft een meting. */
     expect(t).not.toContain('inkomen-limiet');

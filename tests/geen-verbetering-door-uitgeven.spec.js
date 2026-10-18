@@ -60,11 +60,13 @@ async function boot(page, extra) {
 const meet = (page) => page.evaluate(() => {
   go('ins'); const d = document.getElementById('insMaand');
   const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : 0; };
-  const tegels = { 'Nog te betalen \u00b7 vast': leg('nogvast') };
+  // v440 sectie 8: "nog te betalen \u00b7 vast" staat als context onder de kaart ([data-insvastnog]), niet meer als legendarij
+  const vastNog = () => { const e = d.querySelector('[data-insvastnog]'); return e ? +e.dataset.insvastnog : 0; };
+  const tegels = { 'Nog te betalen \u00b7 vast': vastNog() };
   const tekst = document.getElementById('s-ins').innerText.replace(/\s+/g, ' ');
   // v365: Nog te ontvangen staat op Home (dezelfde bron, monthLiquidity().incDue)
   tegels['Nog te ontvangen'] = Math.round(monthLiquidity().incDue);
-  return { tegels, varPlan: leg('nogpot'), tekst, heeftVast: !!d.querySelector('[data-insleg="nogvast"]'),
+  return { tegels, varPlan: leg('nogpot'), tekst, heeftVast: !!d.querySelector('[data-insvast]'),
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
 });
 
@@ -157,7 +159,7 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
       /* v382: de feiten zijn legendarijen van de maandkaart onder "Nog te gaan" */
       go('ins'); const d = document.getElementById('insMaand');
       const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : null; };
-      const tg = { 'Nog te betalen · vast': leg('nogvast') };
+      const vn = d.querySelector('[data-insvastnog]'); const tg = { 'Nog te betalen · vast': vn ? +vn.dataset.insvastnog : 0 };   // v440 sectie 8: context onder de kaart
       // v359: het vierde feit is "Nog in potjes"; v382: de rij "in potjes"
       const VP = varPotjeStand(m);
       return { tg, varPlan: leg('nogpot'),

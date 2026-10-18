@@ -130,6 +130,30 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v440 (sectie 8 + item 6): TEMPO ALLEEN OVER JE POTJES, DE WONING ALS VERWACHTE VASTE LAST, EN TWEE REGELS IN BLOK 20** (`v440`,
+  mockup `design/mockups/Minder_Opzij_VoorNa_v6_Mockup.html` sectie 8, gevraagd door de gebruiker). (1) FORECAST-DEDUP: een betaling
+  aan je woning (een Tikkie of een overboeking naar dezelfde IBAN, `woningKeyVan` === de woning-sleutel; de ids in `woningPaymentIds`,
+  gememoiseerd op `_dataGen`) is een vaste last (`isFixed`), geen variabele uitgave. De kennis (`woning|<iban>`: bedrag, dag, vanaf)
+  geeft de verwachte maandhuur; `woningForecast(m)` is de ENE bron: `betaald` (de woning-betalingen van die maand, een keer geteld) +
+  `nog` (= bedrag − betaald, niet onder nul) = bedrag, dus nooit allebei (geen dubbeltelling met de verwachte vaste last).
+  `monthLiquidity` haalt een schema- of terugvalpost die op recurKey een woning-betaling is eerst weg (`_wkeys`) en zet dan `nog` als
+  fixDueItem onder de woning-sleutel (`woning:true`, cat huur); zo telt een per SEPA-incasso herkende huur niet dubbel. Lezers: de
+  forecast (fixDue → Home, Grip, Inzichten), de Inzichten-kaart en blok 20. Spec `woning-forecast.spec.js` (vier sabotages rood,
+  waaronder de per-incasso-leak). (2) DE INZICHTEN-MAANDKAART LEIDT MET JE POTJES (`insMaandKaart`, soort 'alle'): de kop is de
+  potjes-uitgave (`S.potjes+S.zonder`, `data-insuit`) van het potjesdeel (`S.potDeel`, `data-insbudget`), de streep op het
+  potjes-tempo (`S.potTempo`, `data-instempo`), de balk draagt potjes/zonder/nogpot. De vaste lasten tellen op hun eigen betaaldatum
+  en staan als CONTEXT eronder ("vaste lasten · op hun eigen datum EUR X betaald · nog EUR Y", `data-insvast`/`data-insvastnog`, tik
+  opent de vast-sheet), met de woning als eigen regel ("+ <partij> (nieuw)" in zijn eerste maand, `data-inswoning`, uit
+  `woningForecast`, afgetrokken van de generieke vaste-lasten zodat hij een keer telt) en "telt niet mee in het tempo"
+  (`data-insniettempo`); `insPersRegel` en `insSaldoEindRegel` (v439) blijven, de soort-tabs 'vast'/'var' houden hun eigen weergave.
+  Zonder potjes heet de noemer "inkomen-limiet" (`S.limiet`). DIT HERZIET v382/v436/v367 VOOR DE 'ALLE'-KAART: het hele budget (EUR
+  3.095 op de v436-stand) staat niet meer als kop op Inzichten maar op V.budget, de Budget-meter, de brug, blok 20 en de
+  salariskaart; `insMaandStand().Bvast` draagt het nog als veld. Spec `v440-tempo.spec.js` (vier sabotages rood); inzichten-week,
+  opschonen, persoonlijk-geen-uitgave, potjes-instrument, potjesregel-aansluiting, standkaart-sluit, vast-een-definitie,
+  nog-deze-maand-eenmaal, zwijgen-bij-onbekend en v436 1a gemigreerd. (3) BLOK 20 (`diagMaandBudget`, alleen lezen): een OPZIJ-regel
+  (leest `opzijPeriode`, het netto naar je spaarrekening tegen het doel uit Kiezen) en een "vaste lasten zonder potje"-regel (een
+  herkende incasso met EUR 0 budget valt op; elke vaste last hoort een potje te hebben). Spec `v440-blok20.spec.js` (vier sabotages
+  rood).
 - **v440: OPZIJ STAAT LOS VAN HET BUDGET; DE PLAN-INLEG BESTAAT NIET MEER; OPZIJ WORDT PER SALARISPERIODE GEMETEN** (`v440`, gevraagd
   door de gebruiker, mockup `design/mockups/Minder_Opzij_VoorNa_v6_Mockup.html`; getallen uit de app, niet uit de mockup). (1) DE
   PLAN-INLEG VERVALT: het vastgelegde maandbudget is de SOM VAN DE POTJES, zonder aparte inleg (`maandBudgetNu` en de forecast
@@ -164,8 +188,9 @@ genoemde versietag.)*
   deze maand blijft het potje staan (de ruimte staat als niet gebruikt in de forecast). RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
   v441. Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld, terug-aansluiting,
   geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437 is door v440
-  achterhaald). NOG OPEN (eigen rondes): de Zien-tabel (budget/verwacht/verschil + opzij met doel en gedaan), het Kiezen-scherm
-  (verdeling), Inzichten en tempo over potjes, blok 20 OPZIJ/MAANDBUDGET, en de huur-Cathalina-herclassificatie (data op je toestel).
+  achterhaald). NOG OPEN (eigen rondes): de Zien-tabel (budget/verwacht/verschil + opzij met doel en gedaan) en het Kiezen-scherm
+  (verdeling); de huur-Cathalina op je toestel nakijken (welke rekening ··0806 is). Tempo over potjes, de woning als verwachte vaste
+  last en blok 20 OPZIJ/MAANDBUDGET zijn gebouwd (zie de v440-regel over sectie 8 + item 6 bovenaan).
 - **v439: INZICHTEN DRAAGT HET VERWACHTE SALDO IN DE MAANDKAART, HOME ALLEEN HET SALDO** (`v439`, gevraagd door de gebruiker, gezien op
   het toestel op 17 okt). Inzichten: "Forecast eind <maand>" en "wijzigingen deze maand (alleen forecast) ›" zijn weg uit de maandkaart;
   op die plek staat `insSaldoEindRegel()` (`#insSaldoEind`, `data-inssaldoeind`, `maandVerloop().eind`) met de verwachte bonus

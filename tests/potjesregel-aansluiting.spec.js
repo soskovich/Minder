@@ -162,23 +162,20 @@ test.describe('a · het getal is per potje budget min gebruikt, niet onder nul',
     expect(r.gat).toBeLessThan(0);
   });
 
-  test('de kop van de kaart noemt een ANDERE noemer, en dat staat er ook', async ({ page }) => {
+  test('de kop van de kaart gaat over je potjes, niet over het hele budget (v440 sectie 8)', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
-    /* v382: de noemer van de kaart (totals().spendNorm tegen totals().budget) staat in de kop van de maandkaart, de
-       potjes-noemer (varBudget) in de rij "in potjes". Twee bronnen, twee plekken, en ze lopen uiteen. */
-    expect(r.kaart.uit).toBe(r.kaartSpend);
-    expect(r.kaart.budget).toBe(r.kaartBudget);
+    const S = await page.evaluate(() => insMaandStand());
+    /* v440 sectie 8: de kop van de maandkaart gaat over je potjes (potjes-uitgave van het potjesdeel), zodat tempo en
+       "onder budget" hetzelfde verhaal vertellen. Niet meer totals().spendNorm tegen totals().budget (vast+potjes+zonder);
+       die blijven de bron van de brug en blok 20. De rij "in potjes" leest varPotjeStand (varBudget), zijn eigen bron. */
+    expect(r.kaart.uit).toBe(Math.round(S.potjes + S.zonder));
+    expect(r.kaart.budget).toBe(S.potDeel);
+    expect(r.kaart.budget).not.toBe(r.kaartBudget);   // niet het hele budget (de oude noemer)
     expect(r.lab).not.toMatch(/maandbudget|uitgegeven/);
-    /* DE TWEE NOEMERS LOPEN UITEEN EN DE TWEE RESTANTEN VALLEN OP DEZE FIXTURE SAMEN: de gemelde stand draagt een
-       terugkerend potje (huur 1.200) dat volledig is afgeschreven, dus totals().budget is 2.930 en varBudget() 1.730
-       terwijl beide restanten op 598 uitkomen. Wat hier vastligt is dat elk van de twee zijn eigen bron leest. */
-    const kaartRestant = r.kaartBudget - r.kaartSpend;
     expect(r.valEur).toBe(r.reserve);           // v383: per potje niet onder nul
-    expect(r.budget).not.toBe(r.kaartBudget);
-    expect(r.budget).toBe(1730);
-    expect(r.kaartBudget).toBe(2930);
-    expect(kaartRestant).toBe(r.inPotjes);      // toeval van deze fixture, en dat zegt de test
+    expect(r.budget).toBe(1730);                // de potjesregel leest varBudget
+    expect(r.kaartBudget).toBe(2930);           // totals().budget (het hele budget) blijft die waarde elders
   });
 
   test('niets gebruikt: het hele potje staat er', async ({ page }) => {

@@ -158,15 +158,17 @@ test.describe('d · Inzichten', () => {
     expect(leg.zonder).toBe(r.S.zonder);
     expect(D.uit).toBe((leg.vast || 0) + (leg.potjes || 0) + leg.zonder);
   });
-  test('de delen in vaste volgorde met een tempostreep op het trap-tempo', async ({ page }) => {
+  /* v440 sectie 8: de balk en de streep gaan over je potjes (potjes, zonder potje, nog in potjes), met de streep op het
+     potjes-tempo; de vaste lasten staan als context eronder, niet in de balk. */
+  test('de potjes-delen in vaste volgorde met een tempostreep op het potjes-tempo', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
     const D = await mk(page);
     expect(D.stand).toBe('nu');
-    expect(D.segs).toEqual(['vast', 'potjes', 'zonder', 'nogvast', 'nogpot']);
+    expect(D.segs).toEqual(['potjes', 'zonder', 'nogpot']);
     const S = await page.evaluate(() => insMaandStand());
-    expect(D.uit).toBe(406); expect(S.nogVast).toBe(817); expect(S.nogPot).toBe(2153);
-    const t = await page.evaluate(() => document.querySelector('#insMaand .ins-tlab').innerText);
-    expect(D.tempo).toBe(S.tempo); expect(t).toBe('tempo €' + S.tempo.toLocaleString('nl-NL'));
+    expect(D.uit).toBe(Math.round(S.potjes + S.zonder)); expect(S.nogVast).toBe(817); expect(S.nogPot).toBe(2153);
+    const t = await page.evaluate(() => document.querySelector('#insMaand [data-instempopot]').innerText.replace(/\s+/g, ' '));
+    expect(D.tempo).toBe(S.potTempo); expect(t).toMatch(new RegExp('tempo potjes €' + S.potTempo.toLocaleString('nl-NL').replace('.', '\\.') + ' op'));
   });
   test('de kleur van elke legendarij is de kleur van zijn stuk in de balk', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('ins'));
@@ -174,7 +176,7 @@ test.describe('d · Inzichten', () => {
       const seg = document.querySelector(`#insMaand [data-insseg="${t.dataset.insleg}"]`);
       return { k: t.dataset.insleg, dot: getComputedStyle(t.querySelector('.ins-sq')).backgroundImage + getComputedStyle(t.querySelector('.ins-sq')).backgroundColor,
         seg: getComputedStyle(seg).backgroundImage + getComputedStyle(seg).backgroundColor }; }));
-    expect(r.length).toBeGreaterThan(2);
+    expect(r.length).toBeGreaterThanOrEqual(2);   // v440 sectie 8: de kaart draagt potjes/zonder/nogpot, geen vaste delen meer
     for (const x of r) expect(x.dot, x.k).toBe(x.seg);
     expect(new Set(r.map((x) => x.seg)).size).toBe(r.length);
   });

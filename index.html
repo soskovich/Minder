@@ -3835,7 +3835,7 @@ function maandLiqBasis(){
      betaald is (nog) komt in fixDue onder de woning-sleutel; de betaalde huur telt al als vaste last via isFixed. betaald +
      nog = bedrag, dus de huur telt een keer (geen dubbeltelling met de verwachte vaste last). */
   try{ const _WF=woningForecast(ym);
-    if(_WF.actief){ const _wp=woningPaymentIds(), _wkeys=new Set(); for(const t of TX){ if(_wp.has(t.id)) _wkeys.add(recurKey(t)); }
+    if(_WF.actief){ const _wkeys=woningRecurKeys();
       for(let i=fixDueItems.length-1;i>=0;i--){ if(_wkeys.has(fixDueItems[i].key)) fixDueItems.splice(i,1); }
       if(_WF.nog>0) fixDueItems.push({key:_WF.key, name:_WF.naam, amount:_WF.nog, day:_WF.dag, type:'fixed', intervalM:1, cat:'huur', incasso:true, woning:true}); } }catch(_){}
   // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
@@ -23538,6 +23538,34 @@ function insMaandKaart(P, soort){
   }
   const S=insMaandStand();
   if(!(S.B>0) && !(S.uit>0)) return `<div class="card" id="insMaand" data-insmaand="leeg"><div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}</div><div class="small muted">Je hebt nog geen potjes. Zet ze op Grip met "Budget aanpassen".</div></div>`;
+  /* v440 (mockup sectie 8): HET TEMPO GAAT ALLEEN OVER JE POTJES, waar je zelf invloed op hebt. De grote getallen en de streep
+     zijn de potjes tegen het potjesdeel; de vaste lasten tellen op hun eigen betaaldatum en staan als context eronder ("telt
+     niet mee in het tempo"), met de woning (woningForecast) als eigen regel, "(nieuw)" in zijn eerste maand. Zo vertellen
+     Inzichten en Zien hetzelfde verhaal: loop je achter op je potjes, dan eindig je onder je budget. */
+  if(soort==='alle'){
+    const puit=Math.round(S.potjes+S.zonder), pbud=S.potDeel, pt=S.potTempo, dt=puit-pt;
+    const dln=[{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}], ng=[{k:'nogpot', v:S.nogPot}];
+    const somNog=puit+Math.max(S.nogPot,0), schaal=Math.max(pbud, somNog, 1); let x=0;
+    const segs=[...dln, ...ng].map(d=>{ const w=Math.max(d.v,0)/schaal*100; const h=`<i data-insseg="${d.k}" data-v="${d.v}" style="left:${x.toFixed(2)}%;width:${w.toFixed(2)}%;background:${INS_SEG[d.k]}"></i>`; x+=w; return h; }).join('');
+    const tp=Math.min(Math.max(pt/schaal*100,0),100), pct=S.dim>0?Math.round(S.el/S.dim*100):0;
+    const streep=pbud>0?`<em data-instempo="${pt}" style="left:${tp.toFixed(2)}%"></em>`:'';
+    const dagTxt=new Date(vandaagYMD()+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
+    const tempoTxt=pbud>0?(dt>0?`${euro0(dt)} boven tempo`:(dt<0?`${euro0(-dt)} onder tempo`:'precies op tempo')):'';
+    const vastLab=S.MBV?` <span class="ins-lock" data-vastsinds="${esc(S.MBV.op)}">vast sinds ${esc(new Date(S.MBV.op+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''))}</span>`:'';
+    let WF=null; try{ WF=woningForecast(m); }catch(_){}
+    const wB=(WF&&WF.actief)?WF.betaald:0, wN=(WF&&WF.actief)?WF.nog:0;
+    const genB=Math.max(Math.round(S.vast-wB),0), genN=Math.max(Math.round(S.nogVast-wN),0);
+    const vastRij=(genB>0||genN>0)?`<div class="fl" style="cursor:pointer" role="button" data-insvast="${genB}" data-insvastnog="${genN}" onclick="openInsTegel('vast')"><span>vaste lasten · op hun eigen datum</span><span class="muted"><span data-insgetal>${euro0(genB)}</span> betaald · nog <span data-insgetal>${euro0(genN)}</span></span></div>`:'';
+    const woningRij=(WF&&WF.actief)?`<div class="fl" data-inswoning="${WF.nog>0?WF.nog:WF.betaald}"><span>+ ${esc(WF.naam)}${WF.nieuw?' (nieuw)':''}</span><span class="muted" data-insgetal>${euro0(WF.nog>0?WF.nog:WF.betaald)}</span></div>`:'';
+    const vastBlok=(vastRij||woningRij)?`<div style="margin-top:10px">${vastRij}${woningRij}<div class="small" style="color:var(--mut2);margin-top:2px" data-insniettempo>telt niet mee in het tempo</div></div>`:'';
+    return `<div class="card" id="insMaand" data-insmaand="nu" data-insuit="${puit}" data-insbudget="${pbud}" data-instempoverschil="${dt}">
+      <div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}${vastLab}</div>
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(puit)}</b> <span class="muted" data-insgetal>van ${euro0(pbud)} ${S.limiet?'inkomen-limiet':'potjes'}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
+      <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${pbud>0?16:4}px">${segs}${streep}</div>
+      ${pbud>0?`<div class="small muted" data-instempopot="${pt}">tempo potjes <span data-insgetal>${euro0(pt)}</span> op ${esc(dagTxt)} (${pct}% van de maand)</div>`:''}
+      <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>${insLegPaar(dln.filter(d=>d.v!==0), ng.filter(d=>d.v!==0))}</div>
+      ${vastBlok}${insPersRegel(S)}${insSaldoEindRegel()}</div>`;
+  }
   /* Per soort: variabel is potjes en zonder potje tegen het potjesdeel, vast is de vaste lasten tegen hun som. */
   const delen=insSoortDelen(S, soort);
   const nog=soort==='vast'?[{k:'nogvast', v:S.nogVast}]:(soort==='var'?[{k:'nogpot', v:S.nogPot}]:[{k:'nogvast', v:S.nogVast},{k:'nogpot', v:S.nogPot}]);
@@ -25945,13 +25973,15 @@ function woningKeyVan(t){ const ibs=tegenIbanNums(t);
 /* v440 forecast-dedup: de ids van de betalingen aan je ACTIEVE woning (woningKeyVan === de woning-sleutel). De bron voor
    isFixed: een huurbetaling (een Tikkie of een gewone overboeking naar dezelfde IBAN) is een vaste last en geen variabele
    uitgave. Gememoiseerd op _dataGen, net als recurringKeys; roept isFixed niet aan, dus geen circulariteit. */
-let _woningIds=null, _woningIdsGen=-1;
-function woningPaymentIds(){
-  if(_woningIdsGen===_dataGen && _woningIds) return _woningIds;
-  const s=new Set(), wk=kennisWoningKey();
-  if(wk) for(const t of TX){ if(t.pending || t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk) s.add(t.id); }
-  _woningIds=s; _woningIdsGen=_dataGen; return s;
+let _woning=null, _woningGen=-1;
+function _woningCalc(){
+  if(_woningGen===_dataGen && _woning) return _woning;
+  const ids=new Set(), rk=new Set(), wk=kennisWoningKey();
+  if(wk) for(const t of TX){ if(t.pending || t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk){ ids.add(t.id); rk.add(recurKey(t)); } }
+  _woning={ids, rk}; _woningGen=_dataGen; return _woning;
 }
+function woningPaymentIds(){ return _woningCalc().ids; }   // de ids van de woning-betalingen (isFixed)
+function woningRecurKeys(){ return _woningCalc().rk; }      // hun recurKeys, zodat monthLiquidity een schema-/terugvalpost op naam herkent
 /* v440: DE WONING ALS VERWACHTE MAANDHUUR, uit de kennis (bedrag, dag, vanaf). De Tikkie en de overboeking naar dezelfde IBAN
    zijn dezelfde huur: wat er deze maand al aan de woning ging telt een keer (betaald, via woningKeyVan), en wat nog niet
    betaald is staat als verwachting (nog = bedrag - betaald, niet onder nul). betaald + nog = bedrag, dus nooit allebei: geen
@@ -25961,7 +25991,7 @@ function woningForecast(m){
   const E=kennisGet('woning|'+wk)||{}, bedrag=Math.round(+E.bedrag||0), naam=E.partij||'woonhuur';
   if(!(bedrag>0) || (E.vanaf && m<E.vanaf)) return {actief:false, key:'woning|'+wk, naam, bedrag};
   let betaald=0; for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk) betaald+=-t.amount; }
-  betaald=Math.round(betaald); return {actief:true, key:'woning|'+wk, naam, cat:'huur', bedrag, betaald, nog:Math.max(bedrag-betaald,0), dag:Math.max(+E.dag||1,1)}; }
+  betaald=Math.round(betaald); return {actief:true, key:'woning|'+wk, naam, cat:'huur', bedrag, betaald, nog:Math.max(bedrag-betaald,0), dag:Math.max(+E.dag||1,1), nieuw:(E.vanaf===m)}; }
 function kennisWoningVoorstel(){ let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed' && s.cat==='huur' && +s.amount>=KENNIS_MIN); }catch(_){}
   R=R.filter(s=>!kennisGet('woning|'+s.key)).sort((a,b)=>b.amount-a.amount); return R[0]||null; }
 function kennisWoningVragen(){ if(kennisWoningKey()) return []; const s=kennisWoningVoorstel(); if(!s) return [];
