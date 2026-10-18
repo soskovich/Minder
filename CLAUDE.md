@@ -196,11 +196,22 @@ genoemde versietag.)*
   (herverdeling deze maand); 'verlagen vanaf volgende maand' (`soort:'verlaag'` in `teRuimBestemmingen`, `teRuimBevestig` doet
   `potPlanZet(k, nextYM, nieuw)`) is een budgetwijziging per v436: het maandbudget daalt vanaf volgende maand met het vrije bedrag,
   deze maand blijft het potje staan (de ruimte staat als niet gebruikt in de forecast). RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
-  v441. Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld, terug-aansluiting,
-  geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437 is door v440
-  achterhaald). NOG OPEN (eigen rondes): het Kiezen-scherm (de salarisverdeling); de huur-Cathalina op je toestel nakijken (welke
-  rekening ··0806 is). De Zien-tabel, tempo over potjes, de woning als verwachte vaste last en blok 20 OPZIJ/MAANDBUDGET zijn
-  gebouwd (zie de v440-regels over sectie 3 en sectie 8 + item 6 bovenaan).
+  v441. (6) KIEZEN (sectie 4, mockup "Na"): `renderSalVerdeling` toont "Zo verdeel je je salaris" met drie knoppen, NIETS
+  voorgeselecteerd (alle `btn sec`): Advies volgen (`data-salvakkoord`, akkoord met `rekVoorstel`), Andere verdeling
+  (`data-salvaanpassen`, `window._salv.modus='aanpassen'`, naar de aanpasvelden `data-salvveld`) en Niet nu (`data-salvnietnu`,
+  `closeSheet`). In de aanpas-modus zijn de knoppen Deze kiezen (`data-salvakkoord`) en Terug naar advies (`data-salvterug`, zet
+  `modus`/`eigen` terug, schrijft niets); opzij rekent live mee zodat de som het salaris blijft (`salVerdelingVeld`:
+  `opzij=P.salaris-som`, geklemd zodat de confirm bij opzij<0 uit staat met `voetRedenHTML`) en het gevolg (laagste saldo per
+  rekening) staat eronder (`data-salvgevolg`, `salGevolgHtml`). `salVerdelingZet` schrijft `SET.salVerdeling` (`.opzij` = het DOEL
+  dat `opzijPeriode().doel` leest, `.salYM` = de basis voor moment 1/2) en een afspraak, en verplaatst niets. De verdeling PER
+  rekening en de huur-rekening komen in v441. Spec `v440-kiezen.spec.js`, vijf sabotages (labels per modus, de modus-wissel, de
+  terug-knop, opzij live). Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld,
+  terug-aansluiting, geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437
+  is door v440 achterhaald). NOG OPEN (eigen rondes): de huur-Cathalina op je toestel nakijken: ··0806 is `521200806`, in de
+  gedocumenteerde toestel-data een ABN AMRO-rekening (blok 10-regels), wat klopt met de verwachting dat dit de Betaalrekening is;
+  de precieze naam staat in `SET.psd2Accounts` op het toestel en niet in deze repo, dus die is hier niet te bevestigen. De
+  verdeling per rekening en de huur-rekening komen in v441. De Zien-tabel, tempo over potjes, de woning als verwachte vaste last,
+  blok 20 OPZIJ/MAANDBUDGET en het Kiezen-scherm zijn gebouwd (zie de v440-regels over sectie 3, 4 en 8 + item 6 bovenaan).
 - **v439: INZICHTEN DRAAGT HET VERWACHTE SALDO IN DE MAANDKAART, HOME ALLEEN HET SALDO** (`v439`, gevraagd door de gebruiker, gezien op
   het toestel op 17 okt). Inzichten: "Forecast eind <maand>" en "wijzigingen deze maand (alleen forecast) ›" zijn weg uit de maandkaart;
   op die plek staat `insSaldoEindRegel()` (`#insSaldoEind`, `data-inssaldoeind`, `maandVerloop().eind`) met de verwachte bonus
@@ -7948,6 +7959,20 @@ transactie-velden niet, `_op` gaat dus niet vooruit, en de pending-groep leest d
 is monotoon geklemd en daarmee deterministisch zodra de tweede schrijver werkelijk schrijft. Wie dit oppakt
 maakt de stub betrouwbaar of meet in de spec eerst dat de tweede aanroep gelukt is, zoals de invoermeting van
 `v299`/`v300`.
+
+**Onstabiel, een prestatiegrens die onder last valt, eigen ronde:** `telbare-cache.spec.js` d "Grip en de
+budget-editor blijven onder de grens op toestel-omvang" meet de MEDIAAN van vijf renders op een fixture ter
+grootte van het toestel tegen een milliseconden-grens. Die grens is bewust ruim (de spec zegt het zelf: een
+testmachine is geen telefoon, de spreiding tussen runs is groot), maar in een VOLLE suite waarin meer tests
+tegelijk om de machine vechten haalt de mediaan hem soms niet. GEMETEN DAT HET GEEN v440-REGRESSIE IS: de
+volle suite op de main-commit (`5bb166f`, v439) kwam op 4687 groen met twee rode, en dat waren
+`grip-vanaf-norm.spec.js` 702 EN juist deze `telbare-cache.spec.js` 447. `telbare-cache.spec.js` is bovendien
+byte-voor-byte gelijk aan main, en zijn fixture draagt geen woning, dus de v440-code (`woningRecurKeys`,
+`_woningCalc`) is daar per constructie inert; `woningRecurKeys` is gememoïseerd zodat `monthLiquidity` geen
+extra TX-scan per aanroep doet. Los draait hij 5 van 5 groen, maar dat is niet genoeg om hem bekend te noemen:
+de bekende stand is dat hij OOK op main onder last valt. Wie dit oppakt haalt de prestatiegrens uit de volle
+suite (een eigen project of een serieel `--workers=1`-label) of verruimt de grens; de deterministische kant
+van dezelfde meting (het aantal poort-evaluaties in blok a) is er niet gevoelig voor en blijft de scheidsrechter.
 
 **GEREPAREERD BIJ `v310`: de negen specs die op de EERSTE dag van de maand vielen.** GEMETEN op
 1 oktober 2026 gaf de volle suite twaalf rood waar dezelfde inhoud op 30 september drie had; met de
