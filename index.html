@@ -10966,9 +10966,13 @@ function teRuimBestemmingen(V, x){
   let nieuw=null; try{ const cs=catSpendMap(thisYM())||{};
     const k=Object.keys(cs).filter(c=>!((+B[c]||0)>0) && CATS[c] && CATS[c].type==='expense' && !geenNorm(c) && (+cs[c]||0)>0).sort((a,b)=>cs[b]-cs[a])[0];
     if(k) nieuw={id:'nieuw:'+k, soort:'nieuw', k, naam:CATS[k].name, uit:Math.round(cs[k])}; }catch(_){}
-  return {vast:uit, ander, nieuw};
+  /* v440 (item 5): een derde remedie naast een ander potje en een nieuw potje: het potje VERLAGEN vanaf volgende maand. Het
+     vrijgekomen bedrag gaat dan niet naar een ander potje, maar het maandbudget daalt (budgetwijziging volgens v436,
+     SET.budgetsNext; de lopende maand blijft en toont de ruimte alleen in de forecast). */
+  const verlaag={id:'verlaag', soort:'verlaag', naam:'verlagen'};
+  return {vast:uit, ander, nieuw, verlaag};
 }
-function teRuimBestemVan(V, x, id){ const D=teRuimBestemmingen(V, x); return [...D.vast, ...D.ander, ...(D.nieuw?[D.nieuw]:[])].find(d=>d.id===id)||null; }
+function teRuimBestemVan(V, x, id){ const D=teRuimBestemmingen(V, x); return [...D.vast, ...D.ander, ...(D.nieuw?[D.nieuw]:[]), ...(D.verlaag?[D.verlaag]:[])].find(d=>d.id===id)||null; }
 /* De beleggingsvoorwaarden die niet gehaald zijn, in de korte vorm van de Beleggen-meter. */
 function teRuimBelegMist(){ try{ return beleggenKlaar(maandRegels()).voorwaarden.filter(v=>!v.gehaald).map(v=>gripVoorwaardeKort(v)); }catch(_){ return []; } }
 /* Het gevolg, uit maandVooruit(): een overboeking (Plan, Reservering, Beleggen) gaat volledig uit, dus verwacht stijgt met
@@ -10988,6 +10992,7 @@ function teRuimGevolg(V, x, N, delen){
    er geen nieuwe "niet gebruikt"-stap. Zonder splitsing is er een deel met het hele bedrag. */
 function teRuimDelen(S, V, x, N, d){
   if(!d) return {delen:[], split:false, reden:`Kies waar ${euro0(N.vrij)} naartoe gaat`};
+  if(d.soort==='verlaag') return {delen:[{d, bedrag:N.vrij}], split:false, verlaag:true, reden:''};   // v440: niet herverdelen, het budget daalt
   if(!(d.soort==='pot' && d.boven>0 && N.vrij>d.boven)) return {delen:[{d, bedrag:N.vrij}], split:false, reden:''};
   const e1=S.split1!=null?S.split1:d.boven, e2=S.split2!=null?S.split2:N.vrij-e1;
   const d2=S.bestem2?teRuimBestemVan(V, x, S.bestem2):null;
@@ -10999,7 +11004,7 @@ function teRuimDelen(S, V, x, N, d){
 }
 function teRuimKiesBestem(id){ const S=window._tr; if(!S) return; S.bestem=id; S.split1=null; S.split2=null; S.bestem2=null; S.ander2=false; renderTeRuim(); }
 function teRuimNaarTekst(e){ const d=e.d;
-  return d.soort==='plan'?`Plan · sparen +${euro0(e.bedrag)}/mnd · inleg in Plan`:d.soort==='nieuw'?`nieuw potje ${esc(d.naam)} ${euro0(e.bedrag)}/mnd`:d.soort==='pot'?`${esc(d.naam)} +${euro0(e.bedrag)}/mnd`:`${esc(d.naam)} +${euro0(e.bedrag)}/mnd · inleg in Plan`; }
+  return d.soort==='verlaag'?`maandbudget −${euro0(e.bedrag)}/mnd vanaf volgende maand`:d.soort==='plan'?`Plan · sparen +${euro0(e.bedrag)}/mnd · inleg in Plan`:d.soort==='nieuw'?`nieuw potje ${esc(d.naam)} ${euro0(e.bedrag)}/mnd`:d.soort==='pot'?`${esc(d.naam)} +${euro0(e.bedrag)}/mnd`:`${esc(d.naam)} +${euro0(e.bedrag)}/mnd · inleg in Plan`; }
 function renderTeRuim(){
   const {S, V, TR, x}=teRuimStand();
   if(!TR.length){ window._tr=null; if(document.getElementById('teRuimSheet')) closeSheet(); return; }
@@ -11027,9 +11032,9 @@ function renderTeRuim(){
     const chip=b=>`<span class="chip${S.bestem===b.id?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-teruimbestem="${esc(b.id)}" onclick="teRuimKiesBestem('${esc(b.id)}')">${esc(b.soort==='nieuw'?`+ nieuw potje: ${b.naam}`:b.naam)}${b.boven?` <span class="muted">+${euro0(b.boven)}</span>`:''}</span>`;
     const anderGek=d && d.soort==='pot' && D.ander.some(a=>a.id===d.id);
     bestem=`<div data-teruimwaarheen style="margin-top:8px"><div class="small" style="font-weight:700">Waar gaat ${euro0(N.vrij)} naartoe?</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D.vast.map(chip).join('')}${D.ander.length?`<span class="chip${anderGek?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-teruimander onclick="window._tr.ander=!window._tr.ander;renderTeRuim()">${anderGek?esc(d.naam):'Ander potje'} ›</span>`:''}${D.nieuw?chip(D.nieuw):''}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D.vast.map(chip).join('')}${D.ander.length?`<span class="chip${anderGek?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-teruimander onclick="window._tr.ander=!window._tr.ander;renderTeRuim()">${anderGek?esc(d.naam):'Ander potje'} ›</span>`:''}${D.nieuw?chip(D.nieuw):''}${D.verlaag?chip(D.verlaag):''}</div>
       ${S.ander?`<div data-teruimanderlijst style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D.ander.map(chip).join('')}</div>`:''}
-      <div class="small muted" data-teruimv441 style="margin-top:6px;line-height:1.4">Wat overblijft krijgt een bestemming in v441.</div></div>`;
+      <div class="small muted" data-teruimv441 style="margin-top:6px;line-height:1.4">Reserveringen en beleggen komen in v441.</div></div>`;
     if(d){ const T=teRuimDelen(S, V, x, N, d);
       if(T.split){ const D2=[...D.vast, ...D.ander, ...(D.nieuw?[D.nieuw]:[])].filter(b=>b.id!==d.id && !D.ander.some(a=>a.id===b.id));
         const ander2=D.ander.filter(a=>a.id!==d.id), anderGek2=T.d2 && ander2.some(a=>a.id===T.d2.id);
@@ -11043,12 +11048,12 @@ function renderTeRuim(){
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D2.map(chip2).join('')}${ander2.length?`<span class="chip${anderGek2?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-splitander onclick="window._tr.ander2=!window._tr.ander2;renderTeRuim()">${anderGek2?esc(T.d2.naam):'Ander potje'} ›</span>`:''}</div>
           ${S.ander2?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ander2.map(chip2).join('')}</div>`:''}
           ${T.reden?`<div class="small" data-splitreden style="color:var(--amber);margin-top:5px">${esc(T.reden)}</div>`:''}</div>`; }
-      if(!T.reden){ const G=teRuimGevolg(V, x, N, T.delen), bo=v=>v>0?`${euro0(v)} boven`:v<0?`${euro0(-v)} onder`:'op budget';
+      if(!T.reden){ const G=teRuimGevolg(V, x, N, T.delen), bo=v=>v>0?`${euro0(v)} boven`:v<0?`${euro0(-v)} onder`:'op budget', verlaag=!!T.verlaag;
       gevolg=`<div data-teruimgevolg="${esc(x.k)}" class="small" style="margin-top:8px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
         <div><b>Gevolg</b></div>
-        <div data-gevolgpotje>${esc(x.naam)} ${euro0(x.bud)} → ${euro0(N.nieuw)}</div>
+        <div data-gevolgpotje>${esc(x.naam)} ${euro0(x.bud)} → ${euro0(N.nieuw)}${verlaag?' vanaf volgende maand':''}</div>
         ${T.delen.map(e=>`<div data-gevolgbestem="${esc(e.d.id)}">${teRuimNaarTekst(e)}</div>`).join('')}
-        <div data-gevolgbudget data-gevolgverwacht="${G.P1}">${esc(budgetWijzGevolgTekst({P0:G.P0, P1:G.P1, B1:Math.round(V.budgetNu!=null?V.budgetNu:V.budget), volgende:ymFull(nextYM(thisYM())).split(' ')[0]}))}</div>
+        ${verlaag?`<div data-gevolgbudget data-gevolgverlaag="${G.B-N.vrij}">Maandbudget ${euro0(G.B)} → ${euro0(G.B-N.vrij)} vanaf volgende maand · deze maand blijft ${euro0(x.bud)} (de ruimte staat als niet gebruikt in de forecast)</div>`:`<div data-gevolgbudget data-gevolgverwacht="${G.P1}">${esc(budgetWijzGevolgTekst({P0:G.P0, P1:G.P1, B1:Math.round(V.budgetNu!=null?V.budgetNu:V.budget), volgende:ymFull(nextYM(thisYM())).split(' ')[0]}))}</div>`}
         <div data-gevolgmeter="${G.m1}">Budget-meter ${G.m0}% → ${G.m1}% · ${bo(G.v1)}</div>
         ${T.delen.some(e=>['plan','res','beleg'].includes(e.d.soort))?`<div data-gevolgactie style="margin-top:4px">Daarna: verhoog je automatische overboeking bij je bank. Kiezen houdt dat bij tot Minder hem ziet.</div>`:''}
         ${G.nogRuim?`<div data-gevolgnogruim style="color:var(--amber);margin-top:4px">Nog ${euro0(G.nogBedrag)} ruimer dan nodig (${euro0(x.nodig)}). Je keuze blijft staan; volgende maand toetst Minder opnieuw.</div>`:''}</div>`; } } }
@@ -11058,7 +11063,7 @@ function renderTeRuim(){
   else if(S.optie==='c') knop=`${esc(x.naam)} laten staan`;
   else if(N.reden) reden=N.reden;
   else if(!d) reden=`Kies waar ${euro0(N.vrij)} naartoe gaat`;
-  else { const T=teRuimDelen(S, V, x, N, d); if(T.reden) reden=T.reden; else knop=`${esc(x.naam)} op ${euro0(N.nieuw)} zetten`; }
+  else { const T=teRuimDelen(S, V, x, N, d); if(T.reden) reden=T.reden; else knop=d.soort==='verlaag'?`${esc(x.naam)} vanaf volgende maand op ${euro0(N.nieuw)} zetten`:`${esc(x.naam)} op ${euro0(N.nieuw)} zetten`; }
   $('#sheet').innerHTML=`<div class="grab"></div><div id="teRuimSheet" data-teruimpotje="${esc(x.k)}" data-teruimfocus>
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)} · ruimer dan nodig</div>
     ${x.deel==='variabel'?`<div class="small muted" data-teruimdeel="variabel">${esc(teRuimLabel(x))}${x.vast&&x.vast.bud>0?` · vaste deel (${euro0(x.vast.bud)}) blijft staan`:''}</div>`:''}
@@ -11081,6 +11086,13 @@ function teRuimBevestig(){ window._bwKeuze='te ruim verlaagd';
   if(S.optie==='c'){ const herstel=setSnap(['teRuimLaten','teRuimLatenReden']); teRuimLaten(x.k, [S.reden, (S.redenVrij||'').trim()].filter(Boolean).join(' · ')); window._tr=null; keuzeKlaar(`${x.naam} laten staan`, herstel); return; }
   const N=teRuimNieuw(S, x); if(N.reden || !(N.vrij>0)) return;
   const d=teRuimBestemVan(V, x, S.bestem); if(!d) return;
+  /* v440 (item 5): verlagen vanaf volgende maand. Geen herverdeling: het potje gaat vanaf de volgende maand op N.nieuw
+     (potPlanZet schrijft SET.budgetsNext, v436), het maandbudget daalt dus volgende maand en deze maand blijft het potje staan. */
+  if(d.soort==='verlaag'){ const herstel=setSnapAlles(), nxt=nextYM(ym);
+    potPlanZet(x.k, nxt, N.nieuw);
+    try{ potjeAfspraak(x.k, N.nieuw, nxt, 'verlaagd vanaf volgende maand'); }catch(_){}
+    (SET.teRuimLog=SET.teRuimLog||[]).push({k:x.k, naam:x.naam, van:x.bud, naar:N.nieuw, maand:nxt, bestem:'verlaagd vanaf volgende maand', bestemSoort:'verlaag', op:vandaagYMD()});
+    save(); window._tr=null; keuzeKlaar(`${x.naam} vanaf volgende maand op ${euro0(N.nieuw)}`, herstel); return; }
   const T=teRuimDelen(S, V, x, N, d); if(T.reden || !T.delen.length) return;
   const herstel=setSnapAlles();
   potPlanZet(x.k, ym, N.nieuw);
@@ -14910,11 +14922,23 @@ function spaarOverNaam(x){ return x.type==='noodfonds'?'je noodfonds':esc(x.naam
    VERPLAATST EN NIET GEKOPIEERD: de zin over je plan en je saldo stond in deze kaart en staat nu in de sheet, en de
    tik "haal X weg bij Y" is een van de keuzes daar geworden, zonder voorkeuze. */
 function spaarOverLine(P){
-  const V=spaarOver(); if(!(V.zonder>0)) return '';
-  /* v440: dit is "Inhalen" (punt 2d): onttrekkingen die niet zijn teruggezet (spaarOver().zonder, de ene bron). Telt niet mee in het
-     opzij-doel; de link leidt naar een bestaande ingang (het gat terugzetten). */
-  return `<div class="row small spaar-over" id="spaarOverRegel" data-zondergeld="${V.zonder}" data-planinhalen="${V.zonder}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openSpaarOver()"><span style="flex:1;min-width:0;font-weight:600">Inhalen ${euroC(V.zonder)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">met je bonus of wat over is ›</span></div>`;
+  /* v440 (item 3): INHALEN is de onttrekkingen van je spaarrekening deze salarisperiode die niet zijn teruggezet (opzijInhalen),
+     NIET "toegewezen zonder geld" (spaarOver().zonder). Die twee meten verschillende dingen (blok 20 zet ze naast elkaar); de
+     gebruiker koos opzijInhalen als bron. "Toegewezen zonder geld" blijft als signaal op Grip (de bufferregel leest
+     toewijzingBovenSaldo) en de keuze-sheet (openSpaarOver) blijft bereikbaar via Home. Telt niet mee in het opzij-doel. */
+  let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)) return '';
+  return `<div class="row small spaar-over" id="spaarOverRegel" data-planinhalen="${I.inhalen}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openInhalen()"><span style="flex:1;min-width:0;font-weight:600">Inhalen ${euroC(I.inhalen)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">met je bonus of wat over is ›</span></div>`;
 }
+/* v440: de sheet achter Inhalen: de onttrekkingen van je spaarrekening deze salarisperiode die niet zijn teruggezet, met de
+   onttrekkingen per boeking. Informatief (geen handeling die geld beweegt): je haalt het in met je bonus of wat over is. */
+function openInhalen(){ let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)){ closeSheet(); return; }
+  const eruit=(I.tx||[]).filter(t=>(+t.amount||0)<0).sort((a,b)=>a.amount-b.amount);
+  const dag=d=>d?new Date(String(d).slice(0,10)+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="inhalenSheet" data-planinhalen="${I.inhalen}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Inhalen ${euroC(I.inhalen)}</div>
+    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">Deze salarisperiode haalde je ${euroC(I.onttrokken)} van je spaarrekening en zette er ${euroC(I.teruggestort)} terug. Wat je niet terugzette (${euroC(I.inhalen)}) haal je in met je bonus of met wat er aan het eind van de maand over is. Dit telt niet mee in je opzij-doel.</div>
+    ${eruit.length?`<div class="small" style="font-weight:700;margin:6px 0 2px">Eruit gehaald</div>`+eruit.map(t=>`<div class="row small" data-onttrekking="${esc(t.id)}" style="gap:8px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dag(t.date))} · ${esc(txNaam?txNaam(t):(t.name||''))}</span><span style="white-space:nowrap">${euroC(t.amount)}</span></div>`).join(''):'<div class="small muted">Geen losse onttrekking gevonden in deze periode.</div>'}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg(); }
 /* v371: DE ONTTREKKINGEN PER MAAND, op een plek met twee lezers: blok 14 (sectie 1, de beweging op je spaarrekening)
    en de sheet achter de melding. De bron is savedTx() (v262), dus geen tweede telling (v104). */
 function spaarOnttrekkingen(ms){
@@ -15945,8 +15969,9 @@ function opzijInhalen(){
   for(const t of tx){ const a=+t.amount||0; if(a<0) onttrokken+=-a; else teruggestort+=a; }
   onttrokken=Math.round(onttrokken); teruggestort=Math.round(teruggestort);
   return {ok:true, meetbaar:true, inhalen:Math.max(onttrokken-teruggestort,0), onttrokken, teruggestort, start:P.cur.start, eind:P.cur.eind, tx}; }
-/* v440: INHALEN op Plan is nu nog dezelfde bron als "toegewezen zonder geld" (spaarOver().zonder): zie spaarOverLine. opzijInhalen()
-   is de meting van de onttrekkingen die niet zijn teruggezet; blok 20 legt de twee naast elkaar (item 3). */
+/* v440 (item 3): INHALEN op Plan leest opzijInhalen() (de onttrekkingen die niet zijn teruggezet), NIET meer spaarOver().zonder;
+   zie spaarOverLine/openInhalen. "Toegewezen zonder geld" (spaarOver().zonder) blijft als signaal op Grip (toewijzingBovenSaldo) en
+   zijn keuze-sheet (openSpaarOver) blijft bereikbaar via Home. Blok 20 legt de twee metingen naast elkaar. */
 /* v380: DE KOP. Een bron per getal: het geld en de doelen uit planStandEind(), "deze maand opzij" is de inleg plus wat
    er terug gaat (dezelfde termen als de detailsheet), en "Alles vol" de laatste vol-datum van de rijen (planTijdlijnData(),
    de lezer van de lijst en de tijdlijn). */

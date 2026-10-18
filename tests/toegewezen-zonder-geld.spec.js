@@ -7,7 +7,9 @@ const P = require('./opschonen-stand');
 
 const TOESTEL = { set: { manualBal: { [P.MAIN]: 3000, [P.SAV]: 3000.20 } } };
 const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.getElementById('spaarOverRegel');
-  const O = spaarOver(); return { regel: r ? r.innerText.replace(/\s+/g, ' ').trim() : '', zonder: O.zonder, dekt: O.dekt, over: O.over,
+  /* v440: de Plan-regel (#spaarOverRegel) is sinds v440 "Inhalen" (opzijInhalen), niet meer "toegewezen zonder geld". Dat laatste
+     blijft als signaal op Grip: toewijzingBovenSaldo() is de bron, en die draagt nog steeds spaarOver().zonder. */
+  const O = spaarOver(); return { regel: r ? r.innerText.replace(/\s+/g, ' ').trim() : '', tb: toewijzingBovenSaldo(), zonder: O.zonder, dekt: O.dekt, over: O.over,
     nf: SET.nfToegewezen, gat: (SET.terugzetGat || []).length,
     /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen)
        en als tegel "Deze maand opzij" in de kop van Plan ([data-kpiopzij]) */
@@ -25,7 +27,7 @@ test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
     await P.boot(page, TOESTEL);
     const r = await stand(page);
     expect(r.zonder).toBe(637.8); expect(r.dekt).toBe(0);
-    expect(r.regel).toBe('Inhalen €637,80 met je bonus of wat over is ›');   // v440: Inhalen-vorm
+    expect(r.tb.verschil).toBe(638);   // v440: 'toegewezen zonder geld' staat nu op Grip (toewijzingBovenSaldo), niet in de Plan-regel
   });
   test('na een keuze voor de EUR 231 blijft EUR 406,80 staan, en niet nul', async ({ page }) => {
     await P.boot(page, TOESTEL);
@@ -33,7 +35,7 @@ test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
       await page.evaluate((x) => { terugzetHerstel(thisYM()); terugzetKies(x); }, k);
       const r = await stand(page);
       expect(r.dekt, k).toBe(231); expect(r.zonder, k).toBe(406.8);
-      expect(r.regel, k).toBe('Inhalen €406,80 met je bonus of wat over is ›');
+      expect(r.tb.verschil, k).toBe(407);   // v440: via toewijzingBovenSaldo op Grip
     }
   });
   test('niet terugzetten verlaagt de toewijzing, en dan blijft hetzelfde verschil over', async ({ page }) => {
@@ -193,7 +195,7 @@ test.describe('d · de rij laat geld en plan apart zien', () => {
     /* v381: de regel zegt dat er nog niet gekozen is (de keuzes staan eronder); de centen blijven die van de melding */
     expect(r.op.zg).toBe('€406,80 toegewezen zonder geld · nog niet gekozen');
     expect(+r.nog).toBe(406.8);
-    expect((await stand(page)).regel).toBe('Inhalen €406,80 met je bonus of wat over is ›');
+    expect((await stand(page)).tb.verschil).toBe(407);   // v440: via toewijzingBovenSaldo op Grip
     /* v381: zonder keuze over dat geld is de datum voorlopig */
     expect(r.vol).toBe('vol nov 2026 · voorlopig ›');
   });
@@ -211,14 +213,14 @@ test.describe('e · layout', () => {
     test(`regel, rij en sheet passen op ${w}px`, async ({ page }) => {
       await P.boot(page, Object.assign({ vp: { width: w, height: 800 } }, TOESTEL));
       await page.evaluate(() => { terugzetKies('alles'); go('vooruit'); });
+      // v440: "toegewezen zonder geld" staat niet meer als Plan-regel (die is nu Inhalen); deze test meet de keuze-sheet
+      // (openSpaarOver) en de pagina-overflow. De Inhalen-regel-hoogte staat in v440.spec.js.
       const m = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        regel: document.getElementById('spaarOverRegel').getBoundingClientRect().height,
-        rij: document.querySelector('.plan-item[data-id="noodfonds"]').getBoundingClientRect().height }));   // v380: de rij zelf, [data-geldregel] is vervallen
+        rij: document.querySelector('.plan-item[data-id="noodfonds"]').getBoundingClientRect().height }));
       await page.evaluate(() => openSpaarOver());
       const s = await page.evaluate(() => { const e = document.getElementById('sheet'); return { h: document.getElementById('spaarOverSheet').getBoundingClientRect().height, over: e.scrollWidth - e.clientWidth }; });
-      console.log(`v371 ${w}px: regel ${Math.round(m.regel)}, rij ${Math.round(m.rij)}, sheet ${Math.round(s.h)}`);
+      console.log(`v371 ${w}px: rij ${Math.round(m.rij)}, sheet ${Math.round(s.h)}`);
       expect(m.over).toBeLessThanOrEqual(1); expect(s.over).toBeLessThanOrEqual(1);
-      expect(m.regel).toBeLessThan(45);
     });
   }
 });

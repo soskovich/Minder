@@ -221,8 +221,9 @@ test.describe('2 - de controle is het saldo', () => {
     await boot(page, { norm: 2, gespaard: 3000 });
     const r = await page.evaluate(() => {
       const raakt = spaarOverRaakt();
-      const plan = (function(){ const d = document.createElement('div');
-        if (!d || !spaarOverLine(allocatePlan())) return ''; openSpaarOver();
+      const plan = (function(){
+        // v440: de Plan-regel is nu Inhalen (opzijInhalen); "toegewezen zonder geld" leeft via spaarOver().zonder en openSpaarOver
+        if (!(spaarOver().zonder > 0)) return ''; openSpaarOver();
         const t = document.getElementById('spaarOverSheet').textContent.replace(/\s+/g, ' ').trim(); closeSheet(); return t; })();
       const rij = maandRegels().find((x) => x.key === 'buffer');
       return { raakt, plan, gevolg: rij.gevolg, over: spaarOver() };

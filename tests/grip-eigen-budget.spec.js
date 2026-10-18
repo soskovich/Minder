@@ -164,7 +164,9 @@ test.describe('B · de te-ruim-sheet', () => {
     await huurSheet(page, 'b', 650);   // v440: klein restant (€50), zodat een potje als bestemming niet splitst
     expect(await page.locator('[data-teruimwaarheen]').innerText()).toMatch(/Waar gaat €\d+ naartoe\?/);
     const lijst = await page.locator('[data-teruimbestem]').evaluateAll(e => e.map(x => x.dataset.teruimbestem));
-    expect(lijst.every(id => id.startsWith('pot:'))).toBe(true);   // v440: alleen potjes, geen Plan/res/beleg
+    // v440: de remedies zijn potjes (pot:/nieuw:) en 'verlagen vanaf volgende maand' (verlaag); geen Plan/res/beleg
+    expect(lijst.every(id => id.startsWith('pot:') || id.startsWith('nieuw:') || id === 'verlaag')).toBe(true);
+    expect(lijst.some(id => id === 'verlaag')).toBe(true);
     expect(lijst.length).toBeGreaterThan(0);
     expect(await page.locator('[data-teruimbestem].on').count()).toBe(0);
     expect(await page.locator('[data-teruimgevolg]').count()).toBe(0);

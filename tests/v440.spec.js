@@ -4,7 +4,7 @@
    zonder geld" (spaarOver().zonder); planCapacity leest opzij -> advies -> comfortTot (de spaarinleg is uit de terugval); en de
    te-ruim-sheet heeft geen inleg-bestemmingen meer. GETALLEN VAN DE FIXTURE (budget-fixture), NIET VAN HET TOESTEL. */
 const { test, expect } = require('@playwright/test');
-const { seed, open, MAIN } = require('./budget-fixture');
+const { seed, open, MAIN, SAV, CUR } = require('./budget-fixture');
 
 test.describe('1 · het vastgelegde budget is de som van de potjes', () => {
   test('geen aparte inleg, geen Plan-inleg op enig scherm, en totaal = som van de potjes', async ({ page }) => {
@@ -110,18 +110,23 @@ test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
 });
 
 test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
-  test('Inhalen is dezelfde bron als "toegewezen zonder geld" (spaarOver().zonder), een regel', async ({ page }) => {
-    const p = seed(); const set = JSON.parse(p.minder_set);
-    set.goals = [{ id: 'g1', naam: 'Vakantie', doel: 5000, gespaard: 4000 }];   // meer toegewezen dan er op de spaarrekening staat
-    p.minder_set = JSON.stringify(set);
+  test('Inhalen leest opzijInhalen() (onttrekkingen-niet-teruggezet), een regel', async ({ page }) => {
+    const p = seed(); const tx = JSON.parse(p.minder_tx);
+    // een onttrekking van de spaarrekening deze salarisperiode (na de salarisstorting op de 5e) die niet is teruggezet
+    tx.push({ id: 'onttr1', date: `${CUR}-12`, amount: -300, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    p.minder_tx = JSON.stringify(tx);
     await open(page, p);
     const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
-      return { zonder: Math.round(spaarOver().zonder), tekst: reg ? reg.innerText.replace(/\s+/g, ' ') : '', attr: reg ? +reg.dataset.planinhalen : null,
-        n: document.querySelectorAll('#s-vooruit [data-planinhalen]').length }; });
-    expect(r.zonder).toBeGreaterThan(0);
+      return { inhalen: opzijInhalen().inhalen, tekst: reg ? reg.innerText.replace(/\s+/g, ' ') : '', attr: reg ? +reg.dataset.planinhalen : null,
+        n: document.querySelectorAll('#s-vooruit [data-planinhalen]').length, stijl: reg ? (reg.getAttribute('style') || '') : '',
+        hoogte: reg ? reg.getBoundingClientRect().height : 0 }; });
+    expect(r.inhalen).toBeGreaterThan(0);
     expect(r.tekst).toContain('Inhalen');
-    expect(r.attr).toBe(r.zonder);           // de regel leest spaarOver().zonder
+    expect(r.attr).toBe(r.inhalen);          // de regel leest opzijInhalen().inhalen (niet spaarOver().zonder)
     expect(r.n).toBe(1);                      // een regel, geen dubbele kaart
+    expect(r.stijl).toContain('var(--mut)'); // mut en niet amber: er is niets mis, je haalt het in
+    expect(r.stijl).not.toContain('amber');
+    expect(r.hoogte).toBeLessThan(45);       // de regel past op een regel (zoals de oude melding)
   });
   /* v440 item 3: opzijInhalen() meet "onttrekkingen in de periode die niet zijn teruggezet" (de spec), uit dezelfde bron en
      periode als opzijPeriode. Blok 20 zet die meting (B) naast spaarOver().zonder (A); wijken ze af, dan is Inhalen B. */
@@ -150,13 +155,37 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
     expect(r.cap).toBe(r.advies != null ? r.advies : r.comfort);  // advies, anders comfortTot
     expect(await page.evaluate((acc) => { SET.salVerdeling = { rek: { [acc]: 1 }, opzij: 1200 }; window._rekV = null; return planCapacity(); }, MAIN)).toBe(1200);   // de gekozen opzij gaat voor
   });
-  test('de te-ruim-sheet heeft geen Plan/reservering/beleggen als bestemming meer', async ({ page }) => {
+  test('de te-ruim-sheet heeft drie remedies: ander potje, verlagen vanaf volgende maand, nieuw potje (geen Plan/res/beleg)', async ({ page }) => {
     await open(page);
-    const soorten = await page.evaluate(() => { const V = maandVooruit(), x = (V.potjes || [])[0] || { k: 'boodschappen' };
-      const D = teRuimBestemmingen(V, x); return [...D.vast, ...D.ander, ...(D.nieuw ? [D.nieuw] : [])].map(b => b.soort); });
-    expect(soorten).not.toContain('plan');
-    expect(soorten).not.toContain('res');
-    expect(soorten).not.toContain('beleg');
-    expect(soorten.every(s => s === 'pot' || s === 'nieuw')).toBe(true);
+    const r = await page.evaluate(() => { const V = maandVooruit(), x = (V.potjes || [])[0] || { k: 'boodschappen' };
+      const D = teRuimBestemmingen(V, x);
+      return { soorten: [...D.vast, ...D.ander, ...(D.nieuw ? [D.nieuw] : []), ...(D.verlaag ? [D.verlaag] : [])].map(b => b.soort),
+        verlaag: D.verlaag ? D.verlaag.soort : null }; });
+    expect(r.soorten).not.toContain('plan');
+    expect(r.soorten).not.toContain('res');
+    expect(r.soorten).not.toContain('beleg');
+    expect(r.verlaag).toBe('verlaag');                                   // de derde remedie: verlagen vanaf volgende maand
+    expect(r.soorten.every(s => s === 'pot' || s === 'nieuw' || s === 'verlaag')).toBe(true);
+  });
+  /* v440 (item 5): "verlagen vanaf volgende maand" is een budgetwijziging per v436: het potje daalt vanaf volgende maand
+     (SET.budgetsNext), deze maand blijft het staan, en er wordt NIETS herverdeeld, dus het maandbudget van volgende maand daalt
+     met het vrijgekomen bedrag. SABOTAGE: het vrije bedrag toch bij een ander potje optellen → dan daalt het maandbudget niet. */
+  test('verlagen vanaf volgende maand: deze maand blijft, volgende maand daalt met het vrije bedrag, geen herverdeling', async ({ page }) => {
+    const p = seed({ maanden: 6 }); const set = JSON.parse(p.minder_set);   // genoeg historie zodat teRuim() rekent
+    set.budgets = Object.assign({}, set.budgets, { vervoer: 600 });     // geen vervoer-uitgaven -> ruimer dan nodig
+    p.minder_set = JSON.stringify(set);
+    await open(page, p);
+    const r = await page.evaluate(() => { const V = maandVooruit(), tr = teRuim(V); const x = tr.find(y => y.k === 'vervoer') || tr[0];
+      if (!x) return { geen: true };
+      const nxt = nextYM(thisYM()), som = o => Object.values(o || {}).reduce((a, v) => a + Math.round(+v || 0), 0);
+      const nuVoor = som(SET.budgets), nextVoor = som(budgetVoorMaand(nxt));
+      window._tr = { k: x.k, optie: 'a', bestem: 'verlaag', bedrag: null, reden: '', ander: false };
+      teRuimBevestig();
+      return { k: x.k, bud: x.bud, voorstel: x.voorstel, vrij: x.bud - x.voorstel, nuVoor, nextVoor,
+        nuNa: som(SET.budgets), nextNa: som(budgetVoorMaand(nxt)), nextVervoer: Math.round(+(SET.budgetsNext || {})[x.k] || 0) }; });
+    expect(r.geen).toBeFalsy();
+    expect(r.nuNa).toBe(r.nuVoor);                 // deze maand ongemoeid (v436: de wijziging geldt vanaf volgende maand)
+    expect(r.nextVervoer).toBe(r.voorstel);        // vanaf volgende maand op het (lagere) voorstel
+    expect(r.nextNa).toBe(r.nextVoor - r.vrij);    // het maandbudget daalt volgende maand met het vrije bedrag (geen herverdeling)
   });
 });

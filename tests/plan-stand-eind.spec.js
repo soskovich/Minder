@@ -57,7 +57,8 @@ test.describe('a · de stand van het toestel na de drie keuzes', () => {
   test('geen ongedekt verschil meer, dus geen melding', async ({ page }) => {
     await page.evaluate(() => go('vooruit'));
     expect(await page.evaluate(() => spaarOver().zonder)).toBe(0);
-    expect(await page.locator('#spaarOverRegel').count()).toBe(0);
+    // v440: "toegewezen zonder geld" staat op Grip (toewijzingBovenSaldo); geen verschil = geen signaal (null) (de Plan-regel is nu Inhalen)
+    expect(await page.evaluate(() => toewijzingBovenSaldo())).toBeNull();
   });
 });
 
@@ -68,7 +69,8 @@ test.describe('b · tussenstand: EUR 150 binnen zonder keuze', () => {
     await page.evaluate(() => go('vooruit'));
     const z = await page.evaluate(() => spaarOver().zonder);
     expect(z).toBeGreaterThan(0);
-    expect(await page.locator('#spaarOverRegel').count()).toBe(1);
+    // v440: het signaal staat op Grip (toewijzingBovenSaldo), los van de Plan-regel (die is nu Inhalen)
+    expect(await page.evaluate(() => toewijzingBovenSaldo().verschil)).toBeGreaterThan(0);
   });
 
   test('zonder geld telt niet in de stand: niet vol in oktober, de inleg vult het vanaf november aan, en geen bijna vol', async ({ page }) => {

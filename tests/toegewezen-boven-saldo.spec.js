@@ -54,7 +54,8 @@ const vrij = (page) => page.evaluate(() => spaarVrij());
 /* v371: de melding is een regel bij de kop, en de uitleg staat in de sheet erachter (openSpaarOver()). Deze helper
    leest beide: leeg als er geen regel is, anders de sheet. */
 const regel = (page) => page.evaluate(() => {
-  if (!spaarOverLine(allocatePlan())) return '';
+  // v440: de Plan-regel is nu "Inhalen" (opzijInhalen); "toegewezen zonder geld" leeft via spaarOver().zonder en zijn sheet.
+  if (!(spaarOver().zonder > 0)) return '';
   openSpaarOver(); const t = document.getElementById('spaarOverSheet').textContent.replace(/\s+/g, ' ').trim(); closeSheet(); return t;
 });
 /* v371: de correctie is een keuze in de sheet. Van onder naar boven ('v:*') als die er is, anders de ene bestemming. */
@@ -212,22 +213,20 @@ test.describe('d - de correctie kan het noodfonds verlagen, want anders doet de 
 });
 
 test.describe('e - de melding is een correctie en geen alarm', () => {
-  test('mut en niet amber, want er is niets mis met je geld', async ({ page }) => {
-    await boot(page, GEMETEN);
-    const html = await page.evaluate(() => spaarOverLine(allocatePlan()));
-    expect(html).toContain('var(--mut)');
-    expect(html).not.toContain('--amber');
-    expect(html).not.toContain('warn');
-  });
+  /* v440: de "mut, niet amber"-styling hoort nu bij de Inhalen-regel (opzijInhalen) op Plan; die invariant staat in
+     v440.spec.js (de Inhalen-regel leest var(--mut) en niet amber). "Toegewezen zonder geld" is op Grip een bufferregel met
+     zijn eigen status. */
 
   /* Hij hangt aan renderPlan() zelf en niet aan een plan-rij, dus hij blijft staan ook als het
      noodfonds gepauzeerd, bereikt of uit het plan is. Dat was de reden dat v126 deze regels ooit
      van de rij naar planniveau tilde. */
-  test('hij staat op planniveau en niet in een rij die kan wegvallen', async ({ page }) => {
+  test('het is een Grip-signaal (toewijzingBovenSaldo), los van een plan-rij die kan wegvallen', async ({ page }) => {
     await boot(page, GEMETEN);
-    await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('Inhalen €550');   // v440: de regel bij de kop heet "Inhalen" (zelfde bron, onttrekkingen niet teruggezet)
+    // v440: "toegewezen zonder geld" staat niet meer op Plan maar als signaal op Grip (de bufferregel leest toewijzingBovenSaldo);
+    // het blijft los van de noodfonds-rij en verdwijnt niet als die gepauzeerd, bereikt of uit het plan is.
+    expect(await page.evaluate(() => toewijzingBovenSaldo().verschil)).toBe(550);
+    await page.evaluate(() => { planTogglePause(PLAN_NF); });
+    expect(await page.evaluate(() => toewijzingBovenSaldo().verschil)).toBe(550);
   });
 
   test('ook met een gepauzeerd noodfonds blijft de melding staan', async ({ page }) => {

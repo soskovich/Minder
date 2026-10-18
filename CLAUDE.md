@@ -147,13 +147,21 @@ genoemde versietag.)*
   (spaarinleg-netto) — tegen het DOEL uit Kiezen (`SET.salVerdeling.opzij`, anders 'nog geen doel'); geen spaarrekening → onbekend.
   Plan ('Opzij deze periode' in `planKpi`), de Doelen-meter (`gripMeterDoelen`) en Zien (de opzij-rij van `gripSalarisKaart`) lezen
   ALLEEN deze functie; 'Deze maand opzij' (`planKpiData().opzij`) en 'nog te sparen uit safeToSpend' zijn geen opzij-getal meer. De
-  volledige opzij-weergave op Zien (doel en gedaan) is punt 3 van de ronde en komt later. (3) INHALEN (onttrekkingen die niet zijn
-  teruggezet) is dezelfde bron als 'toegewezen zonder geld' (`spaarOver().zonder`, `spaarOverLine`): ÉÉN regel 'Inhalen EUR X · met
-  je bonus of wat over is', geen tweede kaart (`verplaatsen is niet kopiëren`, v104). (4) `planCapacity` leest de gekozen opzij →
+  volledige opzij-weergave op Zien (doel en gedaan) is punt 3 van de ronde en komt later. (3) INHALEN leest `opzijInhalen()`: de
+  onttrekkingen van je spaarrekening deze salarisperiode die NIET zijn teruggezet (onttrokken − teruggestort, niet onder nul; via
+  `savedTxRange`, dezelfde periode als `opzijPeriode`). Dat is NIET hetzelfde als 'toegewezen zonder geld' (`spaarOver().zonder` =
+  toegewezen aan doelen/buffer − saldo): die twee meten verschillende dingen en verschillen per constructie. De Plan-regel
+  (`spaarOverLine`) is ÉÉN regel 'Inhalen EUR X · met je bonus of wat over is' met de sheet `openInhalen` (de onttrekkingen per
+  boeking), mut en niet amber. 'Toegewezen zonder geld' blijft als signaal op Grip (de bufferregel leest `toewijzingBovenSaldo`) en
+  zijn keuze-sheet (`openSpaarOver`) blijft bereikbaar via Home. Blok 20 zet A (`spaarOver().zonder`) en B (`opzijInhalen`) naast
+  elkaar. (4) `planCapacity` leest de gekozen opzij →
   anders het advies (`rekVoorstel().opzij`) → anders comfortTot. De spaarinleg (`monthlySavingTarget`) is BEWUST uit de terugval:
   dat is een instelling (vast bedrag, percentage, of inkomen min `monthBudget`) en geen meting van wat opzij ging, en hij las nooit
-  de oude Plan-inleg; 'Alles vol' volgt daarmee de gekozen of geadviseerde opzij. (5) DE TE-RUIM-SHEET heeft geen Plan/reservering/beleggen-bestemming meer (alleen een ander potje of
-  een nieuw potje), met de regel 'Wat overblijft krijgt een bestemming in v441'. RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
+  de oude Plan-inleg; 'Alles vol' volgt daarmee de gekozen of geadviseerde opzij. (5) DE TE-RUIM-SHEET heeft drie remedies voor het
+  vrijgekomen bedrag (geen Plan/reservering/beleggen meer): naar een ander potje en een nieuw potje houden het maandbudget gelijk
+  (herverdeling deze maand); 'verlagen vanaf volgende maand' (`soort:'verlaag'` in `teRuimBestemmingen`, `teRuimBevestig` doet
+  `potPlanZet(k, nextYM, nieuw)`) is een budgetwijziging per v436: het maandbudget daalt vanaf volgende maand met het vrije bedrag,
+  deze maand blijft het potje staan (de ruimte staat als niet gebruikt in de forecast). RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
   v441. Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld, terug-aansluiting,
   geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437 is door v440
   achterhaald). NOG OPEN (eigen rondes): de Zien-tabel (budget/verwacht/verschil + opzij met doel en gedaan), het Kiezen-scherm
