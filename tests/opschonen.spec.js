@@ -237,7 +237,7 @@ test.describe('e · Plan', () => {
   test('alles deze maand: EUR 2.431, het geld gaat gearceerd naar het Noodfonds, de toewijzing blijft', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('alles'); });
     const r = await kop(page);
-    expect(r.bedrag).toBe(2431); expect(r.opzij).toBe(2431); expect(r.kpiterug).toBe('231'); expect(r.gekozen).toBe('alles');
+    expect(r.bedrag).toBe(2431); expect(r.gekozen).toBe('alles');   // v440: de kop toont "Opzij deze periode" (opzijPeriode), geen terug-chip meer
     expect(r.terug).toEqual(['noodfonds:231']); expect(r.nf).toBe(3638); expect(r.save).toBe(2431);
     expect(r.eta).toEqual({ noodfonds: 1, kk: 7, iw: null });
     /* v380: terug en inleg staan samen gearceerd in de rij (231 + 362 = 593 van 4.000) */
@@ -248,7 +248,7 @@ test.describe('e · Plan', () => {
   test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Noodfonds dec 2026 en Kosten Koper apr 2027 (v380)', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('drie'); });
     const r = await kop(page);
-    expect(r.bedrag).toBe(2277); expect(r.opzij).toBe(2277); expect(r.kpiterug).toBe('77'); expect(r.gekozen).toBe('drie');
+    expect(r.bedrag).toBe(2277); expect(r.gekozen).toBe('drie');   // v440: geen terug-chip in de kop meer
     expect(r.terug).toEqual(['noodfonds:77']); expect(r.save).toBe(2277);
     expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['dec 2026', 'apr 2027']);
     expect(r.eta.noodfonds).toBe(3); expect(r.eta.kk).toBe(7);
@@ -271,8 +271,7 @@ test.describe('e · Plan', () => {
   test('volgende maand: weer het maandbedrag, of het volgende deel bij spreiden', async ({ page }) => {
     const rec = (k) => ({ '2026-10': { bedrag: 231, keuze: k, bron: [{ id: 'noodfonds', type: 'noodfonds', naam: 'Noodfonds', af: 231 }], delen: k === 'drie' ? [77, 77, 77] : [231], op: '2026-10-09' } });
     await P.boot(page, { dag: '2026-11-09', zonderOpname: true, set: { terugzet: rec('drie') } }); await page.evaluate(() => go('vooruit'));
-    expect((await kop(page)).bedrag).toBe(2277);   // v380: 2.200 + het deel van november, uit planToeMaand()
-    expect((await kop(page)).kpiterug).toBe('77');
+    expect((await kop(page)).bedrag).toBe(2277);   // v380: 2.200 + het deel van november, uit planToeMaand() (v440: geen terug-chip)
     await page.evaluate((r) => { SET.terugzet = r; save(); render(); }, rec('alles'));
     expect((await kop(page)).bedrag).toBe(2200); expect((await kop(page)).kpiterug).toBe(null);
   });

@@ -696,7 +696,7 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
 /* v340: GEMETEN 514px op 360 (was 499): de rij van het record met de open vraag zegt nu "vraag staat
    bovenaan" in plaats van "vraag staat op Grip", en breekt op 360 een regel verder af. Op 390 past hij
    nog en blijft het 483. */
-const PX={360:{log:514, tel:75, metUit:49},
+const PX={360:{log:499, tel:75, metUit:49},   // v440: de brug in de uitkomstregel mist de inleg-staaf, dus het logboek is op 360px 15px lager
           390:{log:483, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van het logboek en de uitkomst-regel`, async ({page})=>{

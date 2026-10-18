@@ -117,7 +117,7 @@ test.describe('C4 · elke keuze sluit de sheet, met ongedaan maken', () => {
   test('te ruim: verlagen naar het voorstel', async ({ page }) => {
     await S.boot(page); const voor = await velden(page);
     const ok = await page.evaluate(() => { const V = maandVooruit(), x = teRuim(V).find(t => t.k === 'huur'); openTeRuim('huur'); window._tr.optie = 'a';
-      const D = teRuimBestemmingen(V, x); window._tr.bestem = D.vast.concat(D.ander).find(b => b.soort === 'res').id; teRuimBevestig(); return !!x; });
+      const D = teRuimBestemmingen(V, x); window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; teRuimBevestig(); return !!x; });   // v440: geen inleg-bestemming meer, naar een potje
     expect(ok).toBe(true);
     const t = await toast(page);
     expect(t).toMatch(/^Huur op €\d+ · €\d+ naar .+ · ongedaan maken$/);

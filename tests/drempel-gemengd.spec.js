@@ -82,7 +82,7 @@ test.describe('B · het variabele deel van een gemengd potje', () => {
   });
   test('verlagen naar het voorstel zet het hele potje op het voorstel (v398: met een bestemming)', async ({ page }) => {
     await grip(page);
-    const b = await page.evaluate(() => { openTeRuim('vervoer'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); return SET.budgets.vervoer; });
+    const b = await page.evaluate(() => { const V = maandVooruit(), D = teRuimBestemmingen(V, teRuim(V).find(t => t.k === 'vervoer')); openTeRuim('vervoer'); teRuimKies('a'); window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; teRuimBevestig(); return SET.budgets.vervoer; });   // v440: naar een potje i.p.v. de vervallen Plan-inleg
     expect(b).toBe(710);
   });
   test('blok 19: vast en variabel als aparte regels bij een gemengd potje', async ({ page }) => {

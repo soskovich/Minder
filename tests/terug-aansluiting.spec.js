@@ -145,29 +145,6 @@ test.describe('de som sluit ook in andere standen', () => {
   });
 });
 
-/* v397: EEN BRON VOOR OPZIJ. Home "nog te sparen" (plus al gestort), Plan "Deze maand opzij" en de Grip Doelen-meter
-   (opzij min eruit) lezen hetzelfde bedrag, op de stand van het toestel en na een wijziging van de keuze. */
-test.describe('v397 · drie schermen, een opzij', () => {
-  const drie = page => page.evaluate(() => { const S = safeToSpend(), K = planKpiData(), M = gripMeterDoelen();
-    go('vooruit'); const plan = +document.querySelector('[data-kpiopzij]').dataset.kpiopzij;
-    go('maand'); const meter = document.querySelector('[data-meter="doelen"]').innerText.replace(/\s+/g, ' ');
-    return { home: S.saveReserved + S.gestort, kpi: K.opzij, plan, meterOpzij: M.opzij, meterNetto: M.netto, uit: M.uit, meter }; });
-  test('oktober: opzij EUR 3.119 op alle drie, de meter EUR 2.100 van EUR 3.119', async ({ page }) => {
-    await toestel(page);
-    const r = await drie(page);
-    expect(r).toMatchObject({ home: 3119, kpi: 3119, plan: 3119, meterOpzij: 3119, meterNetto: 2100, uit: 1019 });
-    expect(r.meter).toContain('€2.100 van €3.119');
-  });
-  for (const k of ['niet', 'drie']) test(`na "${k}" voor vrij spaargeld tonen ze nog steeds hetzelfde bedrag`, async ({ page }) => {
-    await toestel(page);
-    await page.evaluate(k => terugzetVrijZet(k), k);
-    const r = await drie(page);
-    expect(r.home).toBe(r.kpi); expect(r.plan).toBe(r.kpi); expect(r.meterOpzij).toBe(r.kpi);
-    expect(r.meterNetto).toBe(r.kpi - r.uit);
-    expect(r.kpi).toBe(k === 'niet' ? 2888 : 2965);
-  });
-});
-
 test('v397: over 3 maanden spreiden zet in november het tweede deel terug, uit de delen die bij de keuze zijn vastgelegd', async ({ page }) => {
   await toestel(page);
   const r = await page.evaluate(() => { terugzetVrijZet('drie'); const rec = SET.terugzetVrij['2026-10']; return { rec, nov: terugVrijDeel('2026-11'), dec: terugVrijDeel('2026-12'), jan: terugVrijDeel('2027-01') }; });

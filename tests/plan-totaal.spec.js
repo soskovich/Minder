@@ -123,7 +123,7 @@ test.describe('b - alles vol komt uit de projectie', () => {
   });
 
   test('zonder capaciteit staat er geen maand in plaats van een verzonnen tempo', async ({ page }) => {
-    await boot(page, { set: { savingMode: 'amount', savingAmount: 0 } });
+    await boot(page, { set: { savingMode: 'amount', savingAmount: 0, salVerdeling: { rek: { 'NL01MAIN0000001111': 1 }, opzij: 0 } } });   // v440: gekozen opzij 0 -> geen capaciteit
     expect((await T(page)).allesVol).toBe(null);
     expect(await kop(page)).toContain('Alles vol nog niet te zeggen');
   });

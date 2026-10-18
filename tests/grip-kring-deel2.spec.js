@@ -134,8 +134,8 @@ test.describe('v388 kiezen en de keuze-sheet', () => {
   });
   test('een uitgevoerde melding uit Zien staat in Kiezen met wat hij deed', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); gripKiesTab('kiezen'); });
-    expect(await tekst(page, '#gripAlGekozen [data-uitgevoerd="huur"]')).toMatch(/Huur · budget €142[\s\S]*€558 naar Plan · sparen/);   // v428: onder Al gekozen deze maand   // v398: met de bestemming
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); const V = maandVooruit(), D = teRuimBestemmingen(V, teRuim(V).find(t => t.k === 'huur')); window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; teRuimBevestig(); gripKiesTab('kiezen'); });
+    expect(await tekst(page, '#gripAlGekozen [data-uitgevoerd="huur"]')).toMatch(/Huur · budget €142[\s\S]*€558 naar /);   // v440: naar een potje i.p.v. de vervallen Plan-inleg
   });
   test('volgorde: van de app of zelf, en spaargeld blijft eerst', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
@@ -239,7 +239,7 @@ test.describe('v388 terugblik', () => {
   });
   test('de instelling uit Zien staat in de terugblik en telt niet mee', async ({ page }) => {
     await grip(page);
-    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); gripKiesTab('terugblik'); });
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); const V = maandVooruit(), D = teRuimBestemmingen(V, teRuim(V).find(t => t.k === 'huur')); window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; teRuimBevestig(); gripKiesTab('terugblik'); });   // v440: naar een potje
     expect(await page.locator('[data-terugrij="instelling"]').innerText()).toContain('Huur → €142');
     const T = await page.evaluate(() => gripTerugblik('2026-10'));
     expect(T.n).toBe(0);   // het spaardoel van de lopende maand loopt nog

@@ -227,7 +227,7 @@ test.describe('e - de melding is een correctie en geen alarm', () => {
     await boot(page, GEMETEN);
     await page.evaluate(() => go('vooruit'));
     const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('€550 toegewezen zonder geld');   // v371: een regel bij de kop, de uitleg in de sheet
+    expect(t).toContain('Inhalen €550');   // v440: de regel bij de kop heet "Inhalen" (zelfde bron, onttrekkingen niet teruggezet)
   });
 
   test('ook met een gepauzeerd noodfonds blijft de melding staan', async ({ page }) => {

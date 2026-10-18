@@ -57,10 +57,11 @@ test.describe('a · een bedrag per doel in de verdeling', () => {
     const P = await alloc(page);
     expect(P[0].alloc).toBe(50); expect(P[1].alloc).toBe(CAP - 50);
   });
-  test('zonder spaarinleg rekent de verdeling over de terugval-capaciteit', async ({ page }) => {
+  test('zonder spaarinleg rekent de verdeling over de capaciteit (v440: het advies als terugval)', async ({ page }) => {
     await openV(page, zelf([D('gA', 'Vast', 2000), D('gB', 'Ander', 2000)], { gA: 100, gB: 5000 }, (s) => { s.savingAmount = 0; s.limit = 100; }));
-    const r = await page.evaluate(() => ({ cap: planCapacity(), comfort: Math.round(noodfondsModel().comfortTot), target: monthlySavingTarget() }));
-    expect(r.target).toBe(0); expect(r.cap).toBe(r.comfort);
+    const r = await page.evaluate(() => ({ cap: planCapacity(), target: monthlySavingTarget() }));
+    expect(r.target).toBe(0);              // geen ingestelde spaarinleg
+    expect(r.cap).toBeGreaterThan(0);      // v440: planCapacity valt dan terug op het advies (opzij per maand)
     const P = await alloc(page);
     expect(P[0].alloc).toBe(Math.min(100, r.cap)); expect(P[1].alloc).toBe(Math.max(r.cap - 100, 0));
   });

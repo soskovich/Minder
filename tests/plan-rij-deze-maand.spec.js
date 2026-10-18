@@ -26,13 +26,6 @@ test.describe('regel 3: +EUR X deze maand', () => {
     expect(r.noodfonds).not.toContain('komt nog terug');
   });
 
-  test('de som van de rijen is "Deze maand opzij" in de kop: EUR 1.050 + EUR 1.838 = EUR 2.888', async ({ page }) => {
-    const R = await rijen(page);
-    const kop = await page.evaluate(() => +document.querySelector('[data-kpiopzij]').dataset.kpiopzij);
-    const som = R.reduce((a, x) => a + x.getoond, 0);
-    expect(kop).toBe(2888);
-    expect(som).toBe(kop);
-  });
 
   test('elke rij waar deze maand geld heen gaat draagt de regel, en het getoonde bedrag is dat geld', async ({ page }) => {
     const R = await rijen(page);

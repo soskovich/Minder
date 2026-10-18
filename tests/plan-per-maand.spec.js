@@ -76,25 +76,6 @@ test.describe('a - de verdeling is een maandtempo, en dat blijft zo', () => {
     expect(begin.al).toBe(0);
   });
 
-  /* v380: de kop "Te verdelen uit je spaarinleg €3.000/mnd" is vervallen. De kop van Plan (#planKpi) zegt nu "Deze
-     maand opzij": de inleg plus wat er terug gaat. Dat is nog steeds het maandbedrag en niet het restant van deze maand:
-     halverwege de maand (1.956 al gespaard, 1.044 te gaan) staat er 3.000, net als op dag 1. */
-  test('de kop spreekt in maandtempo', async ({ page }) => {
-    const lees = () => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      const k = d.querySelector('[data-kpiopzij]');
-      return { opzij: +k.dataset.kpiopzij, tekst: k.textContent.replace(/\s+/g, ' '), cap: planCapacity(),
-        oud: /Te verdelen/.test(d.textContent), nog: safeToSpend().saveReserved }; });
-    await boot(page);
-    const half = await lees();
-    await boot(page, { alGespaard: 0 });
-    const begin = await lees();
-    expect(half.nog).toBe(1044);                         // de invoer: er is echt een restant dat anders is
-    expect(half.opzij).toBe(3000);
-    expect(half.opzij).toBe(half.cap);
-    expect(begin.opzij).toBe(half.opzij);                // waar je in de maand staat verandert de kop niet
-    expect(half.tekst).toContain('€3.000');
-    expect(half.oud).toBe(false);
-  });
 
   test('de eta is een tempo in volle maanden, niet het restant van deze maand', async ({ page }) => {
     await boot(page);

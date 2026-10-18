@@ -16,20 +16,8 @@ test.describe('a · de kop', () => {
     expect(await tekst(page, '#planKpi')).toContain('€2.850 van €22.000');
   });
 
-  test('deze maand opzij is inleg plus terug: EUR 2.200 + EUR 688 = EUR 2.888', async ({ page }) => {
-    const r = await page.evaluate(() => { const S = planStandEind(); const x = Object.values(S.per);
-      return { opzij: +document.querySelector('[data-kpiopzij]').dataset.kpiopzij, inleg: x.reduce((a, y) => a + y.inleg, 0), tb: x.reduce((a, y) => a + y.tb, 0) }; });
-    expect(r.inleg).toBe(2200); expect(r.tb).toBe(688); expect(r.opzij).toBe(2888);
-    expect(await tekst(page, '[data-kpiopzij]')).toContain('€2.888');
-  });
-
-  test('de chip staat er bij terug boven nul, en opent de opbouw', async ({ page }) => {
-    expect(await tekst(page, '[data-kpiterug]')).toBe('incl. €688 terug ›');
-    await page.locator('[data-kpiterug]').click();
-    await expect(page.locator('#terugOpbouw')).toBeVisible();
-    const r = await page.evaluate(() => ({ tot: +document.getElementById('terugOpbouw').dataset.terugtotaal, rijen: [...document.querySelectorAll('[data-opbouwrij]')].reduce((a, e) => a + (+e.dataset.opbouwrij), 0) }));
-    expect(r.tot).toBe(688); expect(Math.round(r.rijen)).toBe(688);
-  });
+  /* v440: de tegel "Deze maand opzij" (inleg + terug) en de terug-chip zijn vervallen; de kop toont nu "Opzij deze periode"
+     (opzijPeriode: netto naar je spaarrekening tegen het doel uit Kiezen). Dat getest in v440.spec.js. */
 
   test('alles vol is de laatste vol-datum van de rijen, uit dezelfde projectie', async ({ page }) => {
     const r = await page.evaluate(() => { const TL = planTijdlijnData(); const v = Object.values(TL.per).map((x) => x.vol).filter((x) => x != null);

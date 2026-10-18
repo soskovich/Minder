@@ -14,29 +14,6 @@ const inleg = (page, d) => page.evaluate(d => { const t = { id: 'pk' + d, date: 
 const tab = (page, t) => page.evaluate(t => gripKiesTab(t), t);
 const tekst = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); return e ? e.innerText : null; }, sel);
 
-test.describe('1 · spaardoel en Doelen-meter noemen hun basis', () => {
-  test('de terugblik zegt "gestort X van Y · loopt nog", de meter "verwacht A van Y", en de twee getallen verschillen', async ({ page }) => {
-    await grip(page, { opnames: OPNAMES });
-    const r = await page.evaluate(() => ({ net: Math.round(savedNet(thisYM())), opzij: gripMeterDoelen().opzij, verwacht: gripMeterDoelen().netto }));
-    expect(r.verwacht).toBe(r.opzij - 700);   // verwacht = Plan opzij min eruit
-    expect(r.net).not.toBe(r.verwacht);       // gestort min eruit is een ander getal
-    expect(await tekst(page, '[data-meterverwachtdoel]')).toBe(`verwacht €${r.verwacht.toLocaleString('nl-NL')} van €${r.opzij.toLocaleString('nl-NL')}`);
-    await tab(page, 'terugblik');
-    const sp = await tekst(page, `[data-terugmaand="2026-10"] [data-terugrij="spaardoel"] [data-spaarterug]`);
-    // v391: drie delen, gestort nooit negatief, en netto is savedNet
-    expect(sp).toMatch(/^gestort €[\d.]+ · eruit €700 · netto -?€[\d.]+ van €2\.900 · loopt nog$/);   // v397: de EUR 700 uit vrij spaargeld gaat terug en telt in opzij
-    expect(sp).toContain(`netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')}`);
-    // onder de meters het verschil tussen nu en verwacht, en geen uitlegregel meer (die staat in de sheet)
-    expect(await tekst(page, '[data-meternuverwacht]')).toBe(`Doelen: nu netto ${r.net < 0 ? '-' : ''}€${Math.abs(r.net).toLocaleString('nl-NL')} · verwacht eind €${r.verwacht.toLocaleString('nl-NL')}`);
-    expect(await page.locator('[data-meteruitleg]').count()).toBe(0);
-  });
-  test('de sheet van de meter noemt verwacht en verwijst voor gestort naar de terugblik', async ({ page }) => {
-    await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => openGripMeter('doelen'));
-    expect(await tekst(page, '[data-meternetto]')).toContain('Verwacht naar je doelen');
-    expect(await tekst(page, '[data-meterschaal]')).toContain('Terugblik');
-  });
-});
 
 test.describe('3 · terugblik zonder gemeten maand', () => {
   test('geen "0 van 0" maar "Nog geen afgesloten maand gemeten", en de lopende maand alleen als tussenstand', async ({ page }) => {
@@ -86,7 +63,7 @@ test.describe('4 · een tab-✓ alleen na afronding', () => {
 test.describe('5 · Kiezen opgeschoond', () => {
   test('geen afvinkregels, geen "N afspraken voor", geen losse "Kies voor"-link; de rij is de knop', async ({ page }) => {
     await grip(page, { opnames: OPNAMES });
-    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); window._tr.bestem = 'plan'; teRuimBevestig(); const nov = nextYM(thisYM());
+    await page.evaluate(() => { openTeRuim('huur'); teRuimKies('a'); const V = maandVooruit(), D = teRuimBestemmingen(V, teRuim(V).find(t => t.k === 'huur')); window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; teRuimBevestig(); const nov = nextYM(thisYM());   // v440: naar een potje i.p.v. de vervallen Plan-inleg
       afspraakMaak({ soort: 'potje', cat: 'uiteten', bedrag: 120, van: nov, tot: nov, wat: 'Potje Uit eten €120 vanaf november' });
       afspraakMaak({ soort: 'potje', cat: 'boodschappen', bedrag: 400, van: thisYM(), tot: thisYM(), wat: 'Potje Boodschappen €400 in oktober' });
       save(); gripKiesTab('kiezen'); });

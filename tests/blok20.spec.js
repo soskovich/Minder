@@ -65,11 +65,12 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
     const G = sectie(r.L, '7. OKT IN GROEPEN');
     const som = G.find(x => x.startsWith('  SOM:'));
     expect(som).toContain(`tegen V.budget ${r.b}: klopt`); expect(som).toContain(`tegen V.projectie ${r.p}: klopt`);
-    expect(G.join('\n')).toContain('  inleg in Plan: budget 100.00 | verwacht 100.00 | gelijk');
+    // v440: de inleg telt niet meer in het budget: geen "inleg in Plan"-groep en geen inleg-regel in BIJ GEEN POTJE
+    expect(G.join('\n')).not.toContain('inleg in Plan');
     expect(G.join('\n')).toContain('Zorg & apotheek: 159.00 (geboekt 159.00 + verwacht 0.00) | VARIABEL (zonder potje)');
-    expect(G.join('\n')).toMatch(/inleg Reservering: 100\.00 \| OPZIJ/);
+    expect(G.join('\n')).not.toMatch(/inleg Reservering/);
     expect(G.find(x => x.trim().startsWith('samen '))).toMatch(/: klopt$/);
-    expect(G.find(x => x.startsWith('  BIJ GEEN POTJE'))).toContain('= 447.33');
+    expect(G.find(x => x.startsWith('  BIJ GEEN POTJE'))).toContain('= 347.33');
   });
   test('veranderingen: per post eerste tegen laatste maand, nieuw met startmaand, gestopt met stopmaand, totaal', async ({ page }) => {
     await S.boot(page); await page.evaluate(() => postZet('HUURWONINGEN PREMIUM', 'gestopt'));

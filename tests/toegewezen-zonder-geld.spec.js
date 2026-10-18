@@ -25,7 +25,7 @@ test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
     await P.boot(page, TOESTEL);
     const r = await stand(page);
     expect(r.zonder).toBe(637.8); expect(r.dekt).toBe(0);
-    expect(r.regel).toBe('€637,80 toegewezen zonder geld bekijk ›');
+    expect(r.regel).toBe('Inhalen €637,80 met je bonus of wat over is ›');   // v440: Inhalen-vorm
   });
   test('na een keuze voor de EUR 231 blijft EUR 406,80 staan, en niet nul', async ({ page }) => {
     await P.boot(page, TOESTEL);
@@ -33,7 +33,7 @@ test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
       await page.evaluate((x) => { terugzetHerstel(thisYM()); terugzetKies(x); }, k);
       const r = await stand(page);
       expect(r.dekt, k).toBe(231); expect(r.zonder, k).toBe(406.8);
-      expect(r.regel, k).toBe('€406,80 toegewezen zonder geld bekijk ›');
+      expect(r.regel, k).toBe('Inhalen €406,80 met je bonus of wat over is ›');
     }
   });
   test('niet terugzetten verlaagt de toewijzing, en dan blijft hetzelfde verschil over', async ({ page }) => {
@@ -109,13 +109,11 @@ test.describe('c · gelijktrekken laat de melding verdwijnen', () => {
     await page.evaluate(() => { openSpaarOver(); spaarOverKies('alles'); spaarOverZet(); });
     const r = await stand(page);
     expect(r.nf).toBe(3638); expect(r.zonder).toBe(0); expect(r.regel).toBe('');
-    expect(r.kop).toBe(2838);                                       // 2.200 + 231 + 407
-    expect(r.opzij).toBe(2838); expect(r.kopWeg).toBe(true);
-    expect(await page.evaluate(() => safeToSpend().saveReserved)).toBe(2838);
-    /* v380: de regel "gekozen: ... · wijzig" (#terugzetGekozen) is vervallen. Het terugzetdeel staat als chip in de kop
-       (231 + 407 = 638), en de keuzes staan gemarkeerd in "verdeling ⚙" (openPlanInstel()). */
+    expect(r.kop).toBe(2838);   // planToeMaand().teVerdelen (inleg + terug)
+    expect(r.kopWeg).toBe(true);
+    /* v440: de kop toont "Opzij deze periode" (opzijPeriode), niet meer "Deze maand opzij" met een terug-chip; het
+       terugzetdeel staat gemarkeerd in "verdeling ⚙" (openPlanInstel()). */
     expect(await page.locator('#terugzetGekozen').count()).toBe(0);
-    expect(await page.locator('#planKpi [data-kpiterug]').getAttribute('data-kpiterug')).toBe('638');
     await page.evaluate(() => openPlanInstel());
     expect(await page.locator('[data-instelterug="alles"]').getAttribute('data-gekozen')).toBe('1');
     expect(await page.locator('[data-instelgat="alles"]').innerText()).toContain('€407 · alles deze maand · gekozen');
@@ -195,7 +193,7 @@ test.describe('d · de rij laat geld en plan apart zien', () => {
     /* v381: de regel zegt dat er nog niet gekozen is (de keuzes staan eronder); de centen blijven die van de melding */
     expect(r.op.zg).toBe('€406,80 toegewezen zonder geld · nog niet gekozen');
     expect(+r.nog).toBe(406.8);
-    expect((await stand(page)).regel).toBe('€406,80 toegewezen zonder geld bekijk ›');
+    expect((await stand(page)).regel).toBe('Inhalen €406,80 met je bonus of wat over is ›');
     /* v381: zonder keuze over dat geld is de datum voorlopig */
     expect(r.vol).toBe('vol nov 2026 · voorlopig ›');
   });

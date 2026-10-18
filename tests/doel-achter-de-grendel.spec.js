@@ -142,7 +142,7 @@ test.describe('b · wat er niet verandert', () => {
 test.describe('c · de twee randgevallen zonder bedrag', () => {
   test('onbekende openingsmaand: geen bedrag, wel de reden, en niet meegeteld', async ({ page }) => {
     // geen spaarinleg: de buffer wordt op dit tempo nooit vol, dus er is geen openingsmaand
-    await boot(page, { inleg: 0, set: { income: 0 } });
+    await boot(page, { inleg: 0, set: { income: 0, salVerdeling: { rek: { [MAIN]: 1 }, opzij: 0 } } });   // v440: gekozen opzij 0, zodat planCapacity niet op het advies terugvalt
     const r = await meet(page);
     expect(r.G.dicht).toBe(true);
     expect(r.G.maanden).toBe(null);
@@ -237,7 +237,7 @@ test.describe('d · Grip en de coach zeggen hetzelfde', () => {
   });
 
   test('onbekend geeft op Grip geen oordeel', async ({ page }) => {
-    await boot(page, { inleg: 0, set: { income: 0 } });
+    await boot(page, { inleg: 0, set: { income: 0, salVerdeling: { rek: { [MAIN]: 1 }, opzij: 0 } } });   // v440: gekozen opzij 0, zodat planCapacity niet op het advies terugvalt
     const r = await regel(page);
     if (r) {
       expect(r.status).toBe('onbekend');

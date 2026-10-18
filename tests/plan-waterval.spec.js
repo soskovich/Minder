@@ -90,16 +90,14 @@ test.describe('a · de kaart toont het mechanisme', () => {
   /* v380: de inlegbalk met een segment per bestemming is vervallen (planSegmenten() bestaat niet meer). De eigenschap
      dat de hele inleg verdeeld wordt en niets eruit valt staat nu in de kop: "Deze maand opzij" is de inleg plus wat
      er terug gaat, hier zonder terugzetten dus planCapacity(), en planToeMaand() telt dezelfde verdeling op. */
-  test('wat deze maand opzij gaat is planCapacity, en er staat geen inlegbalk meer', async ({ page }) => {
+  test('wat deze maand verdeeld wordt is planCapacity, en er staat geen inlegbalk meer', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 200 }]));
     const r = await page.evaluate(() => ({ cap: planCapacity(), toe: planToeMaand(),
-      opzij: +document.querySelector('[data-kpiopzij]').dataset.kpiopzij,
-      tekst: document.querySelector('[data-kpiopzij]').innerText.replace(/\s+/g, ' '),
+      kop: (document.querySelector('[data-kpiopzijperiode]') || {}).innerText || '',   // v440: de kop toont "Opzij deze periode" (opzijPeriode), geen inlegbalk
       balk: document.querySelectorAll('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').length }));
     expect(r.cap).toBe(CAP);
-    expect(r.opzij).toBe(CAP);
-    expect(r.tekst).toContain(await page.evaluate((c) => euro0(c), CAP));
-    expect(r.toe).toEqual({ toegewezen: CAP, teVerdelen: CAP });
+    expect(r.toe).toEqual({ toegewezen: CAP, teVerdelen: CAP });   // planToeMaand verdeelt de hele capaciteit
+    expect(r.kop.replace(/\s+/g, ' ')).toContain('Opzij deze periode');
     expect(r.balk).toBe(0);
   });
 

@@ -86,7 +86,7 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     await page.evaluate(() => { SET.savingAmount = 100; save(); });
     const pl = await P(page);
     expect(pl.rek.map(x => Math.round(x.verwacht))).toEqual(na.rek.map(x => Math.round(x.verwacht)));
-    expect(pl.plan).toBe(280);   // v433: de geplande inleg uit blok 20 punt 7, niet SET.savingAmount
+    // v440: de Plan-inleg bestaat niet meer; een spaarinleg verandert het voorstel nog steeds niet (verwacht ongewijzigd)
   });
   test('2c/d. buffer is p75 min mediaan (minstens 50, hoogstens 20% van verwacht, v433), en laten staan is verwacht plus buffer naar boven op 50', async ({ page }) => {
     await S.boot(page);
@@ -145,7 +145,7 @@ test.describe('v432 · 4. Kiezen: zo verdeel je je salaris', () => {
     expect(k[0]).toEqual(['oorz:pat:spaargeld:salverdeling', 'Zo verdeel je je salaris']);
     await page.evaluate(() => openSalVerdeling('pat:spaargeld'));
     await expect(page.locator('[data-salvrek]')).toHaveCount(2);
-    await expect(page.locator('[data-salvopzij]')).toContainText(/Opzij €[\d.]+: Plan €280 \+ vrij sparen €[\d.]+/);
+    await expect(page.locator('[data-salvopzij]')).toContainText(/Opzij €[\d.]+/);   // v440: geen "Plan €280 + vrij sparen" meer
     await expect(page.locator('[data-salvgevolg]')).toContainText('Leefgeld: laagste saldo');
     await expect(page.locator('[data-salvgevolg]')).toContainText('onttrekkingen €0');
   });
@@ -205,6 +205,6 @@ test.describe('v432 · 6. blok 23', () => {
     expect(t).toMatch(/\nLeefgeld\n  vaste lasten 0 \(termijnen in de periode\)\n  potjes \d+: /);
     expect(t).toMatch(/LATEN STAAN \d+/);
     expect(t).toMatch(/ONTTREKKINGEN PER REKENING PER MAAND\n  Leefgeld 2026-09 1050 \(3×: 2026-09-08, 2026-09-15, 2026-09-20\) · de grootste/);
-    expect(t).toMatch(/: sluit\n.*: sluit\n.*: gelijk\n(  onttrekkingen 20\d\d-\d\d: per rekening samen \d+ tegen blok 20 punt 4 \d+: gelijk\n){3}  Plan-inleg 280 tegen blok 20 punt 7 \(inleg in Plan: budget\) 280: gelijk\n  gestopte of opgezegde post die meetelt: geen/);
+    expect(t).toMatch(/: sluit\n.*: sluit\n.*: gelijk\n(  onttrekkingen 20\d\d-\d\d: per rekening samen \d+ tegen blok 20 punt 4 \d+: gelijk\n){3}  Plan-inleg 0 tegen blok 20 punt 7 \(inleg in Plan: budget\) 0: gelijk\n  gestopte of opgezegde post die meetelt: geen/);   // v440: Plan-inleg bestaat niet meer, de controle staat op 0
   });
 });

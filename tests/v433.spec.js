@@ -12,49 +12,8 @@ const P = page => page.evaluate(() => { window._rekV = null; const P = rekVoorst
   rek: P.rek.map(r => ({ acc: r.acc, verwacht: r.verwacht, buffer: r.buffer, p75: r.p75, med: r.med, bm: r.bufMaanden.map(x => ({ ym: x.ym, v: x.v, post: x.uit.post, studie: x.uit.studie })) })) }; });
 const plan20 = page => page.evaluate(() => { const D = salarisData(9); return Math.round(maandGroepen(D.V, D.Lq).g.find(x => x.n === 'inleg in Plan').b); });
 
-test.describe('v433 · 1. Plan-inleg', () => {
-  test('1a. de Plan-inleg is het budget "inleg in Plan" van blok 20 punt 7, niet de spaarinleg', async ({ page }) => {
-    await S.boot(page);
-    const r = await P(page);
-    expect(await plan20(page)).toBe(280);
-    expect(r.plan).toBe(280);
-    expect(await page.evaluate(() => Math.round(monthlySavingTarget()))).toBe(2200);   // de spaarinleg is iets anders
-    await page.evaluate(() => { SET.savingAmount = 900; save(); });
-    expect((await P(page)).plan).toBe(280);
-    await page.evaluate(() => { planInlegZet('res', 500); });
-    /* v436: punt 7 houdt het vastgelegde bedrag van oktober; het voorstel voor de komende periode telt de wijziging mee */
-    expect(await plan20(page)).toBe(280);
-    expect((await P(page)).plan).toBe(500);
-  });
-  test('1b. opzij is "Plan EUR 280 + vrij sparen", en onder de Plan-inleg "past niet"', async ({ page }) => {
-    await S.boot(page);
-    const r = await P(page);
-    await page.evaluate(() => openSalVerdeling('pat:spaargeld'));
-    const op = Math.round(r.opzij);
-    const eur = v => '€' + v.toLocaleString('nl-NL');
-    await expect(page.locator('[data-salvopzij]')).toHaveText(`Opzij ${eur(op)}: Plan €280 + vrij sparen ${eur(op - 280)}`);
-    await expect(page.locator('[data-salvgevolg]')).toContainText(`Opzij ${eur(op)}: Plan €280 + vrij sparen`);
-    /* meer laten staan dan er na de Plan-inleg overblijft */
-    await page.locator('[data-salvaanpassen]').click();
-    const l0 = await page.evaluate(() => rekVoorstel().rek.find(r => r.acc === 'NL01LEEF0000004444').laten);
-    await page.locator(`[data-salvveld="${LEEF}"]`).fill(String(l0 + op - 100));
-    await expect(page.locator('[data-salvopzij]')).toHaveText('Opzij €100 · Plan-inleg past niet: €180 tekort');
-    await expect(page.locator('[data-salvgevolg]')).toContainText('Plan-inleg past niet: €180 tekort, je doelen zijn later vol');
-  });
-  test('1c. blok 23 zet de Plan-inleg naast blok 20 punt 7', async ({ page }) => {
-    await S.boot(page);
-    const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
-    expect(d).toContain('Plan-inleg 280 tegen blok 20 punt 7 (inleg in Plan: budget) 280: gelijk');
-    expect(d).toMatch(/OPZIJ \d+ = salaris 5216 min \d+ laten staan · Opzij EUR \d+: Plan EUR 280 \+ vrij sparen EUR \d+/);
-  });
-});
 
 test.describe('v433 · controles slaan aan op een verschil', () => {
-  test('C1. de Plan-controle zegt VERSCHIL als het voorstel een andere Plan-inleg draagt', async ({ page }) => {
-    await S.boot(page);
-    const d = await page.evaluate(() => { window._rekV = null; const R = rekVoorstel(); window._rekV = { s: rekVoorstelSleutel(), R: Object.assign({}, R, { plan: 2480 }) }; return diagRekVerdeling().join('\n'); });
-    expect(d).toContain('Plan-inleg 2480 tegen blok 20 punt 7 (inleg in Plan: budget) 280: VERSCHIL');
-  });
   test('C2. de onttrekkingscontrole zegt VERSCHIL als blok 23 een andere som per maand telt', async ({ page }) => {
     await S.boot(page);
     const d = await page.evaluate(() => { const o = rekOnttrekkingen; rekOnttrekkingen = (...a) => { const r = o(...a); r.lijst.push({ acc: 'NL01LEEF0000004444', date: '2026-09-30', bedrag: 500 }); return r; };

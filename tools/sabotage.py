@@ -111,7 +111,9 @@ def handtekening(schoon, zoek, vervang):
 
 def run(plan_pad, config):
     plan = json.loads(lees(plan_pad))
-    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP): signal.signal(sig, bij_signaal)
+    for naam in ('SIGTERM', 'SIGINT', 'SIGHUP'):   # SIGHUP bestaat niet op Windows
+        sig = getattr(signal, naam, None)
+        if sig is not None: signal.signal(sig, bij_signaal)
     schoon = zet_slot()
     atexit.register(lambda: herstel('afsluiten'))
     log, uitslag = [], []

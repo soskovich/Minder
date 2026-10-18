@@ -198,7 +198,7 @@ test('D · de regel onder de meters begint met "Doelen:", en de feitregel van Bu
   await S.boot(page);
   const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); const n = document.querySelector('[data-meternuverwacht]'), f = document.querySelector('[data-nietgebruikt]');
     return { tekst: n.innerText, volgorde: f ? !!(f.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) : null }; });
-  expect(r.tekst).toMatch(/^Doelen: nu netto /); expect(r.volgorde).toBe(true);
+  expect(r.tekst).toMatch(/^Doelen: /); expect(r.volgorde).toBe(true);   // v440: de regel leest opzijPeriode, met "Doelen:" ervoor (v406)
 });
 
 /* Vijf gevallen die de eerste sabotage-ronde niet droeg (meetles a): twee gelijke maanden (de piek op 2 van 3, niet op 60%),

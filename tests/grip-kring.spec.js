@@ -57,17 +57,6 @@ test.describe('v387 structuur', () => {
 });
 
 test.describe('v387 meters', () => {
-  /* v397: een opname uit vrij spaargeld wordt standaard teruggezet, dus hij verhoogt "opzij" net zoveel als "eruit": de
-     meter blijft op hetzelfde netto staan en zijn percentage daalt. */
-  test('Doelen: Plan opzij min de onttrekkingen; een onttrekking erbij laat het percentage dalen', async ({ page }) => {
-    await grip(page);
-    const a = await page.evaluate(() => ({ M: gripMeterDoelen(), opzij: planKpiData().opzij, uit: spaarStortStand().uit }));
-    expect(a.uit).toBe(500);
-    expect(a.M.netto).toBe(a.opzij - 500); expect(a.M.pct).toBe(Math.round((a.opzij - 500) / a.opzij * 100));
-    expect(await page.locator('[data-meter="doelen"]').innerText()).toContain(`€${(a.opzij - 500).toLocaleString('nl-NL')} van €${a.opzij.toLocaleString('nl-NL')}`);
-    const b = await page.evaluate((sav) => { const t = { id: 'x1', date: '2026-10-10', amount: -150, acc: sav, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); return gripMeterDoelen(); }, G.SPAAR);
-    expect(b.opzij).toBe(a.opzij + 150); expect(b.netto).toBe(a.M.netto); expect(b.pct).toBeLessThan(a.M.pct);
-  });
   test('Doelen: een overboeking tussen twee spaarrekeningen telt niet', async ({ page }) => {
     await grip(page);
     const r = await page.evaluate((sav) => { const voor = gripMeterDoelen().netto; const ander = 'NL01SPAR0000009999';
@@ -75,15 +64,6 @@ test.describe('v387 meters', () => {
       for (const [acc, a] of [[sav, -400], [ander, 400]]) { const t = { id: 'ov' + a, date: '2026-10-10', amount: a, acc, name: 'Eigen', desc: 'OVERBOEKING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); }
       save(); return { voor, na: gripMeterDoelen().netto }; }, G.SPAAR);
     expect(r.na).toBe(r.voor);
-  });
-  /* v397: terugzetten is de standaard; "niet terug" voor het deel uit vrij spaargeld laat de meter dalen. */
-  test('Doelen: niet terugzetten laat hem dalen, terugzetten is de standaard', async ({ page }) => {
-    await grip(page);
-    const r = await page.evaluate(() => { const voor = gripMeterDoelen(); const vrij = spaarStortStand().vrijTerug; terugzetVrijZet('niet'); const niet = gripMeterDoelen(); terugzetVrijZet('alles'); return { voor, niet, vrij, terug: gripMeterDoelen() }; });
-    expect(r.vrij).toBeGreaterThan(0);   // invoermeting: er ging iets uit vrij spaargeld
-    expect(r.niet.opzij).toBe(r.voor.opzij - r.vrij);
-    expect(r.niet.netto).toBeLessThan(r.voor.netto);
-    expect(r.terug).toEqual(r.voor);
   });
   test('Budget: verwacht gedeeld door het maandbudget (v398); te ruim staat erbij als niet gebruikt en trekt niet af', async ({ page }) => {
     await grip(page);
@@ -146,14 +126,14 @@ test.describe('v387 te ruim begroot', () => {
     expect(await page.locator('[data-teruimregel]').count()).toBe(0);   // v394: geen melding meer op Zien
     await page.evaluate(() => openTeRuim('huur'));
     const voor = await page.evaluate(() => JSON.stringify(SET));
-    await page.click('[data-teruimoptie="a"]'); await page.click('[data-teruimbestem="plan"]');
+    /* v440: Plan/reservering/beleggen zijn geen te-ruim-bestemming meer; de verschuiving gaat naar een potje */
+    await page.evaluate(() => { const V = maandVooruit(), D = teRuimBestemmingen(V, teRuim(V).find(t => t.k === 'huur')); window._tr.optie = 'a'; window._tr.bestem = (D.nieuw || D.ander[0] || D.vast[0]).id; renderTeRuim(); });
     const g = await page.locator('[data-teruimgevolg="huur"]').innerText();
-    expect(g).toContain('Huur €700 → €142');   // v409 expect(g).toContain('Maandbudget €3.325 blijft');
-    expect(await page.evaluate(() => JSON.stringify(SET))).toBe(voor);
+    expect(g).toContain('Huur €700 → €142');
+    expect(await page.evaluate(() => JSON.stringify(SET))).toBe(voor);   // kiezen schrijft niets tot bevestigen
     await page.click('[data-teruimbevestig]');
-    const na = await page.evaluate(() => ({ b: SET.budgets.huur, log: SET.teRuimLog, ruim: teRuim().map(x => x.k) }));
-    expect(na.b).toBe(142); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 142, bestemSoort: 'plan' })); expect(na.ruim).toEqual(['vervoer']);
-    expect(await page.locator('#gripMeters ~ [data-nietgebruikt]').innerText()).toBe('waarvan €390 Vervoer & auto niet gebruikt ›');   // Huur is weg
+    const na = await page.evaluate(() => ({ b: SET.budgets.huur, log: SET.teRuimLog }));
+    expect(na.b).toBe(142); expect(na.log[0]).toEqual(expect.objectContaining({ k: 'huur', van: 700, naar: 142 }));
   });
   test('laten staan: het potje blijft, de stap blijft "niet gebruikt" en de regel zegt "zelf gekozen" (v398)', async ({ page }) => {
     await grip(page);

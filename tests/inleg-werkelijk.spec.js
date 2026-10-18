@@ -91,114 +91,6 @@ test.describe('a · de invoer', () => {
   });
 });
 
-/* ===== b) DE REGEL ONDER DE INLEG ===== */
-test.describe('b · de werkelijke inleg naast de ingestelde', () => {
-  for (const [nm, o, verwacht] of STANDEN) {
-    test(`${nm}: de regel noemt ${verwacht} en leest savedNet`, async ({ page }) => {
-      await boot(page, o);
-      const r = await page.evaluate(() => {
-        const e = document.querySelector('#planInleg');
-        return e ? { tekst: e.innerText.replace(/\s+/g, ' ').trim(),
-          inleg: +e.dataset.inleg, cap: +e.dataset.cap,
-          kleur: getComputedStyle(e).color,
-          mut: getComputedStyle(document.documentElement).getPropertyValue('--mut').trim() } : null;
-      });
-      expect(r, 'de regel staat er').toBeTruthy();
-      /* HET GETAL KOMT UIT DE MEETBRON EN NIET UIT DE INSTELLING: het attribuut draagt savedNet(). */
-      expect(r.inleg, nm).toBe(verwacht);
-      expect(r.cap, nm).toBe(2200);
-      expect(r.tekst, nm).toBe(verwacht >= 2200
-        ? 'deze maand €2.200 opzij'
-        : `deze maand €${verwacht === 900 ? '900' : '0'} van €2.200 opzij`);
-    });
-  }
-
-  /* HIJ ZEGT HET ALS FEIT: geen amber en geen rood, ook niet als er niets opzij ging (v78/v93). */
-  test('een lagere inleg is geen alarm: dezelfde kleur als een gehaalde', async ({ page }) => {
-    const kleur = {};
-    for (const [nm, o] of STANDEN) {
-      await boot(page, o);
-      kleur[nm] = await page.evaluate(() => {
-        const e = document.querySelector('#planInleg');
-        const c = getComputedStyle(e).color;
-        const amber = getComputedStyle(document.documentElement).getPropertyValue('--amber').trim();
-        const rood = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
-        const t = document.createElement('div'); t.style.color = 'var(--mut)';
-        document.body.appendChild(t); const mut = getComputedStyle(t).color; t.remove();
-        return { c, amber, rood, mut };
-      });
-    }
-    expect(new Set(Object.values(kleur).map((x) => x.c)).size, 'één kleur in alle drie').toBe(1);
-    expect(kleur.niets.c).toBe(kleur.niets.mut);
-    expect(kleur.niets.c).not.toBe(kleur.niets.amber);
-    expect(kleur.niets.c).not.toBe(kleur.niets.rood);
-  });
-
-  /* EEN NEGATIEF NETTO HEEFT ZIJN EIGEN VORM (v262): wat je eruit haalde, zonder minteken en zonder
-     alarm. Zonder dit geval is "drie vormen" niet van "twee vormen" te onderscheiden. */
-  /* v365: met een bak om naar terug te zetten is "eruit gehaald" een keuze geworden; de losse regel staat er
-     alleen nog zonder bak. v367: die keuze is een compacte regel (#terugzetRegel) met "kies ›" naar een sheet. */
-  test('meer eruit dan erin: de kaart zegt wat je eruit haalde, en de losse regel staat er niet', async ({ page }) => {
-    await boot(page, { okt: -500, saldo: 8100 });
-    const r = await page.evaluate(() => ({ regel: !!document.querySelector('#planInleg'), net: savedNet(thisYM()),
-      k: (document.querySelector('#terugzetRegel') || {}).dataset, t: (document.querySelector('#terugzetRegel') || {}).innerText || '' }));
-    expect(r.net).toBe(-500);
-    expect(r.regel).toBe(false);
-    expect(+r.k.terugzet).toBe(500);
-    expect(r.t).toContain('€500 eruit gehaald in oktober');
-  });
-
-  /* ONBEKEND BLIJFT ONBEKEND (v59/v73/v173): zonder aangewezen spaarrekening EN zonder boeking op de
-     categorie sparen geeft savedNet() null, en dan staat er niets in plaats van een nul.
-     DAT IS EEN BEWUST VERSCHIL MET INZICHTEN, en dat staat hier als assertie naast elkaar:
-     safeToSpend() leest diezelfde null als nul, want dat getal gaat in `safe` en nul is daar de
-     voorzichtige kant (v168). Zonder die tweede helft leest deze test als een tegenspraak. */
-  test('onbekende inleg: Plan zwijgt, en safeToSpend() leest hem als nul', async ({ page }) => {
-    await boot(page, { okt: 0, saldo: 10800,
-      set: { savingsEnds: [], savingsAcc: { [SAV]: false }, savingsAccMigrated: 1 } });
-    const r = await page.evaluate(() => ({
-      net: savedNet(thisYM()), rek: n26SavingsAccounts().length,
-      regel: document.querySelector('#planInleg'),
-      safeSaved: safeToSpend().savedThisMonth,
-    }));
-    expect(r.rek, 'geen rekening telt mee').toBe(0);
-    expect(r.net, 'en geen boeking op de categorie sparen').toBe(null);
-    expect(r.regel, 'dus Plan zegt niets').toBe(null);
-    expect(r.safeSaved, 'terwijl safeToSpend() er nul van maakt').toBe(0);
-  });
-
-  /* EN NIETS OP DE TERUGVAL: dan is de cap comfortTot en geen spaarinleg, en savedNet() ernaast
-     zetten zou twee verschillende grootheden vergelijken. */
-  test('op de terugval staat de regel er niet', async ({ page }) => {
-    await boot(page, { okt: 900, saldo: 11700, comfort: 300, set: { savingAmount: 0 } });
-    const r = await page.evaluate(() => ({ terugval: planCapTerugval(), cap: planCapacity(),
-      tgt: monthlySavingTarget(), net: savedNet(thisYM()),
-      regel: document.querySelector('#planInleg'),
-      /* v380: de kop "Te verdelen uit je comfortabele ruimte" en de inlegbalk zijn vervallen. De herkomst van de cap staat
-         nu in de uitleg van Plan (NOTES.planUitleg), en het bedrag in de tegel "Deze maand opzij" van de kop. */
-      uitleg: NOTES.planUitleg, opzij: +(document.querySelector('#planKpi [data-kpiopzij]') || { dataset: {} }).dataset.kpiopzij,
-      balk: document.querySelectorAll('#s-vooruit .inleg-balk').length }));
-    expect(r.tgt, 'de invoer: geen spaarinleg ingesteld').toBe(0);
-    expect(r.net, 'maar er ging wel geld opzij, dus het zwijgen komt niet van een onbekende meting').toBe(900);
-    expect(r.terugval, 'de invoer: de cap komt uit comfortTot').toBe(true);
-    expect(r.cap).toBeGreaterThan(0);
-    expect(r.uitleg).toMatch(/comfortabele ruimte/);
-    expect(r.opzij, 'de kop verdeelt de terugval-capaciteit').toBe(r.cap);
-    expect(r.balk).toBe(0);
-    expect(r.regel).toBe(null);
-  });
-
-  /* ÉÉN BRON, EN DAT STAAT OP DE BRON VAST: de regel leest savedNet() en rekent geen eigen som over
-     de boekingen (v104). Zonder deze assertie kan een volgende ronde er een tweede telling van maken
-     die bij de eerste wijziging van savedNet() uiteenloopt. */
-  test('planInlegRegel leest savedNet en telt niet zelf', async ({ page }) => {
-    await boot(page, { okt: 900, saldo: 11700 });
-    const src = await kaalUit(page, 'planInlegRegel');
-    expect(src).toMatch(/savedNet\(/);
-    expect(src).toMatch(/planCapacity\(/);
-    expect(src, 'geen eigen lus over de boekingen').not.toMatch(/txOfMonth\(|\.filter\(|reduce\(/);
-  });
-});
 
 /* ===== c) VERDEEL VOLGENS JE PLAN ===== */
 test.describe('c · het vrije spaargeld verdelen', () => {
@@ -405,7 +297,7 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
     expect(t).toMatch(/2026-10 \(deze maand\)\s+savedNet\(\): 900\s+planCapacity\(\): 2200\s+verschil: -1300/);
     expect(t).toMatch(/2026-09\s+savedNet\(\): 2200\s+planCapacity\(\): 2200\s+verschil: 0/);
     expect(t, 'en de rekening eronder').toMatch(new RegExp(SAV.slice(0, 21) + '\\s+900\\s+erin'));
-    expect(t, 'de regel die het scherm toont').toMatch(/deze maand €900 van €2\.200 opzij/);
+    // v440: de losse "deze maand EUR X opzij"-regel op Plan (planInlegRegel) is vervallen; opzij staat als "Opzij deze periode"
   });
   test('de twee knoppen staan er met hun uitkomst naast elkaar', async ({ page }) => {
     await boot(page, { okt: 2200, saldo: 13000 });
@@ -439,50 +331,3 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
   });
 });
 
-/* ===== e) WAT DEZE RONDE KOST ===== */
-test.describe('e · de prijs in pixels', () => {
-  /* v380: DE INLEGBALK EN DE KAART MET DE KOP "TE VERDELEN" ZIJN VERVALLEN. De regel staat nu in het meldingenblok onder de
-     kop van Plan ([data-planmeldingen]) en niet meer in de kaart, dus hij raakt de lijst niet: #planLijst is met en zonder
-     regel even hoog. Wat hij kost is zijn eigen regel tekst (18px) plus de 8px marge van het meldingenblok, dat er zonder
-     melding niet staat: GEMETEN 26px op 390 en 27 op 360 (de zone rondt daar een pixel anders af). Tot v379 was het netto
-     15px, omdat de inlegbalk 5px van zijn marge teruggaf; die balk is er niet meer.
-     DE TWEEDE KNOP kost onveranderd 18px op 360px (de twee knoppen breken daar over twee regels) en NUL op 390px. */
-  for (const [w, h] of [[360, 640], [390, 844]]) {
-    test(`${w}px: de regel kost 26px buiten de lijst, de knop ${w === 360 ? 18 : 0}px`, async ({ page }) => {
-      await boot(page, { okt: 900, saldo: 11700, breedte: w, hoogte: h });
-      const meet = () => page.evaluate(() => {
-        const z = document.querySelector('#s-vooruit');
-        const H = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
-        const m = z.querySelector('[data-planmeldingen]');
-        return { vrij: H(z.querySelector('.spaar-vrij')), inleg: H(document.querySelector('#planInleg')),
-          inMeld: !!(m && m.querySelector('#planInleg')), meldMb: m ? getComputedStyle(m).marginBottom : null,
-          lijst: H(z.querySelector('#planLijst')), balk: z.querySelectorAll('.inleg-balk').length, zone: H(z),
-          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
-      });
-      const vol = await meet();
-      await page.evaluate(() => { window._mag = spaarVerdeelMag; window._inleg = planInlegRegel;
-        window.spaarVerdeelMag = () => false; window.planInlegRegel = () => '';
-        render(); go('vooruit'); });
-      const zonder = await meet();
-      await page.evaluate(() => { window.spaarVerdeelMag = window._mag; render(); go('vooruit'); });
-      const metKnop = await meet();
-      expect(vol.inleg, 'de regel is één regel tekst').toBe(18);
-      expect(vol.inMeld, 'en staat in het meldingenblok onder de kop').toBe(true);
-      expect(vol.meldMb).toBe('8px');
-      expect(vol.balk, 'de inlegbalk is vervallen').toBe(0);
-      expect(zonder.lijst, 'de lijst staat er zonder de regel').toBeGreaterThan(0);
-      expect(vol.lijst, 'de regel staat buiten de lijst en raakt hem niet').toBe(zonder.lijst);
-      expect(Math.abs(metKnop.zone - zonder.zone - (w === 360 ? 18 : 0)), 'de tweede knop').toBeLessThanOrEqual(1);
-      expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
-      expect(Math.abs(vol.zone - metKnop.zone - 26), 'de regel: 18 tekst plus 8 marge').toBeLessThanOrEqual(1);
-      expect(vol.overflow, 'niets steekt buiten de breedte').toBeLessThanOrEqual(1);
-    });
-  }
-  test('de sheet past op 360px', async ({ page }) => {
-    await boot(page, { okt: 2200, saldo: 13000, breedte: 360, hoogte: 640 });
-    const h = await page.evaluate(() => { openSpaarVerdeel();
-      return Math.round(document.querySelector('#sheet').getBoundingClientRect().height); });
-    expect(h).toBe(403);
-    expect(h).toBeLessThan(640);
-  });
-});

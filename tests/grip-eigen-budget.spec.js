@@ -159,19 +159,21 @@ test.describe('B · de te-ruim-sheet', () => {
     expect(await knop(page)).toEqual({ uit: true, tekst: 'Bevestigen', reden: 'Kies een optie' });
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
-  test('bestemming verplicht: na a geen voorselectie en de knop uit, na een keuze noemt de knop de handeling', async ({ page }) => {
+  test('bestemming verplicht: geen voorselectie en de knop uit, een keuze naar een potje noemt de handeling', async ({ page }) => {
     await grip(page);
-    await huurSheet(page, 'a');
-    expect(await page.locator('[data-teruimwaarheen]').innerText()).toContain('Waar gaat €558 naartoe?');
-    expect(await page.locator('[data-teruimbestem]').evaluateAll(e => e.map(x => x.dataset.teruimbestem))).toEqual(['plan', 'res', 'beleg', 'pot:uiteten', 'pot:vices']);
+    await huurSheet(page, 'b', 650);   // v440: klein restant (€50), zodat een potje als bestemming niet splitst
+    expect(await page.locator('[data-teruimwaarheen]').innerText()).toMatch(/Waar gaat €\d+ naartoe\?/);
+    const lijst = await page.locator('[data-teruimbestem]').evaluateAll(e => e.map(x => x.dataset.teruimbestem));
+    expect(lijst.every(id => id.startsWith('pot:'))).toBe(true);   // v440: alleen potjes, geen Plan/res/beleg
+    expect(lijst.length).toBeGreaterThan(0);
     expect(await page.locator('[data-teruimbestem].on').count()).toBe(0);
     expect(await page.locator('[data-teruimgevolg]').count()).toBe(0);
-    expect(await knop(page)).toEqual({ uit: true, tekst: 'Bevestigen', reden: 'Kies waar €558 naartoe gaat' });
+    expect((await knop(page)).uit).toBe(true);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
     await page.evaluate(() => teRuimBevestig());   // de schrijver eist de keuze zelf ook
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
-    await page.click('[data-teruimbestem="plan"]');
-    expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €142 zetten', reden: '' });
+    await page.click(`[data-teruimbestem="${lijst[0]}"]`);
+    expect((await knop(page)).uit).toBe(false);
   });
   test('b: een bedrag tussen nodig en het huidige budget, daarbuiten met een reden; a en c klappen in', async ({ page }) => {
     await grip(page);
@@ -187,62 +189,6 @@ test.describe('B · de te-ruim-sheet', () => {
     const ing = await page.evaluate(() => ['a', 'c'].map(k => { const e = document.querySelector(`[data-teruimoptie="${k}"]`); return { gek: e.dataset.gekozen, h: e.getBoundingClientRect().height }; }));
     for (const o of ing) { expect(o.gek).toBe('0'); expect(o.h).toBeLessThanOrEqual(34); }
   });
-  test('het gevolg: Plan, het maandbudget blijft, verwacht stijgt met het bedrag, de meter, en de oker regel als het nog te ruim is', async ({ page }) => {
-    await grip(page);
-    await huurSheet(page, 'b', 400);
-    await page.click('[data-teruimbestem="plan"]');
-    const g = await page.evaluate(() => Object.fromEntries(['potje', 'bestem', 'budget', 'verwacht', 'meter', 'nogruim'].map(k => [k, (document.querySelector(`[data-gevolg${k}]`) || {}).innerText || null])));
-    expect(g.potje).toBe('Huur €700 → €400');
-    expect(g.bestem).toBe('Plan · sparen +€300/mnd · inleg in Plan');   // v399: een inleg in Plan
-    /* v436: het maandbudget van deze maand ligt vast; de keuze werkt deze maand alleen door in de forecast en is het
-       budget vanaf de 1e van volgende maand. Budget en verwacht zijn daarom EEN regel. */
-    expect(g.budget).toBe('deze maand: forecast €1.711 → €2.011 · maandbudget €3.325 vanaf november');
-    expect(g.verwacht).toBe(g.budget);
-    expect(g.meter).toBe(`Budget-meter 51% → ${Math.round(2011 / 3325 * 100)}% · €1.314 onder`);
-    expect(g.nogruim).toBe('Nog €258 ruimer dan nodig (€142). Je keuze blijft staan; volgende maand toetst Minder opnieuw.');
-    expect(await knop(page)).toEqual({ uit: false, tekst: 'Huur op €400 zetten', reden: '' });
-  });
-  /* v399: pot:uiteten (boven met €67, en €300 vrij) wordt een splitsing; die staat in plan-inleg.spec.js. */
-  for (const [b, stijgt] of [['plan', true], ['res', true], ['beleg', true]]) test(`verwacht ${stijgt ? 'stijgt' : 'blijft gelijk'} bij ${b}, in het gevolg en na bevestigen`, async ({ page }) => {
-    await grip(page);
-    const uit0 = await page.evaluate(() => SET.budgets.uiteten);
-    await huurSheet(page, 'b', 400);
-    await page.click(`[data-teruimbestem="${b}"]`);
-    expect(await page.locator('[data-gevolgverwacht]').getAttribute('data-gevolgverwacht')).toBe(String(stijgt ? 2011 : 1711));
-    await page.click('[data-teruimbevestig]');
-    const r = await page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V);
-      return { bud: Math.round(V.budget), proj: Math.round(V.projectie), huur: SET.budgets.huur, uit: SET.budgets.uiteten,
-        som: B.stappen.slice(1, -1).reduce((a, x) => a + x.waarde, B.stappen[0].waarde), stap: (B.stappen.find(s => s.soort === 'teruim' && s.k === 'huur') || {}).waarde,
-        uitSoort: (B.stappen.find(s => s.k === 'uiteten') || {}).soort }; });
-    expect(r.bud).toBe(3325);   // het maandbudget blijft
-    expect(r.huur).toBe(400);
-    expect(r.proj).toBe(stijgt ? 2011 : 1711);
-    expect(r.som).toBe(r.proj);
-    expect(r.stap).toBe(-258);   // Huur 400 met 142 nodig (v409): 258 niet gebruikt
-    expect(r.uit).toBe(uit0);
-  });
-  test('Plan: de inleg gaat met het bedrag omhoog en Plan verdeelt zelf; veilig te besteden blijft gelijk', async ({ page }) => {
-    await grip(page);
-    const voor = await page.evaluate(() => ({ inleg: Math.round(monthlySavingTarget()), safe: safeToSpend().safe }));
-    await huurSheet(page, 'b', 400); await page.click('[data-teruimbestem="plan"]'); await page.click('[data-teruimbevestig]');
-    const na = await page.evaluate(() => ({ inleg: Math.round(monthlySavingTarget()), safe: safeToSpend().safe, ob: Object.entries(SET.planInleg || {}).map(([k, x]) => [k, x.bedrag]), oud: SET.overboek }));
-    expect(na.inleg).toBe(voor.inleg + 300);
-    expect(na.safe).toBe(voor.safe);
-    expect(na.ob).toEqual([['plan', 300]]);   // v399: een inleg in Plan, geen regel in het budget
-    expect(na.oud).toBeUndefined();
-  });
-  test('Beleggen: een oker waarschuwing met de voorwaarde die ontbreekt, maar bevestigen kan', async ({ page }) => {
-    await grip(page);
-    await huurSheet(page, 'a');
-    expect(await page.evaluate(() => teRuimBelegMist())).toEqual(['reserveringen open']);   // invoermeting
-    await page.click('[data-teruimbestem="beleg"]');
-    const w = page.locator('[data-teruimbelegwaarsch]');
-    expect(await w.innerText()).toBe('Je beleggingsvoorwaarden zijn nog niet gehaald (reserveringen open).');
-    expect(await w.evaluate(e => e.style.color)).toBe('var(--amber)');
-    expect((await knop(page)).uit).toBe(false);
-    await page.click('[data-teruimbestem="plan"]');
-    expect(await page.locator('[data-teruimbelegwaarsch]').count()).toBe(0);
-  });
   test('laten staan: geen bestemming nodig, de reden is optioneel en wordt bewaard', async ({ page }) => {
     await grip(page);
     await huurSheet(page, 'c');
@@ -255,7 +201,7 @@ test.describe('B · de te-ruim-sheet', () => {
   });
   test('past op 390x844 met b open en een bestemming gekozen', async ({ page }) => {
     await grip(page);
-    await huurSheet(page, 'b', 400); await page.click('[data-teruimbestem="plan"]');
+    await huurSheet(page, 'b', 400); await page.click('[data-teruimbestem="pot:uiteten"]');
     const r = await page.evaluate(() => { const s = document.getElementById('sheet'), k = document.querySelector('[data-teruimbevestig]').getBoundingClientRect();
       return { h: s.scrollHeight, ch: s.clientHeight, knop: k.bottom, vh: innerHeight, sw: s.scrollWidth - s.clientWidth }; });
     console.log(`sheet 390: ${r.h} van ${r.ch}px`);

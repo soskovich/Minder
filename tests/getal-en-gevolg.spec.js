@@ -202,37 +202,6 @@ test.describe('f · het aflosbedrag en de looptijd komen uit dezelfde som', () =
 });
 
 test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
-  test('met een spaarinleg heet het je spaarinleg', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => ({ terugval: planCapTerugval(), label: planCapLabel(),
-      kop: (function () { const d = document.createElement('div');
-        d.innerHTML = renderPlan(true); return d.innerText.replace(/\s+/g, ' '); })() }));
-    expect(r.terugval).toBe(false);
-    expect(r.label).toBe('spaarinleg');
-    /* v225: de kop was een zin boven de lijst; hij is een label bij het te verdelen bedrag
-       geworden en de uitleg staat achter het uitlegteken. De eigenschap die deze test bewaakt is
-       onveranderd: het scherm noemt de bron van het bedrag dat het verdeelt, en noemt hem juist. */
-    /* v380: de kop "Te verdelen" is vervallen; de tegel "Deze maand opzij" in de kop van Plan noemt de bron */
-    expect(r.kop).toMatch(/Deze maand opzij.*uit je spaarinleg/);
-    expect(r.kop).not.toMatch(/comfortabele ruimte/);
-    expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/spaarinleg gaat van boven naar beneden/);
-  });
-
-  test('op de terugval zegt de kop dat, met de reden erbij', async ({ page }) => {
-    const p = seed(); const set = JSON.parse(p.minder_set);
-    set.savingMode = 'amount'; set.savingAmount = 0; p.minder_set = JSON.stringify(set);
-    await boot(page, p);
-    const r = await page.evaluate(() => ({ doel: Math.round(monthlySavingTarget()), cap: planCapacity(),
-      terugval: planCapTerugval(), label: planCapLabel(),
-      kop: (function () { const d = document.createElement('div');
-        d.innerHTML = renderPlan(true); return d.innerText.replace(/\s+/g, ' '); })() }));
-    test.skip(!(r.doel === 0 && r.cap > 0), 'deze opzet valt niet terug');
-    expect(r.terugval).toBe(true);
-    expect(r.label).toBe('comfortabele ruimte');
-    expect(r.kop).toMatch(/Deze maand opzij.*uit je comfortabele ruimte/);
-    // de reden staat er nog steeds bij, sinds v225 achter het uitlegteken
-    expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/nog geen spaarinleg ingesteld/);
-  });
 
   test('planCapacity zelf is niet aangeraakt', async ({ page }) => {
     await boot(page);

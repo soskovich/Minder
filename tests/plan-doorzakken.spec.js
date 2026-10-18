@@ -186,6 +186,7 @@ test.describe('b · vrije ruimte i.p.v. verdwijnen', () => {
     await openV(page, {
       minder_tx: JSON.stringify(tx), minder_ovr: JSON.stringify({}),
       minder_set: JSON.stringify({ limit: 100, hideInternal: true, autoIncome: false, income: 2000, savingMode: 'amount', savingAmount: 0,
+        salVerdeling: { rek: { 'NL01MAIN0000001111': 1 }, opzij: 0 },   // v440: gekozen opzij 0 -> geen capaciteit (planCapacity leest de gekozen opzij vóór het advies)
         goals: [{ id: 'gA', naam: 'Vakantie', doel: 1000, gespaard: 0, allocMode: 'fixed', perMaand: 100 }], planOrder: ['gA', 'noodfonds'] }),
       minder_own: JSON.stringify([MAIN]), minder_accmeta: JSON.stringify({}), minder_plan: JSON.stringify({}),
     });

@@ -18,22 +18,24 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
   test('1a. EUR 3.375 op elk scherm: V.budget, Budget-meter, Inzichten, de brug, blok 20 punt 7 en de salariskaart; EUR 3.135 en EUR 3.415 nergens als budget', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(); return { V: V.budget, nu: V.budgetNu, wijz: V.wijz, meter: gripMeterBudget(V).budget, ins: insMaandStand().Bvast, brug: gripGroepBrug(V).budget, p7: Math.round(maandGroepen(V).g.reduce((a, x) => a + x.b, 0)), sal: salarisTabelData(V).budget, bron: V.maandBudget.bron }; });
-    expect(r).toEqual({ V: 3375, nu: 3415, wijz: 40, meter: 3375, ins: 3375, brug: 3375, p7: 3375, sal: 3375, bron: 'herstel' });
+    // v440: de Plan-inleg zit niet meer in het budget; het budget is de som van de potjes (€3.375 − €280 = €3.095)
+    expect(r).toEqual({ V: 3095, nu: 3135, wijz: 40, meter: 3095, ins: 3095, brug: 3095, p7: 3095, sal: 3095, bron: 'herstel' });
     await page.evaluate(() => { go('ins'); renderIns(); });
     const k = await page.locator('#insMaand').innerText();
-    expect(k).toMatch(/van €3\.375/);
+    expect(k).toMatch(/van €3\.095/);
     expect(k).toMatch(/vast sinds 1 okt/);
-    expect(k).toMatch(/waarvan Plan-inleg €280/);
-    expect(k).not.toMatch(/3\.135|3\.415/);
+    expect(k).not.toMatch(/Plan-inleg/);   // v440: geen Plan-inleg meer in het budget
+    expect(k).not.toMatch(/3\.375|3\.415/);
     await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
     const g = await page.locator('#gripGroepKaart [data-groepkop]').innerText();
-    expect(g).toMatch(/budget €3\.375 \(vast sinds 1 okt\) · waarvan Plan-inleg €280/);
+    expect(g).toMatch(/budget €3\.095 \(vast sinds 1 okt\)/);
+    expect(g).not.toMatch(/Plan-inleg/);
   });
   test('1b. een wijziging halverwege de maand: het maandbudget blijft, de forecast volgt, en vanaf 1 november is het het nieuwe budget', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V0 = maandVooruit(); window._bwKeuze = 'test'; potPlanZet('vices', thisYM(), 120); save(); const V1 = maandVooruit();
       return { b0: V0.budget, b1: V1.budget, nu1: V1.budgetNu, opgeslagen: !!(SET.maandBudget || {})['2026-10'], rij: maandBudgetWijz().rijen.find(x => x.k === 'vices') }; });
-    expect(r.b0).toBe(3375); expect(r.b1).toBe(3375); expect(r.nu1).toBe(3515);
+    expect(r.b0).toBe(3095); expect(r.b1).toBe(3095); expect(r.nu1).toBe(3235);   // v440: zonder de €280 inleg
     expect(r.opgeslagen).toBe(true);
     expect(r.rij).toMatchObject({ d: 100, keuze: 'test', op: '2026-10-17' });
     /* de maandwissel: het budget van nu wordt het vastgelegde budget van november */
@@ -41,28 +43,20 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     await pinDatum(page, '2026-11-02');
     await herlaad(page);
     const n = await page.evaluate(() => ({ nov: SET.maandBudget['2026-11'], okt: SET.maandBudget['2026-10'].totaal, w: maandBudgetWijz('2026-11').tot }));
-    expect(n.okt).toBe(3375);
-    expect(n.nov).toMatchObject({ totaal: 3515, inleg: 280, bron: 'maandwissel', op: '2026-11-01' });
+    expect(n.okt).toBe(3095);
+    expect(n.nov).toMatchObject({ totaal: 3235, inleg: 0, bron: 'maandwissel', op: '2026-11-01' });   // v440: inleg niet meer in het budget
     expect(n.w).toBe(0);
   });
-  test('1b. het gevolg vóór bevestigen: "deze maand: forecast EUR X → EUR Y · maandbudget EUR B vanaf november", en de simulatie laat niets achter', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => { const voor = JSON.stringify(SET); const G = budgetWijzGevolg(() => { planInlegVoeg('res', 100); }); return { t: budgetWijzGevolgTekst(G), G, gelijk: JSON.stringify(SET) === voor }; });
-    expect(r.gelijk).toBe(true);
-    expect(r.G.P1 - r.G.P0).toBe(100);
-    expect(r.t).toBe(`deze maand: forecast €${r.G.P0.toLocaleString('nl-NL')} → €${r.G.P1.toLocaleString('nl-NL')} · maandbudget €3.515 vanaf november`);
-    /* in de sheet van de inleg in Plan */
-    await page.evaluate(() => { openPlanInleg('res'); window._pi.bedrag = 380; renderPlanInleg(); });
-    await expect(page.locator('#planInlegSheet [data-budgetgevolg]')).toContainText('vanaf november');
-    await expect(page.locator('#planInlegSheet')).not.toContainText('Maandbudget op Grip');
-  });
+  /* v440: een reserverings- of beleg-inleg telt niet meer in het maandbudget of de forecast (hij staat los, komt in v441),
+     dus deze test over het budget-gevolg van planInlegVoeg('res') is vervallen. Het gevolg vóór bevestigen bij een
+     potje-wijziging wordt gedekt door 1b hierboven (potPlanZet). */
   test('1c. onder budget = vastgelegd - forecast; de brug begint bij het vastgelegde budget en sluit op de forecast', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), M = gripMeterBudget(V), B = gripGroepBrug(V), Z = gripZienBrug(V), D = dezeMaandBrug(V);
       const som = Br => Br.stappen.slice(1, -1).reduce((a, x) => a + x.waarde, Br.stappen[0].waarde);
       return { verschil: M.verschil, P: Math.round(V.projectie), b0: B.stappen[0].waarde, sB: som(B), z0: Z.stappen[0].waarde, sZ: som(Z), zw: (Z.stappen.find(x => x.soort === 'wijz') || {}).waarde, d0: D.stappen[0].waarde, sD: som(D), dw: (D.stappen.find(x => x.soort === 'wijz') || {}).waarde }; });
-    expect(r.verschil).toBe(r.P - 3375);
-    expect([r.b0, r.z0, r.d0]).toEqual([3375, 3375, 3375]);
+    expect(r.verschil).toBe(r.P - 3095);
+    expect([r.b0, r.z0, r.d0]).toEqual([3095, 3095, 3095]);
     expect([r.sB, r.sZ, r.sD]).toEqual([r.P, r.P, r.P]);
     /* v438: geen staaf "wijzigingen" meer; elke groep staat tegen zijn vastgelegde budget en de wijziging zit in zijn forecast */
     expect(r.zw).toBeUndefined(); expect(r.dw).toBeUndefined();
@@ -76,29 +70,29 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     await page.locator('#gripGroepKaart [data-budgetwijz="40"]').click();
     const L = await page.locator('#budgetWijzSheet [data-budgetwijzrij]').evaluateAll(es => es.map(e => [e.dataset.budgetwijzrij, +e.dataset.v, e.innerText.replace(/\s+/g, ' ')]));
     expect(L).toEqual([['huur', 77, '16 okt · Shurgard geaccepteerd · Huur forecast €0 +€77'], ['verzekering', -37, '16 okt · herzien · Verzekeringen forecast €0 −€37']]);   // v438: met het effect op de forecast
-    await expect(page.locator('#budgetWijzSheet')).toContainText('Het nieuwe budget van €3.415 geldt vanaf 1 november');
+    await expect(page.locator('#budgetWijzSheet')).toContainText('Het nieuwe budget van €3.135 geldt vanaf 1 november');
     expect(L.reduce((a, x) => a + x[1], 0)).toBe(40);
   });
   test('1e. oktober herstellen: zonder vastlegging is het het budget van nu min de gelogde wijzigingen; bij de boot met logs wordt het opgeslagen', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => [!!(SET.maandBudget || {})['2026-10'], maandBudgetVast().totaal, maandBudgetVast().herstel.length])).toEqual([false, 3375, 2]);
+    expect(await page.evaluate(() => [!!(SET.maandBudget || {})['2026-10'], maandBudgetVast().totaal, maandBudgetVast().herstel.length])).toEqual([false, 3095, 2]);
     await herlaad(page);
     const r = await page.evaluate(() => SET.maandBudget['2026-10']);
-    expect(r).toMatchObject({ totaal: 3375, inleg: 280, bron: 'herstel', op: '2026-10-01' });
+    expect(r).toMatchObject({ totaal: 3095, inleg: 0, bron: 'herstel', op: '2026-10-01' });   // v440: inleg niet meer in het budget
     expect(r.potjes).toMatchObject({ huur: 700, verzekering: 335, vervoer: 870 });
   });
   test('1e. een stand zonder logs van deze maand: het budget van nu, en de boot slaat niets op', async ({ page }) => {
     await boot(page, { kaal: true });
-    expect(await page.evaluate(() => { const V = maandVooruit(); return [V.budget, V.budgetNu, V.wijz, !!(SET.maandBudget || {})[thisYM()]]; })).toEqual([3605, 3605, 0, false]);
+    expect(await page.evaluate(() => { const V = maandVooruit(); return [V.budget, V.budgetNu, V.wijz, !!(SET.maandBudget || {})[thisYM()]]; })).toEqual([3325, 3325, 0, false]);   // v440: €3.605 − €280 inleg
   });
   test('1f. blok 20 MAANDBUDGET: vastgelegd met datum, de wijzigingen, de forecast, het budget vanaf november en twee controles die sluiten', async ({ page }) => {
     await boot(page);
     const t = await page.evaluate(() => diagSalarisVerdeling().join('\n'));
     expect(t).toMatch(/MAANDBUDGET \(v436\/v437\/v438\)/);
-    expect(t).toMatch(/vastgelegd €3\.375 op 01-10 \(herstel/);
+    expect(t).toMatch(/vastgelegd €3\.095 op 01-10 \(herstel/);
     expect(t).toMatch(/16-10 · Shurgard geaccepteerd · Huur \+€77/);
-    expect(t).toMatch(/budget van nu €3\.415 = vastgelegd €3\.375 \+ wijzigingen €40: klopt · dit wordt het budget vanaf 1 november/);
-    expect(t).toMatch(/CONTROLE maandbudget op alle schermen = vastgelegd €3\.375: .* → klopt/);
+    expect(t).toMatch(/budget van nu €3\.135 = vastgelegd €3\.095 \+ wijzigingen €40: klopt · dit wordt het budget vanaf 1 november/);
+    expect(t).toMatch(/CONTROLE maandbudget op alle schermen = vastgelegd €3\.095: .* → klopt/);
     expect(t).toMatch(/CONTROLE onder budget = vastgelegd - forecast: .* → klopt/);
   });
 });
@@ -211,11 +205,11 @@ test.describe('v436 · 5. de salariskaart tegen het budget', () => {
   test('5a/5d. de tabel: vast, potjes, Plan-inleg, buiten (geen budget), opzij (–); som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
     await boot(page); await page.evaluate(() => { go('maand'); renderMaand(); });
     const R = await page.locator('#gripSalaris [data-saltabel]').evaluateAll(es => es.map(e => [e.dataset.saltabel, e.dataset.salverschil == null ? null : +e.dataset.salverschil, e.innerText.replace(/\s+/g, ' ')]));
-    /* v438: de indeling van de brug (vast, zonder potje, N boven, N onder, Plan-inleg), dan buiten en opzij */
-    expect(R.map(x => x[0])).toEqual(['vast', 'zonder', 'onder', 'inleg', 'buiten', 'opzij']);   // in deze stand eindigt geen potje erboven
-    expect(R[4][2]).toMatch(/geen budget/); expect(R[5][2]).toMatch(/–$/);   // een kort streepje: de huisstijl kent geen gedachtestreepje
+    /* v440: de indeling van de brug zonder Plan-inleg (vast, zonder potje, N boven, N onder), dan buiten en opzij */
+    expect(R.map(x => x[0])).toEqual(['vast', 'zonder', 'onder', 'buiten', 'opzij']);   // in deze stand eindigt geen potje erboven, en geen Plan-inleg-rij meer
+    expect(R[3][2]).toMatch(/geen budget/); expect(R[4][2]).toMatch(/opzij/);   // v440: de opzij-rij leest opzijPeriode (doel/gedaan)
     const som = R.filter(x => x[1] != null).reduce((a, x) => a + x[1], 0);
-    const m = await page.evaluate(() => { const V = maandVooruit(); return { v: gripMeterBudget(V).verschil, d: Math.round(V.projectie) - 3375 }; });
+    const m = await page.evaluate(() => { const V = maandVooruit(); return { v: gripMeterBudget(V).verschil, d: Math.round(V.projectie) - 3095 }; });
     expect(som).toBe(m.v); expect(som).toBe(m.d);
     expect(+(await page.locator('#gripSalaris [data-salsom]').getAttribute('data-salsom'))).toBe(som);
     await expect(page.locator('#gripSalaris [data-salsom]')).toContainText(`samen €${(-som).toLocaleString('nl-NL')} onder budget`);

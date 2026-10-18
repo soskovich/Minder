@@ -25,81 +25,6 @@ const stand = page => page.evaluate(() => { const V = maandVooruit(), SP = maand
 const boek = (page, acc, d, a) => page.evaluate(({ acc, d, a }) => { const t = { id: 'b' + d + a, date: d, amount: a, acc, name: 'Eigen overboeking', desc: 'OVERBOEKING ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
   categorize(t); TX.push(t); OVR[t.id] = 'intern'; save(); }, { acc, d, a });
 
-test.describe('1 · een inleg in Plan, geen regel in het budget', () => {
-  test('Zien: de inleg is geen stap in de bridge, ook niet bij "zonder potje"', async ({ page }) => {
-    await grip(page);
-    const st = () => page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V); return { z: Math.round(V.zonder), stappen: B.stappen.filter(s => !['begin', 'eind', 'teruim'].includes(s.soort)).map(s => [s.soort, s.k || '', s.waarde]) }; });
-    const v = await st();
-    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
-    const n = await st();
-    expect(n.z).toBe(v.z);
-    expect(n.stappen).toEqual(v.stappen);   // alleen de te ruime stap van Huur verandert
-    expect(await page.evaluate(() => maandVooruit().inleg)).toBe(300);
-  });
-  test('Reservering: budget gelijk, verwacht +300, niet in de vaste lasten en niet op Inzichten', async ({ page }) => {
-    await grip(page);
-    const v = await stand(page);
-    expect([v.bud, v.proj]).toEqual([3325, 1711]);   // invoermeting
-    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
-    const n = await stand(page);
-    expect(n.bud).toBe(3325); expect(n.proj).toBe(2011);
-    expect(n.inleg.res).toEqual(expect.objectContaining({ bedrag: 300, vanaf: '2026-10', van: ['huur'] }));
-    expect(n.oud).toBeUndefined();
-    expect(n.vast.some(k => String(k).startsWith('~'))).toBe(false);   // geen vaste regel
-    expect(n.ins).toBe(v.ins - 300);   // Inzichten: het potje is 300 lager en de inleg is geen uitgave
-    const vs = await page.evaluate(() => { openGripVast(); return document.getElementById('sheet').innerText; });
-    expect(vs).not.toContain('Reservering');
-  });
-  test('Plan toont de inleg, met de rekening en het totaal', async ({ page }) => {
-    await grip(page);
-    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
-    await page.evaluate(() => go('vooruit'));
-    const r = page.locator('[data-planinleg="res"]');
-    expect(await r.getAttribute('data-planinlegbedrag')).toBe('300');
-    const t = await r.innerText();
-    expect(t).toContain('Reservering €300/mnd'); expect(t).toContain('totaal €300/mnd'); expect(t).toContain('uit Huur');
-    expect(await page.locator('[data-planinleg]').count()).toBe(1);
-  });
-  test('aanpassen en weghalen in Plan: het gevolg vooraf, en het maandbudget gaat mee', async ({ page }) => {
-    await grip(page);
-    await huurNaar(page, 'beleg'); await page.click('[data-teruimbevestig]');
-    await page.evaluate(() => { go('vooruit'); });
-    await page.click('[data-planinleg="beleg"]');
-    expect(await page.locator('[data-planinlegopslaan]').isDisabled()).toBe(true);
-    await page.fill('[data-planinlegveld]', '200');
-    const g = await page.locator('[data-planinleggevolg]').innerText();
-    expect(g).toContain('Beleggen €300 → €200/mnd'); expect(g).toContain('deze maand: forecast €2.011 → €1.911 · maandbudget €3.225 vanaf november');   // v436: het maandbudget van oktober ligt vast
-    const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    expect(voor).toContain('"beleg":{"bedrag":300');   // openen en typen schrijven niets
-    await page.click('[data-planinlegopslaan]');
-    /* v436: oktober ligt vast op 3.325; het budget van nu (vanaf november) gaat mee */
-    expect((await stand(page)).bud).toBe(3325); expect((await stand(page)).nu).toBe(3225);
-    await page.click('[data-planinleg="beleg"]'); await page.click('[data-planinlegweg]');
-    const n = await stand(page);
-    expect(n.inleg.beleg).toBeUndefined(); expect(n.bud).toBe(3325); expect(n.nu).toBe(3025); expect(n.proj).toBe(1711);
-    expect(await page.locator('[data-planinlegblok]').count()).toBe(0);
-    expect(await page.evaluate(() => (SET.overboekActie || {}).beleg)).toBeUndefined();
-  });
-  test('Plan · sparen: de spaarinleg gaat mee bij aanpassen', async ({ page }) => {
-    await grip(page);
-    const i0 = await page.evaluate(() => Math.round(monthlySavingTarget()));
-    await huurNaar(page, 'plan'); await page.click('[data-teruimbevestig]');
-    expect(await page.evaluate(() => Math.round(monthlySavingTarget()))).toBe(i0 + 300);
-    await page.evaluate(() => { planInlegZet('plan', 100); });
-    expect(await page.evaluate(() => Math.round(monthlySavingTarget()))).toBe(i0 + 100);
-    expect((await stand(page)).proj).toBe(1811);
-  });
-  test('veilig te besteden blijft gelijk (het budget blijft gelijk); de inleg is een claim tot hij is overgemaakt', async ({ page }) => {
-    await grip(page);
-    const s0 = (await stand(page)).safe;
-    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
-    expect((await stand(page)).safe).toBe(s0);   // het potje gaat 300 omlaag en de claim 300 omhoog
-    expect(await page.evaluate(() => inlegNogDezeMaand())).toBe(300);
-    await boek(page, RES, '2026-10-10', 300);
-    expect(await page.evaluate(() => inlegNogDezeMaand())).toBe(0);
-  });
-});
-
 test.describe('1 · migratie van de v398-regels', () => {
   test('SET.overboek wordt een inleg per soort, en de som blijft gelijk', async ({ page }) => {
     await grip(page);
@@ -111,7 +36,7 @@ test.describe('1 · migratie van de v398-regels', () => {
     expect(n.oud).toBeUndefined();
     expect(n.inleg.res).toEqual(expect.objectContaining({ bedrag: 350, vanaf: '2026-09', van: ['huur', 'vervoer'], migratie: 'v398' }));
     expect(n.inleg.plan).toEqual(expect.objectContaining({ bedrag: 100 }));
-    expect(n.bud).toBe(v.bud + 450); expect(n.proj).toBe(v.proj + 450);
+    expect(n.bud).toBe(v.bud); expect(n.proj).toBe(v.proj);   // v440: de inleg telt niet meer in het budget of de forecast
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('minder_set')).overboek)).toBeUndefined();   // de migratie is opgeslagen
   });
 });
@@ -142,74 +67,5 @@ test.describe('1 · meting en Terugblik', () => {
   test('zonder reserveringsrekening: niet gemeten en geen oordeel', async ({ page }) => {
     await grip(page, { resAcc: '', planInleg: { res: { bedrag: 300, vanaf: '2026-09', op: '2026-09-01', basis: 0 } } });
     expect(await page.evaluate(() => inlegUitkomst('res', '2026-09').s)).toBe('onbekend');
-  });
-});
-
-test.describe('2 · splitsing bij een te grote bestemming', () => {
-  const open = async page => { await grip(page); await huurNaar(page, 'pot:uiteten'); };
-  test('het voorstel: de overschrijding naar Uit eten, de rest naar een bestemming die je zelf kiest', async ({ page }) => {
-    await open(page);
-    expect(await page.locator('[data-splitvoorstel]').innerText()).toBe('€67 naar Uit eten & café · €233 naar …');
-    expect(await page.locator('[data-splitbedrag="1"]').inputValue()).toBe('67');
-    expect(await page.locator('[data-splitbedrag="2"]').inputValue()).toBe('233');
-    expect(await page.locator('[data-splitbestem].on').count()).toBe(0);   // geen voorselectie
-    expect(await page.locator('[data-splitbestem="pot:uiteten"]').count()).toBe(0);
-    expect(await page.locator('[data-teruimbevestig]').isDisabled()).toBe(true);
-    expect(await page.locator('[data-voetreden]').innerText()).toBe('Kies waar €233 naartoe gaat');
-  });
-  test('de bedragen zijn aan te passen, en bevestigen kan pas als de som klopt', async ({ page }) => {
-    await open(page);
-    await page.click('[data-splitbestem="plan"]');
-    expect(await page.locator('[data-teruimbevestig]').isDisabled()).toBe(false);
-    await page.fill('[data-splitbedrag="2"]', '300');
-    expect(await page.locator('[data-voetreden]').innerText()).toBe('Samen €367, dat moet €300 zijn');
-    const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await page.evaluate(() => teRuimBevestig());   // de schrijver eist het zelf ook
-    expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
-    await page.fill('[data-splitbedrag="1"]', '0');
-    expect(await page.locator('[data-teruimbevestig]').isDisabled()).toBe(false);
-  });
-  test('na bevestigen: Uit eten +67, Plan +233, en geen nieuwe "niet gebruikt"-stap', async ({ page }) => {
-    await open(page);
-    const u0 = await page.evaluate(() => SET.budgets.uiteten);
-    await page.click('[data-splitbestem="plan"]');
-    expect(await page.locator('[data-gevolgverwacht]').getAttribute('data-gevolgverwacht')).toBe(String(1711 + 233));
-    await page.click('[data-teruimbevestig]');
-    const r = await page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V);
-      return { uit: SET.budgets.uiteten, plan: SET.planInleg.plan.bedrag, proj: Math.round(V.projectie), bud: Math.round(V.budget),
-        tr: B.stappen.filter(s => s.soort === 'teruim').map(s => s.k), teRuim: teRuim(V).map(x => x.k), uitStap: B.stappen.filter(s => s.k === 'uiteten').map(s => s.soort) }; });
-    expect(r.uit).toBe(u0 + 67); expect(r.plan).toBe(233);
-    expect(r.bud).toBe(3325); expect(r.proj).toBe(1711 + 233);
-    expect(r.tr).not.toContain('uiteten'); expect(r.teRuim).not.toContain('uiteten');
-    expect(r.uitStap).toEqual([]);   // geen uitschieter meer en geen niet-gebruikt-stap
-  });
-});
-
-test.describe('3 · de actieregel voor je automatische overboeking', () => {
-  test('Reservering: in Kiezen tot de overboeking met het nieuwe totaal is gezien, en Terugblik meet hem', async ({ page }) => {
-    await grip(page);
-    await huurNaar(page, 'res'); await page.click('[data-teruimbevestig]');
-    const A = await page.evaluate(() => SET.overboekActie.res);
-    expect(A).toEqual(expect.objectContaining({ totaal: 300, op: '2026-10-10' }));
-    const kies = async () => page.evaluate(() => { gripKiesTab('kiezen'); const e = document.querySelector('[data-kiesactie="res"]'); return e ? e.innerText : null; });
-    expect(await kies()).toContain(`Verhoog je automatische overboeking naar ${A.rekening} naar €300`);
-    expect(await page.evaluate(() => gripTerugblik(thisYM()).items.find(i => i.id === 'actie-res').s)).toBe('loopt');
-    await boek(page, RES, '2026-10-10', 250);   // te weinig: telt niet
-    expect(await kies()).not.toBeNull();
-    await boek(page, RES, '2026-10-11', 300);
-    expect(await kies()).toBeNull();
-    expect(await page.evaluate(() => gripTerugblik(thisYM()).items.find(i => i.id === 'actie-res').s)).toBe('ok');
-  });
-  test('Plan: naar je spaarrekening, met je nieuwe spaarinleg als totaal; een potje geeft geen actieregel', async ({ page }) => {
-    await grip(page);
-    await huurNaar(page, 'plan'); await page.click('[data-teruimbevestig]');
-    const r = await page.evaluate(() => ({ A: SET.overboekActie.plan, inleg: Math.round(monthlySavingTarget()), open: overboekActiesOpen().map(a => a.soort) }));
-    expect(r.A.totaal).toBe(r.inleg); expect(r.open).toEqual(['plan']);
-    await page.evaluate(() => { SET.overboekActie = {}; save(); });
-    await page.evaluate(() => openTeRuim('vervoer'));
-    await page.click('[data-teruimoptie="a"]'); await page.click('[data-teruimbestem="pot:vices"]');
-    await page.fill('[data-splitbedrag="1"]', '390'); await page.fill('[data-splitbedrag="2"]', '0');   // alles naar Vices: geen tweede bestemming nodig
-    await page.click('[data-teruimbevestig]');
-    expect(await page.evaluate(() => overboekActiesOpen().length)).toBe(0);
   });
 });

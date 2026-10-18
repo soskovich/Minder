@@ -59,7 +59,7 @@ test.describe('b · één term per begrip', () => {
       return uit.join('\n');
     });
     expect(gezien.toLowerCase()).not.toContain('spaarruimte');
-    expect(gezien.toLowerCase()).toContain('spaarinleg');
+    expect(gezien.toLowerCase()).toContain('opzij');   // v440: de zichtbare spaarterm op Plan is "opzij" (Opzij deze periode); "spaarinleg" blijft de term in de uitleg/JARGON
   });
 
   test('de doel-editor en het noodfonds gebruiken dezelfde term', async ({ page }) => {
@@ -76,12 +76,12 @@ test.describe('b · één term per begrip', () => {
     expect(nf.toLowerCase()).not.toContain('spaarruimte');
   });
 
-  test('het plan-overzicht noemt de spaarinleg en legt hem uit', async ({ page }) => {
+  test('het plan-overzicht noemt opzij deze periode en legt het plan uit', async ({ page }) => {
     await boot(page, 'vooruit');
     const html = await page.evaluate(() => renderPlan());
-    expect(html).toContain(">spaarinleg<");                            // als uitlegbare term
-    // v225: de zin over de volgorde staat achter het uitlegteken in de kop, en dus in NOTES.
-    // De eis blijft: de term staat zichtbaar op het scherm en er hangt een uitleg aan.
+    expect(html).toContain('Opzij deze periode');                     // v440: de opzij-term op Plan (opzijPeriode)
+    expect(html).toContain('planUitleg');                             // het uitlegteken hangt in de kop
+    // de uitleg staat achter het uitlegteken, en dus in NOTES; de term spaarinleg blijft in JARGON gedefinieerd
     expect(await page.evaluate(() => NOTES.planUitleg)).toContain('gaat van boven naar beneden');
     expect(await page.evaluate(() => JARGON.spaarinleg)).toContain('per maand opzij');
   });
