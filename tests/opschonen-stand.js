@@ -6,6 +6,7 @@
    juni 2027. SINDS v370 TELT OKTOBER MEE: Noodfonds vol in oktober 2026, en niet terugzetten schuift Kosten Koper van
    april naar mei 2027. */
 const { pinDatum } = require('./vaste-dag');
+const { withOpzij } = require('./opzij-inject');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';
 const DAG = '2026-10-09';
 function seed(o) {
@@ -27,7 +28,7 @@ async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
   await pinDatum(page, (o && o.dag) || DAG);
   if (o && o.vp) await page.setViewportSize(o.vp);
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof allocatePlan === 'function' && typeof TX !== 'undefined' && TX.length > 0);
 }

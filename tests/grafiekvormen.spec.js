@@ -3,6 +3,7 @@
 // terug, niet een kleinere versie van dezelfde vorm.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDag } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
@@ -41,7 +42,7 @@ async function boot(page, o) {
      en op de op-een-na-laatste dag van een maand is dat "1 dag" (v257). */
   await pinDag(page);
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof renderPlan === 'function' && typeof insKpis === 'function');   // v382: spendVsBudgetChart is weg
 }

@@ -4,6 +4,7 @@
 // niet aangeroepen. Verplichtingen voer je zelf in; niets wordt uit transacties gedetecteerd.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
@@ -40,7 +41,7 @@ function seedRes(set = {}, opt = {}) {
 
 async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seedRes());
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(payload || seedRes()));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof dekking === 'function');
 }

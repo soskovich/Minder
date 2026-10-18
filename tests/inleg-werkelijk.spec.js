@@ -10,6 +10,7 @@
    c) "Verdeel volgens je plan" verdeelt het vrije spaargeld met planVerdeelMaand(), dezelfde functie
       als allocatePlan() en planVooruit(), met het vrije bedrag als cap. */
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
@@ -59,7 +60,7 @@ function seed(o) {
 async function boot(page, o) {
   await pinDatum(page, o.dag || DAG);
   if (o.breedte) await page.setViewportSize({ width: o.breedte, height: o.hoogte || 844 });
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof spaarVerdeelVoorstel === 'function');
   await page.evaluate(() => go('vooruit'));

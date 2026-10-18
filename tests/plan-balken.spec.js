@@ -21,6 +21,7 @@
 // markering "niet op schaal" zijn vervallen met de vaten waar ze bij hoorden.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -66,7 +67,7 @@ function seed(o) {
 const VOL = { nfDoel: 5301, nfToe: 5301, spaar: 5301 };
 async function boot(page, o, breed) {
   await page.setViewportSize({ width: breed || 360, height: 800 });
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof doelStreepje === 'function');
   await page.evaluate(() => go('vooruit'));

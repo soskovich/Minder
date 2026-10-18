@@ -12,6 +12,7 @@
    nog te betalen, v327); vakantie draagt de rest. HET TEMPO VAN DE MOCKUP (EUR 490) WAS EEN VOORBEELD:
    op deze stand is het variabele deel EUR 2.559, en dat naar rato op dag 7 van 31 is EUR 578. */
 const { pinDatum } = require('./vaste-dag');
+const { withOpzij } = require('./opzij-inject');
 
 const MAIN = 'NL01MAIN0000001111', SPAAR = 'NL01SAVE0000004323';
 const DAG = '2026-10-07';
@@ -70,7 +71,7 @@ function seed(o) {
 async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
   await pinDatum(page, (o && o.dag) || DAG);
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof renderIns === 'function' && typeof TX !== 'undefined' && TX.length > 0);
   /* Allianz staat onder Vervoer door een eigen keuze (OVR), zoals in de mockup. De id van een boeking wordt

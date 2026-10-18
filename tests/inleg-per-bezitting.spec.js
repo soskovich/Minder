@@ -5,6 +5,7 @@
 // a.rend / a.eenmalig / a.horizon / a.infl raken de projectie nog steeds niet.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -66,7 +67,7 @@ function seed(assets, extra) {
 }
 
 async function boot(page, assets, extra) {
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(assets, extra));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(assets, extra)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }

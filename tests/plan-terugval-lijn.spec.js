@@ -15,6 +15,7 @@
    `.plan-tak i` had `min-width:3px` en het balksegment niet, en de balk was bovendien flex: gemeten
    werd hetzelfde segment 2,98px in de balk en 3px in de tak. */
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
@@ -45,7 +46,7 @@ function seed(o) {
 }
 async function boot(page, o) {
   await pinDatum(page, o.dag || DAG);
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof planTerugval === 'function');
   await page.evaluate(() => go('vooruit'));

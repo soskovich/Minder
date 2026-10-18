@@ -7,6 +7,7 @@
 // nog uitsluitend voor nieuwe inleg, waarvan de bestemming nog niet bepaald is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -62,7 +63,7 @@ function seed(assets, reis) {
   };
 }
 async function boot(page, assets, reis) {
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(assets, reis));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(assets, reis)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }

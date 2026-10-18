@@ -25,6 +25,7 @@
 // binnen één maand vol is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron } = require('./bron-kaal');
@@ -77,7 +78,7 @@ const DRIE = [
   { id: 'g2', naam: 'Inrichting woning', doel: 3000, gespaard: 0, allocMode: 'auto', streefdatum: '2029-01' },
 ];
 async function boot(page, o) {
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof planPlekMag === 'function');
   await page.evaluate(() => go('vooruit'));

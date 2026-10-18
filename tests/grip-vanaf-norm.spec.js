@@ -9,6 +9,7 @@
      ene lat en op 150 voor de andere. Met samenvallende latten is 'hij leest het oorspronkelijke
      potje' niet van 'hij leest het bijgestelde potje' te onderscheiden. */
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
@@ -46,6 +47,8 @@ function seed(o={}){
      onderscheiden en is de bekend-lijst inert (meetles q). */
   add(VORIG,'25',-40,'Shell','BEA, BETAALPAS SHELL');
   const set=Object.assign({mode:'begeleid',autoIncome:false,income:4000,limit:70,
+    // v440: planCapacity leest de gekozen opzij; deze fixture rekende op de auto-spaarinleg (gemeten monthlySavingTarget = 1200).
+    savingMode:'amount', savingAmount:1200,
     bufferNorm:NORM, nfToegewezen:TOEGEWEZEN, nfToegewezenMigrated:1, nfMaanden:RICHT, nfDoelVast:DOEL,
     savingsEnds:['4323'], resAcc:RES, manualBal:{[MAIN]:3000,[SAV]:6000,[RES]:500},
     budgets:{huur:900,boodschappen:POTJE_ORIG,vervoer:150},
@@ -61,7 +64,7 @@ function seed(o={}){
 }
 async function boot(page,o={}){
   await pinDag(page);
-  await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, seed(o));
+  await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(()=>typeof window.renderMaand==='function');
 }

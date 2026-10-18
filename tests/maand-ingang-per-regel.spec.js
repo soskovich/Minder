@@ -10,6 +10,7 @@
 // en is één zin voor het hele plan - dus alleen de vorm is overgenomen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();
@@ -63,7 +64,7 @@ function seed(o) {
   };
 }
 async function boot(page, o) {
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof maandIngang === 'function');
   await page.evaluate(() => go('maand'));

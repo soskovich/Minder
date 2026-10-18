@@ -1153,13 +1153,25 @@ function maandBudgetVast(ym){ ym=ym||thisYM(); const M=SET.maandBudget||{};
 function maandBudgetDeInleg(){ if(SET.mbDeInleg) return false; const M=SET.maandBudget||{}, geraakt=[];
   for(const ym in M){ const r=M[ym]; if(!r || typeof r!=='object') continue;
     const had=Math.round(+r.inleg||0), verpl=Array.isArray(r.verplaatst)?r.verplaatst:[];
-    const somNu=Object.values(r.potjes||{}).reduce((a,v)=>a+Math.round(+v||0),0);
-    if(!had && !verpl.length && Math.round(+r.totaal||0)===somNu) continue;
-    r.potjes=r.potjes||{};
-    for(const v of verpl){ if(v && v.van && +v.bedrag>0) r.potjes[v.van]=Math.round((+r.potjes[v.van]||0)+(+v.bedrag)); }
+    const potjesVoor=Object.assign({}, r.potjes||{});   // snapshot VÓÓR de verplaatsing wordt teruggezet
+    const somVoor=Object.values(potjesVoor).reduce((a,v)=>a+Math.round(+v||0),0);
+    if(!had && !verpl.length && Math.round(+r.totaal||0)===somVoor) continue;
+    const voorTot=Math.round(+r.totaal||0);
+    r.potjes=Object.assign({}, potjesVoor); const teruggekregen=[];
+    for(const v of verpl){ if(v && v.van && +v.bedrag>0){ r.potjes[v.van]=Math.round((+r.potjes[v.van]||0)+(+v.bedrag)); teruggekregen.push({potje:v.van, bedrag:Math.round(+v.bedrag)}); } }
     delete r.verplaatst; r.inleg=0; r.totaal=Object.values(r.potjes).reduce((a,x)=>a+Math.round(+x||0),0);
-    geraakt.push({ym, inleg:had, verplaatst:verpl.length, totaal:r.totaal}); }
+    geraakt.push({ym, voor:{inleg:had, totaal:voorTot, potjes:potjesVoor, verplaatst:verpl.map(x=>Object.assign({},x))},
+      na:{totaal:r.totaal, potjes:Object.assign({}, r.potjes)}, teruggekregen}); }
   SET.mbDeInleg={op:vandaagYMD(), geraakt}; return true; }
+/* v440: HET HERSTELPAD. Zet de vóór-stand van elk geraakt record terug (inleg, totaal, potjes, een eerdere verplaatsing) en
+   markeer de migratie als hersteld, zodat de boot hem niet opnieuw draait (de vlag blijft staan, `if(SET.mbDeInleg) return false`).
+   Zo is de de-inleg-migratie in één stap om te draaien als een vastlegging er verkeerd uit kwam. */
+function maandBudgetDeInlegHerstel(){ const D=SET.mbDeInleg; if(!D || !Array.isArray(D.geraakt) || !D.geraakt.length) return false;
+  const M=SET.maandBudget=SET.maandBudget||{};
+  for(const g of D.geraakt){ if(!g || !g.ym || !g.voor) continue; const r=M[g.ym]||(M[g.ym]={});
+    r.inleg=Math.round(+g.voor.inleg||0); r.totaal=Math.round(+g.voor.totaal||0); r.potjes=Object.assign({}, g.voor.potjes||{});
+    if(Array.isArray(g.voor.verplaatst) && g.voor.verplaatst.length) r.verplaatst=g.voor.verplaatst.map(x=>Object.assign({},x)); else delete r.verplaatst; }
+  D.hersteld=vandaagYMD(); return true; }
 function maandBudget437(){ if(SET.mb437) return false; const ym=thisYM(), M=SET.maandBudget||{}, x=M[ym];
   SET.mb437={op:vandaagYMD()}; if(!x || x.bron==='maandwissel') return true;
   const H=maandBudgetHerstel(ym); SET.mb437.voor={ym, totaal:x.totaal, inleg:x.inleg};
@@ -14261,10 +14273,13 @@ function terugzetLogRij(x){
    (SET.salVerdeling.opzij) als je een verdeling koos; anders je ingestelde spaarinleg (monthlySavingTarget); anders het advies
    (rekVoorstel().opzij); anders de comfortabele ruimte. Opzij gaat dus vóór de spaarinleg, en Plan verdeelt wat er volgens je
    salarisverdeling opzij gaat. Zonder gekozen opzij of ingestelde spaarinleg landt het op het advies. */
+/* v440: planCapacity leest de gekozen opzij uit Kiezen (SET.salVerdeling), anders het advies (rekVoorstel().opzij), anders
+   comfortTot. De spaarinleg (monthlySavingTarget) is BEWUST uit de terugval gehaald: dat is een instelling (een vast bedrag,
+   een percentage van je inkomen, of inkomen min budget via monthBudget) en geen meting van wat er opzij ging, en hij las nooit
+   de oude Plan-inleg. Opzij volgt dus de gekozen of geadviseerde verdeling, niet je spaarinstelling. */
 function planCapacity(){
   let cap=null;
   const SV=SET.salVerdeling; if(SV && SV.rek && SV.opzij!=null) cap=Math.round(+SV.opzij||0);
-  if(cap==null){ const t=Math.round(monthlySavingTarget()||0); if(t>0) cap=t; }
   if(cap==null){ try{ const P=rekVoorstel(); if(P && P.ok) cap=Math.round(P.opzij); }catch(_){} }
   if(cap==null){ try{ cap=Math.round(noodfondsModel().comfortTot||0); }catch(_){} }
   return Math.max(cap,0);
@@ -15917,8 +15932,21 @@ function opzijPeriode(){
   let doel=null; const SV=SET.salVerdeling; if(SV && SV.rek && SV.opzij!=null) doel=Math.round(+SV.opzij||0);
   return {ok:!!P, start:P?P.cur.start:null, eind:P?P.cur.eind:null, ym:P?P.cur.ym:null, meetbaar, netto, tx, doel,
     pct:(doel>0 && netto!=null)?Math.max(Math.round(netto/doel*100),0):null}; }
-/* v440: INHALEN is dezelfde bron als "toegewezen zonder geld" (spaarOver().zonder): onttrekkingen die niet zijn teruggezet. Hij
-   staat op Plan als één regel (spaarOverLine), met de Inhalen-vorm; geen aparte kaart, geen tweede bron (v104). */
+/* v440 (item 3): INHALEN ALS METING. Onttrekkingen van je spaarrekening in de salarisperiode (salPeriode().cur) die niet zijn
+   teruggezet: onttrokken (de afschrijvingen) min teruggestort (de bijschrijvingen), niet onder nul. Dezelfde bron (savedTxRange,
+   dezelfde periode) als opzijPeriode, dus teruggestort − onttrokken is per constructie opzijPeriode.netto. Dit is NIET hetzelfde
+   als spaarOver().zonder (toegewezen aan doelen/buffer min saldo): dat meet een over-toewijzing en kent de periode niet. Blok 20
+   zet de twee naast elkaar; wijken ze af, dan is Inhalen deze meting (de onttrekkingen die niet zijn teruggezet). */
+function opzijInhalen(){
+  let P=null; try{ P=salPeriode(); }catch(_){}
+  const meetbaar=n26SavingsAccounts().length>0;
+  if(!P || !meetbaar) return {ok:!!P, meetbaar, inhalen:null, onttrokken:null, teruggestort:null, start:P?P.cur.start:null, eind:P?P.cur.eind:null, tx:[]};
+  const tx=savedTxRange(P.cur.start, P.cur.eind); let onttrokken=0, teruggestort=0;
+  for(const t of tx){ const a=+t.amount||0; if(a<0) onttrokken+=-a; else teruggestort+=a; }
+  onttrokken=Math.round(onttrokken); teruggestort=Math.round(teruggestort);
+  return {ok:true, meetbaar:true, inhalen:Math.max(onttrokken-teruggestort,0), onttrokken, teruggestort, start:P.cur.start, eind:P.cur.eind, tx}; }
+/* v440: INHALEN op Plan is nu nog dezelfde bron als "toegewezen zonder geld" (spaarOver().zonder): zie spaarOverLine. opzijInhalen()
+   is de meting van de onttrekkingen die niet zijn teruggezet; blok 20 legt de twee naast elkaar (item 3). */
 /* v380: DE KOP. Een bron per getal: het geld en de doelen uit planStandEind(), "deze maand opzij" is de inleg plus wat
    er terug gaat (dezelfde termen als de detailsheet), en "Alles vol" de laatste vol-datum van de rijen (planTijdlijnData(),
    de lezer van de lijst en de tijdlijn). */
@@ -30829,7 +30857,18 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
   /* v440: het vastgelegde totaal is de som van de potjes; de Plan-inleg telt niet meer mee */
   { const pS=Object.values(MB.potjes||{}).reduce((a,v)=>a+(+v||0),0);
     L.push(`  CONTROLE budget = som van de potjes: ${euro0(pS)} tegen vastgelegd ${euro0(MB.totaal)} → ${Math.round(pS)===Math.round(MB.totaal)?'klopt':'VERSCHILT'}`); }
-  if(SET.mbDeInleg && (SET.mbDeInleg.geraakt||[]).length) L.push(`  v440: de inleg is uit ${SET.mbDeInleg.geraakt.length} vastgelegd record(s) gehaald (${SET.mbDeInleg.geraakt.map(x=>`${x.ym}: inleg ${euro0(x.inleg)} → 0, totaal ${euro0(x.totaal)}`).join('; ')})`);
+  if(SET.mbDeInleg && (SET.mbDeInleg.geraakt||[]).length){ const DI=SET.mbDeInleg;
+    L.push(`  migratie de-inleg (v440${DI.hersteld?', HERSTELD op '+dag(DI.hersteld):''}): inleg uit ${DI.geraakt.length} vastgelegd record(s) gehaald`);
+    for(const x of DI.geraakt){ const tg=(x.teruggekregen||[]).map(t=>`${(CATS[t.potje]||{}).name||t.potje} +${euro0(t.bedrag)}`).join(', ');
+      L.push(`    ${x.ym}: inleg ${euro0((x.voor||{}).inleg||0)} → 0 · totaal ${euro0((x.voor||{}).totaal||0)} → ${euro0((x.na||{}).totaal||0)}${tg?' · potje terug: '+tg:''}`); } }
+  /* v440 item 3: INHALEN — twee definities naast elkaar. A = spaarOver().zonder (toegewezen aan doelen/buffer − dekt − saldo),
+     B = opzijInhalen() (onttrekkingen in de salarisperiode die niet zijn teruggezet). Wijken ze af, dan is Inhalen B. */
+  { let A=null; try{ A=Math.round(spaarOver().zonder); }catch(_){} let I=null; try{ I=opzijInhalen(); }catch(_){}
+    L.push('  INHALEN (v440 item 3) — twee definities naast elkaar:');
+    L.push(`    A · "toegewezen zonder geld" (spaarOver().zonder = toegewezen aan doelen/buffer − dekt − saldo): ${A==null?'onbekend':euro0(A)}  [de huidige bron van de Inhalen-regel op Plan]`);
+    if(!I || I.inhalen==null) L.push('    B · onttrekkingen in de periode niet teruggezet (opzijInhalen): onbekend (geen spaarrekening of geen salarisperiode)');
+    else { L.push(`    B · onttrekkingen in de periode niet teruggezet (opzijInhalen, ${I.start}..${I.eind}): ${euro0(I.inhalen)}  (onttrokken ${euro0(I.onttrokken)} − teruggestort ${euro0(I.teruggestort)})`);
+      if(A!=null) L.push(`    A tegen B: ${A===I.inhalen?'gelijk':'VERSCHILT ('+euro0(Math.abs(A-I.inhalen))+'); dan geldt de spec: Inhalen = B (onttrekkingen die niet zijn teruggezet)'}`); } }
   if(!vk || !V || V.onbekend){ L.push('  forecast onbekend (geen drie afgeronde maanden)'); return L; }
   /* v438: per groep (de indeling van de brug, brugIndeling) het vastgelegde budget, de forecast en het verschil */
   { let I=null; try{ I=brugIndeling(V); }catch(_){}

@@ -15,6 +15,7 @@
 const { test, expect } = require('@playwright/test');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
+const { withOpzij } = require('./opzij-inject');
 
 const MAIN='NL01MAIN0000001111', SAV='NL01SAVE0000004323';
 const MS=['2026-05','2026-06','2026-07','2026-08','2026-09'];
@@ -59,7 +60,7 @@ function seed(o={}){
 }
 async function boot(page,o={}){
   await pinDatum(page, o.dag||'2026-10-01');
-  await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, seed(o));
+  await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(()=>typeof window.renderMaand==='function');
 }

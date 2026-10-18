@@ -9,6 +9,7 @@
 // buffer het totale gat naar je richtbedrag, en alleen bij doel een maandbedrag.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { beslisIngangen, beslisTekstAlles } = require('./beslis-sheet');   // v320: in de sheet
 
 const now = new Date();
@@ -66,7 +67,7 @@ function seed(o) {
   };
 }
 async function boot(page, o) {
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof maandSuggestie === 'function');
 }

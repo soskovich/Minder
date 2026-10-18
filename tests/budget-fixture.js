@@ -2,6 +2,7 @@
 // Bewust kalender-onafhankelijk: elk bedrag hieronder is gelijk op elke dag van de maand.
 // Alleen varDue (tempo x resterende dagen) beweegt mee met de datum.
 const { openDag } = require('./vaste-dag');
+const { withOpzij } = require('./opzij-inject');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now);
@@ -105,6 +106,7 @@ function seed({ giftCharged = true, maanden = 3 } = {}) {
 
 // Boot de echte app met de fixture in localStorage.
 async function open(page, payload = seed()) {
+  payload = withOpzij(payload);   // v440: capaciteit uit savingAmount als gekozen opzij (zie opzij-inject.js)
   await page.route('**/sw.js', (r) => r.abort());   // geen controllerchange-reload tijdens de test
   await page.addInitScript((data) => { for (const k in data) localStorage.setItem(k, data[k]); }, payload);
   await page.goto('/index.html');

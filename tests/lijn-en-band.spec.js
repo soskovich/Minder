@@ -9,6 +9,7 @@
 // Inrichting 3.000 over zes, een boete van 299 volgende maand, noodfonds vol.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { kaalUit } = require('./bron-kaal');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -35,7 +36,7 @@ const PREMIE = { id: 'r2', naam: 'Premie', bedrag: 1200, vervalmaand: ym(new Dat
 async function boot(page, res, extra) {
   const d = seed(res);
   if (extra) { const s = JSON.parse(d.minder_set); Object.assign(s, extra); d.minder_set = JSON.stringify(s); }
-  await page.addInitScript((x) => { for (const k in x) localStorage.setItem(k, x[k]); }, d);
+  await page.addInitScript((x) => { for (const k in x) localStorage.setItem(k, x[k]); }, withOpzij(d));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }

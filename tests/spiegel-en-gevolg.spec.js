@@ -6,6 +6,7 @@
 // de data volgt, dan zegt de regel dat het een observatie is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 /* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
    na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */
 const { pinDag } = require('./vaste-dag');
@@ -57,6 +58,9 @@ function seed(o = {}) {
   const bal = { [MAIN]: o.saldo != null ? o.saldo : 4000 };
   if (o.spaar) bal[SAV] = o.spaarSaldo != null ? o.spaarSaldo : 0;
   const set = Object.assign({ mode: o.mode || 'begeleid', autoIncome: false, income: 3000, limit: 70,
+    // v440: planCapacity leest de gekozen opzij; deze spec rekende op de auto-spaarinleg (inkomen min de limiet-begroting ~900).
+    // Zet die capaciteit expliciet laag genoeg zodat de doelen (9000) in tekort blijven en coHorizonVraag ze noemt (eta > de streef).
+    savingMode: 'amount', savingAmount: 900,
     // v243: de grendel staat hier open; deze spec gaat over wat er daarna gebeurt
     nfToegewezen: 9e7, nfToegewezenMigrated: true,
 
@@ -70,7 +74,7 @@ function seed(o = {}) {
 async function boot(page, payload) {
   await pinDag(page);
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(payload || seed()));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof insSignals === 'function');
 }

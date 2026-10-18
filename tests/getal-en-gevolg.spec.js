@@ -5,6 +5,7 @@
 // niet met 'en' plakt.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const now = new Date();
@@ -44,7 +45,7 @@ function seed(o = {}) {
 }
 async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(payload || seed()));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof planCapacity === 'function' && TX.length > 0);
 }
@@ -203,12 +204,13 @@ test.describe('f · het aflosbedrag en de looptijd komen uit dezelfde som', () =
 
 test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
 
-  test('planCapacity zelf is niet aangeraakt', async ({ page }) => {
+  test('planCapacity leest de gekozen opzij, dan het advies, dan comfortTot (v440: geen spaarinleg)', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => planCapacity.toString());
-    expect(src).toContain('monthlySavingTarget()');
-    expect(src).toContain('comfortTot');
-    expect(src).not.toContain('planCapLabel');
+    expect(src).not.toContain('monthlySavingTarget');   // v440: de spaarinleg is uit de terugval
+    expect(src).toContain('salVerdeling');               // de gekozen opzij gaat voor
+    expect(src).toContain('rekVoorstel');                // dan het advies
+    expect(src).toContain('comfortTot');                 // dan comfortTot
   });
 });
 

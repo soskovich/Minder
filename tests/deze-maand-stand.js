@@ -18,6 +18,7 @@
    DE OPTELLING: uitgegeven 1.574 (huur 1.450, boodschappen 49, uit eten 75), vast nog 253 (150 + 30 +
    73), variabel verwacht 845 (vices 133, boodschappen 512, uit eten 200): 2.672. */
 const { pinDatum } = require('./vaste-dag');
+const { withOpzij } = require('./opzij-inject');
 
 const MAIN = 'NL01MAIN0000001111', SPAAR = 'NL01SAVE0000004323';
 const DAG = '2026-10-06';
@@ -55,7 +56,7 @@ function seed(o) {
 async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
   await pinDatum(page, (o && o.dag) || DAG);
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof maandVooruit === 'function' && typeof TX !== 'undefined' && TX.length > 0);
 }

@@ -1,8 +1,8 @@
 /* v440: OPZIJ STAAT LOS VAN HET BUDGET. De Plan-inleg bestaat niet meer: het vastgelegde maandbudget is de som van de potjes
    (geen aparte inleg, geen spookbedrag). Opzij wordt per salarisperiode gemeten (opzijPeriode): netto naar je spaarrekening,
    tegen het doel uit Kiezen. Plan, de Doelen-meter en Zien lezen die ene functie; Inhalen is dezelfde bron als "toegewezen
-   zonder geld" (spaarOver().zonder); planCapacity leest opzij -> spaarinleg -> advies; en de te-ruim-sheet heeft geen inleg-
-   bestemmingen meer. GETALLEN VAN DE FIXTURE (budget-fixture), NIET VAN HET TOESTEL. */
+   zonder geld" (spaarOver().zonder); planCapacity leest opzij -> advies -> comfortTot (de spaarinleg is uit de terugval); en de
+   te-ruim-sheet heeft geen inleg-bestemmingen meer. GETALLEN VAN DE FIXTURE (budget-fixture), NIET VAN HET TOESTEL. */
 const { test, expect } = require('@playwright/test');
 const { seed, open, MAIN } = require('./budget-fixture');
 
@@ -49,6 +49,40 @@ test.describe('1 · het vastgelegde budget is de som van de potjes', () => {
     expect(r.totaal).toBe(2380);
     expect(r.geraakt).toContain('2026-09');
   });
+  /* v440 item 2: de migratie bewaart de vóór-stand (inleg, totaal, potjes, verplaatsing), zet een verplaatsing terug in het
+     bronpotje, en is in één stap om te draaien. SABOTAGE: snapshot ná de verplaatsing (potjesVoor = r.potjes na de toevoeging) →
+     dan herstelt maandBudgetDeInlegHerstel() het verkeerde potje en valt de roundtrip-assertie. */
+  test('de migratie bewaart de vóór-stand en maandBudgetDeInlegHerstel() zet hem exact terug', async ({ page }) => {
+    const p = seed(); const set = JSON.parse(p.minder_set);
+    // een v439-record met een inleg én een verplaatsing (boodschappen gaf 300 aan de inleg)
+    set.maandBudget = { '2026-08': { totaal: 2680, potjes: { huur: 900, boodschappen: 500, uiteten: 400, shopping: 280 }, inleg: 600,
+      verplaatst: [{ van: 'boodschappen', bedrag: 300, naar: 'plan' }], op: '2026-08-01', bron: 'maandwissel' } };
+    delete set.mbDeInleg; p.minder_set = JSON.stringify(set);
+    await open(page, p);
+    const na = await page.evaluate(() => { const rec = SET.maandBudget['2026-08'], g = SET.mbDeInleg.geraakt.find(x => x.ym === '2026-08');
+      return { inleg: Math.round(+rec.inleg || 0), totaal: Math.round(rec.totaal), boodschappen: Math.round(+rec.potjes.boodschappen || 0),
+        verplaatst: !!rec.verplaatst, voor: g.voor, naTot: g.na.totaal, teruggekregen: g.teruggekregen,
+        diag: diagMaandBudget(null, false, null).join('\n') }; });
+    expect(na.inleg).toBe(0);
+    expect(na.totaal).toBe(2380);                       // 900 + (500+300) + 400 + 280
+    expect(na.boodschappen).toBe(800);                  // het bronpotje kreeg de 300 terug
+    expect(na.voor.inleg).toBe(600);                    // de vóór-stand is bewaard
+    expect(na.voor.totaal).toBe(2680);
+    expect(na.voor.potjes.boodschappen).toBe(500);
+    expect(na.teruggekregen).toEqual([{ potje: 'boodschappen', bedrag: 300 }]);
+    expect(na.diag).toContain('migratie de-inleg');     // blok 20 noemt de regel
+    expect(na.diag).toContain('potje terug');
+    // het herstelpad zet de vóór-stand exact terug
+    const herstel = await page.evaluate(() => { const ok = maandBudgetDeInlegHerstel(), rec = SET.maandBudget['2026-08'];
+      return { ok, inleg: Math.round(+rec.inleg || 0), totaal: Math.round(rec.totaal), boodschappen: Math.round(+rec.potjes.boodschappen || 0),
+        verplaatst: Array.isArray(rec.verplaatst) ? rec.verplaatst.length : 0, hersteld: !!SET.mbDeInleg.hersteld }; });
+    expect(herstel.ok).toBe(true);
+    expect(herstel.inleg).toBe(600);                    // vóór-stand terug
+    expect(herstel.totaal).toBe(2680);
+    expect(herstel.boodschappen).toBe(500);
+    expect(herstel.verplaatst).toBe(1);                 // de verplaatsing staat weer in het record
+    expect(herstel.hersteld).toBe(true);                // en de vlag blijft staan, dus de boot migreert niet opnieuw
+  });
 });
 
 test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
@@ -62,7 +96,7 @@ test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
   });
   test('het doel komt uit Kiezen (SET.salVerdeling.opzij); zonder keuze is er geen doel', async ({ page }) => {
     await open(page);
-    expect(await page.evaluate(() => opzijPeriode().doel)).toBe(null);
+    expect(await page.evaluate(() => { delete SET.salVerdeling; return opzijPeriode().doel; })).toBe(null);
     const d = await page.evaluate((acc) => { SET.salVerdeling = { rek: { [acc]: 1 }, opzij: 1200 }; return opzijPeriode().doel; }, MAIN);
     expect(d).toBe(1200);
   });
@@ -89,9 +123,31 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
     expect(r.attr).toBe(r.zonder);           // de regel leest spaarOver().zonder
     expect(r.n).toBe(1);                      // een regel, geen dubbele kaart
   });
-  test('planCapacity leest opzij -> spaarinleg -> advies', async ({ page }) => {
+  /* v440 item 3: opzijInhalen() meet "onttrekkingen in de periode die niet zijn teruggezet" (de spec), uit dezelfde bron en
+     periode als opzijPeriode. Blok 20 zet die meting (B) naast spaarOver().zonder (A); wijken ze af, dan is Inhalen B. */
+  test('opzijInhalen meet onttrekkingen-niet-teruggezet (zelfde bron als opzijPeriode), en blok 20 zet A en B naast elkaar', async ({ page }) => {
     await open(page);
-    expect(await page.evaluate(() => planCapacity())).toBe(300);   // geen gekozen opzij, wel een spaarinleg van 300
+    const r = await page.evaluate(() => { const I = opzijInhalen(), O = opzijPeriode();
+      return { meetbaar: I.meetbaar, inhalen: I.inhalen, onttrokken: I.onttrokken, teruggestort: I.teruggestort, netto: O.netto,
+        diag: diagMaandBudget(null, false, null).join('\n') }; });
+    expect(r.meetbaar).toBe(true);
+    expect(r.teruggestort - r.onttrokken).toBe(r.netto);           // dezelfde bron en periode als opzijPeriode
+    expect(r.inhalen).toBe(Math.max(r.onttrokken - r.teruggestort, 0));   // onttrokken − teruggestort, niet onder nul
+    expect(r.inhalen).toBeGreaterThanOrEqual(0);
+    expect(r.diag).toContain('INHALEN (v440 item 3)');             // blok 20 zet A en B naast elkaar
+    expect(r.diag).toMatch(/A · "toegewezen zonder geld"/);
+    expect(r.diag).toMatch(/B · onttrekkingen in de periode niet teruggezet/);
+  });
+  test('planCapacity leest opzij -> advies -> comfortTot, en nooit de spaarinleg', async ({ page }) => {
+    await open(page);
+    // v440: de spaarinleg bepaalt planCapacity niet meer; zonder gekozen opzij valt hij op het advies, anders comfortTot
+    const r = await page.evaluate(() => { delete SET.salVerdeling; SET.savingMode = 'amount'; SET.savingAmount = 9999; window._rekV = null;
+      let advies = null; try { const P = rekVoorstel(); if (P && P.ok) advies = Math.round(P.opzij); } catch (_) {}
+      let comfort = null; try { comfort = Math.round(noodfondsModel().comfortTot || 0); } catch (_) {}
+      return { cap: planCapacity(), inleg: Math.round(monthlySavingTarget() || 0), advies, comfort }; });
+    expect(r.inleg).toBe(9999);                                   // de spaarinleg staat op een afwijkend bedrag
+    expect(r.cap).not.toBe(r.inleg);                              // en bepaalt planCapacity niet
+    expect(r.cap).toBe(r.advies != null ? r.advies : r.comfort);  // advies, anders comfortTot
     expect(await page.evaluate((acc) => { SET.salVerdeling = { rek: { [acc]: 1 }, opzij: 1200 }; window._rekV = null; return planCapacity(); }, MAIN)).toBe(1200);   // de gekozen opzij gaat voor
   });
   test('de te-ruim-sheet heeft geen Plan/reservering/beleggen als bestemming meer', async ({ page }) => {

@@ -4,6 +4,7 @@
 // doelTempo() is puur; doelTempoLine() zet er de zin omheen, in de spiegel-gevolg-keuze-vorm.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -39,7 +40,7 @@ function seedDoel(goals, extra = {}) {
 
 async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload);
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(payload));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof doelTempo === 'function');
 }

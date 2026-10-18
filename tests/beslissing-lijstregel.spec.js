@@ -23,6 +23,7 @@
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 const { beslisRegels } = require('./beslis-sheet');
@@ -81,7 +82,7 @@ function seed(o = {}) {
 async function boot(page, o = {}) {
   if (o.w) await page.setViewportSize({ width: o.w, height: o.w === 360 ? 640 : 844 });
   await pinDag(page, o.dagen);
-  await page.addInitScript((s) => { for (const k in s) localStorage.setItem(k, s[k]); }, seed(o));
+  await page.addInitScript((s) => { for (const k in s) localStorage.setItem(k, s[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof window.renderMaand === 'function');
   await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });

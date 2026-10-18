@@ -3,6 +3,7 @@
 // het referentiepunt; die mogen nooit sneuvelen om compact te blijven.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 
 const MAIN = 'NL01MAIN0000001111';
 const RES = 'NL01RESE0000009999';
@@ -42,7 +43,7 @@ function seed(o = {}) {
 
 async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof allocatePlan === 'function');
 }

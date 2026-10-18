@@ -137,8 +137,11 @@ genoemde versietag.)*
   meer). De `MB.inleg`-verplaatsingsmachinerie is weg: `maandInlegWijz` vervallen, `maandBudgetLogs`/`maandBudgetHerstel`/
   `maandBudgetWijz` zonder `~inleg`, en `planInlegVoeg`/`planInlegZet` raken het maandbudget niet meer. Een boot-migratie
   (`maandBudgetDeInleg`, eenmalig, `SET.mbDeInleg`) zet `inleg` op 0 in bestaande records, herleidt het totaal uit de potjes en zet
-  een eerdere verplaatsing (`MB.verplaatst`) terug in het bronpotje; de geraakte records staan in `SET.mbDeInleg.geraakt` (blok 20
-  noemt ze). HET VASTGELEGDE BUDGET IS VAST + SOM VAN DE POTJES, ook na een verplaatsing: geen spookbedrag. (2) OPZIJ =
+  een eerdere verplaatsing (`MB.verplaatst`) terug in het bronpotje. Elk geraakt record in `SET.mbDeInleg.geraakt` draagt de
+  VÓÓR-stand (`voor`: inleg, totaal, potjes, verplaatst), de NA-stand en wat het bronpotje terugkreeg (`teruggekregen`); blok 20
+  toont onder MAANDBUDGET de regel 'migratie de-inleg' met per record vóór → na en het potje terug. `maandBudgetDeInlegHerstel()`
+  is het herstelpad: het zet de vóór-stand exact terug en zet `SET.mbDeInleg.hersteld`, zodat de boot niet opnieuw migreert.
+  HET VASTGELEGDE BUDGET IS VAST + SOM VAN DE POTJES, ook na een verplaatsing: geen spookbedrag. (2) OPZIJ =
   `opzijPeriode()`: wat er netto naar je spaarrekening ging (inleg min onttrekkingen) van de salarisstorting tot de dag vóór de
   volgende (`salPeriode().cur`), via `savedNetRange()` — de ENE optelling over je spaarrekening, die `savedNet` ook leest
   (spaarinleg-netto) — tegen het DOEL uit Kiezen (`SET.salVerdeling.opzij`, anders 'nog geen doel'); geen spaarrekening → onbekend.
@@ -147,8 +150,9 @@ genoemde versietag.)*
   volledige opzij-weergave op Zien (doel en gedaan) is punt 3 van de ronde en komt later. (3) INHALEN (onttrekkingen die niet zijn
   teruggezet) is dezelfde bron als 'toegewezen zonder geld' (`spaarOver().zonder`, `spaarOverLine`): ÉÉN regel 'Inhalen EUR X · met
   je bonus of wat over is', geen tweede kaart (`verplaatsen is niet kopiëren`, v104). (4) `planCapacity` leest de gekozen opzij →
-  anders je ingestelde spaarinleg (`monthlySavingTarget`) → anders het advies (`rekVoorstel().opzij`) → anders comfortTot; 'Alles
-  vol' volgt daarmee de opzij. (5) DE TE-RUIM-SHEET heeft geen Plan/reservering/beleggen-bestemming meer (alleen een ander potje of
+  anders het advies (`rekVoorstel().opzij`) → anders comfortTot. De spaarinleg (`monthlySavingTarget`) is BEWUST uit de terugval:
+  dat is een instelling (vast bedrag, percentage, of inkomen min `monthBudget`) en geen meting van wat opzij ging, en hij las nooit
+  de oude Plan-inleg; 'Alles vol' volgt daarmee de gekozen of geadviseerde opzij. (5) DE TE-RUIM-SHEET heeft geen Plan/reservering/beleggen-bestemming meer (alleen een ander potje of
   een nieuw potje), met de regel 'Wat overblijft krijgt een bestemming in v441'. RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
   v441. Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld, terug-aansluiting,
   geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437 is door v440

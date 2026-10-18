@@ -65,7 +65,7 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.cap).toBe(a.cap);
     expect(b.brug).toBe('budget:3375 Boodschappen:61 ruimte:-1039 vaste lasten:0 zonder potje:275 okt:2672');
   });
-  test('naar sparen: maandbudget omlaag, spaarinleg omhoog, Plan sneller, veilig te besteden gelijk', async ({ page }) => {
+  test('naar sparen: maandbudget omlaag, spaarinleg omhoog, Plan GELIJK (opzij staat los van de spaarinleg sinds v440), veilig te besteden gelijk', async ({ page }) => {
     await boot(page, OPT);
     const a = await meet(page);
     await open(page);
@@ -74,8 +74,10 @@ test.describe('b · elke bestemming boekt door', () => {
     await page.click('[data-potformsave]');
     const b = await meet(page);
     expect(b.tot).toBe(3175);
-    expect(b.cap).toBe(600);
-    expect([a.eta, b.eta]).toEqual([14, 9]);   // planVooruit(): het noodfonds is vijf maanden eerder vol
+    // v440: planCapacity leest de gekozen opzij, niet de spaarinleg. De spaarinleg omhoog zetten verandert planCapacity en de
+    // vol-datums dus NIET meer (opzij staat los van de spaarinleg); Plan blijft gelijk in plaats van sneller.
+    expect(b.cap).toBe(a.cap);
+    expect(b.eta).toBe(a.eta);
     expect(b.safe).toBe(a.safe);              // wat uit het potje gaat, gaat naar nog te sparen
     /* v438: het vastgelegde maandbudget van oktober blijft 3.375; geen staaf "wijzigingen": Sport staat tegen zijn vastgelegde budget
        en de spaarinleg is geen inleg in Plan, dus de brug blijft zoals hij was */

@@ -16,6 +16,7 @@
 // vergelijking zetten (meetles a). Veertien labels per gepinde dag, uitgeschreven.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const fs = require('fs');
 const path = require('path');
 const { pinDatum } = require('./vaste-dag');
@@ -157,7 +158,7 @@ function seed(o) {
 
 async function boot(page, o) {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof allocatePlan === 'function');
 }

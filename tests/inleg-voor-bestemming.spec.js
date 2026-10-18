@@ -9,6 +9,7 @@
 // belegging en hoort juist wél te compounderen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { withOpzij } = require('./opzij-inject');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 
 /* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
@@ -78,7 +79,7 @@ function seed(o) {
 }
 async function boot(page, o) {
   await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
-  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }

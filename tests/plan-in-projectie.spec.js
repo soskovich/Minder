@@ -10,6 +10,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { kaalUit } = require('./bron-kaal');
+const { withOpzij } = require('./opzij-inject');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now), M1 = ym(new Date(now.getFullYear(), now.getMonth()-1, 1)), M2 = ym(new Date(now.getFullYear(), now.getMonth()-2, 1)), M3 = ym(new Date(now.getFullYear(), now.getMonth()-3, 1));
@@ -33,7 +34,7 @@ function seed(o){
 const BOETE = { id: 'r1', naam: 'Boete', bedrag: 299, vervalmaand: NOV, intervalM: 0 };
 const PREMIE = { id: 'r2', naam: 'Premie', bedrag: 1200, vervalmaand: ym(new Date(now.getFullYear(), now.getMonth() + 3, 1)), intervalM: 12 };
 async function boot(page, o) {
-  await page.addInitScript((x) => { for (const k in x) localStorage.setItem(k, x[k]); }, seed(o));
+  await page.addInitScript((x) => { for (const k in x) localStorage.setItem(k, x[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }
