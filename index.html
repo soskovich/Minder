@@ -30920,10 +30920,22 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
   /* v440: het vastgelegde totaal is de som van de potjes; de Plan-inleg telt niet meer mee */
   { const pS=Object.values(MB.potjes||{}).reduce((a,v)=>a+(+v||0),0);
     L.push(`  CONTROLE budget = som van de potjes: ${euro0(pS)} tegen vastgelegd ${euro0(MB.totaal)} → ${Math.round(pS)===Math.round(MB.totaal)?'klopt':'VERSCHILT'}`); }
+  /* v440 item 6 punt 6: elke vaste last hoort een eigen potje te hebben; een herkende vaste last zonder potje (EUR 0 budget,
+     zonderPotje in maandSplitsing) valt hier op. Voor de gebruiker leeg, of alleen de huur-Cathalina tot 1 nov (dan krijgt de
+     huur zijn eigen potje, v436). */
+  { let zp=[]; try{ zp=(maandSplitsing(m).vastePotjes||[]).filter(x=>x.zonderPotje); }catch(_){}
+    L.push(`  vaste lasten zonder potje: ${zp.length?zp.map(x=>`${x.naam} ${euro0(Math.round(x.eind))}`).join(', '):'geen (elke vaste last heeft een potje)'}`); }
   if(SET.mbDeInleg && (SET.mbDeInleg.geraakt||[]).length){ const DI=SET.mbDeInleg;
     L.push(`  migratie de-inleg (v440${DI.hersteld?', HERSTELD op '+dag(DI.hersteld):''}): inleg uit ${DI.geraakt.length} vastgelegd record(s) gehaald`);
     for(const x of DI.geraakt){ const tg=(x.teruggekregen||[]).map(t=>`${(CATS[t.potje]||{}).name||t.potje} +${euro0(t.bedrag)}`).join(', ');
       L.push(`    ${x.ym}: inleg ${euro0((x.voor||{}).inleg||0)} → 0 · totaal ${euro0((x.voor||{}).totaal||0)} → ${euro0((x.na||{}).totaal||0)}${tg?' · potje terug: '+tg:''}`); } }
+  /* v440 punt 8: OPZIJ DEZE PERIODE — wat er netto naar je spaarrekening ging (opzijPeriode), tegen het doel uit Kiezen
+     (SET.salVerdeling.opzij). De ENE bron voor opzij op Plan, de Doelen-meter en Zien; geen spaarrekening → onbekend. */
+  { let O=null; try{ O=opzijPeriode(); }catch(_){}
+    L.push('  OPZIJ (v440 punt 8) — netto naar je spaarrekening deze salarisperiode:');
+    if(!O || !O.ok) L.push('    geen salarisperiode herkend (geen regel of geen salarisbetaling)');
+    else if(!O.meetbaar || O.netto==null) L.push(`    gedaan: onbekend (geen spaarrekening herkend) · periode ${O.start}..${O.eind}`);
+    else L.push(`    gedaan ${euro0(O.netto)} (${O.start}..${O.eind}) tegen doel ${O.doel==null?'nog geen doel (geen salarisverdeling gekozen)':euro0(O.doel)+(O.pct!=null?' · '+O.pct+'%':'')}`); }
   /* v440 item 3: INHALEN — twee definities naast elkaar. A = spaarOver().zonder (toegewezen aan doelen/buffer − dekt − saldo),
      B = opzijInhalen() (onttrekkingen in de salarisperiode die niet zijn teruggezet). Wijken ze af, dan is Inhalen B. */
   { let A=null; try{ A=Math.round(spaarOver().zonder); }catch(_){} let I=null; try{ I=opzijInhalen(); }catch(_){}
