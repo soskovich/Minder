@@ -205,21 +205,23 @@ test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
 });
 
 test.describe('v436 · 5. de salariskaart tegen het budget', () => {
-  test('5a/5d. de tabel: vast, potjes, Plan-inleg, buiten (geen budget), opzij (–); som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
+  test('5a/5d. de stand-tabel op Zien: vast en potjes tegen hun budget; som verschillen = Budget-meter = vastgelegd - forecast', async ({ page }) => {
     await boot(page); await page.evaluate(() => { go('maand'); renderMaand(); });
-    const R = await page.locator('#gripSalaris [data-saltabel]').evaluateAll(es => es.map(e => [e.dataset.saltabel, e.dataset.salverschil == null ? null : +e.dataset.salverschil, e.innerText.replace(/\s+/g, ' ')]));
-    /* v440: de indeling van de brug zonder Plan-inleg (vast, zonder potje, N boven, N onder), dan buiten en opzij */
-    expect(R.map(x => x[0])).toEqual(['vast', 'zonder', 'onder', 'buiten', 'opzij']);   // in deze stand eindigt geen potje erboven, en geen Plan-inleg-rij meer
-    expect(R[3][2]).toMatch(/geen budget/); expect(R[4][2]).toMatch(/opzij/);   // v440: de opzij-rij leest opzijPeriode (doel/gedaan)
-    const som = R.filter(x => x[1] != null).reduce((a, x) => a + x[1], 0);
+    /* v440 sectie 3: de salariskaart is vervangen door de stand-tabel (gripZienStand): vast en potjes met budget/verwacht/
+       verschil, een totaalrij en een opzij-rij (opzijPeriode). De verschillen van vast en potjes tellen op tot de totaalrij,
+       en die is de Budget-meter (vastgelegd − forecast). salarisTabelData blijft de bron van blok 20 (zie v438 1e). */
+    const R = await page.locator('#gripZienStand [data-zienrij]').evaluateAll(es => es.map(e => [e.dataset.zienrij, +e.dataset.verschil]));
+    expect(R.map(x => x[0])).toEqual(['vast', 'potjes', 'budget']);
+    const som = R.filter(x => x[0] !== 'budget').reduce((a, x) => a + x[1], 0);
+    const budgetRij = R.find(x => x[0] === 'budget')[1];
     const m = await page.evaluate(() => { const V = maandVooruit(); return { v: gripMeterBudget(V).verschil, d: Math.round(V.projectie) - 3095 }; });
+    expect(som).toBe(budgetRij);           // vast + potjes = de totaalrij
     expect(som).toBe(m.v); expect(som).toBe(m.d);
-    expect(+(await page.locator('#gripSalaris [data-salsom]').getAttribute('data-salsom'))).toBe(som);
-    await expect(page.locator('#gripSalaris [data-salsom]')).toContainText(`samen €${(-som).toLocaleString('nl-NL')} onder budget`);
+    await expect(page.locator('#gripZienStand [data-zienopzij]')).toContainText('opzij');   // de opzij-rij (doel/gedaan)
   });
   test('5b/5c. "waar zit het ›" en een tik op de Budget-meter openen de brug in Begrijpen', async ({ page }) => {
     await boot(page); await page.evaluate(() => { go('maand'); renderMaand(); });
-    await page.locator('#gripSalaris [data-salbrug]').click();
+    await page.locator('#gripZienStand [data-zienbrug]').click();
     expect(await page.evaluate(() => gripTab())).toBe('begrijpen'); await expect(page.locator('#gripGroepKaart')).toBeVisible();
     await page.evaluate(() => { gripKiesTab('zien'); });
     await page.locator('[data-meter="budget"]').click();

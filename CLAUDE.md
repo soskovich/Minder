@@ -130,6 +130,16 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v440 (sectie 3): ZIEN — HOE STA JE ERVOOR** (`v440`, mockup sectie 3, gevraagd door de gebruiker). De salarisbalk op de
+  Zien-tab (v428) is vervangen door een stand-tabel (`gripZienTabel`, `#gripZienStand`), ALLEEN de stand, geen advies: per rij
+  budget · verwacht · verschil, voor `vast` (= `V.vaste` van maandVooruit; de woning zit erin en duwt vast boven budget) en
+  `potjes` (= de totaalrij min vast, zodat de twee per constructie optellen tot de som en de zonder-potje-uitgave bij potjes valt),
+  dan de totaalrij `budget` (= `V.budget` tegen `V.projectie`, de ene bron, met "EUR X onder/boven") en een `opzij`-rij (`data-zienopzij`:
+  het doel uit Kiezen `opzijPeriode().doel`, anders "nog geen", tegen `gedaan` = `opzijPeriode().netto`; netto onder nul is rood met
+  "uit spaargeld", geen spaarrekening → "onbekend"). De sub noemt de woning als die nieuw is ("incl. <partij> EUR X (nieuw, vast)",
+  `woningForecast().nieuw`). "waar zit het ›" (`data-zienbrug`) opent de brug in Begrijpen. `gripSalarisKaart` is vervallen;
+  `salarisBalk`/`salarisBalkHtml` blijven voor de Terugblik en `salarisTabelData` voor blok 20 en de brug. Spec `v440-zien.spec.js`
+  (vier sabotages rood); v428 1b (nu een data-invariant op salarisBalk) en v436 5 (nu de stand-tabel) gemigreerd.
 - **v440 (sectie 8 + item 6): TEMPO ALLEEN OVER JE POTJES, DE WONING ALS VERWACHTE VASTE LAST, EN TWEE REGELS IN BLOK 20** (`v440`,
   mockup `design/mockups/Minder_Opzij_VoorNa_v6_Mockup.html` sectie 8, gevraagd door de gebruiker). (1) FORECAST-DEDUP: een betaling
   aan je woning (een Tikkie of een overboeking naar dezelfde IBAN, `woningKeyVan` === de woning-sleutel; de ids in `woningPaymentIds`,
@@ -188,9 +198,9 @@ genoemde versietag.)*
   deze maand blijft het potje staan (de ruimte staat als niet gebruikt in de forecast). RESERVERINGEN EN BELEGGEN STAAN APART EN KOMEN IN
   v441. Spec `v440.spec.js`; grip-eigen-budget, v432/v433/v436/v438, plan-inleg, toegewezen-zonder-geld, terug-aansluiting,
   geldbegrippen, opschonen e.a. gemigreerd; `v437.spec.js` vervallen (de Plan-inleg-in-budget-reparatie van v437 is door v440
-  achterhaald). NOG OPEN (eigen rondes): de Zien-tabel (budget/verwacht/verschil + opzij met doel en gedaan) en het Kiezen-scherm
-  (verdeling); de huur-Cathalina op je toestel nakijken (welke rekening ··0806 is). Tempo over potjes, de woning als verwachte vaste
-  last en blok 20 OPZIJ/MAANDBUDGET zijn gebouwd (zie de v440-regel over sectie 8 + item 6 bovenaan).
+  achterhaald). NOG OPEN (eigen rondes): het Kiezen-scherm (de salarisverdeling); de huur-Cathalina op je toestel nakijken (welke
+  rekening ··0806 is). De Zien-tabel, tempo over potjes, de woning als verwachte vaste last en blok 20 OPZIJ/MAANDBUDGET zijn
+  gebouwd (zie de v440-regels over sectie 3 en sectie 8 + item 6 bovenaan).
 - **v439: INZICHTEN DRAAGT HET VERWACHTE SALDO IN DE MAANDKAART, HOME ALLEEN HET SALDO** (`v439`, gevraagd door de gebruiker, gezien op
   het toestel op 17 okt). Inzichten: "Forecast eind <maand>" en "wijzigingen deze maand (alleen forecast) ›" zijn weg uit de maandkaart;
   op die plek staat `insSaldoEindRegel()` (`#insSaldoEind`, `data-inssaldoeind`, `maandVerloop().eind`) met de verwachte bonus

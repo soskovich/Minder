@@ -12411,24 +12411,36 @@ function salarisTabelData(V){ if(!V || V.onbekend || !(V.budget>0)) return null;
   const R=I.groepen.filter(x=>x.k!=='inleg' || Math.abs(x.b)>=0.5 || Math.abs(x.v)>=0.5).filter(x=>!((x.k==='boven'||x.k==='onder') && !x.n && !x.d))
     .map(x=>({k:x.k, l:x.k==='inleg'?'Plan-inleg':x.l, v:x.v, b:x.b, d:x.d}));
   return {rijen:R, budget:I.budget, projectie:I.projectie, som:R.reduce((a,x)=>a+x.d,0)}; }
-function gripSalarisKaart(){ let D=null; try{ D=salarisData(1); }catch(_){ return ''; }
-  const SB=salarisBalk(D, D.Rc); if(!(SB.salaris>0)) return `<div class="card" id="gripSalaris" data-salaris="geen"><div class="hlabel" style="margin:0">Je salaris in ${esc(ymFull(D.cur))}</div><div class="small muted" style="margin-top:4px">Nog geen salaris herkend: een terugkerende inkomensbron in minstens twee maanden.</div></div>`;
-  const kop=`<div class="row" style="justify-content:space-between;align-items:baseline"><span class="hlabel" style="margin:0">Je salaris in ${esc(ymFull(D.cur))}</span><b data-salkop>${euro0(SB.salaris)}</b></div>`;
-  let V=null, T=null; try{ V=maandVooruit(); T=salarisTabelData(V); }catch(_){}
-  if(!T) return `<div class="card" id="gripSalaris" data-salaris="${Math.round(SB.salaris)}">${salarisBalkHtml(SB, kop)}</div>`;
-  const sal=SB.salaris, pct=v=>sal>0?Math.round(v/sal*100)+'%':'', kl={vast:SALBALK_KLEUR.vast, potjes:SALBALK_KLEUR.potjes, boven:SALBALK_KLEUR.potjes, onder:SALBALK_KLEUR.potjes, zonder:'var(--mut2)', inleg:'var(--mut2)', buiten:SALBALK_KLEUR.buiten, opzij:SALBALK_KLEUR.opzij};
-  const inl=(T.rijen.find(x=>x.k==='inleg')||{v:0}).v, buiten=(SB.delen.find(d=>d.k==='buiten')||{v:0}).v, opzij=Math.max((SB.delen.find(d=>d.k==='opzij')||{v:0}).v-inl,0);
-  let O=null; try{ O=opzijPeriode(); }catch(_){}   /* v440: opzij op Zien leest opzijPeriode (doel uit Kiezen, netto gedaan deze periode); de volledige opzij-weergave met doel en gedaan komt in de Zien-tabel (punt 3) */
-  const td=(t,st)=>`<span style="text-align:right;white-space:nowrap${st||''}">${t}</span>`;
-  const tr=(k,l,v,dTxt,attr)=>`<div data-saltabel="${k}"${attr||''} style="display:grid;grid-template-columns:1.3fr 1fr .8fr 1.2fr;gap:4px;padding:4px 0;border-top:1px solid var(--line);font-size:var(--fs-sm);align-items:center"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${kl[k]}"></i>${l}</span>${td(euro0(Math.round(v)))}${td(pct(v),';color:var(--mut2)')}${dTxt}</div>`;
-  const dt=x=>td(x.d<0?`−${euro0(-x.d)}`:x.d>0?`+${euro0(x.d)}`:euro0(0), `;font-weight:700;color:${x.d<0?'var(--green)':x.d>0?'var(--red)':'var(--txt)'}`);
-  const rijen=T.rijen.map(x=>tr(x.k, x.l, x.v, dt(x), ` data-salverschil="${x.d}"`)).join('')
-    +tr('buiten','buiten',buiten,td('geen budget',';color:var(--mut2);font-size:var(--fs-xs)'))+tr('opzij', O&&O.doel!=null?'opzij (doel)':'opzij', O&&O.doel!=null?O.doel:opzij, td(O?(O.netto==null?'nog te meten':`${euro0(O.netto)} gedaan`):'–',';color:var(--mut2);font-size:var(--fs-xs)'), ' data-salopzijperiode');
-  const som=T.som;
-  return `<div class="card" id="gripSalaris" data-salaris="${Math.round(SB.salaris)}">${salarisBalkHtml(SB, kop, true)}
-    <div data-saltabelkop style="display:grid;grid-template-columns:1.3fr 1fr .8fr 1.2fr;gap:4px;padding:6px 0 3px;font-size:var(--fs-xs);color:var(--mut2)"><span></span><span style="text-align:right">verwacht</span><span style="text-align:right">% salaris</span><span style="text-align:right">t.o.v. budget</span></div>
-    ${rijen}
-    <div class="row" data-salsom="${som}" style="justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)"><b class="small">samen ${som<0?`${euro0(-som)} onder`:som>0?`${euro0(som)} boven`:'op'} budget</b><span class="small" data-salbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${budgetWijzRegel()}</div>`;
+/* v440 sectie 3: ZIEN — HOE STA JE ERVOOR. Alleen de stand, geen advies: budget, verwacht en verschil per vast en potjes, de som
+   (= V.budget tegen V.projectie, de ene bron) en opzij (het doel uit Kiezen tegen wat er gedaan is deze periode, opzijPeriode).
+   De vaste lasten zijn V.vaste van maandVooruit (de woning zit daarin en duwt vast boven budget, de sub noemt hem als die nieuw
+   is); potjes is de rest tot de som, zodat de twee rijen per constructie optellen tot budget en verwacht. Vervangt de salarisbalk
+   op Zien (v428); salarisBalk blijft voor de Terugblik en salarisTabelData voor blok 20 en de brug. "waar zit het ›" opent de brug. */
+function gripZienTabel(){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const m=thisYM();
+  if(!V || V.onbekend || !(V.budget>0)) return `<div class="card" id="gripZienStand" data-zienstand="geen"><div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(ymFull(m))}</div><div class="small muted" style="margin-top:4px">Nog geen potjes of te weinig historie: zet ze met "Budget aanpassen".</div></div>`;
+  const vastB=Math.round(V.vaste.budget), vastV=Math.round(V.vaste.eind), totB=Math.round(V.budget), totV=Math.round(V.projectie);
+  const potB=totB-vastB, potV=totV-vastV;
+  let WF=null; try{ WF=woningForecast(m); }catch(_){}
+  let O=null; try{ O=opzijPeriode(); }catch(_){}
+  const kl=d=>d>0?'var(--red)':d<0?'var(--green)':'var(--txt)', dtxt=d=>d>0?`+${euro0(d)}`:d<0?`−${euro0(-d)}`:euro0(0);
+  const col='display:grid;grid-template-columns:1.2fr 1fr 1fr 1.1fr;gap:4px;align-items:center', num=(t,st)=>`<span style="text-align:right;white-space:nowrap${st||''}">${t}</span>`;
+  const dot=c=>`<i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${c}"></i>`;
+  const rij=(k,l,b,v,c)=>`<div data-zienrij="${k}" data-budget="${b}" data-verwacht="${v}" data-verschil="${v-b}" style="${col};padding:4px 0;border-top:1px solid var(--line);font-size:var(--fs-sm)"><span>${dot(c)}${l}</span>${num(euro0(b))}${num(euro0(v))}${num(dtxt(v-b),`;font-weight:700;color:${kl(v-b)}`)}</div>`;
+  const totD=totV-totB;
+  const gedaan = !O||!O.ok ? num('–',';color:var(--mut2)')
+    : (!O.meetbaar||O.netto==null) ? num('onbekend',';color:var(--mut2);font-size:var(--fs-xs)')
+    : num(O.netto<0?`−${euro0(-O.netto)}`:euro0(O.netto), `;font-weight:700;color:${O.netto<0?'var(--red)':'var(--green)'}`);
+  return `<div class="card" id="gripZienStand" data-zienstand="nu">
+    <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(ymFull(m))}</div>
+    <div class="small muted" style="margin:2px 0 4px" data-ziensub>budget zonder Plan-inleg${WF&&WF.actief&&WF.nieuw?` · incl. ${esc(WF.naam)} ${euro0(WF.bedrag)} (nieuw, vast)`:''}</div>
+    <div style="${col};padding:2px 0;font-size:var(--fs-xs);color:var(--mut2)"><span></span>${num('budget')}${num('verwacht')}${num('verschil')}</div>
+    ${rij('vast','vast',vastB,vastV,SALBALK_KLEUR.vast)}
+    ${rij('potjes','potjes',potB,potV,SALBALK_KLEUR.potjes)}
+    <div data-zienrij="budget" data-budget="${totB}" data-verwacht="${totV}" data-verschil="${totD}" style="${col};padding:6px 0 4px;border-top:2px solid var(--line);font-weight:800"><span>budget</span>${num(euro0(totB))}${num(euro0(totV))}${num(`${euro0(Math.abs(totD))} ${totD>0?'boven':'onder'}`,`;color:${kl(totD)}`)}</div>
+    <div data-zienopzij data-doel="${O&&O.doel!=null?O.doel:''}" data-gedaan="${O&&O.netto!=null?O.netto:''}" style="${col};padding:6px 0 2px;border-top:1px solid var(--line);font-size:var(--fs-sm)"><span>${dot(SALBALK_KLEUR.opzij)}opzij</span><span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">doel ${O&&O.doel!=null?euro0(O.doel):'nog geen'}</span>${gedaan}<span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">${O&&O.netto!=null&&O.netto<0?'uit spaargeld':'gedaan'}</span></div>
+    <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="small" data-zienbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${budgetWijzRegel()}</div>`;
 }
 /* Openstaand: wat je uitleende en nog open staat (loanStand(), de bron van de leningsheet en blok 20). */
 function gripOpenLeningen(){ return loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar').map(l=>({l, S:loanStand(l)})).filter(x=>x.S && x.S.open>0.005); }
@@ -12534,7 +12546,7 @@ function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MA
 function gripSlimRegel(C){ const m=thisYM(), n=C.kies.length;
   return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover style="color:var(--mut)">nog ${maandDagenOver(m)} ${maandDagenOver(m)===1?'dag':'dagen'} in ${esc(ymFull(m).split(' ')[0])}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
 function gripZienHtml(C, V){
-  return gripSlimRegel(C)+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salTekortHtml()+salVoorstelKaartHtml()+gripSalarisKaart()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
+  return gripSlimRegel(C)+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salTekortHtml()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
 }
 /* ===== BEGRIJPEN ===== */
 /* De groepen van maandGroepen() (punt 7 van blok 20) in vier: vast, potjes, zonder potje, Plan-inleg. Potjes buiten de norm
