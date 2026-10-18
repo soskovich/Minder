@@ -3830,6 +3830,14 @@ function maandLiqBasis(){
       return _paid.some(p=>{ if(s.cadans && (p.k===s.key || p.d<grens)) return false; const bb=p.n, sh=a.length<=bb.length?a:bb, lo=a.length<=bb.length?bb:a; return sh.length>=5 && lo.startsWith(sh.slice(0,Math.min(sh.length,16))); }); };
     for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i])) fixDueItems.splice(i,1); }
   }catch(_){}
+  /* v440: de woning als verwachte vaste last (woningForecast). Een huurbetaling die het schema of de terugval op naam
+     (recurKey) toch als vaste last oppikte, haal ik eerst weg; daarna staat er een post, de woning-forecast. Wat nog niet
+     betaald is (nog) komt in fixDue onder de woning-sleutel; de betaalde huur telt al als vaste last via isFixed. betaald +
+     nog = bedrag, dus de huur telt een keer (geen dubbeltelling met de verwachte vaste last). */
+  try{ const _WF=woningForecast(ym);
+    if(_WF.actief){ const _wp=woningPaymentIds(), _wkeys=new Set(); for(const t of TX){ if(_wp.has(t.id)) _wkeys.add(recurKey(t)); }
+      for(let i=fixDueItems.length-1;i>=0;i--){ if(_wkeys.has(fixDueItems[i].key)) fixDueItems.splice(i,1); }
+      if(_WF.nog>0) fixDueItems.push({key:_WF.key, name:_WF.naam, amount:_WF.nog, day:_WF.dag, type:'fixed', intervalM:1, cat:'huur', incasso:true, woning:true}); } }catch(_){}
   // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
   /* v369: niet meer het aan/uit van de vlag maar verwachtInMaand(): een opgezegde post met een laatste afschrijving
      later dan deze maand telt gewoon mee in "nog te betalen", in de bridge en in vrij te besteden. */
@@ -20591,6 +20599,7 @@ function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
   const c=CATS[catOf(t)]; if(!c || c.type!=='expense') return false;
+  if(woningPaymentIds().has(t.id)) return true;   // v440: een betaling aan je woning is een vaste last, geen variabele uitgave
   return recurringKeys().has(recurKey(t));   // vast = HERKENDE HERHALING (incasso OF periodieke overboeking, >=2x regelmatig); niet de categorie of betaalvorm
 }
 // drill-down vanuit het 'Vaste vs variabele lasten'-widget: toon de transacties van die splitsing (zelfde periode)
@@ -25933,6 +25942,26 @@ function kennisWoningKey(){ for(const [k,E] of Object.entries(SET.kennis||{})) i
 function woningKeyVan(t){ const ibs=tegenIbanNums(t);
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.soort!=='woning' || !E.iban) continue; if(ibs.has(ibanNum(E.iban))) return k.slice(7); }
   return recurKey(t); }
+/* v440 forecast-dedup: de ids van de betalingen aan je ACTIEVE woning (woningKeyVan === de woning-sleutel). De bron voor
+   isFixed: een huurbetaling (een Tikkie of een gewone overboeking naar dezelfde IBAN) is een vaste last en geen variabele
+   uitgave. Gememoiseerd op _dataGen, net als recurringKeys; roept isFixed niet aan, dus geen circulariteit. */
+let _woningIds=null, _woningIdsGen=-1;
+function woningPaymentIds(){
+  if(_woningIdsGen===_dataGen && _woningIds) return _woningIds;
+  const s=new Set(), wk=kennisWoningKey();
+  if(wk) for(const t of TX){ if(t.pending || t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk) s.add(t.id); }
+  _woningIds=s; _woningIdsGen=_dataGen; return s;
+}
+/* v440: DE WONING ALS VERWACHTE MAANDHUUR, uit de kennis (bedrag, dag, vanaf). De Tikkie en de overboeking naar dezelfde IBAN
+   zijn dezelfde huur: wat er deze maand al aan de woning ging telt een keer (betaald, via woningKeyVan), en wat nog niet
+   betaald is staat als verwachting (nog = bedrag - betaald, niet onder nul). betaald + nog = bedrag, dus nooit allebei: geen
+   dubbeltelling met de verwachte vaste last. De ENE bron voor monthLiquidity (fixDue), de Inzichten-kaart en blok 20. */
+function woningForecast(m){
+  m=m||thisYM(); const wk=kennisWoningKey(); if(!wk) return {actief:false, key:null};
+  const E=kennisGet('woning|'+wk)||{}, bedrag=Math.round(+E.bedrag||0), naam=E.partij||'woonhuur';
+  if(!(bedrag>0) || (E.vanaf && m<E.vanaf)) return {actief:false, key:'woning|'+wk, naam, bedrag};
+  let betaald=0; for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk) betaald+=-t.amount; }
+  betaald=Math.round(betaald); return {actief:true, key:'woning|'+wk, naam, cat:'huur', bedrag, betaald, nog:Math.max(bedrag-betaald,0), dag:Math.max(+E.dag||1,1)}; }
 function kennisWoningVoorstel(){ let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed' && s.cat==='huur' && +s.amount>=KENNIS_MIN); }catch(_){}
   R=R.filter(s=>!kennisGet('woning|'+s.key)).sort((a,b)=>b.amount-a.amount); return R[0]||null; }
 function kennisWoningVragen(){ if(kennisWoningKey()) return []; const s=kennisWoningVoorstel(); if(!s) return [];
