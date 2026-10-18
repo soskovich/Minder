@@ -130,6 +130,14 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v440 (sectie 5): OPZIJ OP INZICHTEN** (`v440`, mockup sectie 5, gevraagd door de gebruiker). Op de lopende maand draagt
+  Inzichten een kaart "Opzij · netto naar je spaarrekening" (`insOpzijKaart`, `#insOpzij`, `data-insopzij`): het netto dat deze
+  salarisperiode naar je spaarrekening ging, uit `opzijPeriode().netto` (de ENE bron, geen `savedNetRange`/`savedTxRange` ernaast),
+  met "<maand> tot nu" en het bedrag (`data-insgetal`, minteken vóór het euroteken bij een onttrekking). Zonder gekoppelde
+  spaarrekening (`!O.meetbaar`) is het `data-insopzij="onbekend"` met de reden, geen verzonnen nul. Het DOEL-tegen-GEDAAN blijft op
+  Zien (de opzij-rij van de sectie-3-tabel): deze kaart toont alleen het gemeten netto, want een element staat op precies een scherm.
+  Hij staat op de 'nu'-tak van `renderIns`, vóór `insWeekTegel`; `insSaldoEindRegel` en de bonusregel (v439) blijven in de maandkaart.
+  Spec `v440-opzij.spec.js` (drie sabotages rood: advies-netto, meetbaar-genegeerd, label-maand).
 - **v440 (sectie 3): ZIEN — HOE STA JE ERVOOR** (`v440`, mockup sectie 3, gevraagd door de gebruiker). De salarisbalk op de
   Zien-tab (v428) is vervangen door een stand-tabel (`gripZienTabel`, `#gripZienStand`), ALLEEN de stand, geen advies: per rij
   budget · verwacht · verschil, voor `vast` (= `V.vaste` van maandVooruit; de woning zit erin en duwt vast boven budget) en

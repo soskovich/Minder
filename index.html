@@ -23946,10 +23946,23 @@ function insSaldoEindRegel(){ let V=null; try{ V=maandVerloop(); }catch(_){ retu
   return `<div id="insSaldoEind" data-inssaldoeind="${V.eind}" role="button" style="cursor:pointer;margin-top:8px;padding-top:6px;border-top:1px solid var(--line)" onclick="openVerwachtEind()">
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span class="small">Verwacht saldo eind ${esc(mnd)}</span><span style="white-space:nowrap;font-weight:800">≈ ${euro0(V.eind)}${V.missing>0?' <span class="small muted" style="font-weight:400">· onvolledig</span>':''} <span style="color:var(--teal)">›</span></span></div>
     ${Bo?`<div class="small" data-insbonus="${Bo.bedrag}" style="color:var(--mut2);margin-top:3px">+ ${esc(Bo.naam)} ${euro0(Bo.bedrag)}${eenm} · telt mee zodra binnen</div><div class="small" data-inssaldobonus="${V.eind+Bo.bedrag}" style="color:var(--mut2)">≈ ${euro0(V.eind+Bo.bedrag)} met ${esc(Bo.naam)}</div>`:''}</div>`; }
+/* v440 (mockup sectie 5): OPZIJ IS EEN GETAL OP INZICHTEN, netto naar je spaarrekening in deze salarisperiode (opzijPeriode(),
+   de ENE bron die Plan, de Doelen-meter en Zien ook lezen; geen tweede telling). Geen aparte Plan-inleg meer. Alleen op de
+   lopende maand; zonder gekoppelde spaarrekening is het onbekend (v173). Het doel-tegen-gedaan staat op Zien (sectie 3); deze
+   kaart toont de netto beweging als operationeel feit, zoals de andere observaties op Inzichten. */
+function insOpzijKaart(){
+  let O=null; try{ O=opzijPeriode(); }catch(_){}
+  if(!O || !O.ok) return '';
+  const kop=`<div class="hlabel" style="margin:0 0 4px">Opzij · netto naar je spaarrekening</div>`;
+  if(!O.meetbaar) return `<div class="card" id="insOpzij" data-insopzij="onbekend">${kop}<div class="small muted">Geen spaarrekening gekoppeld, dus Minder kan niet meten wat er deze periode netto opzij ging.</div></div>`;
+  const n=Math.round(O.netto||0), mnd=MFULL[+O.ym.slice(5,7)-1].toLowerCase();
+  return `<div class="card" id="insOpzij" data-insopzij="${n}">${kop}
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span class="muted" data-insopzijmnd>${esc(mnd)} tot nu</span><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(n)}</b></div></div>`;
+}
 function renderIns(){
   const P=insPeriode(), soort=insSoort();
   $('#s-ins').innerHTML = insFilterKnop(P,soort) + insMaandKaart(P,soort)
-    + (P.key==='nu' ? insWeekTegel() + insHistorieRegel() : '')   // v436: de patroontegels zijn weg; het label staat bij de signalen op Grip
+    + (P.key==='nu' ? insOpzijKaart() + insWeekTegel() + insHistorieRegel() : '')   // v436: de patroontegels zijn weg; het label staat bij de signalen op Grip
     + insVerschuiving();
 }
 
