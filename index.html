@@ -11998,7 +11998,10 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
       const wp=TX.filter(t=>!t.pending && t.amount<0 && (CATS[catOf(t)]||{}).type==='expense' && woningKeyVan(t)===wk).sort((a,b)=>b.date.localeCompare(a.date));
       const acc=(wp[0] && set.has(wp[0].acc))?wp[0].acc:terugval;
       const base=prevYM(start.slice(0,7))+'-'+dd, sWon={cadans:'maand', intervalM:1, key:WF.key, name:WF.naam};
-      const tmW=rekTermijnen(sWon, base, start, eind);
+      /* v444: een termijn in een maand waarin er in deze periode al een betaling aan de woning was, vervalt (dezelfde regel als
+         woningForecast); de termijn van een maand zonder betaling blijft staan */
+      const WE=kennisGet(WF.key)||{}, betM=new Set(TX.filter(t=>t.date>=start && t.date<=eind && woningBetaling(t, wk, WE)).map(t=>t.date.slice(0,7)));
+      const tmW=rekTermijnen(sWon, base, start, eind).filter(d=>!betM.has(String(d).slice(0,7)));
       vastAlle.push({key:WF.key, naam:WF.naam, acc, termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true}); } }catch(_){}
   const vast=vastAlle.filter(x=>x.n>0), vastBuiten=vastAlle.filter(x=>!x.n);
   /* (2b) potjes en zonder potje uit maandVooruit(), zonder eenmalig: het VERWACHTE eind van deze maand (niet je budget) */
@@ -12985,7 +12988,7 @@ function gripVastDrill(){
   const terug=`<div class="small" data-symterug role="button" style="color:var(--teal);font-weight:700;cursor:pointer;margin:0 2px 8px" onclick="gripNaarLijst()">← waar zit het</div>`;
   let D=null; try{ D=salarisData(DIAG_SAL_MAANDEN); }catch(_){ return terug+'<div class="card small muted">Niet te rekenen.</div>'; }
   const A=D.R.slice(0,-1), WK=woningKeuze(D.R), NG=vastNieuwGestopt(D);
-  const w=r=>WK.wkey?(r.woning[WK.wkey]||0):0, top=Math.max(...A.map(r=>r.vast),1)*1.1, H=90;
+  const w=r=>woningInMaand(r, WK), top=Math.max(...A.map(r=>r.vast),1)*1.1, H=90;
   const kol=r=>`<div data-vastmaand="${r.ym}" data-vasttotaal="${Math.round(r.vast)}" data-vastwoning="${Math.round(w(r))}" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:${H}px"><span class="small" style="font-size:var(--fs-xs);font-weight:700">${euro0(r.vast)}</span><i style="display:block;width:70%;height:${Math.max((r.vast-w(r))/top*H,1).toFixed(1)}px;background:var(--teal)"></i><i style="display:block;width:70%;height:${(w(r)/top*H).toFixed(1)}px;background:var(--mut2)"></i></div>`;
   const pct=r=>{ const s=D.tot(r,'salaris'); return s>0?Math.round(D.tot(r,'vast')/s*100):null; };
   const eerste=A[0], laatste=A[A.length-1], zw=r=>r.vast-w(r);
@@ -26275,11 +26278,27 @@ function woningRecurKeys(){ return _woningCalc().rk; }      // hun recurKeys, zo
    zijn dezelfde huur: wat er deze maand al aan de woning ging telt een keer (betaald, via woningKeyVan), en wat nog niet
    betaald is staat als verwachting (nog = bedrag - betaald, niet onder nul). betaald + nog = bedrag, dus nooit allebei: geen
    dubbeltelling met de verwachte vaste last. De ENE bron voor monthLiquidity (fixDue), de Inzichten-kaart en blok 20. */
+/* v444: HOORT DEZE BOEKING BIJ DE WONING. Op IBAN of naam (woningKeyVan), op de naam van de partij uit de kennis (een woord
+   van minstens 5 letters, als heel woord), of als boeking in Huur vanaf de ingangsmaand van de woning die geen andere vaste post in Huur is
+   (Shurgard: een herkende terugkerende sleutel die niet van de woning is) en minstens de helft van de huur bedraagt. GEMELD op het
+   toestel: de huur van 19-10 (EUR 300) stond in Huur, deel vast, maar matchte niet op IBAN of naam, dus woningForecast() zag hem niet
+   als betaald en verwachtte er nog EUR 300 bovenop (blok 20 punt 2, nog te betalen Nathaniel Cathalina 300). Lezers: woningForecast()
+   (de verwachte termijn in een maand) en rekVoorstelRuw() (de termijn in een salarisperiode, blok 23). */
+function woningBetaling(t, wk, E){
+  if(!t || t.pending || t.amount>=0) return false; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) return false;
+  const k=woningKeyVan(t); if(k===wk) return true;
+  if(k!==wk && (kennisGet('woning|'+k)||{}).soort==='woning') return false;   // een andere woning (Macnack) is niet deze
+  E=E||kennisGet('woning|'+wk)||{};
+  const W=String(E.partij||'').toUpperCase().split(/[^A-Z]+/).filter(x=>x.length>=5), tw=new Set(`${t.name||''} ${t.desc||''}`.toUpperCase().split(/[^A-Z]+/));
+  if(W.some(x=>tw.has(x))) return true;
+  if(c!=='huur' || (E.vanaf && t.date.slice(0,7)<E.vanaf)) return false;
+  const rk=recurKey(t); let ander=false; try{ ander=recurringKeys().has(rk) && !woningRecurKeys().has(rk); }catch(_){}
+  return !ander && -t.amount>=0.5*(+E.bedrag||0); }
 function woningForecast(m){
   m=m||thisYM(); const wk=kennisWoningKey(); if(!wk) return {actief:false, key:null};
   const E=kennisGet('woning|'+wk)||{}, bedrag=Math.round(+E.bedrag||0), naam=E.partij||'woonhuur';
   if(!(bedrag>0) || (E.vanaf && m<E.vanaf)) return {actief:false, key:'woning|'+wk, naam, bedrag};
-  let betaald=0; for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) continue; if(woningKeyVan(t)===wk) betaald+=-t.amount; }
+  let betaald=0; for(const t of txOfMonth(m)){ if(woningBetaling(t, wk, E)) betaald+=-t.amount; }
   betaald=Math.round(betaald); return {actief:true, key:'woning|'+wk, naam, cat:'huur', bedrag, betaald, nog:Math.max(bedrag-betaald,0), dag:Math.max(+E.dag||1,1), nieuw:(E.vanaf===m)}; }
 /* v443: HET POTJE HUUR TEGEN WAT ER VANAF VOLGENDE MAAND IN HUUR VERWACHT WORDT: de woning (woningForecast, het bedrag uit de
    kennislaag) plus de andere actieve vaste posten in Huur (recurringSchedule, het laatste termijnbedrag, zoals Shurgard), tegen het
@@ -31139,6 +31158,17 @@ function vastNieuwGestopt(D){ const A=D.R.slice(0,-1), eerste=A[0], af=D.af;
     const lst=String(P.laatste||s.lastDate||'').slice(0,10); if(lst && lst.slice(0,7)<af[0]) continue;
     gestopt.push({k:s.key, naam:titleCase(cleanMerch(s.name)||s.name||s.key), status:P.status, lst}); }
   return {nieuw, gestopt, begin, sched, keys}; }
+/* v444: DE WONINGEN VAN EEN MAAND. Elke woning uit "Wat Minder van jou weet" (soort woning, ja) in de maanden dat hij je woning
+   was: vanaf zijn ingangsmaand (vanaf, leeg = van het begin) tot en met zijn eindmaand (gestopt, leeg = nog lopend). Ml Macnack tot en
+   met aug 2026, Nathaniel Cathalina vanaf okt 2026. Zonder woning in de kennis valt het terug op het voorstel (de grootste vaste post
+   in Huur, woningKeuze). Lezers: "uitgaven zonder woning" in blok 20 en de vaste lasten per maand in Begrijpen. Tot v444 trok blok 20
+   alleen de actieve woning af, dus apr tot aug stonden op "waarvan woning: 0". */
+function woningKeysInMaand(ym, WK){ const o=[];
+  for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.soort!=='woning' || !E.ja) continue;
+    if(E.vanaf && ym<E.vanaf) continue; if(E.gestopt && ym>E.gestopt) continue; o.push(k.slice(7)); }
+  if(!o.length && WK && WK.wkey && !Object.values(SET.kennis||{}).some(E=>E && E.soort==='woning' && E.ja)) o.push(WK.wkey);   // het voorstel alleen zonder enige woning in de kennis
+  return o; }
+function woningInMaand(r, WK){ return woningKeysInMaand(r.ym, WK).reduce((a,k)=>a+((r.woning||{})[k]||0),0); }
 function woningKeuze(R){ const wk={}; for(const r of R) for(const k in r.woning) wk[k]=(wk[k]||0)+r.woning[k];
   /* v425: de woning is wat JIJ aanwees (SET.kennis, soort woning); zonder antwoord is de grootste vaste post in Huur alleen een voorstel */
   const wjij=kennisWoningKey(), wgok=Object.keys(wk).filter(k=>!(kennisGet('woning|'+k)||{}).soort).sort((a,b)=>wk[b]-wk[a])[0];
@@ -31216,7 +31246,9 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
       /* v420: de woning per partij, uit alles wat in Huur als vast telt (een post of het vaste potje); v440: of wat op IBAN
          bij een woning uit "Wat Minder van jou weet" hoort (woningKeyVan), zodat een huur-Tikkie en de gewone overboeking
          naar dezelfde IBAN samen onder de woning vallen en samen uit "uitgaven zonder woning" blijven */
-      const wk=woningKeyVan(t), wKennis=(kennisGet('woning|'+wk)||{}).soort==='woning';
+      let wk=woningKeyVan(t), wKennis=(kennisGet('woning|'+wk)||{}).soort==='woning';
+      /* v444: een huurbetaling die niet op IBAN of naam matcht maar wel bij de woning van die maand hoort (woningBetaling), telt onder die woning */
+      if(!wKennis){ for(const k of woningKeysInMaand(ym)){ if((kennisGet('woning|'+k)||{}).soort==='woning' && woningBetaling(t, k)){ wk=k; wKennis=true; break; } } }
       if(c==='huur' && (isFixed(t) || potHeelVast(c) || wKennis)){ woning[wk]=(woning[wk]||0)+vn; wNaam[wk]=wNaam[wk]||t; }
       if(isFixed(t)){ const k=recurKey(t); posten[k]=(posten[k]||0)+vn; postNaam[k]=postNaam[k]||t; (postTx[k]=postTx[k]||[]).push(t); }
       else if(potHeelVast(c)) vastPot[c]=(vastPot[c]||0)+vn;
@@ -31616,10 +31648,13 @@ function diagSalarisVerdeling(){
     /* v421: de lopende maand is geboekt plus verwacht, net als punt 7 (de verwachte woning en studieschuld gaan er ook af); de
        versie met alleen geboekt staat ernaast. */
     const fdi=(Lq&&Lq.fixDueItems||[]).filter(x=>!x.excl && !x.inPotje);
-    const wVerw=wkey?fdi.filter(x=>x.key===wkey).reduce((a,x)=>a+(+x.amount||0),0):0, sVerw=fdi.filter(x=>x.cat==='studie').reduce((a,x)=>a+(+x.amount||0),0);
-    const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-(wkey?(r.woning[wkey]||0):0)-r.studie;
+    const wVerw=fdi.filter(x=>x.woning || (wkey && (x.key===wkey || x.key==='woning|'+wkey))).reduce((a,x)=>a+(+x.amount||0),0), sVerw=fdi.filter(x=>x.cat==='studie').reduce((a,x)=>a+(+x.amount||0),0);
+    const zonder=(r,verw)=>r.vast+r.pot+r.buiten+(verw?(r.vastVerwacht||0)+(r.potVerwacht||0)-wVerw-sVerw:0)-woningInMaand(r, WK)-r.studie;
     L.push(`  ${kol(r=>zonder(r, r===Rc))} (* = lopend: geboekt plus verwacht, zoals punt 7) · ${MN(cur)}* alleen geboekt ${e0(zonder(Rc,false))}`);
-    L.push(`  waarvan woning: ${kol(r=>wkey?(r.woning[wkey]||0):0)} · studieschuld: ${kol(r=>r.studie)}`); }
+    L.push(`  waarvan woning: ${kol(r=>woningInMaand(r, WK))} · studieschuld: ${kol(r=>r.studie)}`);
+    /* v444: CONTROLE per maand: de woningen van die maand (woningKeysInMaand) met hun bedrag, en hun som is "waarvan woning" */
+    const wn=k=>(kennisGet('woning|'+k)||{}).partij||k;
+    L.push(`  CONTROLE woningen per maand (v444): ${R.map(r=>{ const ks=woningKeysInMaand(r.ym, WK), som=woningInMaand(r, WK); return `${MN(r.ym)} ${ks.length?ks.map(k=>`${wn(k)} ${e0((r.woning||{})[k]||0)}`).join(' + '):'geen woning'} = ${e0(som)}`; }).join(' · ')}`); }
   /* v425: KENNIS: alles wat Minder van jou weet, uit de ene lezer kennisLijst(), met bron en datum. OPEN VRAGEN: de wachtrij in
      "Kloppen mijn gegevens?" op bedrag, met hoe vaak "later". CONTANT NAAR: waar je contante geld volgens jou heen ging (een tik,
      het verandert geen boekingen). Alleen uitleg. */
