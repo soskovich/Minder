@@ -261,7 +261,7 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
         fix: Math.round(monthLiquidity().fixDue), plan: varPlanRemaining(m),
         inPotjes: VP.budget - VP.gebruikt, gNog: insGroepen().pot.nog };
     });
-    expect(r.txt.toLowerCase()).toContain('nog te gaan');   // de kop staat in hoofdletters via CSS
+    expect(r.txt.toLowerCase()).toContain('nog verwacht');   // v443 nazorg: de kolom heet Nog verwacht (hoofdletters via CSS)
     expect(r.txt).not.toMatch(/\(tempo\)/);
     if (r.fix !== 0) expect(r.nogvast).toBe(r.fix); else expect(r.nogvast).toBeNull();
     expect(r.inPotjes).toBeGreaterThan(0);

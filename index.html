@@ -11064,7 +11064,7 @@ function renderTeRuim(){
     bestem=`<div data-teruimwaarheen style="margin-top:8px"><div class="small" style="font-weight:700">Waar gaat ${euro0(N.vrij)} naartoe?</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D.vast.map(chip).join('')}${D.ander.length?`<span class="chip${anderGek?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-teruimander onclick="window._tr.ander=!window._tr.ander;renderTeRuim()">${anderGek?esc(d.naam):'Ander potje'} ›</span>`:''}${D.nieuw?chip(D.nieuw):''}${D.verlaag?chip(D.verlaag):''}</div>
       ${S.ander?`<div data-teruimanderlijst style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D.ander.map(chip).join('')}</div>`:''}
-      <div class="small muted" data-teruimv441 style="margin-top:6px;line-height:1.4">Reserveringen en beleggen komen in v441.</div></div>`;
+      </div>`;
     if(d){ const T=teRuimDelen(S, V, x, N, d);
       if(T.split){ const D2=[...D.vast, ...D.ander, ...(D.nieuw?[D.nieuw]:[])].filter(b=>b.id!==d.id && !D.ander.some(a=>a.id===b.id));
         const ander2=D.ander.filter(a=>a.id!==d.id), anderGek2=T.d2 && ander2.some(a=>a.id===T.d2.id);
@@ -23534,7 +23534,7 @@ function renderInsTegel(){
     const S=insMaandStand(), G=insGroepen(S); let V=null; try{ V=maandVooruit(); }catch(_){}
     const rows=((V&&V.potjes)||[]).map(x=>({k:x.k, naam:x.naam, uit:Math.round(x.uit), eind:Math.round(x.eindR), nog:Math.max(Math.round(x.eindR)-Math.round(x.uit),0)})).filter(r=>r.nog>0).sort((a,b)=>b.nog-a.nog || (a.naam<b.naam?-1:1));
     const rest=G.pot.nog-rows.reduce((a,r)=>a+r.nog,0);
-    h=`<div id="insTegelSheet" data-instegelsheet="potjes" data-insfc="1" data-inswaarde="${G.pot.nog}">${insSheetKop('Nog te gaan · in potjes · '+esc(ymFull(m)), 'wat de forecast nog verwacht, per potje', euro0(G.pot.nog))}
+    h=`<div id="insTegelSheet" data-instegelsheet="potjes" data-insfc="1" data-inswaarde="${G.pot.nog}">${insSheetKop('Nog verwacht · in potjes · '+esc(ymFull(m)), 'wat de forecast nog verwacht, per potje', euro0(G.pot.nog))}
       ${rows.map(r=>insRij(esc(r.naam)+' ›', `${euro0(r.uit)} uitgegeven · verwacht eind ${euro0(r.eind)}`, euro0(r.nog), ` data-insrij="${r.nog}" data-inspotrij="${esc(r.k)}" role="button" onclick="openInsPotje('${esc(r.k)}')"`)).join('')}
       ${rest?insRij('zonder potje en overig', 'wat de forecast verder verwacht', euro0(rest), ` data-insrij="${rest}" data-insrest`):''}
       ${insNaarGripLink('')}</div>`;
@@ -23788,9 +23788,11 @@ function insMaandKaart(P, soort){
      Inzichten en Zien hetzelfde verhaal: loop je achter op je potjes, dan eindig je onder je budget. */
   if(soort==='alle'){
     const puit=Math.round(S.potjes+S.zonder), pbud=S.potDeel, pt=S.potTempo, dt=puit-pt;
-    /* v443 1b: de vaste lasten staan weer in het overzicht (Uitgegeven: vast · potjes · zonder potje; Nog te gaan: vast · in
-       potjes), en per groep is uitgegeven + nog te gaan de forecast van die groep (insGroepen, dezelfde bron als blok 20 punt 7).
-       Het tempo, de balk en "EUR X onder tempo" blijven alleen over je potjes. */
+    /* v443 1b: de vaste lasten staan weer in het overzicht (Uitgegeven: vast · potjes · zonder potje; Nog verwacht: vast · in
+       potjes), en per groep is uitgegeven + nog verwacht de forecast van die groep (insGroepen, dezelfde bron als blok 20 punt 7).
+       Het tempo, de balk en "EUR X onder tempo" blijven alleen over je potjes. De kolom heet sinds de nazorg van v443 "Nog
+       verwacht" en niet "Nog te gaan": het zijn verwachte uitgaven, geen resterend budget (dat staat in de kop, EUR X van EUR Y).
+       De soort-tabs Vast en Variabel houden "Nog te gaan", want daar is "nog" wel het resterende budget (S.nogPot). */
     const GR=insGroepen(S);
     const dln=[{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}], ng=[{k:'nogpot', v:GR.pot.nog}];
     const legU=[{k:'vast', v:GR.vast.uit},{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}], legN=[{k:'nogvast', v:GR.vast.nog},{k:'nogpot', v:GR.pot.nog, fc:GR.fc}];   // fc: de sheet in zijn forecast-vorm
@@ -23806,7 +23808,7 @@ function insMaandKaart(P, soort){
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(puit)}</b> <span class="muted" data-insgetal>van ${euro0(pbud)} ${S.limiet?'inkomen-limiet':'potjes'}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
       <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${pbud>0?16:4}px">${segs}${streep}</div>
       ${pbud>0?`<div class="small muted" data-instempopot="${pt}">tempo potjes <span data-insgetal>${euro0(pt)}</span> op ${esc(dagTxt)} (${pct}% van de maand)</div>`:''}
-      <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0))}</div>
+      <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk" data-inslegnog>Nog verwacht</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0))}</div>
       <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${insSaldoEindRegel()}</div>`;
   }
   /* Per soort: variabel is potjes en zonder potje tegen het potjesdeel, vast is de vaste lasten tegen hun som. */
@@ -26090,6 +26092,7 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
      overboeking naar diezelfde IBAN valt onder deze woning (woningKeyVan), zonder een extra vraag. Ml Macnack is dan de vorige
      woning (gestopt aug 2026); zonder een opvolger blijft Macnack gewoon de woning. */
   const CATH_IBAN='NL77ABNA0599037806', cathNum=ibanNum(CATH_IBAN);
+  const WONING_GESTOPT_GROND="jouw 'opgezegd, loopt af'";
   const cath=TX.find(t=>t.amount<0 && tegenIbanNums(t).has(cathNum));
   const mac=TX.find(t=>t.amount<0 && /MACNACK/.test(recurKey(t)));
   if(mac) zet('macnack', 'woning|'+recurKey(mac), {soort:'woning', partij:benoemPartij(mac), wat:cath?'Woonhuur (vorige woning)':'Woonhuur (gestopt)', ja:true, gestopt:cath?'2026-08':undefined, tx:[]});
@@ -26099,6 +26102,12 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   if(cath && mac && !Z.macnack443){ const Em=kennisGet('woning|'+recurKey(mac)), Ec=kennisGet('woning|'+cathNum);
     if(Em && Ec && Ec.ja && !Ec.gestopt && !Em.gestopt && !(+Em.bedrag>0)){ Em.gestopt='2026-08'; Em.wat='Woonhuur (vorige woning)'; }
     Z.macnack443=vandaagYMD(); gedaan=true; }
+  /* v443 nazorg: de markering "gestopt" die Minder zette (het zaad van v440 of de rechtzetting hierboven) draagt bron en datum
+     (gestoptDoor), zodat hij in blok 20 KENNIS terug te vinden is. Dit is de enige schrijver: hij draait een keer, direct na de
+     rechtzetting, en neemt de dag waarop die draaide (op een toestel van voor deze stap is dat een eerdere dag). */
+  if(mac && !Z.macnackBron){ const Em=kennisGet('woning|'+recurKey(mac));
+    if(Em && Em.gestopt && !Em.gestoptDoor) Em.gestoptDoor={door:'minder', op:Z.macnack443||Em.op||vandaagYMD(), grond:WONING_GESTOPT_GROND};
+    Z.macnackBron=vandaagYMD(); gedaan=true; }
   /* v427: het antwoord "Zorg EUR 159, eenmalig" hoort bij de Tikkie aan Lausa Eriksson (09-10), niet bij een andere boeking van
      EUR 159 (Posh Clinic); een zaad dat op een andere boeking staat wordt een keer weggehaald, en die boeking is weer "nog niet benoemd". */
   const zrg=TX.find(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`));
@@ -26358,7 +26367,7 @@ function kennisLijst(){ const o=[];
       o.push({id:'k:'+k, groep:g, partij:P.naam||E.partij||kennisNaamVan(E.key), wat:E.status==='afloop'?'Opgezegd, loopt af':'Gestopt', bron:E.bron||'jij', op:E.op||'', soort:'post', kennis:k}); continue; }
     const wat=E.soort==='benoem'?`${E.label||E.wat||'nog niet benoemd'}${E.aard?' \u00b7 '+(E.aard==='eenmalig'?'eenmalig':'komt terug'):''}`
       :E.soort==='vast'?`${E.wat} \u00b7 ${(CATS[E.potje]||{}).name||E.potje}`:E.soort==='opname'?`${E.wat||'weet ik niet'} (${euro0(E.bedrag)} contant ${dagKort(E.datum)})`:(E.wat||'weet ik niet');
-    o.push({id:'k:'+k, groep:g, partij:E.partij||'', wat, bron:E.bron||'jij', op:E.op||'', bedrag:+E.bedrag||0, soort:E.soort, kennis:k}); }
+    o.push({id:'k:'+k, groep:g, partij:E.partij||'', wat, bron:E.bron||'jij', op:E.op||'', bedrag:+E.bedrag||0, soort:E.soort, kennis:k, gestopt:E.gestopt||'', gestoptDoor:E.gestoptDoor||null}); }
   for(const [k,v] of Object.entries(SET.fixOvrM||{})){ if(v!=='fixed' || kennisGet('vast|'+k)) continue;   /* met een antwoord (wat het is) staat hij daar */ o.push({id:'f:'+k, groep:'vast', partij:kennisNaamVan(k), wat:'Vast per maand', bron:'jij', op:'', soort:'vastm', key:k}); }
   for(const [id,v] of Object.entries(SET.eenmaligOk||{})){ const t=TX.find(x=>x.id===id); if(!t) continue;
     o.push({id:'e:'+id, groep:'eenmalig', partij:benoemPartij(t), wat:`Klopt, eenmalig (${euro0(-t.amount)} op ${dagKort(t.date)})`, bron:'jij', op:typeof v==='string'?v:'', soort:'eenmaligok', key:id}); }
@@ -31617,7 +31626,9 @@ function diagSalarisVerdeling(){
   { const KL=kennisLijst();
     L.push('', `KENNIS (v425/v426): ${KL.length} ${KL.length===1?'antwoord':'antwoorden'} · soort | partij | wat | bron | datum`);
     if(!KL.length) L.push('  geen');
-    for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)) L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
+    for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)){ L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
+      /* v443 nazorg: een markering "gestopt" die Minder zette noemt bron en datum, zodat hij terug te vinden is */
+      if(x.gestopt) L.push(`    gestopt vanaf ${MN(x.gestopt)} ${String(x.gestopt).slice(0,4)} · ${x.gestoptDoor&&x.gestoptDoor.door==='minder'?`door Minder gezet op ${String(x.gestoptDoor.op||'').slice(8,10)}-${String(x.gestoptDoor.op||'').slice(5,7)}, op basis van ${x.gestoptDoor.grond||'jouw antwoord'}`:'door jou'}`); }
     const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)), O=new Set(gegevensOpen().slice(0, KENNIS_MAX_OPEN).map(q=>q.qkey));
     L.push('', `OPEN VRAGEN (v425): ${Q.length} · hooguit ${KENNIS_MAX_OPEN} tegelijk in Zien, op bedrag · vraag | bedrag | datum | later | stand`);
     if(!Q.length) L.push('  geen');

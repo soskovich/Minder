@@ -202,11 +202,11 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     // v382: de lopende maand draagt in de maandkaart "Nog te gaan" (vaste lasten en wat er in je potjes zit) en een
     // tempo; een afgesloten maand draagt alleen wat er uitkwam
     const nu = await tekst(page, 'ins');
-    expect(nu).toMatch(/nog te gaan/i);
+    expect(nu).toMatch(/nog verwacht/i);   // v443 nazorg: de kolom heet Nog verwacht
     expect(nu).toMatch(/tempo/i);
     await kies(page, VORIGE);
     const t = await tekst(page, 'ins');
-    expect(t).not.toMatch(/nog te gaan/i);
+    expect(t).not.toMatch(/nog te gaan|nog verwacht/i);
     expect(t).not.toMatch(/tempo/i);
     expect(t).not.toMatch(/nog te betalen/i);
     expect(t).not.toMatch(/nog te ontvangen/i);
