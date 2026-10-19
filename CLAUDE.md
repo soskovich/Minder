@@ -152,7 +152,10 @@ genoemde versietag.)*
   huur plus de andere actieve vaste posten in Huur (Shurgard, laatste termijnbedrag), in blok 20 OPBOUW; is het lager, dan staat in
   Kiezen "Potje Huur verhogen vanaf 1 <maand>" (`huurPotjeVoorstel()`, `openHuurVerhogen()`: het bestaande potje-formulier met bedrag
   en maand ingevuld, de dekking kies je zelf). Niets stil. Spec `v443.spec.js` (13 tests, 12 sabotages rood); `v440-opzij` vervallen,
-  `v440-tempo` b/c, `nog-deze-maand-eenmaal`, `geen-verbetering-door-uitgeven`, `vast-een-definitie` A en `v442-blok` c gemigreerd.
+  `v440-tempo` b/c, `nog-deze-maand-eenmaal`, `geen-verbetering-door-uitgeven`, `vast-een-definitie` A, `v442-blok` c, `een-definitie-variabel` a/b/d,
+  `opschonen` d, `standkaart-sluit` c1 en `uit-reservering` a/b gemigreerd (ze pinden "in potjes" als de reservering; die blijft
+  `insMaandStand().nogPot`, de rij is de forecast-rest). `grip-eigen-budget` B (390x844, 690 tegen 673px) staat ook op `v442` rood en
+  is dus niet van deze ronde.
 - **v442: INHALEN DOORSCHUIVEN, HUUR EN SPORT CITY IN DE VERDELING, EEN BRON VOOR HET BUDGET PER GROEP, OPZIJ-LABEL** (`v442`,
   gevraagd door de gebruiker, zes secties; gebouwd en gepind tegen GECONSTRUEERDE fixtures — de echte toestelgetallen
   (potjes €1.816/€1.921/€1.903, Betaalrekening ±€1.750 / opzij ±€1.328) staan niet in de repo en verifieert de gebruiker met

@@ -151,8 +151,10 @@ test.describe('d · Inzichten', () => {
     await I.boot(page, { extraTx: [{ id: 'k1', date: '2026-10-06', amount: -200, name: 'Kapper Knip', desc: 'BEA, BETAALPAS KAPPER KNIP' }] });
     await page.evaluate(() => go('ins'));
     const D = await mk(page);
-    const r = await page.evaluate(() => ({ nog: varPotjeStand(thisYM()).nog, S: insMaandStand() }));
+    const r = await page.evaluate(() => ({ nog: insGroepen().pot.nog, S: insMaandStand() }));
     const leg = Object.fromEntries(D.leg.map((x) => [x.k, x.v]));
+    /* v443 (1c): "in potjes" is de forecast van potjes en zonder potje min wat er al uit is (insGroepen); de kapper zit
+       in "zonder potje" (uitgegeven) en niet nog eens in wat er te gaan staat. */
     expect(leg.nogpot).toBe(r.nog);
     expect(r.S.zonder, 'invoer: de kapper valt op geen potje').toBeGreaterThanOrEqual(200);
     expect(leg.zonder).toBe(r.S.zonder);
@@ -174,11 +176,15 @@ test.describe('d · Inzichten', () => {
     await I.boot(page); await page.evaluate(() => go('ins'));
     const r = await page.evaluate(() => [...document.querySelectorAll('#insMaand [data-insleg]')].map((t) => {
       const seg = document.querySelector(`#insMaand [data-insseg="${t.dataset.insleg}"]`);
+      /* v443 (1b): vast staat weer in de legenda, maar de balk blijft over je potjes; een vaste rij heeft dus geen stuk */
+      if (!seg) return { k: t.dataset.insleg, geenSeg: true };
       return { k: t.dataset.insleg, dot: getComputedStyle(t.querySelector('.ins-sq')).backgroundImage + getComputedStyle(t.querySelector('.ins-sq')).backgroundColor,
         seg: getComputedStyle(seg).backgroundImage + getComputedStyle(seg).backgroundColor }; }));
-    expect(r.length).toBeGreaterThanOrEqual(2);   // v440 sectie 8: de kaart draagt potjes/zonder/nogpot, geen vaste delen meer
-    for (const x of r) expect(x.dot, x.k).toBe(x.seg);
-    expect(new Set(r.map((x) => x.seg)).size).toBe(r.length);
+    for (const x of r.filter((x) => x.geenSeg)) expect(['vast', 'nogvast'], x.k).toContain(x.k);
+    const m = r.filter((x) => !x.geenSeg);
+    expect(m.length).toBeGreaterThanOrEqual(2);   // v440 sectie 8: de balk draagt potjes/zonder/nogpot
+    for (const x of m) expect(x.dot, x.k).toBe(x.seg);
+    expect(new Set(m.map((x) => x.seg)).size).toBe(m.length);
   });
   test('een afgesloten maand toont alleen wat uitging en geen tempostreep', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => { go('ins'); insFilterZet('vorige', null); });

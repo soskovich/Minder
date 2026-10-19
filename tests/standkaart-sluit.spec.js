@@ -108,16 +108,19 @@ test('b4 de lijst achter "nog te betalen" zegt dat Shurgard in zijn potje telt',
   expect(t).toMatch(/IN EEN POTJE · TELT DAAR[\s\S]*Shurgard NL[\s\S]*uit je potje Huur/i);
 });
 
-test('c1 de maandkaart toont €2.380 nog in potjes, zonder dagbedrag (v367/v440 sectie 8)', async ({page})=>{
+test('c1 de maandkaart toont de forecast-rest in potjes, zonder dagbedrag (v367/v440 sectie 8/v443)', async ({page})=>{
   await bootStand(page);
   /* v382: de tegels zijn weg; "nog in potjes" is de rij [data-insleg="nogpot"] in de legenda van de maandkaart.
      v440 sectie 8: de kop gaat over je potjes (potjes-uitgave van het potjesdeel), niet meer over het hele budget;
      de vaste lasten staan als context eronder. go() hertekent niet als het scherm al de bron is (v280) */
   const t=await page.evaluate(()=>{ go('ins'); renderIns(); const k=document.querySelector('#insMaand'), S=insMaandStand();
     const pot=k.querySelector('[data-insleg="nogpot"]');
-    return {pot:pot?pot.innerText.replace(/\s+/g,' '):'', potv:pot?+pot.dataset.v:null, uit:+k.dataset.insuit, puit:Math.round(S.potjes+S.zonder), kop:k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g,' ')}; });
-  expect(t.potv).toBe(2380);
-  expect(t.pot).toMatch(/in potjes €2\.380/);
+    return {gNog:insGroepen().pot.nog, nogPot:S.nogPot, pot:pot?pot.innerText.replace(/\s+/g,' '):'', potv:pot?+pot.dataset.v:null, uit:+k.dataset.insuit, puit:Math.round(S.potjes+S.zonder), kop:k.querySelector('[data-insmaandkop]').innerText.replace(/\s+/g,' ')}; });
+  /* v443 (1c): de rij is de forecast-rest van je potjes (insGroepen), niet meer de stand van €2.380 die nog in je potjes
+     zit; die stand blijft insMaandStand().nogPot (de reservering van Home). */
+  expect(t.nogPot).toBe(2380);
+  expect(t.potv).toBe(t.gNog);
+  expect(t.pot).toMatch(new RegExp('in potjes €'+t.gNog.toLocaleString('nl-NL').replace('.','\\.')));
   expect(t.pot).not.toMatch(/per dag/);
   expect(t.uit).toBe(t.puit);                         // de kop is de potjes-uitgave
   expect(t.kop).toMatch(/€[\d.]+ van €[\d.]+ potjes/);

@@ -101,6 +101,8 @@ const LEES = () => {
     kopPotjes: (() => { try { const d = document.createElement('div'); d.innerHTML = insMaandKaart(insPeriode(), 'alle');
       const k = d.querySelector('[data-insleg="nogpot"]');
       return k ? [...k.children].map((x) => x.textContent).join(' ').replace(/\s+/g, ' ').trim().toLowerCase().replace(/\u20ac/, '') : null; } catch (_) { return null; } })(),
+    /* v443 (1c): "in potjes" is de forecast-rest van je potjes (insGroepen); is die nul, dan staat de rij er niet. */
+    gNog: (() => { try { return insGroepen().pot.nog; } catch (_) { return null; } })(),
   };
 };
 
@@ -138,7 +140,7 @@ test.describe('a - zonder vlag: de huidige situatie, ongewijzigd', () => {
        stand-kaart. De lijst draagt hem niet meer, en dat is de andere helft van de verhuizing. */
     /* v383: per potje niet onder nul (gevraagd door de gebruiker): belasting gaat EUR 363 over zijn potje, maar de ruimte
        in de andere potjes blijft staan, dus de rij zegt "in potjes" en niet meer "te veel". */
-    expect(r.kopPotjes).toMatch(/^in potjes /);
+    if (r.gNog > 0) expect(r.kopPotjes).toMatch(/^in potjes /); else expect(r.kopPotjes).toBeNull();   // v443: nooit "te veel"
     expect(r.posten.some((p) => /Te veel uitgegeven|uit je potjes/.test(p))).toBe(false);
   });
 });
@@ -183,7 +185,7 @@ test.describe('b - mijn geval: twee boetes samen 463 gevlagd', () => {
     expect(r.planRest).toBeLessThanOrEqual(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.reserved).toBe(355);
-    expect(r.kopPotjes).toMatch(/^in potjes /);       // v309: op de kaart, niet in de lijst
+    if (r.gNog > 0) expect(r.kopPotjes).toMatch(/^in potjes /); else expect(r.kopPotjes).toBeNull();   // v443: nooit "te veel"       // v309: op de kaart, niet in de lijst
     expect(r.posten.some((p) => /uit je potjes|Te veel uitgegeven/.test(p))).toBe(false);
   });
 
