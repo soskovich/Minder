@@ -223,3 +223,45 @@ test('l. de Terugblik meet gekozen tegen werkelijk naar je spaar- en reservering
   expect(r.dSpaar).toBe(250);             // de meting volgt wat er netto naar de spaarrekening ging
   expect(r.dRes).toBe(120);               // en naar de reserveringsrekening
 });
+
+/* v441 sectie 5: ONREGELMATIG INKOMEN. Een bonus van EUR 2.500 die binnen is in de lopende salarisperiode. */
+test('m. een bonus telt niet als salaris en krijgt een Kiezen-kaart met bestemmingen, niets voorgeselecteerd', async ({ page }) => {
+  await S.boot(page);
+  const r = await page.evaluate(({ MAIN }) => {
+    const sal0 = rekVoorstel().salaris;
+    const t = { amount: 2500, date: '2026-10-05', acc: MAIN, name: 'Bonus', desc: 'SALARIS BONUS', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+    categorize(t); OVR[t.id] = 'inkomen'; TX.push(t);
+    SET.onregelmatig = Object.assign({}, SET.onregelmatig, { [t.id]: 2500 });
+    save(); try { buildAccMeta(); } catch (_) {}
+    const B = onregBinnen();
+    return { sal0, sal1: rekVoorstel().salaris, nBinnen: B.length, bedrag: B[0] && B[0].bedrag, bid: t.id, naam: B[0] && B[0].naam };
+  }, { MAIN });
+  expect(r.sal1).toBe(r.sal0);          // de bonus telt niet als salaris (inkomenEenmalig)
+  expect(r.nBinnen).toBe(1);
+  expect(r.bedrag).toBe(2500);
+  await page.evaluate(() => { go('maand'); if (typeof gripKiesTab === 'function') gripKiesTab('kiezen'); renderMaand(); });
+  const k = page.locator(`[data-onreg="${r.bid}"]`);
+  await expect(k).toContainText('Bonus · eenmalig €2.500');
+  await expect(k.locator('[data-onregopslaan]')).toBeDisabled();   // niets voorgeselecteerd
+  await expect(k.locator('[data-onregrij="voorjezelf"]')).toContainText('Voor jezelf');
+  await k.locator('[data-onregveld="sparen"]').fill('2500');
+  await expect(k.locator('[data-onregopslaan]')).toBeEnabled();
+  await k.locator('[data-onregopslaan]').click();
+  const saved = await page.evaluate((bid) => SET.onregBestemming[bid].delen.sparen, r.bid);
+  expect(saved).toBe(2500);
+});
+
+test('n. de Terugblik toont wat je met het eenmalige inkomen deed', async ({ page }) => {
+  await S.boot(page);
+  const t = await page.evaluate(() => {
+    SET.onregBestemming = { 'b9': { delen: { inhalen: 0, sparen: 1500, reservering: 500, voorjezelf: 500, anders: 0 }, resWelke: '', anderLabel: '', bedrag: 2500, naam: 'Bonus', op: '2026-10-05' } };
+    save();
+    go('maand'); if (typeof gripKiesTab === 'function') gripKiesTab('terugblik'); renderMaand();
+    const el = document.querySelector('#gripOnregTerug [data-onregterug]');
+    return el ? el.innerText : null;
+  });
+  expect(t).toContain('Bonus');
+  expect(t).toContain('sparen €1.500');
+  expect(t).toContain('reservering €500');
+  expect(t).toContain('voor jezelf €500');
+});
