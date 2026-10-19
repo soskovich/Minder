@@ -142,3 +142,21 @@ test('h. moment 2 meet wat er naar de reserveringsrekening ging tegen het advies
   expect(m.resAdvies).toBe(150);   // het advies uit de afspraak
   expect(m.resW).toBe(120);        // netto naar de reserveringsrekening in de periode
 });
+
+/* v441 sectie 3: DE ROUTE VAN HET SALARIS bovenaan de sheet, en de som van de delen is het salaris. */
+test('i. de route toont salaris → rekening → delen (reserveringen, spaarrekening, blijft) en telt op tot het salaris', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  const r = await page.evaluate(() => { const P = rekVoorstel(), R = salRouteDelen(P); return { som: R.som, salaris: Math.round(P.salaris), namen: R.delen.map(x => x.naam) }; });
+  expect(r.som).toBe(r.salaris);                      // de route sluit op het salaris (controle A+B+C+D+E=salaris)
+  expect(r.namen).toContain('Reserveringen');
+  expect(r.namen).toContain('Spaarrekening');
+  expect(r.namen).toContain('blijft');
+  await page.evaluate(() => { go('maand'); openSalVerdeling('x'); });
+  const t = await page.locator('#salVerdeling [data-salvroute]').innerText();
+  expect(t).toMatch(/^Salaris €[\d.]+ → .+ → /);      // salaris → de rekening waar het binnenkomt → de delen
+  expect(t).toContain('Spaarrekening');
+  expect(t).toContain('blijft');
+  const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
+  expect(d).toMatch(/de route telt op tot het salaris: \d+ tegen \d+: sluit/);
+});

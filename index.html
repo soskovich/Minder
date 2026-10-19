@@ -12119,6 +12119,17 @@ function salGevolgHtml(P, B){ const G=salVerdelingGevolg(P, B), som=P.rek.reduce
   return `<b>Gevolg</b><br>${G.map(g=>`${esc(g.naam)}: laagste saldo ${euro0(g.laagst)} op ${dagKort(g.dag)}, onttrekkingen ${g.laagst>=0?euro0(0):'nodig'}`).join('<br>')}<br>${rekOpzijTekst(opzij, P.plan)}${planMist>0.5?', je doelen zijn later vol':''}`; }
 /* v441 sectie 2: de regel "Reserveringen EUR X" in de verdeling, met Hoe berekend per reservering (doel, saldo op volgorde,
    vervaldatum, bedrag per periode). Alleen met een reserveringsrekening en minstens een reservering met een voorkomen. */
+/* v441 sectie 3: DE ROUTE VAN HET SALARIS. Salaris → de rekening waar het binnenkomt → elke andere betaalrekening, de
+   reserveringen, de spaarrekening (opzij) en wat er op de salarisrekening blijft staan. De som van de delen is per constructie
+   het salaris (som = alle betaalrekeningen laten; anders + reserveringen + opzij + blijft = som + reserveringen + opzij). */
+function salRouteDelen(P){ const salR=P.rek.find(r=>r.acc===P.salAcc), blijft=salR?Math.round(salR.laten):0, anders=P.rek.filter(r=>r.acc!==P.salAcc);
+  const delen=anders.map(r=>({naam:r.naam, bedrag:Math.round(r.laten)}));
+  if(P.resOk && (P.resRijen||[]).length) delen.push({naam:'Reserveringen', bedrag:Math.round(P.reserveringen)});
+  delen.push({naam:'Spaarrekening', bedrag:Math.round(P.opzij)});
+  delen.push({naam:'blijft', bedrag:blijft});
+  return {hub:rekNaam(P.salAcc), delen, som:delen.reduce((a,x)=>a+x.bedrag,0)}; }
+function salRouteHtml(P){ const R=salRouteDelen(P), e=euro0;
+  return `<div class="small" data-salvroute style="margin-top:6px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.45">Salaris ${e(P.salaris)} → ${esc(R.hub)} → ${R.delen.map(x=>`${esc(x.naam)} ${e(x.bedrag)}`).join(' · ')}</div>`; }
 function salResHtml(P){ if(!P.resOk || !(P.resRijen||[]).length) return '';
   const e=euro0, mn=ym=>`${MNAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}`, open=!!(window._salv&&window._salv.resHoe);
   const rij=x=>`<div class="row" style="gap:8px;padding:2px 0"><span style="flex:1;min-width:0">${esc(x.naam)} · doel ${e(x.doel)} − staat ${e(x.saldo)}, voor ${esc(mn(x.datum))} (${x.periodes} ${x.periodes===1?'periode':'periodes'})</span><span style="white-space:nowrap">${e(x.per)}</span></div>`;
@@ -12150,6 +12161,7 @@ function renderSalVerdeling(){ const S=window._salv||{}, P=rekVoorstel(); if(!P 
   $('#sheet').innerHTML=`<div class="grab"></div><div id="salVerdeling"><div class="small muted">${S.bron==='moment2'?'Voorstel uit je terugblik · volgende periode':'Betaalrekening op · salaris opgedeeld'}</div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">Zo verdeel je je salaris</div>
     <div class="small" data-salvfeit style="margin-top:6px;line-height:1.45">Salaris ${euro0(P.salaris)} · van ${dagKort(P.start)} tot en met ${dagKort(P.eind)} (${P.dagen} dagen). Wat er per rekening nodig is tot je volgende salaris, uit de rekening waar je uitgaven echt van afgingen.</div>
+    ${salRouteHtml(P)}
     ${P.rek.map(rij).join('')}
     ${salResHtml(P)}
     <div class="row" data-salvopzij style="gap:8px;padding:7px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;font-weight:700">${rekOpzijTekst(opzij, plan)}</span></div>
@@ -31572,6 +31584,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   if(P.resOk && (P.resRijen||[]).length){ L.push('', `RESERVERINGEN ${e(P.reserveringen)} (saldo ${e(P.resStand)} op vervaldatum-volgorde toegerekend)`);
     for(const x of P.resRijen) L.push(`  ${x.naam}: doel ${e(x.doel)} − staat ${e(x.saldo)} = ${e(x.doel-x.saldo)} ÷ ${x.periodes} periode(n) tot ${x.datum} = ${e(x.per)}`); }
   L.push('', `OPZIJ ${e(P.opzij)} = salaris ${e(P.salaris)} min ${e(P.som)} laten staan min ${e(P.reserveringen)} reserveringen · ${rekOpzijTekst(P.opzij, P.plan, v=>'EUR '+Math.round(v))}`);
+  { const RT=salRouteDelen(P); L.push('', `ROUTE: salaris ${e(P.salaris)} → ${rekNaam(P.salAcc)} → ${RT.delen.map(x=>`${x.naam} ${e(x.bedrag)}`).join(' · ')}`); }
   if(P.vastNiet.length) L.push('vaste lasten die niet meetellen: '+P.vastNiet.map(x=>`${x.naam} (${x.reden})`).join(', '));
   const B=rekBewijs(); L.push('', 'ONTTREKKINGEN PER REKENING PER MAAND');
   if(B && B.G.length) for(const g of B.G) L.push(`  ${g.acc==='onbekend'?'een betaalrekening die Minder niet aanwijst':rekNaam(g.acc)} ${g.ym} ${e(g.bedrag)} (${g.n}×: ${g.data.join(', ')})${g.acc===B.grootste?' · de grootste':''}`); else L.push('  geen');
@@ -31585,6 +31598,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   L.push('', 'CONTROLES');
   L.push(`  som over de rekeningen ${e(somR)} = vast ${e(P.totVast)} + potjes ${e(P.totPot)} + contant ${e(P.kasP)} = ${e(somT)}: ${Math.abs(somR-somT)<0.5?'sluit':'VERSCHIL'}`);
   L.push(`  laten staan ${e(P.som)} + reserveringen ${e(P.reserveringen)} + opzij ${e(P.opzij)} = ${e(P.som+P.reserveringen+P.opzij)} tegen salaris ${e(P.salaris)}: ${Math.abs(P.som+P.reserveringen+P.opzij-P.salaris)<0.5?'sluit':'VERSCHIL'}`);
+  { const RT=salRouteDelen(P); L.push(`  de route telt op tot het salaris: ${e(RT.som)} tegen ${e(P.salaris)}: ${Math.abs(RT.som-P.salaris)<0.5?'sluit':'VERSCHIL'}`); }
   L.push(`  contant ${e(P.kas)} over het venster (${P.af.join(', ')}) tegen de mediaan CONTANT OPGENOMEN daarvan ${e(kas20)}: ${Math.abs(P.kas-kas20)<0.5?'gelijk':'VERSCHIL'}${opnBuiten?` · ${opnBuiten} opname(s) van een rekening die geen betaalrekening is`:''}`);
   if(B && D){ const yms=[...new Set([valtOpYmPlus(thisYM(),-2), valtOpYmPlus(thisYM(),-1), thisYM()])];
     for(const ym of yms){ const s23=B.G.filter(g=>g.ym===ym).reduce((a,g)=>a+g.bedrag,0), r=D.R.find(x=>x.ym===ym), s20=r?r.onttSom:null;
