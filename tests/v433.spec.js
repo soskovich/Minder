@@ -103,10 +103,14 @@ test.describe('v433 · 3. buffer', () => {
 });
 
 test.describe('v433 · 4. prestatietest', () => {
-  test('4. de Grip-meting neemt de mediaan van vijf, en CLAUDE.md noemt geen ruis meer', async () => {
+  /* v445: de Grip-meting is geen tijdmeting meer maar een telling (aanroepen van telbareTx() en poort-evaluaties op een warme
+     memo), want de mediaan van vijf viel onder last ook op main. De eis van v433 (geen ruis) geldt nu per constructie. */
+  test('4. de Grip-meting telt werk en geen milliseconden, en CLAUDE.md noemt geen ruis meer', async () => {
     const t = fs.readFileSync(path.join(__dirname, 'telbare-cache.spec.js'), 'utf8');
-    expect(t).toMatch(/\[0, 1, 2, 3, 4\]\.map\(\(\) => een\(fn\)\)\.sort\(\(x, y\) => x - y\); return a\[2\];/);
-    expect(t).toMatch(/grip: meet\(\(\) => renderMaand\(\)\)/);
+    const d = t.slice(t.indexOf("test.describe('d - "), t.indexOf("test.describe('e - "));
+    expect(d).not.toMatch(/performance\.now/);
+    expect(d).toMatch(/\['Grip', \(\) => renderMaand\(\)\]/);
+    expect(d).toMatch(/window\.telbareTx = function/);
     const c = fs.readFileSync(path.join(__dirname, '..', 'CLAUDE.md'), 'utf8');
     expect(c).not.toMatch(/Onstabiel onder last/);
   });

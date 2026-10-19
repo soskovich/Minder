@@ -130,6 +130,30 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v445: DE TESTBROWSER HOORT BIJ PLAYWRIGHT, ELK BEDRAGVELD IS TEKST, EN DE RESTJES VAN BLOK 20 EN 23** (`v445`, gevraagd door de
+  gebruiker). (1) `@playwright/test` staat vast op `1.56.1`, de versie die bij de geinstalleerde Chromium-build 1194 (Chrome 141) hoort;
+  1.61 verwachtte build 1228 en `/opt/pw-browsers/chromium_headless_shell-1228` was een symlink naar 1194. GEMETEN: de deadlock van
+  `een-definitie-variabel` (1,5 tot 3 procent hangt bij v439) gaf met het paar 0 van 300 (`--repeat-each=150`). Niet `playwright install`
+  draaien (omgevingsregel). De andere wankele tests zijn deterministisch gemaakt: `diag-entry-merge` (de fixture zette geen
+  `psd2LastSync`, dus de boot startte een ECHTE vernieuwing met de niet-gestubde `psd2Api` die met "Failed to fetch" door de gestubde
+  run heen schreef; 192 van 192 na de reparatie), `telbare-cache` d (de milliseconden-grens is een telling geworden: op een warme memo
+  geen poort-evaluatie en hoogstens 80 aanroepen van `telbareTx()` per render, gemeten Grip 54, editor 0, Home 3, Inzichten 0) en
+  `grip-vanaf-norm` 705 (de maand staat nu ook vast, oktober 2026: maandnamen in het logboek braken de regel op 360px de ene maand over
+  twee en de andere over drie regels; gemeten 514px). (2) Elk bedragveld is `type="text" inputmode="decimal"` en wordt via `numIn()`
+  gelezen: "12,50" en "12.50" zijn 12,5, "1.250,00" is 1250 (40 velden, o.a. bezitting, schuld, doel, reservering, potje, budget,
+  aankoopcheck, noodfonds, instellingen). Vier lezers deden nog `+waarde` en lezen nu `numIn()` (`openMeevaller`, `afBedrag`,
+  `startBuy`, de onttrekking, `potDraftTotal`, `savePotje`, `setNfAmount`), en `verdelingBedrag()` streepte elk teken weg dat geen cijfer
+  was ("12,50" werd 1250). Geen bedrag (maanden, procenten, jaren, aantallen) blijft `type="number"`. `v445.spec.js` b eist dat geen
+  `type="number"` binnen 160 tekens van een euroteken staat. (3) Blok 20: `kennisZaai()` geeft een keer (`SET.kennis425.macnack445`)
+  elke woning in de kennis met Macnack in sleutel of partij, met `gestopt` en zonder `gestoptDoor`, alsnog `gestoptDoor` (de schrijver
+  van de nazorg van v443 zocht alleen onder `woning|recurKey` van de eerste Macnack-boeking); zonder `gestoptDoor` zegt de export "bron
+  niet vastgelegd" en niet meer "door jou". Punt 4 noemt "opzij deze periode (dd-mm t/m dd-mm, opzijPeriode): gedaan EUR X tegen doel
+  EUR Y (Z%)" in plaats van "nog verwacht" (`Rc.opzijVerwacht` is weg). (5) Blok 23 TUSSENDOOR: per rekening "daling tot de storting =
+  vast (termijnen dd-mm) + potjes (EUR/dag) + contant (EUR/dag)" uit `r.uitDagDelen(d)`, de bron van `r.uitDag(d)` (die is hun som).
+  CONTANT NA JE SALARIS (`r.kasNaSal`): met een patroon (`kasPatroon.dag`, minstens 3 maanden), deze maand nog geen opname op die
+  rekening, niet op de stortingsdag en de laatste storting in een eerdere maand, wordt er tot `SP.cur.eind` geen contant verwacht; de
+  regel "contant: verwacht na je salaris" staat erbij. Dat raakt ook `salProjectie()`/`salTekortData()` en het verwachte saldo voor de
+  storting. Spec `v445.spec.js`.
 - **v444: DE HUUR TELT EEN KEER, EN UITGAVEN ZONDER WONING TREKKEN ELKE WONING IN ZIJN EIGEN MAANDEN AF** (`v444`, gevraagd door de
   gebruiker; GECONSTRUEERDE fixture, de toestelgetallen verifieert de gebruiker: vast verwacht EUR 1.324, forecast EUR 2.831, EUR 264 onder
   budget). (1) `woningBetaling(t, wk, E)` is de ENE toets of een boeking bij de woning hoort: op IBAN of naam (`woningKeyVan`), op een woord
@@ -7527,8 +7551,9 @@ genoemde versietag.)*
 - **Getalinvoer** (`v215`): een getal dat de gebruiker intikt komt binnen via `numIn()` en gaat
   terug het veld in via `numUit()`. Een veld waar een decimaal betekenis heeft is
   `type="text" inputmode="decimal"`, nooit `type="number"`: dat laatste **wist een komma al in de
-  DOM**, dus dan valt er voor `numIn()` niets meer af te vangen. Een bedragveld in hele euro's mag
-  `type="number" inputmode="numeric"` blijven. De import-parsers voor MT940 en CSV houden hun eigen
+  DOM**, dus dan valt er voor `numIn()` niets meer af te vangen. SINDS `v445` OOK ELK BEDRAGVELD IN HELE
+  EURO'S: de uitzondering van `v215` ("mag `type="number"` blijven") is vervallen, want daar kwam
+  "3219,50" als 321950 binnen. De import-parsers voor MT940 en CSV houden hun eigen
   lezer: daar is de punt per formaat duizendtal, en `numIn()` leest `3.5` juist als drieënhalf.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
@@ -7989,6 +8014,10 @@ de samenvatting weg. Wil je de uitvoer beperken, gebruik dan een reporter of sch
 bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
+**`@playwright/test` hoort bij de browser in `/opt/pw-browsers`** (`v445`): op deze VM is dat Chromium-build 1194, dus
+Playwright 1.56.1. Een nieuwere Playwright met een oude browser gaf de Chromium-deadlock van `v439` (een hang in
+`page.evaluate`, 1,5 tot 3 procent op een zware test). Wie Playwright ophoogt, hoogt de browser mee op of laat het staan.
+
 **Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
 `lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
 
@@ -8114,7 +8143,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v444` → `minder-v445`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v445` → `minder-v446`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -8150,7 +8179,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382`, `v383` naar `minder-v383`, `v384` naar `minder-v384`, `v385` naar `minder-v385`, `v386` naar `minder-v386`, `v387` naar `minder-v387`, `v388` naar `minder-v388`, `v389` naar `minder-v389`, `v390` naar `minder-v390`, `v391` naar `minder-v391`, `v392` naar `minder-v392`, `v393` naar `minder-v393`, `v394` naar `minder-v394`, `v395` naar `minder-v395`, `v396` naar `minder-v396`, `v397` naar `minder-v397`, `v398` naar `minder-v398`, `v399` naar `minder-v399`, `v400` naar `minder-v400`, `v401` naar `minder-v401`, `v402` naar `minder-v402`, `v403` naar `minder-v403`, `v404` naar `minder-v404`, `v405` naar `minder-v405`, `v406` naar `minder-v406`, `v407` naar `minder-v407`, `v408` naar `minder-v408`, `v409` naar `minder-v409` en `v410` naar `minder-v410` en `v411` naar `minder-v411` en `v412` naar `minder-v412` en `v413` naar `minder-v413` en `v414` naar `minder-v414` en `v415` naar `minder-v415` en `v416` naar `minder-v416` en `v417` naar `minder-v417` en `v418` (gevraagd als v417b) naar `minder-v418` en `v419` naar `minder-v419` en `v420` naar `minder-v420` en `v421` naar `minder-v421` en `v422` naar `minder-v422` en `v423` naar `minder-v423` en `v424` naar `minder-v424` en `v425` naar `minder-v425` en `v426` naar `minder-v426` en `v427` naar `minder-v427` en `v428` naar `minder-v428` en `v429` naar `minder-v429` en `v430` naar `minder-v430` en `v431` naar `minder-v431` en `v432` naar `minder-v432` en `v433` naar `minder-v433` en `v434` naar `minder-v434` en `v435` naar `minder-v435` en `v436` naar `minder-v436` en `v437` naar `minder-v437` en `v438` naar `minder-v438` en `v439` naar `minder-v439` en `v440` naar `minder-v440` en `v441` naar `minder-v441` en `v442` naar `minder-v442` en `v443` naar `minder-v443` en `v444` (met de nazorg van v443) naar `minder-v444`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373`, `v374` naar `minder-v374`, `v375` naar `minder-v375`, `v376` naar `minder-v376`, `v377` naar `minder-v377`, `v378` naar `minder-v378`, `v379` naar `minder-v379`, `v380` naar `minder-v380`, `v381` naar `minder-v381`, `v382` naar `minder-v382`, `v383` naar `minder-v383`, `v384` naar `minder-v384`, `v385` naar `minder-v385`, `v386` naar `minder-v386`, `v387` naar `minder-v387`, `v388` naar `minder-v388`, `v389` naar `minder-v389`, `v390` naar `minder-v390`, `v391` naar `minder-v391`, `v392` naar `minder-v392`, `v393` naar `minder-v393`, `v394` naar `minder-v394`, `v395` naar `minder-v395`, `v396` naar `minder-v396`, `v397` naar `minder-v397`, `v398` naar `minder-v398`, `v399` naar `minder-v399`, `v400` naar `minder-v400`, `v401` naar `minder-v401`, `v402` naar `minder-v402`, `v403` naar `minder-v403`, `v404` naar `minder-v404`, `v405` naar `minder-v405`, `v406` naar `minder-v406`, `v407` naar `minder-v407`, `v408` naar `minder-v408`, `v409` naar `minder-v409` en `v410` naar `minder-v410` en `v411` naar `minder-v411` en `v412` naar `minder-v412` en `v413` naar `minder-v413` en `v414` naar `minder-v414` en `v415` naar `minder-v415` en `v416` naar `minder-v416` en `v417` naar `minder-v417` en `v418` (gevraagd als v417b) naar `minder-v418` en `v419` naar `minder-v419` en `v420` naar `minder-v420` en `v421` naar `minder-v421` en `v422` naar `minder-v422` en `v423` naar `minder-v423` en `v424` naar `minder-v424` en `v425` naar `minder-v425` en `v426` naar `minder-v426` en `v427` naar `minder-v427` en `v428` naar `minder-v428` en `v429` naar `minder-v429` en `v430` naar `minder-v430` en `v431` naar `minder-v431` en `v432` naar `minder-v432` en `v433` naar `minder-v433` en `v434` naar `minder-v434` en `v435` naar `minder-v435` en `v436` naar `minder-v436` en `v437` naar `minder-v437` en `v438` naar `minder-v438` en `v439` naar `minder-v439` en `v440` naar `minder-v440` en `v441` naar `minder-v441` en `v442` naar `minder-v442` en `v443` naar `minder-v443` en `v444` (met de nazorg van v443) naar `minder-v444` en `v445` naar `minder-v445`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

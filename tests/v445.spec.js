@@ -103,13 +103,18 @@ test.describe('5 · blok 23 TUSSENDOOR', () => {
     const leef = P.rek.find((x) => x.naam === 'Leefgeld');
     let dal = 0; const T = { vast: 0, pot: 0, kas: 0 };
     for (let d = rekDag(vandaagYMD(), 1); d <= SP.cur.eind; d = rekDag(d, 1)) { dal += leef.uitDag(d); const u = leef.uitDagDelen(d); T.vast += u.vast; T.pot += u.pot; T.kas += u.kas; }
-    return { tus, dal, T, nasal: leef.kasNaSal };
+    /* de som per soort tegen de daling voor ELKE rekening: Leefgeld heeft geen termijn, de Salarisrekening wel (20-10), en zonder die
+       rekening zou een fout in het vaste deel hier niet te zien zijn */
+    const alle = P.rek.map((x) => { let d = 0, s = 0, vast = 0; for (let k = rekDag(vandaagYMD(), 1); k <= SP.cur.eind; k = rekDag(k, 1)) { d += x.uitDag(k); const u = x.uitDagDelen(k); s += u.vast + u.pot + u.kas; vast += u.vast; } return { naam: x.naam, d, s, vast }; });
+    return { tus, dal, T, nasal: leef.kasNaSal, alle };
   });
 
   test('a. de daling per soort telt op tot de daling van de reeks, en contant staat na je salaris', async ({ page }) => {
     await boot(page);
     const r = await lees(page);
     expect(r.T.vast + r.T.pot + r.T.kas).toBeCloseTo(r.dal, 6);
+    expect(r.alle.some((x) => x.vast > 0), 'een rekening met een termijn in de periode').toBe(true);
+    for (const x of r.alle) expect(x.s, x.naam).toBeCloseTo(x.d, 6);
     expect(r.nasal).toBe(true);
     expect(r.T.kas).toBe(0);
     expect(r.tus).toMatch(/Leefgeld: nu [^\n]*\n {4}daling tot de storting [^\n]*= vast [^\n]* \+ potjes [^\n]*per dag\) \+ contant /);
