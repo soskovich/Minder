@@ -58,35 +58,37 @@ test.describe('v433 · 2. onttrekkingen', () => {
 test.describe('v433 · 3. buffer', () => {
   test('3a. de buffer rekent zonder een gestopte post, studieschuld, eenmalig en wat uit een reservering kwam', async ({ page }) => {
     await S.boot(page);
+    /* v441: de buffer leest het venster sinds de rekening-indeling (jul, aug, sep); de posten staan in dat venster */
+    const af = await page.evaluate(() => rekVoorstel().af);
+    expect(af).toEqual(['2026-07', '2026-08', '2026-09']);
     const rows = [];
-    for (const ym of ['2026-04', '2026-06', '2026-08']) rows.push([MAIN, ym + '-14', -400, 'Ml Macnack', 'SEPA INCASSO ML MACNACK', 'overig']);
-    for (const ym of ['2026-05', '2026-07', '2026-09']) rows.push([MAIN, ym + '-19', -120, 'DUO', 'SEPA INCASSO DUO HOOFDREKENING', 'studie']);
-    rows.push([MAIN, '2026-09-21', -700, 'Mediamarkt', 'BEA MEDIAMARKT', 'shopping'], [MAIN, '2026-07-22', -300, 'CJIB', 'CJIB VERKEERSBOETE', 'belasting']);
+    for (const ym of ['2026-08', '2026-09']) rows.push([MAIN, ym + '-14', -400, 'Ml Macnack', 'SEPA INCASSO ML MACNACK', 'overig']);   // gestopte post (terugkerend, laatste 14 sep → nog actief)
+    for (const ym of ['2026-07', '2026-08', '2026-09']) rows.push([MAIN, ym + '-19', -120, 'DUO', 'SEPA INCASSO DUO HOOFDREKENING', 'studie']);
+    rows.push([MAIN, '2026-07-21', -700, 'Mediamarkt', 'BEA MEDIAMARKT', 'shopping'], [MAIN, '2026-07-22', -300, 'CJIB', 'CJIB VERKEERSBOETE', 'belasting']);   // eenmalig + uit reservering, in jul
     await add(page, rows);
     const voor = await P(page), sv = voor.rek.find(x => x.acc === MAIN);
-    expect(sv.bm.find(x => x.ym === '2026-09').v).toBeGreaterThan(1500);   // zonder keuzes telt het mee
+    expect(sv.bm.find(x => x.ym === '2026-07').v).toBeGreaterThan(700);   // zonder keuzes tellen de posten mee (studie altijd eruit)
     await page.evaluate(() => {
       postZet(recurKey(TX.find(t => t.name === 'Ml Macnack')), 'gestopt'); closeSheet();
-      SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [TX.find(t => t.name === 'Mediamarkt').id]: { op: '2026-09-22' } });
+      SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [TX.find(t => t.name === 'Mediamarkt').id]: { op: '2026-07-22' } });
       SET.uitReservering = Object.assign({}, SET.uitReservering, { [TX.find(t => t.name === 'CJIB').id]: 300 }); save(); });
     const na = await P(page), s = na.rek.find(x => x.acc === MAIN), m = ym => s.bm.find(x => x.ym === ym);
     const v0 = ym => sv.bm.find(x => x.ym === ym).v;
-    expect(m('2026-04').post).toBe(400); expect(m('2026-06').post).toBeGreaterThanOrEqual(400); expect(m('2026-08').post).toBeGreaterThanOrEqual(400);
-    expect(m('2026-05').studie).toBe(120); expect(m('2026-09').studie).toBe(120);
-    expect(v0('2026-09') - m('2026-09').v).toBeCloseTo(700, 5);     // eenmalig eruit (studie was er al uit)
-    expect(sv.bm.find(x => x.ym === '2026-09').studie).toBe(120);        // studieschuld telt nooit, ook zonder keuze
-    expect(v0('2026-07') - m('2026-07').v).toBeCloseTo(300, 5);     // uit reservering eruit
-    expect(v0('2026-04') - m('2026-04').v).toBeCloseTo(400, 5);           // de gestopte post
+    expect(m('2026-08').post).toBeGreaterThanOrEqual(400); expect(m('2026-09').post).toBeGreaterThanOrEqual(400);   // de gestopte post eruit (de maanden dragen ook een basispost; de uitsluiting blijkt uit het verschil)
+    expect(m('2026-07').studie).toBe(120); expect(m('2026-09').studie).toBe(120);
+    expect(sv.bm.find(x => x.ym === '2026-07').studie).toBe(120);        // studieschuld telt nooit, ook zonder keuze
+    expect(v0('2026-08') - m('2026-08').v).toBeCloseTo(400, 5);          // de gestopte post (het verschil cancelt de basispost)
+    expect(v0('2026-07') - m('2026-07').v).toBeCloseTo(1000, 5);         // eenmalig 700 + uit reservering 300 (studie was er al uit)
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
-    expect(d).toMatch(/Salarisrekening \(salaris\)[\s\S]*maandbedragen voor de buffer \(zonder eenmalig, uit reservering, eigen overboekingen, gestopte\/opgezegde posten, studieschuld\): 2026-04 \d+ \(eruit: post 400, studie 0\)/);
+    expect(d).toMatch(/Salarisrekening \(salaris\)[\s\S]*maandbedragen voor de buffer \(zonder eenmalig, uit reservering, eigen overboekingen, gestopte\/opgezegde posten, studieschuld\): 2026-07 \d+ \(eruit: post \d+, studie 120\)/);
   });
   test('3b. de buffer is p75 min mediaan, minstens 50 en hoogstens 20% van verwacht', async ({ page }) => {
     await S.boot(page);
     const r = await P(page);
     for (const x of r.rek) expect(x.buffer).toBeCloseTo(Math.max(Math.min(x.p75 - x.med, 0.2 * x.verwacht), 50), 5);
+    /* v441: over het venster sinds de rekening-indeling (3 maanden) collapst de spreiding van Leefgeld tot de ondergrens van 50 */
     const l = r.rek.find(x => x.acc === LEEF);
-    expect(l.p75 - l.med).toBeGreaterThan(0.2 * l.verwacht);    // het plafond bindt hier
-    expect(l.buffer).toBeCloseTo(0.2 * l.verwacht, 5);
+    expect(l.buffer).toBe(50);
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
     expect(d).toMatch(/Leefgeld\n[\s\S]*buffer \d+ = p75 \d+ min mediaan \d+ = \d+, minstens 50, hoogstens 20% van verwacht \d+/);
   });
@@ -96,7 +98,7 @@ test.describe('v433 · 3. buffer', () => {
     /* de fixture zet elke maand EUR 1000 van Main naar Leefgeld; geen maand van de Salarisrekening bevat die 1000 */
     const s = r.rek.find(x => x.acc === MAIN);
     expect(Math.max(...s.bm.map(x => x.v))).toBeLessThan(1000);
-    expect(l.bm.length).toBe(6);
+    expect(l.bm.length).toBe(3);   // v441: het venster sinds de rekening-indeling (jul, aug, sep)
   });
 });
 
