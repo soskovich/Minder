@@ -81,11 +81,12 @@ test.describe('b · Inzichten is de enige lezer', () => {
     await boot(page, 'ins');
     const el = page.locator('#s-ins');
     expect(await el.locator('#insMaand[data-insmaand="nu"]').count()).toBe(1);
-    /* v440 sectie 8: de vaste lasten staan niet meer als balk-segment/legenda in de kaart, maar als context eronder
-       ("telt niet mee in het tempo"); wat er nog vast komt staat daar één keer, in [data-insvastnog]. */
-    expect(await el.locator('[data-insvastnog]').count()).toBe(1);
+    /* v443: wat er nog vast komt staat weer in het overzicht onder Nog te gaan ([data-insleg="nogvast"]), een keer, en is de
+       forecast van vast min wat er al uit is (insGroepen); de context-regel van v440 ([data-insvastnog]) is weg. */
+    expect(await el.locator('[data-insleg="nogvast"]').count()).toBe(1);
+    expect(await el.locator('[data-insvastnog]').count()).toBe(0);
     expect(await el.locator('[data-insseg="nogvast"]').count()).toBe(0);
-    const v = await page.evaluate(() => ({ leg: +document.querySelector('#s-ins [data-insvastnog]').dataset.insvastnog, bron: Math.round(insMaandStand().nogVast) }));
+    const v = await page.evaluate(() => ({ leg: +document.querySelector('#s-ins [data-insleg="nogvast"]').dataset.v, bron: insGroepen().vast.nog }));
     expect(v.leg).toBe(v.bron);
     expect(await el.locator('.wvo-tiles').count()).toBe(0);
     expect(await el.locator('#insNogLijst').count()).toBe(0);
@@ -112,7 +113,7 @@ test.describe('c · de functies zijn niet aangeraakt', () => {
 test.describe('d · zonder budget staat de maandkaart er ook', () => {
   test('wat er nog vast komt staat er één keer, zonder losse kaart', async ({ page }) => {
     await boot(page, 'ins', seed({ income: 0, budgets: {} }));
-    expect(await page.locator('#s-ins [data-insvastnog]').count()).toBe(1);   // v440 sectie 8: in het context-blok
+    expect(await page.locator('#s-ins [data-insleg="nogvast"]').count()).toBe(1);   // v443: in het overzicht van de maandkaart
     expect(await page.locator('#s-ins .wvo-tiles').count()).toBe(0);
     expect(await page.locator('#s-ins #insMaand').count()).toBe(1);
   });

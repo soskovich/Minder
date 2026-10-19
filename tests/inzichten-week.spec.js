@@ -240,7 +240,7 @@ test.describe('e · de maandkaart', () => {
     expect(await page.locator('#insZonderSheet').innerText()).toContain('Kapper Jan');
     await page.evaluate(() => closeSheet());
     await page.locator('[data-insleg="nogpot"]').click();
-    await expect(page.locator('#insTegelSheet[data-instegelsheet="potjes"]')).toHaveCount(1);
+    await expect(page.locator('#insTegelSheet[data-instegelsheet="potjes"]')).toHaveCount(1);   // v443: in zijn forecast-vorm (data-insfc)
   });
   /* v383: de regel "boven budget" is weg; zonder potje zegt "EUR X · buiten budget". Eén getal, niet twee. */
   test('geen regel boven budget; zonder potje zegt buiten budget, ook als een potje erboven gaat', async ({ page }) => {

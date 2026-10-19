@@ -44,29 +44,18 @@ test('a. de kop en de streep gaan over je potjes, niet over het hele budget', as
   expect(r.kop).toMatch(/van €[\d.]+ potjes/);
 });
 
-test('b. de vaste lasten staan als context, telt niet mee in het tempo', async ({ page }) => {
+/* v443: de context-regel ("vaste lasten · op hun eigen datum ... telt niet mee in het tempo") en de eigen woningregel zijn weg;
+   vast staat weer in het overzicht (Uitgegeven: vast; Nog te gaan: vast), de woning zit daarin, en er staat een korte regel
+   "tempo gaat alleen over je potjes". De oorspronkelijke tests b en c zijn hierheen gemigreerd. */
+test('b. de vaste lasten staan in het overzicht, met de woning erin; het tempo gaat alleen over je potjes', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), S = insMaandStand(), WF = woningForecast('2026-10');
-    const vast = k.querySelector('[data-insvast]');
-    return { heeftVast: !!vast, genB: vast ? +vast.dataset.insvast : null, genN: vast ? +vast.dataset.insvastnog : null,
-      niettempo: !!k.querySelector('[data-insniettempo]'), txt: k.innerText.replace(/\s+/g, ' '), S, wB: WF.betaald, wN: WF.nog, nogVast: Math.round(S.nogVast), vast0: Math.round(S.vast) }; });
-  expect(r.heeftVast).toBe(true);
-  expect(r.niettempo).toBe(true);
-  expect(r.txt).toContain('telt niet mee in het tempo');
-  // de woning is uit de generieke vaste-lasten afgetrokken (een keer geteld): genB = vast - woning-betaald, genN = nogVast - woning-nog
-  expect(r.genB).toBe(Math.max(r.vast0 - r.wB, 0));
-  expect(r.genN).toBe(Math.max(r.nogVast - r.wN, 0));
-  expect(r.genB).not.toBe(r.vast0);                          // de aftrek doet ertoe (de woning zit in S.vast)
-});
-
-test('c. de woning staat als eigen regel, met (nieuw) in zijn eerste maand', async ({ page }) => {
-  await boot(page);
-  const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), WF = woningForecast('2026-10');
-    const w = k.querySelector('[data-inswoning]');
-    return { heeftWoning: !!w, bedrag: w ? +w.dataset.inswoning : null, txt: w ? w.innerText.replace(/\s+/g, ' ') : '', wBedrag: WF.bedrag, nieuw: WF.nieuw }; });
-  expect(r.heeftWoning).toBe(true);
-  expect(r.nieuw).toBe(true);                                // vanaf 2026-10 = de lopende maand
-  expect(r.txt).toContain('Nathaniel Cathalina');
-  expect(r.txt).toContain('(nieuw)');
-  expect(r.txt).toContain('€300');                           // het kennis-bedrag
+  const r = await page.evaluate(() => { const k = document.querySelector('#insMaand'), S = insMaandStand(), G = insGroepen(S);
+    const leg = (x) => { const e = k.querySelector(`[data-insleg="${x}"]`); return e ? +e.dataset.v : null; };
+    return { oud: !!k.querySelector('[data-insvast], [data-insniettempo], [data-inswoning]'), vast: leg('vast'), Gv: G.vast.uit,
+      regel: (k.querySelector('[data-instempopotjes]') || {}).innerText || '', txt: k.innerText.replace(/\s+/g, ' '), vast0: Math.round(S.vast) }; });
+  expect(r.oud).toBe(false);
+  expect(r.txt).not.toContain('telt niet mee in het tempo');
+  expect(r.vast).toBe(r.Gv);
+  expect(r.vast).toBe(r.vast0);                              // de woning-betaling zit in vast, een keer geteld
+  expect(r.regel).toBe('tempo gaat alleen over je potjes');
 });

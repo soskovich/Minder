@@ -32,10 +32,10 @@ test('b. blok 20 toont de opbouw van het budget vanaf 1 nov, met de woning erbij
   expect(r.b20).toMatch(/de woning \(Nathaniel Cathalina/);   // de huur staat in de opbouw (zonder eigen potje: niet in het budget)
 });
 
-test('c. blok 20 controleert budget-per-groep en opzij-label (beide kloppen)', async ({ page }) => {
+test('c. blok 20 controleert budget-per-groep en dat Inzichten geen opzij-kaart draagt (v443: de label-controle van v442 is mee verhuisd)', async ({ page }) => {
   const r = await bootBlok(page);
   expect(regel(r.b20, 'CONTROLE budget per groep')).toContain('klopt');
-  const lab = regel(r.b20, 'CONTROLE opzij-label noemt geen kalendermaand');
+  const lab = regel(r.b20, 'CONTROLE Inzichten draagt geen opzij-kaart');
   expect(lab).toContain('klopt');
   expect(lab).not.toContain('VERSCHILT');
 });

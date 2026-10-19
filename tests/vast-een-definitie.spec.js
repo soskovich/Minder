@@ -59,9 +59,10 @@ test('A: de terugvalpost in een vast potje telt als nog vast, niet in je potjes 
   const r = await page.evaluate(() => { const S = insMaandStand(); return { nogVast: S.nogVast, fixDue: Math.round(monthLiquidity().fixDue), huurPot: S.potRijen.find((x) => x.k === 'huur') || null }; });
   expect(r.nogVast).toBe(r.fixDue + 137);
   expect(r.huurPot).toBeNull();
-  // v440 sectie 8: de vaste lasten staan als context onder de kaart ([data-insvast], tik opent de vast-sheet)
+  // v443: de vaste lasten staan weer in het overzicht; "Nog te gaan · vast" opent de vast-sheet en is dezelfde som
   await page.evaluate(() => go('ins'));
-  await page.locator('#insMaand [data-insvast]').click();
+  expect(+(await page.locator('#insMaand [data-insleg="nogvast"]').getAttribute('data-v'))).toBe(r.nogVast);
+  await page.locator('#insMaand [data-insleg="nogvast"]').click();
   const s = await page.locator('#insTegelSheet[data-instegelsheet="vast"]').evaluate((e) => ({ w: +e.dataset.inswaarde, rijen: [...e.querySelectorAll('[data-insrij]')].map((x) => +x.dataset.insrij), t: e.innerText }));
   expect(s.w).toBe(r.nogVast);
   expect(s.rijen.reduce((a, x) => a + x, 0)).toBe(r.nogVast);

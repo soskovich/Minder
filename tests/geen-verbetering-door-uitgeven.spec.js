@@ -60,13 +60,15 @@ async function boot(page, extra) {
 const meet = (page) => page.evaluate(() => {
   go('ins'); const d = document.getElementById('insMaand');
   const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : 0; };
-  // v440 sectie 8: "nog te betalen \u00b7 vast" staat als context onder de kaart ([data-insvastnog]), niet meer als legendarij
-  const vastNog = () => { const e = d.querySelector('[data-insvastnog]'); return e ? +e.dataset.insvastnog : 0; };
-  const tegels = { 'Nog te betalen \u00b7 vast': vastNog() };
+  /* v443: "Nog te gaan" op Inzichten is per groep de forecast min wat er al uit is (insGroepen). De OUDE som die deze spec
+     narekent ging over de oude posten (fixDue en varBudget min gebruikt); die worden hier uit hun bronnen gelezen, en de toets
+     blijft dat dat bedrag nergens op het scherm staat. */
+  const VP = varPotjeStand(curMonth || months()[months().length - 1]);
+  const tegels = { 'Nog te betalen \u00b7 vast': Math.round(monthLiquidity().fixDue) };
   const tekst = document.getElementById('s-ins').innerText.replace(/\s+/g, ' ');
   // v365: Nog te ontvangen staat op Home (dezelfde bron, monthLiquidity().incDue)
   tegels['Nog te ontvangen'] = Math.round(monthLiquidity().incDue);
-  return { tegels, varPlan: leg('nogpot'), tekst, heeftVast: !!d.querySelector('[data-insvast]'),
+  return { tegels, varPlan: VP.budget - VP.gebruikt, leg: leg('nogpot'), tekst, heeftVast: !!d.querySelector('[data-insleg="vast"], [data-insleg="nogvast"]'),
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
 });
 
@@ -159,21 +161,22 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
       /* v382: de feiten zijn legendarijen van de maandkaart onder "Nog te gaan" */
       go('ins'); const d = document.getElementById('insMaand');
       const leg = (k) => { const e = d.querySelector(`[data-insleg="${k}"]`); return e ? +e.dataset.v : null; };
-      const vn = d.querySelector('[data-insvastnog]'); const tg = { 'Nog te betalen · vast': vn ? +vn.dataset.insvastnog : 0 };   // v440 sectie 8: context onder de kaart
+      const G = insGroepen();   // v443: Nog te gaan per groep = forecast min uitgegeven
+      const tg = { 'Nog te betalen · vast': leg('nogvast') || 0 };
       // v359: het vierde feit is "Nog in potjes"; v382: de rij "in potjes"
       const VP = varPotjeStand(m);
-      return { tg, varPlan: leg('nogpot'),
+      return { tg, varPlan: leg('nogpot') || 0, G,
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),
         saveReserved: Math.max(Math.round(S.saveReserved), 0), bron: varPlanRemaining(m),
         inPotjes: VP.budget - VP.gebruikt };
     });
-    expect(r.tg['Nog te betalen · vast']).toBe(r.fixDue);
+    expect(r.tg['Nog te betalen · vast']).toBe(r.G.vast.nog);   // v443: de forecast van vast min wat er al uit is
     // v365: ontvangen staat op Home, sparen op Plan
     /* v438: nog te ontvangen staat in de sheet Verwacht eind (dezelfde bron), niet meer op Home */
     expect(await page.evaluate(() => { go('dash'); openVerwachtEind(); return +document.querySelector('#verwachtEindSheet [data-veterm="inkomen"]').dataset.bedrag; })).toBe(r.incDue);
     /* v308: hier stond r.bron, de tempo-som. Het getal op die regel is sinds v250 de AFTREKKING,
        en die twee waren hetzelfde zolang een potje met ruimte zijn hele onbestede deel in de
        tempo-som droeg. De vierde tegel leest dus varBudget min gebruikt. */
-    expect(r.varPlan).toBe(r.inPotjes);
+    expect(r.varPlan).toBe(r.G.pot.nog);   // v443: de forecast van de potjes (met zonder potje) min wat er al uit is
   });
 });
