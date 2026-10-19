@@ -8062,6 +8062,8 @@ ROOD, deterministisch: `decimaalteken.spec.js` "een bedrag dat je intikt komt al
 "de prijs in pixels van het logboek en de uitkomst-regel" (p360/p390; rood op v442 en ouder, eigen ronde). Een rapport noemt passed + failed
 + skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het lijstaantal).
 
+**GEREPAREERD BIJ `v445`: de deadlock van Chromium in deze VM.** `@playwright/test` staat op `1.56.1`, de versie die bij build 1194
+hoort; GEMETEN 0 hangers op 300 runs (`--repeat-each=150`) tegen 1,5 tot 3 procent op 1.61. Wat hieronder staat is de meting van `v439`.
 **Onstabiel, oorzaak gemeten, NIET IN DE APP: een deadlock van Chromium in deze VM** (`v439`, gemeten op verzoek van
 de gebruiker). `een-definitie-variabel.spec.js` "een overschreden potje: drie plekken en het scherm" blijft af en toe in
 `page.evaluate` hangen tot de timeout, ook op `main` (dus van voor `v439`). GEMETEN in een reeks probes van 250 tot 1000
@@ -8077,6 +8079,9 @@ WIJKT AF: Playwright 1.61 verwacht build 1228 (Chrome 149) en `/opt/pw-browsers/
 symlink naar de `headless_shell` van build 1194. Wie dit oppakt begint daar (een browser die bij Playwright hoort) en
 niet in `index.html`. Tot dan telt een hang van DEZE test in de volle suite als bekend, mits hij los opnieuw groen draait.
 
+**GEREPAREERD BIJ `v445`:** de fixture zette geen `psd2LastSync`, dus de boot startte een ECHTE vernieuwing met de niet-gestubde
+`psd2Api`, die met "Failed to fetch" door de gestubde run heen schreef. Met `psd2LastSync` erbij: 192 van 192 groen. Wat hieronder staat
+is de stand van daarvoor; de toeschrijving aan "de stub die soms niet levert" was half juist (het was een tweede, ongestubde aanroeper).
 **Onstabiel, oorzaak gemeten, eigen ronde:** `diag-entry-merge.spec.js` "blok 8 noemt welke groep uit een
 eerdere sync komt" valt ongeveer een op de vier keer (GEMETEN 3 van 4 groen in vier runs achter elkaar, en
 ook rood op `HEAD`). HET ZIJN TWEE TESTS EN NIET EEN, en dat is bij `v315` gemeten en niet aangenomen: ook
@@ -8091,6 +8096,8 @@ is monotoon geklemd en daarmee deterministisch zodra de tweede schrijver werkeli
 maakt de stub betrouwbaar of meet in de spec eerst dat de tweede aanroep gelukt is, zoals de invoermeting van
 `v299`/`v300`.
 
+**GEREPAREERD BIJ `v445`:** blok d telt nu werk in plaats van milliseconden: op een warme memo geen poort-evaluatie en hoogstens 80
+aanroepen van `telbareTx()` per render (gemeten Grip 54, editor 0, Home 3, Inzichten 0). Wat hieronder staat is de stand van daarvoor.
 **Onstabiel, een prestatiegrens die onder last valt, eigen ronde:** `telbare-cache.spec.js` d "Grip en de
 budget-editor blijven onder de grens op toestel-omvang" meet de MEDIAAN van vijf renders op een fixture ter
 grootte van het toestel tegen een milliseconden-grens. Die grens is bewust ruim (de spec zegt het zelf: een
@@ -8122,7 +8129,7 @@ De spec pint nu 15 september en staat in de lijst van `vaste-testdag.spec.js`. D
 van `v299`/`v310` op de rand van een VENSTER in plaats van een maandgrens, en dezelfde vorm kan nog in
 elke spec zitten die een vaste maand naast een venster vanaf vandaag legt.
 
-**Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
+**GEREPAREERD BIJ `v445` (elk bedragveld is tekst met `numIn()`), dit was de stand daarvoor. Bekend rood:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
