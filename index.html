@@ -26293,7 +26293,8 @@ function woningBetaling(t, wk, E){
   if(W.some(x=>tw.has(x))) return true;
   if(c!=='huur' || (E.vanaf && t.date.slice(0,7)<E.vanaf)) return false;
   const rk=recurKey(t); let ander=false; try{ ander=recurringKeys().has(rk) && !woningRecurKeys().has(rk); }catch(_){}
-  return !ander && -t.amount>=0.5*(+E.bedrag||0); }
+  /* zonder bedrag in de kennis is er geen huur om tegen te meten, dan telt alleen IBAN of naam (een woning van v425 zonder bedrag nam anders elke huurboeking) */
+  return !ander && (+E.bedrag||0)>0 && -t.amount>=0.5*(+E.bedrag); }
 function woningForecast(m){
   m=m||thisYM(); const wk=kennisWoningKey(); if(!wk) return {actief:false, key:null};
   const E=kennisGet('woning|'+wk)||{}, bedrag=Math.round(+E.bedrag||0), naam=E.partij||'woonhuur';

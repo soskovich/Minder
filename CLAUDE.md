@@ -134,7 +134,8 @@ genoemde versietag.)*
   gebruiker; GECONSTRUEERDE fixture, de toestelgetallen verifieert de gebruiker: vast verwacht EUR 1.324, forecast EUR 2.831, EUR 264 onder
   budget). (1) `woningBetaling(t, wk, E)` is de ENE toets of een boeking bij de woning hoort: op IBAN of naam (`woningKeyVan`), op een woord
   van minstens 5 letters uit de partij in de kennis (als heel woord), of als boeking in Huur vanaf de ingangsmaand (`vanaf`) die geen andere
-  vaste post in Huur is (een sleutel uit `recurringKeys()` buiten `woningRecurKeys()`, zoals Shurgard) en minstens de helft van de huur is.
+  vaste post in Huur is (een sleutel uit `recurringKeys()` buiten `woningRecurKeys()`, zoals Shurgard) en minstens de helft van de huur is; ZONDER BEDRAG in de kennis telt die Huur-regel niet (de Macnack-entry van v425 heeft geen bedrag en nam
+  anders elke huurboeking, GEMETEN in de volle suite: v425 1/5 rood met "Woningstichting Oud" als woning).
   Een andere woning uit de kennis (Macnack) telt nooit voor deze. Lezers: `woningForecast()` (een termijn in een maand vervalt zodra er in
   die maand een betaling is; GEMELD: de huur van 19-10 in Huur matchte niet op IBAN of naam en blok 20 punt 2 verwachtte er nog EUR 300
   bovenop) en `rekVoorstelRuw()` (blok 23: een termijn vervalt als er in die salarisperiode al een betaling in dezelfde maand was; 1-11 blijft).
