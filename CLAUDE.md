@@ -8028,7 +8028,7 @@ vraag gaat over de app en deze over de fixture.
 **WANKEL, BIJ NAAM (v444, gevraagd door de gebruiker), zodat een nieuwe rode er niet tussen wegvalt:** `een-definitie-variabel.spec.js`
 "een overschreden potje: drie plekken en het scherm" (hangt soms, Chromium-deadlock, zie hieronder); `diag-entry-merge.spec.js` "blok 8
 noemt welke groep uit een eerdere sync komt" en "blok 13 markeert de pending-kolommen van de herkoppelde rekening" (de stub levert soms
-niet); `telbare-cache.spec.js` d "Grip en de budget-editor blijven onder de grens op toestel-omvang" (prestatiegrens onder last). BEKEND
+niet); `telbare-cache.spec.js` d "Grip en de budget-editor blijven onder de grens op toestel-omvang" (prestatiegrens onder last). Ook `grip-nav.spec.js` c "geen zichtbare tekst noemt het scherm nog Maand" en `v420.spec.js` "uitgeleend: drie leningen samen 750,99 open" (rood in een volle run op `9c8a444`, groen in de run ervoor en los 3 van 3 groen met `--repeat-each=3`; oorzaak niet gemeten). BEKEND
 ROOD, deterministisch: `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag binnen" en `grip-vanaf-norm.spec.js` 705
 "de prijs in pixels van het logboek en de uitkomst-regel" (p360/p390; rood op v442 en ouder, eigen ronde). Een rapport noemt passed + failed
 + skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het lijstaantal).
