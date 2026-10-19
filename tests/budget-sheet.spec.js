@@ -47,7 +47,7 @@ test('b · de editor ververst live mee na een render', async ({ page }) => {
 test('c · een categorie-potje behoudt focus tijdens typen', async ({ page }) => {
   await openEditor(page);
 
-  const inp = page.locator('#sheet .row', { hasText: 'Online shopping' }).locator('input[type="number"]').first();
+  const inp = page.locator('#sheet .row', { hasText: 'Online shopping' }).locator('input[inputmode="decimal"]').first();
   await inp.click();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('300');                                             // drie losse oninput-events

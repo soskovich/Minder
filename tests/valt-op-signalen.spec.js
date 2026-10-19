@@ -507,9 +507,9 @@ test.describe('layout', () => {
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     const veld = page.locator('#valtOpBedrag');
-    // v215: hele euro's mogen type=number/inputmode=numeric houden
-    expect(await veld.getAttribute('type')).toBe('number');
-    expect(await veld.getAttribute('inputmode')).toBe('numeric');
+    // v445: elk bedragveld is tekst met inputmode=decimal, zodat een komma niet in de DOM wordt gewist
+    expect(await veld.getAttribute('type')).toBe('text');
+    expect(await veld.getAttribute('inputmode')).toBe('decimal');
     await dek(page, 'Online shopping', 100);   // v238: met de dekkingshelft erbij
     const over = await page.evaluate(() => {
       const el = document.querySelector('#sheet');

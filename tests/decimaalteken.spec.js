@@ -119,15 +119,14 @@ test.describe('b - de invoervelden lopen erdoorheen', () => {
     expect(await page.evaluate(() => SET.assets[0].waarde)).toBe(3220);
   });
 
-  /* Bewuste afbakening. Een bedragveld blijft type=number met inputmode=numeric: daar is een
-     decimaal niet betekenisvol (de opslag rondt af op hele euro's) en het veld houdt zijn
-     numerieke toetsenbord. numIn leest hem wel, dus komt er via de browser toch een komma
-     binnen, dan wordt die gelezen in plaats van stil nul. */
-  test('een bedragveld blijft een numeriek veld, maar wordt wel via numIn gelezen', async ({ page }) => {
+  /* v445: de afbakening van v215 is vervallen. Een bedragveld was type=number met
+     inputmode=numeric, en dat veld wist een komma al in de DOM: '3219,50' kwam binnen als 321950.
+     Elk bedragveld is nu tekst met inputmode=decimal, en numIn() leest het. */
+  test('een bedragveld is een tekstveld met inputmode=decimal en wordt via numIn gelezen', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => openAsset('a1'));
-    expect(await page.locator('#aWaarde').getAttribute('type')).toBe('number');
-    expect(await page.locator('#aWaarde').getAttribute('inputmode')).toBe('numeric');
+    expect(await page.locator('#aWaarde').getAttribute('type')).toBe('text');
+    expect(await page.locator('#aWaarde').getAttribute('inputmode')).toBe('decimal');
     expect(await lees(page, '1.250,00')).toBe(1250);
   });
 });
@@ -140,11 +139,11 @@ test.describe('c - een decimaal veld verklaart zichzelf niet ongeldig', () => {
      dat als enige al was. */
   test('een number-veld wist een komma voordat de lezer hem ziet', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openAsset('a1'));
+    // v445: de app draagt geen bedragveld van type=number meer, dus de eigenschap van de browser wordt op een los veld getoond
     const gewist = await page.evaluate(() => {
-      const el = document.getElementById('aWaarde');   // type=number
-      el.value = '3219,50';
-      return el.value;
+      const el = document.createElement('input'); el.type = 'number'; document.body.appendChild(el);
+      el.value = '3219,50'; const v = el.value; el.remove();
+      return v;
     });
     expect(gewist).toBe('');
   });

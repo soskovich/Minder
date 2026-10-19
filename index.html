@@ -5703,13 +5703,13 @@ function renderGoalSheet(id, g, modeOverride){
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
     ${isNew?debtNudgeCard():''}
     <label class="fld">Waarvoor spaar je?</label><input id="gNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantie" style="width:100%">
-    <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="number" inputmode="numeric" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
+    <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="text" inputmode="decimal" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
     <label class="fld" style="margin-top:10px">Streefdatum</label><input id="gDatum" type="month" value="${esc(d.streefdatum||'')}" style="width:100%">
     <div class="small muted" style="margin-top:6px">${(!isNew&&!d.streefdatum)?'Dit doel komt van vóór deze versie en heeft er nog geen. Zonder datum valt er niets terug te rekenen. ':''}Elk doel heeft er een; alleen je noodfonds niet, want dat is geen doel met een einddatum maar de bodem eronder.</div>
     ${(function(){ try{ const pi=id?allocatePlan().find(x=>x.id===id):null; return pi?doelTempoLine(pi):''; }catch(_){ return ''; } })()}
     ${id?(function(){ try{ return planOrdeVeld(id); }catch(_){ return ''; } })():''}
     ${krijgt}
-    <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
+    <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="text" inputmode="decimal" value="${d.gespaard||''}" placeholder="0" style="width:100%">
     ${g?`<div class="small" data-goalpauze style="margin-top:12px;text-align:center;color:var(--mut2);cursor:pointer" onclick="planTogglePause('${id}');renderGoalSheet('${id}',(SET.goals||[]).find(x=>x.id==='${id}'),null)">${planPaused(id)?'Pauze opheffen':'Pauzeren'}</div>`:''}
     ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
     ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
@@ -6963,11 +6963,11 @@ function meevallerVorige(){
   try { return (SET.coachLog || []).find(l => l && l.type === 'tip' && l.meevaller) || null; } catch(_){ return null; }
 }
 function openMeevaller(bedrag, bron){
-  const b = Math.max(Math.round(+bedrag || 0), 0);
+  const b = Math.max(Math.round(numIn(bedrag) || 0), 0);   // v445: het veld is tekst, dus een komma of punt komt hier ongewijzigd binnen
   const P = b > 0 ? meevallerPlan(b) : null;
   const vorige = meevallerVorige();
   const invoer = `<label class="fld">Nettobedrag</label>
-    <input type="number" id="mvInp" value="${b > 0 ? b : ''}" placeholder="bv. 1800" style="width:100%">
+    <input type="text" inputmode="decimal" id="mvInp" value="${b > 0 ? b : ''}" placeholder="bv. 1800" style="width:100%">
     <div class="small muted" style="margin-top:6px">Vul in wat er daadwerkelijk op je rekening komt. Vul je een brutobedrag in, dan verdeelt het voorstel geld dat je niet krijgt en komt de verdeling niet uit.</div>
     <button class="btn sec" style="margin-top:8px" onclick="openMeevaller(document.getElementById('mvInp').value,'handmatig')">Bereken de verdeling</button>`;
   let body = '';
@@ -7882,7 +7882,7 @@ function valtOpDekBlok(){
       <div class="info"><div class="nm">${esc(c.name)}</div><div class="cat">ruimte ${euro0(R.ruimte)} · ${euro0(R.potje)} min ${euro0(R.uit)} uitgegeven</div></div>
       <div style="display:flex;align-items:center;gap:8px">
         <span class="muted">€</span>
-        <input id="valtOpDek_${esc(k)}" type="number" min="0" max="${R.ruimte}" step="5" inputmode="numeric" value="${d.dek[k]>0?d.dek[k]:''}" oninput="valtOpDekZet('${esc(k)}',this.value)" style="width:74px;text-align:right;padding:6px 8px">
+        <input id="valtOpDek_${esc(k)}" type="text" min="0" max="${R.ruimte}" step="5" inputmode="decimal" value="${d.dek[k]>0?d.dek[k]:''}" oninput="valtOpDekZet('${esc(k)}',this.value)" style="width:74px;text-align:right;padding:6px 8px">
         <span class="small" style="color:var(--mut2);cursor:pointer" onclick="valtOpDekWeg('${esc(k)}')">weg</span>
       </div></div>`; };
   const kies=x=>`<div class="tx" style="cursor:pointer" onclick="valtOpDekVoegToe('${esc(x.k)}')">
@@ -7916,7 +7916,7 @@ function valtOpPotjeSheet(id){
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${esc(s.naam)}-potje bijstellen</div>
     <div class="small muted" style="margin-bottom:12px">Je gaf deze maand ${euro0(s.uitgegeven)} uit en je potje staat op ${euro0(s.potje)}. Het voorstel ligt nooit onder je huidige stand en telt de dagen mee die de maand nog heeft.</div>
     <label class="fld">Maandbudget (€)</label>
-    <input id="valtOpBedrag" type="number" min="0" step="5" inputmode="numeric" value="${valtOpVoorstel(s)}" oninput="valtOpBedragIn(this.value)" style="width:100%">
+    <input id="valtOpBedrag" type="text" min="0" step="5" inputmode="decimal" value="${valtOpVoorstel(s)}" oninput="valtOpBedragIn(this.value)" style="width:100%">
     <div style="border-top:1px solid var(--line);margin:14px 0 12px"></div>
     <div class="hlabel" style="margin:0 0 8px">Waar komt het vandaan</div>
     <div id="valtOpDekBlok">${valtOpDekBlok()}</div>
@@ -8508,7 +8508,7 @@ function renderAfspraakSheet(id){
   const per=(S.per||[]).map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small">${esc(afMnd(x.m))}</span><span class="small" style="font-weight:700">${euro0(x.g)} van ${euro0(a.bedrag)}</span></div>`).join('');
   const kan=!afspraakHerzienVan(a);
   const aanpas = !kan ? '' : a.soort==='storting'
-    ? `<div style="margin-top:12px" data-afaanpas><label class="fld">Per maand (€)</label><input id="afBedrag" type="number" min="0" inputmode="numeric" value="${Math.round(+a.bedrag||0)}" style="width:100%">
+    ? `<div style="margin-top:12px" data-afaanpas><label class="fld">Per maand (€)</label><input id="afBedrag" type="text" min="0" inputmode="decimal" value="${Math.round(+a.bedrag||0)}" style="width:100%">
        <label class="fld" style="margin-top:8px">Tot en met</label><input id="afTot" type="month" value="${esc(String(a.tot))}" style="width:100%">
        <button class="btn sec" style="margin-top:10px;width:100%" onclick="afspraakAanpassen('${esc(a.id)}')">Aanpassen</button></div>`
     : (a.soort==='potje'||a.soort==='incasso') && CATS[a.cat] ? `<button class="btn sec" style="margin-top:12px;width:100%" onclick="closeSheet();openPotje('${esc(a.cat)}')">Potje aanpassen</button>` : '';
@@ -8525,7 +8525,7 @@ function renderAfspraakSheet(id){
 function afspraakStop(id){ if(!afspraakHerzien(id,'gestopt')) return; save(); closeSheet(); render(); toast('Afspraak gestopt'); }
 function afspraakAanpassen(id){
   const a=afsprakenLijst().find(x=>x.id===id); if(!a||afspraakHerzienVan(a)||a.soort!=='storting') return;
-  const b=Math.round(+((document.getElementById('afBedrag')||{}).value)||0);
+  const b=Math.round(numIn((document.getElementById('afBedrag')||{}).value)||0);
   const tot=String((document.getElementById('afTot')||{}).value||a.tot);
   if(!(b>0) || !/^\d{4}-\d{2}$/.test(tot) || tot<thisYM()) return;
   afspraakMaak({soort:'storting', bedrag:b, van:thisYM(), tot, wat:`${euro0(b)} per maand naar je reserveringen tot ${afMnd(tot)}`});
@@ -12046,15 +12046,25 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const perDag=(pS+(kasDag?0:kS))/Math.max(dagen,1), lijn=(L)=>{ let b=L, laagst=L, dag=start; for(let i=0;i<dagen;i++){ const d=rekDag(start,i); b-=perDag; if(kasDag===d) b-=kS; for(const tm of termijnen) if(tm.date===d) b-=tm.bedrag; if(b<laagst-1e-9){ laagst=b; dag=d; } } return {laagst, dag, eind:b}; };
     let Lz=lijn(laten0), laten=laten0, tekort=0; if(Lz.laagst<0){ tekort=-Lz.laagst; laten=rekPlus50(laten0+tekort); Lz=lijn(laten); }
     /* het model vanaf vandaag: wat er per dag verwacht afgaat (potjes en contant, de vaste termijnen van alle posten van deze rekening) */
-    const restNu=pd.reduce((a,x)=>a+x.rest,0)+Math.max(kM-((D&&D.R.slice(-1)[0]&&D.R.slice(-1)[0].ym===cur)?(D.R.slice(-1)[0].opn||[]).filter(t=>t.acc===acc).reduce((a,t)=>a-t.amount,0):0),0);
-    const pMaand=pd.reduce((a,x)=>a+x.maand*x.aandeel,0)+kM, alleTerm={};
+    /* v445: het model per soort (uitDagDelen: vast, potjes, contant), zodat blok 23 TUSSENDOOR de verwachte daling per soort kan
+       splitsen; uitDag is hun som en verandert daarvoor niet. CONTANT NA JE SALARIS: heb je deze maand op deze rekening nog niet
+       gepind en is je patroon pinnen na je salaris (kasPatroon.dag, minstens 3 maanden), dan wordt er tot de dag voor de volgende
+       verwachte storting geen contant verwacht; dat komt in de periode erna. */
+    const kasNu=(D&&D.R.slice(-1)[0]&&D.R.slice(-1)[0].ym===cur)?(D.R.slice(-1)[0].opn||[]).filter(t=>t.acc===acc).reduce((a,t)=>a-t.amount,0):0;
+    const kasNaSal=kp.dag!=null && kM>0.005 && !(kasNu>0.005) && !nu && String(SP.cur.start||'').slice(0,7)<cur;   // het salaris van deze maand is nog niet binnen
+    const potRestNu=pd.reduce((a,x)=>a+x.rest,0), kasRestNu=Math.max(kM-kasNu,0), restNu=potRestNu+kasRestNu;
+    const potMaand=pd.reduce((a,x)=>a+x.maand*x.aandeel,0), pMaand=potMaand+kM, alleTerm={};
     for(const x of vastAlle.filter(x=>x.acc===acc)) for(const d of rekTermijnen(x.s, x.last, rekDag(vandaag,1), horizon)) alleTerm[d]=(alleTerm[d]||0)+x.termijn;
-    const uitDag=d=>{ if(d<=vandaag) return 0; const ym=d.slice(0,7); let v=ym===cur?restNu/Math.max(dagenNa,1):pMaand/new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(); return v+(alleTerm[d]||0); };
+    const uitDagDelen=d=>{ if(d<=vandaag) return {vast:0, pot:0, kas:0}; const ym=d.slice(0,7), dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+      const pot=ym===cur?potRestNu/Math.max(dagenNa,1):potMaand/dim;
+      const kas=(kasNaSal && d<=SP.cur.eind)?0:(ym===cur?kasRestNu/Math.max(dagenNa,1):kM/dim);
+      return {vast:alleTerm[d]||0, pot, kas}; };
+    const uitDag=d=>{ const u=uitDagDelen(d); return u.vast+u.pot+u.kas; };
     const saldo=accBalance(acc);
     /* (3) overboeken rekent alleen op de dag van de werkelijke storting, met het dan bekende saldo; daarvoor het verwachte saldo op de
        verwachte storting */
     let verwachtSaldo=null; if(!nu && saldo!=null){ verwachtSaldo=saldo; for(let d=rekDag(vandaag,1); d<start; d=rekDag(d,1)) verwachtSaldo-=uitDag(d); }
-    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand}; });
+    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, uitDagDelen, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand}; });
   /* een rekening zonder verwachte uitgaven en zonder vaste last laat niets staan: die valt buiten het voorstel */
   const actief=rek.filter(r=>r.vastS+r.potS+r.kasS>0.5 || r.sal);
   /* v441 sectie 2: de reserveringen staan tussen de rekeningen en opzij; opzij (naar je spaarrekening) is wat daarna overblijft */
@@ -12335,7 +12345,7 @@ function watOverKaart(){ const W=watOverPeriode(); if(!W.ok) return '';
   const rij=x=>{ const hint=x.k==='inhalen'&&W.inhaal>0?` · tekort ${e(W.inhaal)}`:x.k==='anders'&&(vast?s.anderLabel:true)?'':'';
     const sel=x.k==='reservering'&&resL.length?`<select data-watreswelke onchange="watOverResWelke(this.value)" ${vast?'disabled':''} style="margin-top:3px;max-width:160px"><option value="">welke reservering?</option>${resL.map(v=>`<option value="${esc(v.id)}" ${s.resWelke===v.id?'selected':''}>${esc(v.naam||'Reservering')}</option>`).join('')}</select>`:'';
     const ander=x.k==='anders'?`<input type="text" data-watander placeholder="waarvoor?" value="${esc(s.anderLabel||'')}" ${vast?'disabled':''} oninput="watOverAnder(this.value)" style="margin-top:3px;max-width:160px">`:'';
-    return `<div data-watrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}${hint?`<span style="color:var(--mut2);font-weight:400">${hint}</span>`:''}</span><input type="text" inputmode="numeric" data-watveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" ${vast?'disabled':''} oninput="watOverVeld('${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
+    return `<div data-watrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}${hint?`<span style="color:var(--mut2);font-weight:400">${hint}</span>`:''}</span><input type="text" inputmode="decimal" data-watveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" ${vast?'disabled':''} oninput="watOverVeld('${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
   const voet=vast
     ? `<div class="small" data-watklaar style="margin-top:8px;color:var(--mut2)">Vastgelegd op ${esc(dagKort(vast.op))}. <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="watOverHerstel()">wijzigen ›</span></div>`
     : `<div class="small" data-watrest style="margin-top:8px;font-weight:700">Nog te verdelen: ${e(rest)}${klaar?'':' · niets voorgeselecteerd'}</div><div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" data-watopslaan ${klaar?'':'disabled'} onclick="watOverZet()">Opslaan</button><button class="btn sec" data-watlater onclick="closeSheet&&0;go('maand')">Later</button></div>`;
@@ -12388,7 +12398,7 @@ function onregKaart(){ const B=onregBinnen(); if(!B.length) return ''; const e=e
   return B.map(bon=>{ const s=onregState(bon.id), delen=s.delen||{}, som=ONREG_SOORTEN.reduce((a,x)=>a+(+delen[x.k]||0),0), rest=bon.bedrag-som, klaar=Math.abs(rest)<0.5;
     const rij=x=>{ const sel=x.k==='reservering'&&resL.length?`<select data-onregreswelke onchange="onregResWelke('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px"><option value="">welke reservering?</option>${resL.map(v=>`<option value="${esc(v.id)}" ${s.resWelke===v.id?'selected':''}>${esc(v.naam||'Reservering')}</option>`).join('')}</select>`:'';
       const ander=x.k==='anders'?`<input type="text" data-onregander placeholder="waarvoor?" value="${esc(s.anderLabel||'')}" oninput="onregAnder('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px">`:'';
-      return `<div data-onregrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}</span><input type="text" inputmode="numeric" data-onregveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" oninput="onregVeld('${esc(bon.id)}','${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
+      return `<div data-onregrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}</span><input type="text" inputmode="decimal" data-onregveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" oninput="onregVeld('${esc(bon.id)}','${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
     return `<div class="card" data-onreg="${esc(bon.id)}"><div class="hlabel" style="margin:0">${esc(bon.naam)} · eenmalig ${e(bon.bedrag)}</div>${gripSub(`binnen op ${dagKort(bon.datum)} · niet in je maandbudget of salarisverdeling`)}
       ${ONREG_SOORTEN.map(rij).join('')}<div class="small" data-onregrest style="margin-top:8px;font-weight:700">Nog te verdelen: ${e(rest)}${klaar?'':' · niets voorgeselecteerd · het gevolg per doel zie je live'}</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" data-onregopslaan ${klaar?'':'disabled'} onclick="onregZet('${esc(bon.id)}')">Opslaan</button><button class="btn sec" data-onreglater onclick="go('maand')">Later</button></div></div>`; }).join(''); }
@@ -14064,7 +14074,7 @@ function openReservering(id){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px" id="resEditHead">${v?'Verplichting bewerken':'Nieuwe verplichting'}</div>
     <label class="fld">Waarvoor?</label><input id="rNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Gemeentelijke aanslag" style="width:100%">
-    <label class="fld" style="margin-top:10px">Bedrag (€)</label><input id="rBedrag" type="number" inputmode="numeric" value="${d.bedrag||''}" placeholder="bv. 480" style="width:100%">
+    <label class="fld" style="margin-top:10px">Bedrag (€)</label><input id="rBedrag" type="text" inputmode="decimal" value="${d.bedrag||''}" placeholder="bv. 480" style="width:100%">
     <label class="fld" style="margin-top:10px">Eerstvolgende vervalmaand</label><input id="rMaand" type="month" value="${esc(d.vervalmaand||'')}" style="width:100%">
     <label class="fld" style="margin-top:12px">Hoe vaak?</label>
     <div class="chips" id="rModes">${chips}</div>
@@ -14203,7 +14213,7 @@ function openResNaarDoel(id){
         `<div class="row" style="padding:5px 0;gap:10px"><span class="small muted" style="flex:1">${l}</span><span class="small" style="font-weight:700">${r}</span></div>`).join('')}
       </div>
       <label class="fld" style="margin-top:12px">Al gespaard (€)</label>
-      <input id="rnGespaard" type="number" inputmode="numeric" value="0" placeholder="0" style="width:100%">
+      <input id="rnGespaard" type="text" inputmode="decimal" value="0" placeholder="0" style="width:100%">
       <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.5">Staat dat geld nog op je reserveringsrekening, dan telt het hier én in je dekking, dus twee keer. Overboeken naar je spaarrekening haalt dat eruit; nul invullen ook.</div>
       <button class="btn" style="margin-top:14px;width:100%" onclick="resNaarDoel('${esc(String(id).replace(/'/g,"\\'"))}')">${ICON('check')} Omzetten naar spaardoel</button>`
     :`<div class="small muted" style="line-height:1.5">${bedrag>0?'Deze post heeft geen volgende vervalmaand meer, dus er is geen streefdatum om mee te nemen.':'Deze post heeft nog geen bedrag, dus er is geen doelbedrag om mee te nemen.'} Vul dat eerst aan in de verplichting zelf.</div>`}
@@ -15439,7 +15449,7 @@ function renderPlanAllocSheet(){
   const id=window._planAllocId; const it=planMap()[id]; if(!it){ closeSheet(); return; }
   const A=planAllocOf(planAllocCfg(id)); const cap=planCapacity();
   const veld = A.mode==='fixed'
-    ? `<label class="fld" style="margin-top:10px">Per maand extra (€)</label><input id="paPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="bv. 100" onchange="setPlanAllocVeld('perMaand',this.value)" style="width:100%">`
+    ? `<label class="fld" style="margin-top:10px">Per maand extra (€)</label><input id="paPer" type="text" inputmode="decimal" min="0" value="${A.perMaand||''}" placeholder="bv. 100" onchange="setPlanAllocVeld('perMaand',this.value)" style="width:100%">`
     : A.mode==='pct'
     ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="paPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="bv. 30" onchange="setPlanAllocVeld('pct',this.value)" style="width:100%">
        <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd ${planCapLabel()} te verdelen · dit item krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
@@ -16061,7 +16071,7 @@ function renderVerdeling(){
     const vak=p=>{ const max=Math.max(Math.round(+p.rest||0),0), v=st.bedragen[p.id];
       return `<div class="row" data-vddoel="${esc(p.id)}" style="gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
         <span style="flex:1;min-width:0"><b class="small" style="display:block">${esc(p.naam)}</b><span class="small" style="color:var(--mut)">nog ${euro0(max)} tot vol${st.max[p.id]?` · <span data-vdmax style="color:var(--amber)">max ${euro0(max)}</span>`:''}</span></span>
-        <input data-vdvak="${esc(p.id)}" type="text" inputmode="numeric" placeholder="€ …" value="${v!=null&&v!==''?esc(String(v)):''}" style="width:92px;text-align:right;font-weight:700" oninput="verdelingBedrag('${esc(p.id)}',this.value)"></div>`; };
+        <input data-vdvak="${esc(p.id)}" type="text" inputmode="decimal" placeholder="€ …" value="${v!=null&&v!==''?esc(String(v)):''}" style="width:92px;text-align:right;font-weight:700" oninput="verdelingBedrag('${esc(p.id)}',this.value)"></div>`; };
     const tel=D.rest===0?`<div class="row small" data-vdteller="0" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)"><span>Nog te verdelen</span><b>${euro0(0)} ✓</b></div>`
       :`<div class="row small" data-vdteller="${D.rest}" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--amber) 18%,transparent)"><span>${D.rest>0?'Nog te verdelen':'Te veel verdeeld'}</span><b>${euro0(Math.abs(D.rest))}</b></div>`;
     const pill=k=>`<span data-vdbijvol="${k}" data-gekozen="${st.bijVol===k?1:0}" role="button" class="small" style="display:inline-block;border:1.5px solid ${st.bijVol===k?'var(--teal)':'var(--bar)'};${st.bijVol===k?'background:var(--teal);color:var(--bg);':''}border-radius:16px;padding:4px 10px;margin:4px 4px 0 0;cursor:pointer" onclick="verdelingBijVol('${k}')">${VD_BIJVOL[k]}</span>`;
@@ -16088,9 +16098,11 @@ function verdelingBedrag(id, val){
   const st=window._vd; if(!st) return;
   const p=allocatePlan().find(x=>x.id===id); if(!p) return;
   const max=Math.max(Math.round(+p.rest||0),0);
-  let v=String(val||'').replace(/[^\d]/g,'');
+  /* v445: dit veld streepte elk teken weg dat geen cijfer was, dus "12,50" werd 1250. Het leest nu via
+     numIn(), zoals elk bedragveld, en rondt pas daarna af op hele euro's. */
+  const v=String(val==null?'':val).trim();
   if(v===''){ delete st.bedragen[id]; st.max[id]=false; }
-  else { let n=Math.round(+v); if(n>max){ n=max; st.max[id]=true; } else st.max[id]=false; st.bedragen[id]=n; }
+  else { let n=Math.max(Math.round(numIn(v)),0); if(n>max){ n=max; st.max[id]=true; } else st.max[id]=false; st.bedragen[id]=n; }
   const vak=document.querySelector(`[data-vdvak="${id}"]`), had=document.activeElement===vak, pos=vak?vak.selectionStart:null;
   renderVerdeling();
   if(had){ const n=document.querySelector(`[data-vdvak="${id}"]`); if(n){ n.focus(); try{ const l=n.value.length; n.setSelectionRange(Math.min(pos??l,l),Math.min(pos??l,l)); }catch(_){} } }
@@ -16729,20 +16741,20 @@ function openDebt(id,pre){
     <label class="fld" style="margin-top:10px">Type</label>
     <select id="dType" onchange="dTypeChange()" style="width:100%">${opt('lening','Lening / krediet')}${opt('studie','Studieschuld')}${opt('financiallease','Financial lease (auto)')}</select>
     <div id="dtypenote" class="small muted" style="font-size:var(--fs-xs);margin-top:6px">${typeNote}</div>
-    <label class="fld" style="margin-top:10px">Oorspronkelijk bedrag (€) <span class="small muted">· optioneel, voor voortgang</span></label><input id="dStart" type="number" inputmode="numeric" value="${d.start||''}" placeholder="bv. 12000" style="width:100%">
-    <label class="fld" style="margin-top:10px">Huidige restschuld (€)</label><input id="dRest" type="number" inputmode="numeric" value="${d0?(rest||''):(d.rest||'')}" placeholder="bv. 8000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Oorspronkelijk bedrag (€) <span class="small muted">· optioneel, voor voortgang</span></label><input id="dStart" type="text" inputmode="decimal" value="${d.start||''}" placeholder="bv. 12000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Huidige restschuld (€)</label><input id="dRest" type="text" inputmode="decimal" value="${d0?(rest||''):(d.rest||'')}" placeholder="bv. 8000" style="width:100%">
     ${d0?schuldStandBlok(d0):''}
-    <label class="fld" style="margin-top:10px">Maandaflossing (€)</label><input id="dMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 120" style="width:100%">
+    <label class="fld" style="margin-top:10px">Maandaflossing (€)</label><input id="dMnd" type="text" inputmode="decimal" value="${d.perMaand||''}" placeholder="bv. 120" style="width:100%">
     ${d0?schuldPerRegel(d0):''}
     <label class="fld" style="margin-top:10px">Rente per jaar (%) <span class="small muted">· optioneel</span></label><input id="dRente" type="text" inputmode="decimal" value="${numUit(d.rente||'')}" placeholder="bv. 2,5" style="width:100%">
-    <div id="dslotwrap" style="display:${dtype==='financiallease'?'block':'none'}"><label class="fld" style="margin-top:10px">Slottermijn aan het eind (€) <span class="small muted">· financial lease</span></label><input id="dSlot" type="number" inputmode="numeric" value="${d.slot||''}" placeholder="bv. 3000" style="width:100%"></div>
+    <div id="dslotwrap" style="display:${dtype==='financiallease'?'block':'none'}"><label class="fld" style="margin-top:10px">Slottermijn aan het eind (€) <span class="small muted">· financial lease</span></label><input id="dSlot" type="text" inputmode="decimal" value="${d.slot||''}" placeholder="bv. 3000" style="width:100%"></div>
     <div id="dautowrap" style="display:${dtype==='financiallease'?'block':'none'}">
       <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);padding:11px 0;margin-top:12px"><input type="checkbox" id="dAuto" ${d.autoBezit!==false?'checked':''}><span style="flex:1"><span style="font-weight:600;font-size:13px">Auto meerekenen als bezitting</span><span class="small muted" style="display:block">Telt mee in je vermogen · auto − restschuld = je eigen deel</span></span></label>
-      <label class="fld">Dagwaarde auto (€)</label><input id="dDag" type="number" inputmode="numeric" value="${d.dagwaarde||''}" placeholder="bv. 16000" style="width:100%">
+      <label class="fld">Dagwaarde auto (€)</label><input id="dDag" type="text" inputmode="decimal" value="${d.dagwaarde||''}" placeholder="bv. 16000" style="width:100%">
       <div id="dDagPrev" class="small muted" style="font-size:var(--fs-xs);margin-top:4px"></div>
       <details style="margin-top:8px"${(d.aankoop||d.bouwjaar)?' open':''}><summary class="small" style="color:var(--teal);cursor:pointer">Geen dagwaarde? Schat 'm via afschrijving (lokaal)</summary>
         <div class="row" style="gap:8px;margin-top:8px">
-          <div style="flex:1"><label class="fld" style="margin-top:0">Aankoopwaarde (€)</label><input id="dAankoop" type="number" inputmode="numeric" value="${d.aankoop||''}" placeholder="24000" style="width:100%"></div>
+          <div style="flex:1"><label class="fld" style="margin-top:0">Aankoopwaarde (€)</label><input id="dAankoop" type="text" inputmode="decimal" value="${d.aankoop||''}" placeholder="24000" style="width:100%"></div>
           <div style="flex:1"><label class="fld" style="margin-top:0">Bouwjaar</label><input id="dBouwjaar" type="number" inputmode="numeric" value="${d.bouwjaar||''}" placeholder="2022" style="width:100%"></div>
         </div>
         <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
@@ -16780,7 +16792,7 @@ function openDebtUpdate(id){
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(d.naam||'Schuld')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     ${gek?`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt mee met je gekoppelde betalingen. Vul je de stand van je bank in, dan is dat het nieuwe startpunt.</div>`
          :isMode('rustig')?'':`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt niet vanzelf mee met je betalingen. Die stand houd je zelf bij.</div>`}
-    <label class="fld">Restschuld nu (€)</label><input id="duRest" type="number" inputmode="numeric" min="0" value="${rest||''}" placeholder="bv. 8000" style="width:100%">
+    <label class="fld">Restschuld nu (€)</label><input id="duRest" type="text" inputmode="decimal" min="0" value="${rest||''}" placeholder="bv. 8000" style="width:100%">
     ${vloer>0?`<div class="small muted" data-slottermijn style="font-size:var(--fs-xs);margin-top:6px">Aan het eind betaal je nog een slottermijn van ${euro0(vloer)}.${(per>0&&rest>vloer)?' Lager dan dat bedrag zet de knop hieronder je restschuld niet.':''}</div>`:''}
     ${afboek}
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebtRest('${id}')">${ICON('check')} Opslaan</button>
@@ -17009,7 +17021,7 @@ function openAsset(id, naamVoorstel){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
     <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
-    <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a0?bezitWaardeNu(a0):(a.waarde||'')}" placeholder="bv. 5000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="text" inputmode="decimal" value="${a0?bezitWaardeNu(a0):(a.waarde||'')}" placeholder="bv. 5000" style="width:100%">
     ${a0?bezitWaardeBlok(a0):''}
     <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 0;margin:12px 0">
       <input type="checkbox" id="aGrow" ${g?'checked':''} onchange="document.getElementById('agrowf').style.display=this.checked?'block':'none'">
@@ -17023,7 +17035,7 @@ function openAsset(id, naamVoorstel){
            geen veld. -->
       <div class="row" style="gap:8px">
         <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="text" inputmode="decimal" value="${numUit(a.rend||'')}" placeholder="0" style="width:100%"></div>
-        <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="text" inputmode="decimal" value="${a.per||''}" placeholder="0" style="width:100%"></div>
       </div>
       ${a0?bezitPerRegel(a0):''}
       <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Rendement is niet gegarandeerd, en dit is geen advies. Inflatie en de horizon gelden voor je hele reis en stel je in bij "Rendement &amp; inflatie".</div>
@@ -17958,11 +17970,11 @@ function renderFire(){
   const inlegContent = `${rs.inleg}
       ${R.inlegMode==='auto'
         ? roRow('Periodieke inleg', euro0(R.pmt)+'/mnd', 'Uit je restsaldo (auto). Kies hierboven "Zelf invullen" voor een vast bedrag.')
-        : fl('Periodieke inleg (nu)','type="number" min="0" step="25" value="'+R.pmt+'" onchange="reisSet(\'pmt\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd')}
+        : fl('Periodieke inleg (nu)','type="text" inputmode="decimal" min="0" step="25" value="'+R.pmt+'" onchange="reisSet(\'pmt\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd')}
       ${stepList}
       <button class="cp-add" style="margin-top:8px" onclick="reisAddStep()">+ Inleg-wijziging vanaf jaar</button>
       ${nl('Of: inleg groeit','type="text" inputmode="decimal" value="'+numUit(R.grow)+'" onchange="reisSet(\'grow\',Math.max(0,numIn(this.value)))"','%/jr')}
-      ${fl('Eenmalige inleg nu','type="number" min="0" step="500" value="'+R.een+'" onchange="reisSet(\'een\',Math.max(0,Math.round(numIn(this.value)||0)))"')}`;
+      ${fl('Eenmalige inleg nu','type="text" inputmode="decimal" min="0" step="500" value="'+R.een+'" onchange="reisSet(\'een\',Math.max(0,Math.round(numIn(this.value)||0)))"')}`;
   // De aannames-groepen (rendement/inflatie/belasting · leeftijd/pensioen · FIRE-factor · jaaruitgaven · inkomen) staan nu in Instellingen → setFireAannames().
   const gOpen=k=>!!(SET.reis&&SET.reis['g_'+k]);   // per-groep open-state (nog gebruikt door de Inleg-groep)
   const groep=(k,titel,samenv,inhoud)=>`<div style="margin-top:9px;border:1px solid var(--line);border-radius:11px;overflow:hidden">
@@ -18028,14 +18040,14 @@ function onttrekkingUitkomst(K){
 }
 function renderOnttrekkingSheet(){
   const ruw=window._onttrBedrag||'';
-  const b=Math.round(+ruw||0);
+  const b=Math.round(numIn(ruw)||0);
   const K=b>0?onttrekkingKosten(b):null;
   const geen=(b>0&&!K)?`<div class="small muted" style="margin-top:12px;line-height:1.6">Hier valt nog niets over te zeggen. Vul je saldi en bezittingen aan en zet een FIRE-getal, dan rekent dit terug.</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="onttrHead">Wat kost een onttrekking?</div>
     <div class="small muted" style="margin-bottom:12px">Geld uit je belegde laag komt niet terug in euro's maar in tijd: het rendement dat je erover misloopt.</div>
     <label class="fld">Bedrag (€)</label>
-    <input id="onttrInp" type="number" inputmode="numeric" min="0" step="100" value="${esc(ruw)}" placeholder="bv. 4000" style="width:100%">
+    <input id="onttrInp" type="text" inputmode="decimal" min="0" step="100" value="${esc(ruw)}" placeholder="bv. 4000" style="width:100%">
     <button class="btn" style="margin-top:12px;width:100%" onclick="onttrekkingReken()">${ICON('trend')} Reken door</button>
     ${onttrekkingUitkomst(K)}${geen}
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met je eigen aannames uit de vermogensreis. Je uitgaven en maandinleg blijven hierbij gelijk. Geen advies of belofte.</div>`;
@@ -18394,7 +18406,7 @@ function renderNfSheet(){
     const editor=nOpen[r.cat]?`<div style="background:var(--card2);border:1px solid var(--teal);border-radius:10px;padding:8px 10px;margin:6px 0 2px"><div style="font-size:var(--fs-xs);color:var(--mut2);margin-bottom:4px">Notitie · waarom dit bedrag?</div><input type="text" value="${esc(r.note)}" placeholder="bv. alleen basis" onchange="setNfNote('${r.cat}',this.value)" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:var(--fs-sm);color:var(--txt)">${r.man?`<div style="font-size:10.5px;color:var(--mut2);cursor:pointer;text-decoration:underline;margin-top:7px;display:inline-block" onclick="resetNfAmount('${r.cat}')">↺ terug naar automatisch (${euro0(r.auto)})</div>`:''}</div>`:'';
     return `${grp}<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)">
       <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${nm}</div><div style="font-size:var(--fs-xs);color:var(--mut2)">auto ${euro0(r.auto)}</div>${noteLine}</div>
-      <div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${r.man?'var(--teal)':'var(--line)'};border-radius:9px;padding:3px 9px;width:88px"><span style="color:var(--mut2);font-weight:600">€</span><input type="number" inputmode="numeric" min="0" value="${r.crisis}" onchange="setNfAmount('${r.cat}',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:2px 0"></div>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${r.man?'var(--teal)':'var(--line)'};border-radius:9px;padding:3px 9px;width:88px"><span style="color:var(--mut2);font-weight:600">€</span><input type="text" inputmode="decimal" min="0" value="${r.crisis}" onchange="setNfAmount('${r.cat}',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:2px 0"></div>
       <div onclick="toggleNfNote('${r.cat}')" title="Notitie" style="width:28px;height:28px;border-radius:8px;background:var(--card2);border:1px solid ${penOn?'var(--teal)':'var(--line)'};display:flex;align-items:center;justify-content:center;font-size:13px;color:${penOn?'var(--teal)':'var(--mut2)'};flex-shrink:0;cursor:pointer">✎</div>
     </div>${editor}`;
   }).join('');
@@ -18676,7 +18688,7 @@ function nfDoelVastRij(M){
   const v=M.doelVast;
   const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${v!=null?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
       <span class="small muted">€</span>
-      <input id="nfDoelVast" type="number" inputmode="numeric" min="0" value="${v!=null?v:''}" placeholder="${M.doelAuto}" onchange="setNfDoelVast(this.value)"
+      <input id="nfDoelVast" type="text" inputmode="decimal" min="0" value="${v!=null?v:''}" placeholder="${M.doelAuto}" onchange="setNfDoelVast(this.value)"
         style="flex:1;min-width:0;background:transparent;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:0"></div>`;
   const noot=(v!=null)
     ? `<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Dit doel schuift niet meer mee met je transacties. De schatting zou nu ${euro0(M.doelAuto)} zeggen. <span style="color:var(--teal);cursor:pointer" onclick="resetNfDoelVast()">terug naar automatisch</span></div>`
@@ -18691,7 +18703,7 @@ function nfDoelVastRij(M){
 function nfAllocCard(){
   const A=planAllocOf(planAllocCfg(PLAN_NF)); const cap=planCapacity();
   const veld = A.mode==='fixed'
-    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Vast bedrag per maand</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><span class="small muted">€</span><input id="nfPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="0" onchange="setNfAlloc('perMaand',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none"></div></div>`
+    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Vast bedrag per maand</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><span class="small muted">€</span><input id="nfPer" type="text" inputmode="decimal" min="0" value="${A.perMaand||''}" placeholder="0" onchange="setNfAlloc('perMaand',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none"></div></div>`
     : A.mode==='pct'
     ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Deel van je spaarinleg</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><input id="nfPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="0" onchange="setNfAlloc('pct',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none"><span class="small muted">%</span></div></div>
        <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd ${planCapLabel()} te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
@@ -18742,7 +18754,7 @@ function setNfDoelVast(v){
   save(); renderNfSheet(); try{renderVooruit();}catch(_){}
 }
 function resetNfDoelVast(){ delete SET.nfDoelVast; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
-function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||!isFinite(numIn(s))) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(+s)); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
+function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||!isFinite(numIn(s))) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(numIn(s))); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNoteOpen) delete SET.nfNoteOpen[c]; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
 function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!SET.nfNoteOpen[c]; save(); renderNfSheet(); }
@@ -19802,7 +19814,7 @@ function openBuy(){
     <label class="fld">Wat?</label>
     <input id="buyItem" type="text" placeholder="bv. koptelefoon" style="width:100%">
     <label class="fld" style="margin-top:10px">Bedrag (€)</label>
-    <input id="buyAmt" type="number" min="0" inputmode="numeric" placeholder="bv. 120" style="width:100%">
+    <input id="buyAmt" type="text" min="0" inputmode="decimal" placeholder="bv. 120" style="width:100%">
     <label class="fld" style="margin-top:10px">Uit welk potje?</label>
     <select id="buyCat" style="width:100%">${optHtml}</select>
     <button class="btn" style="margin-top:14px;width:100%" onclick="startBuy()">${ICON('cart')} Check</button>`;
@@ -19813,7 +19825,7 @@ function openBuy(){
    formulier gevuld, dus closeSheet() gevolgd door buyFlow() liet de check op zijn eerste regel
    terugkeren: geen bubbel, geen keuze, geen log-entry. Het overnemen van de sheet loopt daarom
    via coStart(), de enige ingang naar het gesprek; het formulier maakt er geen tweede naast. */
-function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; if(amt>0&&cat) coStart('koop',null,{cat,amt,item}); else { closeSheet(); toast('Vul een bedrag in'); } }
+function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(numIn((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; if(amt>0&&cat) coStart('koop',null,{cat,amt,item}); else { closeSheet(); toast('Vul een bedrag in'); } }
 function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`});
   /* v429: een aankoop in een potje met een lopende testweek krijgt een tik "Hoe voelde je je net?" (overslaan mag) */
   if(['gepland','verschoven','doorgezet'].includes(uitkomst)){ try{ const T=testweekKoop(cat, amt, item); if(T) setTimeout(()=>{ try{ openTestweekTik(T.key, T.id); }catch(_){} }, 700); }catch(_){} } }
@@ -19916,7 +19928,7 @@ async function buyFlow(cat,amt,item,verder){
 }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
 // een potje draagt een AANNAME (basis): frequentie × bedrag, per week, of vast. Het maandbedrag volgt eruit.
-function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((+d.n||0)*(+d.per||0)); if(d.type==='week') return Math.round((+d.per||0)*4.345); return Math.round(+d.vast||0); }
+function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((numIn(d.n)||0)*(numIn(d.per)||0)); if(d.type==='week') return Math.round((numIn(d.per)||0)*4.345); return Math.round(numIn(d.vast)||0); }
 function potAssumptionLabel(k){ const meta=(SET.potMeta||{})[k]; if(!meta) return ''; if(meta.type==='freq') return `${meta.n}× à ${euro0(meta.per)}`; if(meta.type==='week') return `${euro0(meta.per)}/week`; return ''; }
 function openPotje(k){
   const c=CATS[k]; if(!c) return;
@@ -19947,9 +19959,9 @@ function renderPotSheet(k){
   let fields='';
   if(d.type==='freq') fields=`<div style="display:flex;gap:10px">
       <div style="flex:1"><label class="fld">Keer per maand</label><input type="number" min="0" inputmode="numeric" value="${d.n??''}" oninput="potDraftSet('n',this.value)" style="width:100%"></div>
-      <div style="flex:1"><label class="fld">Per keer (€)</label><input type="number" min="0" inputmode="numeric" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%"></div></div>`;
-  else if(d.type==='week') fields=`<label class="fld">Bedrag per week (€)</label><input type="number" min="0" inputmode="numeric" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%">`;
-  else fields=`<label class="fld">Maandbudget (€)</label><input type="number" min="0" inputmode="numeric" value="${d.vast??''}" oninput="potDraftSet('vast',this.value)" style="width:100%">`;
+      <div style="flex:1"><label class="fld">Per keer (€)</label><input type="text" min="0" inputmode="decimal" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%"></div></div>`;
+  else if(d.type==='week') fields=`<label class="fld">Bedrag per week (€)</label><input type="text" min="0" inputmode="decimal" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%">`;
+  else fields=`<label class="fld">Maandbudget (€)</label><input type="text" min="0" inputmode="decimal" value="${d.vast??''}" oninput="potDraftSet('vast',this.value)" style="width:100%">`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${c.icon||''} ${c.name}-potje${potSchatTag(k)}</div>
     <div class="small muted" style="margin-bottom:12px">${sp>0?`Deze maand al ${euro0(sp)} besteed. `:''}Waarop baseer je dit potje?</div>
@@ -20017,8 +20029,8 @@ function savePotje(k,del){
   } else {
     const d=window._potDraft||{type:'vast'}; const total=potDraftTotal();
     let meta=null;
-    if(d.type==='freq' && +d.n>0 && +d.per>0) meta={type:'freq',n:Math.round(+d.n),per:Math.round(+d.per)};
-    else if(d.type==='week' && +d.per>0) meta={type:'week',per:Math.round(+d.per)};
+    if(d.type==='freq' && numIn(d.n)>0 && numIn(d.per)>0) meta={type:'freq',n:Math.round(numIn(d.n)),per:Math.round(numIn(d.per))};
+    else if(d.type==='week' && numIn(d.per)>0) meta={type:'week',per:Math.round(numIn(d.per))};
     if(exists){ // wijziging aan bestaand potje → de meetlat blijft deze maand staan, geldt vanaf volgende maand
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]= total>0?total:0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]= meta; save();
@@ -25036,12 +25048,12 @@ function setFireAannames(){
         <span onclick="reisExpMode('auto')" class="chip ${R.expMode!=='eigen'?'on':''}" style="flex:1;text-align:center">Auto${R.autoExp>0?' · '+euro0(R.autoExp)+'/jr':''}</span>
         <span onclick="reisExpMode('eigen')" class="chip ${R.expMode==='eigen'?'on':''}" style="flex:1;text-align:center">Eigen maandbedrag</span>
       </div>
-      ${R.expMode==='eigen'?fl('Verwachte uitgaven','type="number" min="0" step="50" value="'+(R.expMonthly||'')+'" placeholder="0" onchange="reisSet(\'expMonthly\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd'):''}
+      ${R.expMode==='eigen'?fl('Verwachte uitgaven','type="text" inputmode="decimal" min="0" step="50" value="'+(R.expMonthly||'')+'" placeholder="0" onchange="reisSet(\'expMonthly\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd'):''}
       <div class="small muted" style="margin-top:7px;font-size:11.5px">${R.expMode==='eigen'?(R.expMonthly>0?('= <b style="color:var(--txt)">'+euro0(R.annualExp)+'</b>/jaar'):'Vul je verwachte maanduitgaven in.'):'Geschat uit je recente uitgaven.'}</div>`;
   const factorContent = `<div class="chips" style="margin-top:2px">${fireChips}</div>
       ${R.fireCustom?nl('Eigen factor','type="number" min="10" value="'+R.fireMult+'" onchange="reisSet(\'fireMult\',numIn(this.value)||25)"','×'):''}
       <div class="small muted" style="margin-top:7px;font-size:11.5px">De factor bepaalt hoe groot je FIRE-getal is. Het bedrag en het jaar staan bij je mijlpalen.</div>`;
-  const inkomenContent = `${fl('Gewenst per maand','type="number" min="0" step="100" value="'+R.incGoal+'" onchange="reisSet(\'incGoal\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd')}
+  const inkomenContent = `${fl('Gewenst per maand','type="text" inputmode="decimal" min="0" step="100" value="'+R.incGoal+'" onchange="reisSet(\'incGoal\',Math.max(0,Math.round(numIn(this.value)||0)))"','/mnd')}
       <div class="small muted" style="margin-top:7px;font-size:11.5px">Wat dit bedrag aan kapitaal vraagt, en of je daar uitkomt, staat bij je mijlpalen.</div>`;
   const sub=t=>`<div class="hlabel" style="margin:15px 0 0;font-size:11.5px">${t}</div>`;
   return `<div class="small muted" style="margin-bottom:2px">Aannames voor je Vermogensreis. Ze sturen de projectie; de grafiek en de mijlpalen zie je op het Vermogensreis-scherm.</div>
@@ -25312,7 +25324,7 @@ function setBudget(){
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
       const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:(potIsOpen(k)?`<span class="small" data-gridopen style="color:var(--mut2);margin-left:6px">nog niet vastgesteld</span>`:'')+potSchatTag(k);
       return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md);cursor:pointer" onclick="openPotje('${k}')">${c.icon} ${c.name}${note}</span>
-        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
+        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="text" inputmode="decimal" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
 }
 /* De bestedingslimiet staat met zijn bedrag en ernaast je budget en het verschil: "Nu: EUR X besteden" heette een
    limiet "besteden", en dat is hij niet. Het bedrag is monthBudget(baseIncome()), de bron die die regel las. */
@@ -25341,20 +25353,20 @@ function setSpelregels(){
     <div class="small muted" style="margin:10px 0 6px">Hoe je limiet meebeweegt met je inkomen.</div>
     <div class="chips">${[['pct','% van inkomen'],['cap','Vast plafond'],['baseline','Vorig niveau'],['damper','Rem op groei']].map(([k,l])=>`<span class="chip ${lm===k?'on':''}" onclick="SET.limitMode='${k}';save();render();">${l}</span>`).join('')}</div>
     ${lm==='cap'
-      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen. Een loonsverhoging verhoogt je limiet niet.</div>`
+      ? `<input type="text" inputmode="decimal" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen. Een loonsverhoging verhoogt je limiet niet.</div>`
       : lm==='damper'
       ? `<input type="number" min="0" max="100" value="${SET.damperPct||30}" placeholder="30" oninput="SET.damperPct=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Van elke euro die je meer verdient dan je basisinkomen (${euro0(baseIncome())}) gaat ${SET.damperPct||30}% naar je limiet, de rest naar sparen.</div>`
       : lm==='baseline'
       ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen.</div>`
       : `<div class="small muted" style="margin-top:6px">Je limiet is ${SET.limit}% van je inkomen. Meer inkomen is meer ruimte.</div>`}
     <label class="fld">Nachtje over slapen vanaf (€)</label>
-    <input type="number" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,numIn(this.value)||0);save();">
+    <input type="text" inputmode="decimal" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,numIn(this.value)||0);save();">
     <div class="small muted" style="margin-top:6px">Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Je kiest zelf: parkeren tot morgen, of meteen de uitkomst zien. Op ${euro0(0)} staat de stap uit.</div>
     ${kop('Sparen')}
     <label class="fld" style="margin-top:4px">Sparen per maand</label>
     <div class="chips">${[['auto','Automatisch'],['amount','Vast bedrag'],['percent','% van inkomen']].map(([k,l])=>`<span class="chip ${(SET.savingMode||'auto')===k?'on':''}" onclick="SET.savingMode='${k}';save();render();">${l}</span>`).join('')}</div>
     ${(SET.savingMode||'auto')==='amount'
-      ? `<input type="number" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=numIn(this.value)||0;save();render();">`
+      ? `<input type="text" inputmode="decimal" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=numIn(this.value)||0;save();render();">`
       : (SET.savingMode||'auto')==='percent'
       ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=numIn(this.value)||0;save();render();">`
       : `<div class="small muted">Automatisch is je inkomen min je bestedingslimiet.</div>`}
@@ -25480,7 +25492,7 @@ function openIrregular(id){
     <label class="fld" style="margin-top:10px">Maand</label>
     <input id="irMaand" type="month" value="${esc(d.ym||'')}" style="width:100%">
     <label class="fld" style="margin-top:10px">Netto bedrag (€)</label>
-    <input id="irBedrag" type="number" inputmode="numeric" value="${d.amount||''}" placeholder="bv. 2400" style="width:100%">
+    <input id="irBedrag" type="text" inputmode="decimal" value="${d.amount||''}" placeholder="bv. 2400" style="width:100%">
     <div class="small muted" style="margin-top:6px">Netto, dus wat er werkelijk op je rekening komt. Minder rekent nergens netto uit bruto.</div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveIrregular('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>
     ${v?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteIrregular('${esc(String(id).replace(/'/g,"\\'"))}')">Verwijderen</div>`:''}
@@ -25511,7 +25523,7 @@ function setIncome(){
     <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
-      :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=numIn(this.value)||0;save();render();">`}
+      :`<label class="fld">Inkomen per maand (€)</label><input type="text" inputmode="decimal" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=numIn(this.value)||0;save();render();">`}
     <label class="fld" style="margin-top:14px">Onregelmatig inkomen <span class="small muted">· vakantiegeld, dertiende maand, bonus</span></label>
     <div class="small muted" style="margin-bottom:2px">Deze bedragen tellen in hun eigen maand mee in je prognose, boven op je maandinkomen.</div>
     ${irrRijen()}
@@ -26111,6 +26123,14 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   if(mac && !Z.macnackBron){ const Em=kennisGet('woning|'+recurKey(mac));
     if(Em && Em.gestopt && !Em.gestoptDoor) Em.gestoptDoor={door:'minder', op:Z.macnack443||Em.op||vandaagYMD(), grond:WONING_GESTOPT_GROND};
     Z.macnackBron=vandaagYMD(); gedaan=true; }
+  /* v445: de schrijver hierboven zocht de markering onder de sleutel van de EERSTE Macnack-boeking (woning|recurKey). Staat het
+     antwoord onder een andere sleutel (een andere recurKey of het rekeningdeel van de IBAN), dan vond hij niets en zette hij toch
+     zijn vlag, en dan droeg de export van blok 20 de markering zonder bron en datum. Een keer: elke woning in de kennis met Macnack
+     in sleutel of partij, met 'gestopt' en zonder gestoptDoor, krijgt hem alsnog, met de dag van de rechtzetting als datum. */
+  if(!Z.macnack445){ for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.soort!=='woning' || !E.gestopt || E.gestoptDoor) continue;
+      if(!/MACNACK/i.test(k+' '+(E.partij||''))) continue;
+      E.gestoptDoor={door:'minder', op:Z.macnack443||Z.macnackBron||E.op||vandaagYMD(), grond:WONING_GESTOPT_GROND}; }
+    Z.macnack445=vandaagYMD(); gedaan=true; }
   /* v427: het antwoord "Zorg EUR 159, eenmalig" hoort bij de Tikkie aan Lausa Eriksson (09-10), niet bij een andere boeking van
      EUR 159 (Posh Clinic); een zaad dat op een andere boeking staat wordt een keer weggehaald, en die boeking is weer "nog niet benoemd". */
   const zrg=TX.find(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`));
@@ -27207,7 +27227,7 @@ function setBank(){
     <div class="small muted" style="margin-top:8px">Tik op een rekening om de naam aan te passen of hem als spaarrekening te markeren.</div>
     ${rekOverlapRegel()}
     <label class="fld" style="margin-top:14px" data-spaarelders>Spaargeld elders (niet gekoppeld)</label>
-    <input type="number" value="${SET.extraSavings||''}" placeholder="0" oninput="SET.extraSavings=numIn(this.value)||0;save();">
+    <input type="text" inputmode="decimal" value="${SET.extraSavings||''}" placeholder="0" oninput="SET.extraSavings=numIn(this.value)||0;save();">
     <div class="small muted" style="margin-top:6px">Alleen geld op rekeningen die Minder niet ziet. Staat het op een gekoppelde rekening, dan telt het al mee en hier dubbel.</div>` : '';
   const advHtml = adv ? `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
@@ -31285,7 +31305,6 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
   Rc.salarisVerwacht=Lq?Math.max(+Lq.incDue||0,0):0;
   Rc.vastVerwacht=vk?(V.vasteEindR+(V.zonderLosPosten||[]).reduce((a,x)=>a+x.bedrag,0))-Rc.vast:0;
   Rc.potVerwacht=vk?(V.varEindR+V.zonderStand.geboekt+V.zonderStand.verwacht)-Rc.pot:0;
-  Rc.opzijVerwacht=(S?Math.max(+S.saveReserved||0,0):0)+(()=>{ try{ return inlegNogDezeMaand(cur); }catch(_){ return 0; } })();
   const tot=(r,k)=>r[k]+(r===Rc?(r[k+'Verwacht']||0):0);
 
   return {cur, ms, af, inkTx, bronMnd, terugk, bronSom, salBron, salNaam, sav, resA, opzijRek, EC, R, Rc, V, Lq, S, vk, tot};
@@ -31532,7 +31551,14 @@ function diagSalarisVerdeling(){
   for(const r of R) if(r.ontt.length) L.push(`      ${MN(r.ym)}: ${r.ontt.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
   L.push(`  tussen je spaar- en reserveringsrekeningen (geen onttrekking, v419): ${kol(r=>r.binnenSom)}`);
   for(const r of R) if(r.binnen.length) L.push(`      ${MN(r.ym)}: ${r.binnen.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
-  L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.opzijVerwacht)} (nog te sparen uit safeToSpend + inleg in Plan die nog moet)`);
+  /* v445: de regel "nog verwacht" (nog te sparen uit safeToSpend plus inleg in Plan) is weg: de Plan-inleg bestaat sinds v440 niet
+     meer en opzij wordt per salarisperiode gemeten. Op zijn plek staat opzij deze periode, gedaan tegen het doel uit Kiezen, uit de
+     ene bron opzijPeriode() (dezelfde als Plan, de Doelen-meter en Zien). */
+  { let O=null; try{ O=opzijPeriode(); }catch(_){}
+    const dm=d=>d?d.slice(8,10)+'-'+d.slice(5,7):'?';
+    L.push(!O||!O.ok?'  opzij deze periode: salarisperiode onbekend'
+      :!O.meetbaar?`  opzij deze periode (${dm(O.start)} t/m ${dm(O.eind)}): onbekend, geen spaarrekening gekoppeld`
+      :`  opzij deze periode (${dm(O.start)} t/m ${dm(O.eind)}, opzijPeriode): gedaan ${e0(O.netto)} tegen doel ${O.doel!=null?e0(O.doel)+(O.pct!=null?` (${O.pct}%)`:''):'nog geen (kies het in Kiezen)'}`); }
   L.push(`  NETTO OPZIJ: ${kol(r=>tot(r,'opzij'))}${R.some(r=>!r.VIbekend)?' (een maand zonder spaar- of reserveringsrekening en zonder beleggingsboeking telt als 0: niet gemeten)':''}`);
   /* v421: HOLDING. De partij die jij aanwees ("Dit is mijn holding"). De terugkerende maandbetaling is inkomen (punt 1); de rest
      staat hier, geen inkomen en geen uitgave, per maand netto met de boekingen erachter. */
@@ -31664,7 +31690,7 @@ function diagSalarisVerdeling(){
     if(!KL.length) L.push('  geen');
     for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)){ L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
       /* v443 nazorg: een markering "gestopt" die Minder zette noemt bron en datum, zodat hij terug te vinden is */
-      if(x.gestopt) L.push(`    gestopt vanaf ${MN(x.gestopt)} ${String(x.gestopt).slice(0,4)} · ${x.gestoptDoor&&x.gestoptDoor.door==='minder'?`door Minder gezet op ${String(x.gestoptDoor.op||'').slice(8,10)}-${String(x.gestoptDoor.op||'').slice(5,7)}, op basis van ${x.gestoptDoor.grond||'jouw antwoord'}`:'door jou'}`); }
+      if(x.gestopt) L.push(`    gestopt vanaf ${MN(x.gestopt)} ${String(x.gestopt).slice(0,4)} · ${x.gestoptDoor&&x.gestoptDoor.door==='minder'?`door Minder gezet op ${String(x.gestoptDoor.op||'').slice(8,10)}-${String(x.gestoptDoor.op||'').slice(5,7)}, op basis van ${x.gestoptDoor.grond||'jouw antwoord'}`:'bron niet vastgelegd (geen gestoptDoor op dit antwoord)'}`); }
     const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)), O=new Set(gegevensOpen().slice(0, KENNIS_MAX_OPEN).map(q=>q.qkey));
     L.push('', `OPEN VRAGEN (v425): ${Q.length} · hooguit ${KENNIS_MAX_OPEN} tegelijk in Zien, op bedrag · vraag | bedrag | datum | later | stand`);
     if(!Q.length) L.push('  geen');
@@ -31929,7 +31955,14 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   L.push('', 'TUSSENDOOR (verwacht saldo per dag tot de dag voor de volgende verwachte storting)');
   if(SP.stil || SP.laat) L.push(`  ${SP.stil?'tussen de nominale dag en de verwachte storting':'na de verwachte storting'}: geen waarschuwing`);
   for(const r of P.rek){ const b=accBalance(r.acc); if(b==null){ L.push(`  ${r.naam}: saldo onbekend`); continue; } const reeks=[]; let x=b; for(let d=rekDag(vandaagYMD(),1); d<=SP.cur.eind; d=rekDag(d,1)){ x-=r.uitDag(d); reeks.push(`${d.slice(8,10)}-${d.slice(5,7)} ${e(x)}`); }
-    L.push(`  ${r.naam}: nu ${e(b)} · ${reeks.join(', ')||'de periode eindigt vandaag'}`); }
+    L.push(`  ${r.naam}: nu ${e(b)} · ${reeks.join(', ')||'de periode eindigt vandaag'}`);
+    /* v445: de verwachte daling tot de storting per soort: vast (de termijnen op hun datum), potjes en contant, met het dagbedrag per
+       soort; ze tellen op tot de daling in de reeks hierboven (uitDagDelen is de bron van uitDag) */
+    if(r.uitDagDelen){ const T={vast:0, pot:0, kas:0}, term=[]; let n=0;
+      for(let d=rekDag(vandaagYMD(),1); d<=SP.cur.eind; d=rekDag(d,1)){ const u=r.uitDagDelen(d); T.vast+=u.vast; T.pot+=u.pot; T.kas+=u.kas; n++; if(u.vast>0.005) term.push(`${d.slice(8,10)}-${d.slice(5,7)} ${e(u.vast)}`); }
+      const pd=v=>n?` (${e(v/n)} per dag)`:'';
+      L.push(`    daling tot de storting ${e(T.vast+T.pot+T.kas)} = vast ${e(T.vast)}${term.length?` (termijnen ${term.join(', ')})`:' (geen termijn)'} + potjes ${e(T.pot)}${pd(T.pot)} + contant ${e(T.kas)}${pd(T.kas)}`);
+      if(r.kasNaSal) L.push(`    contant: verwacht na je salaris (deze maand nog ${e(r.kasNu||0)} opgenomen; je pint gewoonlijk ${r.kasPatroon.dag} dagen na je salaris)`); } }
   { const A=SET.salTekort||{}, G=[]; for(const [st,P2] of Object.entries(A)) for(const [acc,x] of Object.entries(P2)) G.push(`${st} ${rekNaam(acc)}: ${x.op} tekort ${x.tekort} rond ${x.datum}${x.eerder!=null?` (eerder ${x.eerder})`:''}`); L.push(`  gegeven waarschuwingen: ${G.length?G.join(' · '):'geen'}`); }
   L.push('', 'MOMENT 2 (einde periode)');
   { const M2=salMoment2(); if(!M2) L.push(`  ${PV?`nog niet: de periode loopt t/m ${PV.eind}`:'geen afspraak'}`);

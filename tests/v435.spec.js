@@ -61,7 +61,9 @@ test.describe('v435 · 0. de verwachte salarisdatum', () => {
     let r = await page.evaluate(() => { go('maand'); renderMaand(); const P = salPeriode(); return { stil: P.stil, laat: P.laat, T: salTekortData().length, nb: !!document.querySelector('[data-salnietbinnen]'), tk: document.querySelectorAll('[data-saltekort]').length }; });
     expect(r).toEqual({ stil: true, laat: false, T: 0, nb: false, tk: 0 });
     /* 24 okt: het stille venster en de periode loopt nog (t/m 25 okt), terwijl Leefgeld voor de storting onder nul komt */
-    await boot(page, { dag: '2026-10-24', set: { manualBal: { [LEEF]: 1 } } });
+    // v445: contant wordt voor de storting niet meer verwacht als je deze maand nog niet pinde (pinnen na salaris), dus de
+    // projectie komt pas onder nul met een saldo dat er al onder staat; de eis blijft: in het stille venster geen signaal
+    await boot(page, { dag: '2026-10-24', set: { manualBal: { [LEEF]: -50 } } });
     r = await page.evaluate(acc => { go('maand'); renderMaand(); const P = salPeriode(), V = rekVoorstel(), x = V.rek.find(z => z.acc === acc); return { stil: P.stil, onder: salProjectie(x, accBalance(acc), P.cur.eind).laagst < 0, T: salTekortData().length, tk: document.querySelectorAll('[data-saltekort]').length }; }, LEEF);
     expect(r).toEqual({ stil: true, onder: true, T: 0, tk: 0 });
     await boot(page, { dag: '2026-10-26' });

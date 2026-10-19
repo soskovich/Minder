@@ -48,6 +48,10 @@ function seed() {
     minder_set: JSON.stringify({ limit: 70, autoIncome: false, income: 2500,
       manualBal: { [ACC1]: 1000, [ACC2]: 200 }, budgets: { boodschappen: 300 },
       psd2Url: 'https://x.test', psd2Token: 't',
+      /* v445: zonder psd2LastSync start de boot een eigen, ECHTE vernieuwing (langer dan 4 uur geleden, regel bij de boot), met de
+         niet-gestubde psd2Api. Die faalde met "Failed to fetch" en schreef zijn mislukking soms NA de gestubde run in dezelfde
+         entry: dat was de wankelheid van deze spec (ongeveer een op de vier runs). Met een sync van nu draait die boot-sync niet. */
+      psd2LastSync: Date.now(),
       /* De hash is wat een herkoppeling op DEZELFDE rekening-id laat landen (v281): `bekend` wint van
          de IBAN en van de uid. Zonder hem zou de koppel-route een nieuwe id maken en zou deze spec een
          ander geval toetsen dan hij beschrijft. */

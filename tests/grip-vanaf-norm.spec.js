@@ -10,11 +10,14 @@
      potje' niet van 'hij leest het bijgestelde potje' te onderscheiden. */
 const { test, expect } = require('@playwright/test');
 const { withOpzij } = require('./opzij-inject');
-const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
+const { pinDatum, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
 const MAIN='NL01MAIN0000001111', SAV='NL01SAVE0000004323', RES='NL01RESV0000007788';
-const NU=vasteDatum(DAGEN_OVER);
+/* v445: DE MAAND STAAT OOK VAST (oktober 2026), niet alleen de dag. De logboektest meet een hoogte in pixels, en daarin staan
+   maandnamen ("sinds september 2026", "Vanaf december staat hier ook ..."): met de echte maand brak die regel op 360px de ene
+   maand over twee en de andere over drie regels, en dan stond de test afhankelijk van de kalender op 499 of 514. */
+const NU=vasteDatum(DAGEN_OVER, new Date(2026,9,15));
 const ym=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 const MS=[4,3,2,1,0].map(k=>ym(new Date(NU.getFullYear(),NU.getMonth()-k,1)));
 const THIS=MS[4], VORIG=MS[3];
@@ -63,7 +66,7 @@ function seed(o={}){
     minder_own:JSON.stringify([MAIN,SAV,RES]), minder_accmeta:'{}', minder_plan:'{}'};
 }
 async function boot(page,o={}){
-  await pinDag(page);
+  await pinDatum(page, ym(NU)+'-'+String(NU.getDate()).padStart(2,'0'));
   await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, withOpzij(seed(o)));
   await page.goto('/index.html');
   await page.waitForFunction(()=>typeof window.renderMaand==='function');
@@ -699,7 +702,7 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
 /* v340: GEMETEN 514px op 360 (was 499): de rij van het record met de open vraag zegt nu "vraag staat
    bovenaan" in plaats van "vraag staat op Grip", en breekt op 360 een regel verder af. Op 390 past hij
    nog en blijft het 483. */
-const PX={360:{log:499, tel:75, metUit:49},   // v440: de brug in de uitkomstregel mist de inleg-staaf, dus het logboek is op 360px 15px lager
+const PX={360:{log:514, tel:75, metUit:49},   // v445: GEMETEN op 24 okt 2026 (vaste datum): "Vanaf december staat hier ook wat bij jou werkt." breekt op 360px over drie regels
           390:{log:483, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van het logboek en de uitkomst-regel`, async ({page})=>{

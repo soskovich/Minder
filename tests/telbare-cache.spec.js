@@ -439,29 +439,38 @@ test.describe('c - de aanroeper krijgt een eigen array', () => {
   });
 });
 
-test.describe('d - de prestatiegrens', () => {
-  /* EEN GRENS IN MILLISECONDEN IS RUIM, want een testmachine is niet een telefoon en de spreiding
-     tussen runs is groot. Wat hem toch waard maakt is de ORDE: vóór v310 kostte renderMaand() op
-     deze fixture 608 ms en de budget-editor 258 ms, en dat is wat de gebruiker als traag meldde.
-     De deterministische kant van dezelfde meting staat in blok a. */
-  test('Grip en de budget-editor blijven onder de grens op toestel-omvang', async ({ page }) => {
+test.describe('d - de prestatiegrens, deterministisch', () => {
+  /* v445: DEZE GRENS STOND IN MILLISECONDEN (Grip onder 250, de editor onder 150) en viel in een volle suite onder last, ook op
+     main: dan meet hij de machine en niet de app. Wat de milliseconden van v310/v311 droeg was het WERK: voor v310 kostte een render
+     van Grip 1059 aanroepen van telbareTx() met elk een pass over TX (608 ms), daarna 6 (45 ms). Dat werk is te tellen en hangt niet
+     aan de machine. De grens is daarom: op toestel-omvang en een warme memo roept een render van Grip, de budget-editor, Home en
+     Inzichten telbareTx() een begrensd aantal keer aan, en voert hij GEEN ENKELE poort meer uit. Zonder de maand-memo van v311 is
+     het eerste getal in de honderden, zonder de poort-memo van v310 het tweede een veelvoud van TX. */
+  test('Grip en de budget-editor doen op toestel-omvang geen pass over TX meer', async ({ page }) => {
     await pinDag(page); await open(page, groot());
+    await armeerPoorten(page);
     const r = await page.evaluate(() => {
-      /* v433: een meting onder last schommelt (gemeten bij v432: 186 tot 286 ms voor dezelfde render); daarom vijf keer en de
-         MEDIAAN, zodat een enkele uitschieter de grens niet raakt en een echte vertraging wel */
-      const een = (fn) => { const t0 = performance.now(); fn(); return performance.now() - t0; };
-      const meet = (fn) => { const a = [0, 1, 2, 3, 4].map(() => een(fn)).sort((x, y) => x - y); return a[2]; };
-      renderDash();                                        // een keer warmlopen
-      return { n: TX.length, maanden: months().length,
-        grip: meet(() => renderMaand()), editor: meet(() => openBudgetEditor(thisYM())),
-        home: meet(() => renderDash()), ins: meet(() => renderIns()) };
+      let n = 0; const e = window.telbareTx;
+      window.telbareTx = function (...a) { n++; return e.apply(this, a); };
+      const uit = {};
+      renderDash(); renderMaand(); openBudgetEditor(thisYM()); renderIns();   // de memo warm, zoals na een render
+      for (const [label, fn] of [['Grip', () => renderMaand()], ['editor', () => openBudgetEditor(thisYM())],
+        ['Home', () => renderDash()], ['Inzichten', () => renderIns()]]) {
+        n = 0; window.__poort = 0; fn();
+        uit[label] = { aanroepen: n, poorten: window.__poort };
+      }
+      window.telbareTx = e;
+      return { n: TX.length, maanden: months().length, uit };
     });
     expect(r.n, 'de fixture moet de omvang van het toestel hebben').toBeGreaterThan(1400);
     expect(r.maanden).toBeGreaterThan(18);
-    expect(r.grip, 'Grip: ' + Math.round(r.grip) + ' ms').toBeLessThan(250);
-    expect(r.editor, 'budget-editor: ' + Math.round(r.editor) + ' ms').toBeLessThan(150);
-    expect(r.home, 'Home: ' + Math.round(r.home) + ' ms').toBeLessThan(120);
-    expect(r.ins, 'Inzichten: ' + Math.round(r.ins) + ' ms').toBeLessThan(120);
+    for (const [label, v] of Object.entries(r.uit)) {
+      expect(v.poorten, label + ': poort-evaluaties op een warme memo').toBe(0);
+      /* GEMETEN bij v445 op een warme memo: Grip 54, de editor 0, Home 3, Inzichten 0 (de directe lezers van v285, elk een slice uit
+         de memo). Zonder de maand-memo van v311 is Grip er honderden; de lat van 80 laat ruimte voor een lezer erbij, niet voor een
+         lezer per maand. */
+      expect(v.aanroepen, label + ': ' + v.aanroepen + ' aanroepen van telbareTx()').toBeLessThanOrEqual(80);
+    }
   });
 });
 

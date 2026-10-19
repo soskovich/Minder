@@ -158,8 +158,8 @@ test('b3 de knop "Volgende maand anders" op Grip komt in het logboek als volgend
   expect(oc).toContain("openPotje('boodschappen')");
   await page.evaluate(()=>{ const el=[...document.querySelectorAll('.valtop-open [onclick]')]
     .find(x=>/openPotje\(/.test(x.getAttribute('onclick')||'')); el.click(); });
-  await page.waitForFunction(()=>!!document.querySelector('#sheet input[type=number]'));
-  await page.fill('#sheet input[type=number]', String(NIEUW));
+  await page.waitForFunction(()=>!!document.querySelector('#sheet input[inputmode=decimal]'));
+  await page.fill('#sheet input[inputmode=decimal]', String(NIEUW));
   await page.locator('#sheet button.btn').click();
   const r=await lees(page,'boodschappen');
   expect(r.actie).toBe('volgende_maand');

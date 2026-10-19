@@ -27,7 +27,7 @@ test.describe('a · wat de potjes-widget achterliet', () => {
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Budget deze maand');
     expect(sheet).toContain('Maandbudget per categorie');
-    expect(await page.locator('#sheet input[type="number"]').count()).toBeGreaterThan(0);
+    expect(await page.locator('#sheet input[inputmode="decimal"]').count()).toBeGreaterThan(0);
 
     // de potjes-helpers zelf zijn niet gesloopt
     const helpers = await page.evaluate(() => ({
