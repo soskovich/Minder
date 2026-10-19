@@ -39,7 +39,8 @@ test('a. de netto inleg naar je spaarrekening deze periode, uit opzijPeriode()',
   expect(O).toBe(400);                                  // de bron: netto +400 op de spaarrekening deze periode
   const k = await kaart(page);
   expect(+k.v).toBe(400);                                // de kaart leest datzelfde getal
-  expect(k.txt).toContain('oktober tot nu');
+  expect(k.txt).toContain('deze periode');                                 // v442 sectie 1: de salarisperiode, geen kalendermaand
+  expect(k.txt.toLowerCase()).not.toMatch(/\b(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\b/);
   expect(k.txt.toLowerCase()).toContain('netto naar je spaarrekening');
 });
 

@@ -11984,6 +11984,19 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     if(!set.has(last.acc)){ vastNiet.push({key:x.key, naam, reden:'afgeschreven van '+rekNaam(last.acc)}); continue; }
     const tm=rekTermijnen(x, last.date.slice(0,10), start, eind);
     vastAlle.push({key:x.key, naam, acc:last.acc, termijn:Math.abs(last.amount), maand:postMaandBedrag(x, Math.abs(last.amount)), data:tm, n:tm.length, bedrag:Math.abs(last.amount)*tm.length, last:last.date.slice(0,10), s:x}); }
+  /* v442 sectie 3: DE WONING (Cathalina) als vaste last met een termijn op zijn eigen datum, op de rekening van de externe
+     betaling. De huur komt via een Tikkie/iDEAL binnen en vormt geen herkend schema (recurKey verschilt per betaling), dus hij
+     staat niet in SCH en viel uit het voorstel (gemeld: geen huur op 1-11). woningForecast is de ene bron; de dedup voorkomt
+     dubbeltelling als een woning-betaling tóch een herkend schema vormt (woningRecurKeys, zoals monthLiquidity in v440). De
+     woning-betalingen zijn al isFixed (woningPaymentIds), dus ze tellen niet in het aandeel hierboven. */
+  try{ const WF=woningForecast(cur), wrk=woningRecurKeys();
+    if(WF && WF.actief && WF.bedrag>0 && ![...vastAlle, ...vastNiet].some(x=>wrk.has(x.key))){
+      const wk=WF.key.slice(7), dd=String(Math.min(Math.max(+WF.dag||1,1),28)).padStart(2,'0');
+      const wp=TX.filter(t=>!t.pending && t.amount<0 && (CATS[catOf(t)]||{}).type==='expense' && woningKeyVan(t)===wk).sort((a,b)=>b.date.localeCompare(a.date));
+      const acc=(wp[0] && set.has(wp[0].acc))?wp[0].acc:terugval;
+      const base=prevYM(start.slice(0,7))+'-'+dd, sWon={cadans:'maand', intervalM:1, key:WF.key, name:WF.naam};
+      const tmW=rekTermijnen(sWon, base, start, eind);
+      vastAlle.push({key:WF.key, naam:WF.naam, acc, termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true}); } }catch(_){}
   const vast=vastAlle.filter(x=>x.n>0), vastBuiten=vastAlle.filter(x=>!x.n);
   /* (2b) potjes en zonder potje uit maandVooruit(), zonder eenmalig: het VERWACHTE eind van deze maand (niet je budget) */
   let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -12585,8 +12598,8 @@ function gripZienTabel(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const m=thisYM();
   if(!V || V.onbekend || !(V.budget>0)) return `<div class="card" id="gripZienStand" data-zienstand="geen"><div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(ymFull(m))}</div><div class="small muted" style="margin-top:4px">Nog geen potjes of te weinig historie: zet ze met "Budget aanpassen".</div></div>`;
-  const vastB=Math.round(V.vaste.budget), vastV=Math.round(V.vaste.eind), totB=Math.round(V.budget), totV=Math.round(V.projectie);
-  const potB=totB-vastB, potV=totV-vastV;
+  const BG=budgetPerGroep(V), totB=Math.round(V.budget), totV=Math.round(V.projectie);   // v442 sectie 5: één bron voor het budget per groep
+  const vastB=BG.vast.b, vastV=BG.vast.v, potB=BG.potjes.b+BG.zonder.b, potV=BG.potjes.v+BG.zonder.v;   // zonder potje (budget 0) telt bij de potjes-rij
   let WF=null; try{ WF=woningForecast(m); }catch(_){}
   let O=null; try{ O=opzijPeriode(); }catch(_){}
   const kl=d=>d>0?'var(--red)':d<0?'var(--green)':'var(--txt)', dtxt=d=>d>0?`+${euro0(d)}`:d<0?`−${euro0(-d)}`:euro0(0);
@@ -12751,6 +12764,24 @@ function brugIndeling(V){
   const A=brugAfronden(G.map(x=>({k:x.k, v:x.v-x.b})), P-Bud);
   for(const x of G) x.d=A[x.k]||0;
   return {budget:Bud, projectie:P, groepen:G, g:k=>G.find(x=>x.k===k), som:G.reduce((a,x)=>a+x.d,0), Q, W}; }
+/* v442 sectie 5: DE ENE BRON VOOR HET BUDGET PER GROEP (gevraagd door de gebruiker; gemeld: potjes Inzichten/Zien/blok 20 liepen
+   uiteen, €1.816 · €1.921 · €1.903, omdat elk scherm "vast" anders definieerde — Inzichten mengde er zelfs de forecast in). vast /
+   potjes / zonder potje, afgerond met brugAfronden zodat de SOM altijd het vastgelegde maandbudget is (de som van de potjes,
+   round(V.budget)). Leest gripGroepenVier (= maandGroepen, die de wijzigingen van deze maand per groep van het vastgelegde budget
+   aftrekt, v436/v440). Vier lezers: Inzichten (insMaandStand), Zien (gripZienTabel), blok 20 punt 7 (maandGroepen) en MAANDBUDGET.
+   De forecast per groep (verwacht) staat erbij, afgerond op round(V.projectie), zodat verwacht ook overal gelijk is. */
+function budgetPerGroep(V){
+  if(!V || V.onbekend || !(V.budget>0)) return null;
+  const G=maandGroepen(V), g=n=>G.g.find(x=>x.n===n)||{b:0,v:0}, Bud=Math.round(V.budget), P=Math.round(V.projectie);
+  /* vast = de vaste delen van je potjes PLUS de vaste lasten zonder potje (de woning, Sport City: budget 0, maar wel verwacht),
+     zodat een herkende vaste last op elk scherm bij vast telt (v442 sectie 3/4). potjes = de variabele potjes en buiten de norm;
+     zonder potje = alleen variabele uitgaven zonder potje. vast en zonder afgerond, potjes neemt de rest op (zoals Zien al
+     "potjes = totaal − vast" rekent), zodat de som per constructie het vastgelegde budget is en de splitsing overal gelijk. */
+  const vastB=g('vast (potjes)').b+g('vast zonder potje').b, vastV=g('vast (potjes)').v+g('vast zonder potje').v;
+  const zonderV=g('zonder potje (variabel)').v;
+  const vB=Math.round(vastB), zB=0, pB=Bud-vB-zB;
+  const vV=Math.round(vastV), zV=Math.round(zonderV), pV=P-vV-zV;
+  return {vast:{b:vB, v:vV}, potjes:{b:pB, v:pV}, zonder:{b:zB, v:zV}, budget:Bud, projectie:P, som:vB+pB+zB}; }
 /* De brug "Waar zit de EUR X?" (v438): de staven van brugIndeling(), in die volgorde. Boven en onder staan als een staaf; een tik
    toont de potjes van die kant. Zonder potje is een staaf met geboekt (dicht) en verwacht (licht). */
 function gripGroepBrug(V){
@@ -15136,17 +15167,18 @@ function spaarOverLine(P){
      gebruiker koos opzijInhalen als bron. "Toegewezen zonder geld" blijft als signaal op Grip (de bufferregel leest
      toewijzingBovenSaldo) en de keuze-sheet (openSpaarOver) blijft bereikbaar via Home. Telt niet mee in het opzij-doel. */
   let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)) return '';
-  return `<div class="row small spaar-over" id="spaarOverRegel" data-planinhalen="${I.inhalen}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openInhalen()"><span style="flex:1;min-width:0;font-weight:600">Inhalen ${euroC(I.inhalen)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">met je bonus of wat over is ›</span></div>`;
+  return `<div class="row small spaar-over" id="spaarOverRegel" data-planinhalen="${I.inhalen}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openInhalen()"><span style="flex:1;min-width:0;font-weight:600">Terug te zetten ${euroC(I.inhalen)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">met je bonus of wat over is ›</span></div>`;
 }
-/* v440: de sheet achter Inhalen: de onttrekkingen van je spaarrekening deze salarisperiode die niet zijn teruggezet, met de
-   onttrekkingen per boeking. Informatief (geen handeling die geld beweegt): je haalt het in met je bonus of wat over is. */
+/* v442 sectie 2: de sheet achter Terug te zetten: per AFGESLOTEN periode met een tekort wat eruit ging (tekort), wat al is
+   teruggezet en wat nog open staat. Informatief (geen handeling die geld beweegt): je zet het terug met je bonus of wat over is.
+   De som van "open" is het totaal. */
 function openInhalen(){ let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)){ closeSheet(); return; }
-  const eruit=(I.tx||[]).filter(t=>(+t.amount||0)<0).sort((a,b)=>a.amount-b.amount);
-  const dag=d=>d?new Date(String(d).slice(0,10)+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="inhalenSheet" data-planinhalen="${I.inhalen}">
-    <div style="font-weight:800;font-size:var(--fs-lg)">Inhalen ${euroC(I.inhalen)}</div>
-    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">Deze salarisperiode haalde je ${euroC(I.onttrokken)} van je spaarrekening en zette er ${euroC(I.teruggestort)} terug. Wat je niet terugzette (${euroC(I.inhalen)}) haal je in met je bonus of met wat er aan het eind van de maand over is. Dit telt niet mee in je opzij-doel.</div>
-    ${eruit.length?`<div class="small" style="font-weight:700;margin:6px 0 2px">Eruit gehaald</div>`+eruit.map(t=>`<div class="row small" data-onttrekking="${esc(t.id)}" style="gap:8px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dag(t.date))} · ${esc(txNaam?txNaam(t):(t.name||''))}</span><span style="white-space:nowrap">${euroC(t.amount)}</span></div>`).join(''):'<div class="small muted">Geen losse onttrekking gevonden in deze periode.</div>'}
+  const per=ym=>{ const mn=MNAMES[+String(ym).slice(5,7)-1]; return mn+' '+String(ym).slice(0,4); };
+  const rij=r=>`<div class="row small" data-inhaalperiode="${esc(r.ym)}" data-tekort="${r.tekort}" data-teruggezet="${r.teruggezet}" data-open="${r.open}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(per(r.ym))}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">eruit ${euroC(-r.tekort)}${r.teruggezet>0?` · teruggezet ${euroC(r.teruggezet)}`:''}</span></span><span style="white-space:nowrap;font-weight:700">${euroC(r.open)} open</span></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="inhalenSheet" data-planinhalen="${I.inhalen}" data-inhaalopen="${I.open}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Terug te zetten ${euroC(I.inhalen)}</div>
+    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">In deze periodes haalde je samen ${euroC(I.onttrokkenTot)} netto van je spaarrekening${I.afgelost>0?` en zette je er ${euroC(I.afgelost)} van terug`:''}. Wat nog open staat (${euroC(I.open)}) zet je terug met je bonus of met wat er aan het eind van een periode over is (een "terugzetten"-bestemming), of je haalt het in door een latere periode meer dan je doel opzij te zetten. Dit telt niet mee in je opzij-doel.</div>
+    ${I.periodes.length?`<div class="small" style="font-weight:700;margin:6px 0 2px">Per periode</div>`+I.periodes.map(rij).join(''):'<div class="small muted">Geen periode met een tekort.</div>'}
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg(); }
 /* v371: DE ONTTREKKINGEN PER MAAND, op een plek met twee lezers: blok 14 (sectie 1, de beweging op je spaarrekening)
    en de sheet achter de melding. De bron is savedTx() (v262), dus geen tweede telling (v104). */
@@ -16165,19 +16197,30 @@ function opzijPeriode(){
   let doel=null; const SV=SET.salVerdeling; if(SV && SV.rek && SV.opzij!=null) doel=Math.round(+SV.opzij||0);
   return {ok:!!P, start:P?P.cur.start:null, eind:P?P.cur.eind:null, ym:P?P.cur.ym:null, meetbaar, netto, tx, doel,
     pct:(doel>0 && netto!=null)?Math.max(Math.round(netto/doel*100),0):null}; }
-/* v440 (item 3): INHALEN ALS METING. Onttrekkingen van je spaarrekening in de salarisperiode (salPeriode().cur) die niet zijn
-   teruggezet: onttrokken (de afschrijvingen) min teruggestort (de bijschrijvingen), niet onder nul. Dezelfde bron (savedTxRange,
-   dezelfde periode) als opzijPeriode, dus teruggestort − onttrokken is per constructie opzijPeriode.netto. Dit is NIET hetzelfde
-   als spaarOver().zonder (toegewezen aan doelen/buffer min saldo): dat meet een over-toewijzing en kent de periode niet. Blok 20
-   zet de twee naast elkaar; wijken ze af, dan is Inhalen deze meting (de onttrekkingen die niet zijn teruggezet). */
+/* v442 sectie 2: TERUG TE ZETTEN — een grootboek over de salarisperiodes heen (vervangt de meting over EEN periode van v440).
+   Elke AFGESLOTEN periode (eind vóór de lopende periode, salPeriodeVan) met netto opzij < 0 (meer van je spaarrekening af dan
+   erop, savedNetRange) opent een tekort; het open bedrag telt op over de periodes. Het gaat omlaag door (b): netto opzij BOVEN
+   het doel in een LATERE periode (alleen het deel boven het doel lost de oudste open af, FIFO), en een "terugzetten"-bestemming
+   (de inhalen-knop uit "Over deze periode" (watOver) of uit onregelmatig inkomen (onregBestemming)). Nooit dubbel: een aflossing
+   is geklemd op wat open staat. "Opzij deze periode" en het doel staan los (opzijPeriode). Startpunt: de eerste periode met
+   spaaractiviteit (bij de gebruiker 24 aug–23 sep, vóór het eerste SKF-salaris; salPeriodeVan valt terug op de verwachte dag). */
 function opzijInhalen(){
   let P=null; try{ P=salPeriode(); }catch(_){}
   const meetbaar=n26SavingsAccounts().length>0;
-  if(!P || !meetbaar) return {ok:!!P, meetbaar, inhalen:null, onttrokken:null, teruggestort:null, start:P?P.cur.start:null, eind:P?P.cur.eind:null, tx:[]};
-  const tx=savedTxRange(P.cur.start, P.cur.eind); let onttrokken=0, teruggestort=0;
-  for(const t of tx){ const a=+t.amount||0; if(a<0) onttrokken+=-a; else teruggestort+=a; }
-  onttrokken=Math.round(onttrokken); teruggestort=Math.round(teruggestort);
-  return {ok:true, meetbaar:true, inhalen:Math.max(onttrokken-teruggestort,0), onttrokken, teruggestort, start:P.cur.start, eind:P.cur.eind, tx}; }
+  if(!P || !meetbaar) return {ok:!!P, meetbaar, inhalen:null, open:null, periodes:[], onttrokkenTot:null, afgelost:null, overschotTot:0, terug:0, doel:null, start:P?P.cur.start:null, eind:P?P.cur.eind:null};
+  const SV=SET.salVerdeling, doel=(SV && SV.opzij!=null)?Math.round(+SV.opzij||0):null, curStart=P.cur.start;
+  const rows=[]; let ym=P.cur.ym;
+  for(let i=0;i<24;i++){ ym=prevYM(ym); let pv=null; try{ pv=salPeriodeVan(ym); }catch(_){} if(!pv) break; if(pv.start>=curStart) continue;
+    const tx=savedTxRange(pv.start, pv.eind); if(!tx.length) continue;   // geen spaaractiviteit: geen periode in het grootboek
+    const netto=Math.round(savedNetRange(pv.start, pv.eind)||0);
+    rows.unshift({ym, start:pv.start, eind:pv.eind, netto, tekort:Math.max(-netto,0), overschot:doel!=null?Math.max(netto-doel,0):0, teruggezet:0, open:0, tx}); }
+  const aflos=(bedrag)=>{ let p=Math.max(Math.round(bedrag)||0,0); const voor=p; for(const r of rows){ if(p<=0) break; if(r.open<=0) continue; const x=Math.min(r.open,p); r.open-=x; r.teruggezet+=x; p-=x; } return voor-p; };
+  for(const r of rows){ if(r.tekort>0) r.open=r.tekort; if(r.overschot>0) aflos(r.overschot); }   // chronologisch: een overschot lost de OUDERE open af (de latere periodes staan nog niet open)
+  let terug=0; for(const k in (SET.watOver||{})) terug+=Math.round(+((SET.watOver[k].delen||{}).inhalen)||0);
+  for(const k in (SET.onregBestemming||{})) terug+=Math.round(+((SET.onregBestemming[k].delen||{}).inhalen)||0);
+  const terugAfgelost=aflos(terug);
+  const onttrokkenTot=rows.reduce((a,r)=>a+r.tekort,0), open=rows.reduce((a,r)=>a+r.open,0), overschotTot=rows.reduce((a,r)=>a+r.overschot,0);
+  return {ok:true, meetbaar:true, inhalen:open, open, periodes:rows.filter(r=>r.tekort>0), onttrokkenTot, afgelost:onttrokkenTot-open, overschotTot, terug, terugAfgelost, doel, start:P.cur.start, eind:P.cur.eind}; }
 /* v440 (item 3): INHALEN op Plan leest opzijInhalen() (de onttrekkingen die niet zijn teruggezet), NIET meer spaarOver().zonder;
    zie spaarOverLine/openInhalen. "Toegewezen zonder geld" (spaarOver().zonder) blijft als signaal op Grip (toewijzingBovenSaldo) en
    zijn keuze-sheet (openSpaarOver) blijft bereikbaar via Home. Blok 20 legt de twee metingen naast elkaar. */
@@ -23671,7 +23714,11 @@ function insMaandStand(){
   /* v436: het tempo rekent met de potjes van het VASTGELEGDE maandbudget (zonder de inleg in Plan, die geen uitgave is) */
   let MBV=null; try{ MBV=T0.potTotal>0?maandBudgetVast(m):null; }catch(_){}
   const Bp=MBV?Math.round(MBV.totaal-(+MBV.inleg||0)):B;
-  const vastSom=vast+nogVast, potDeel=Math.max(Bp-vastSom,0);
+  /* v442 sectie 5: de budget-splitsing (vast / potjes) komt uit budgetPerGroep, de ENE bron die ook Zien en blok 20 lezen; vastSom
+     is het vast-budget en potDeel het potjes- en zonder-potje-budget, samen het vastgelegde maandbudget. Zonder forecast
+     (maandVooruit onbekend, geen drie afgeronde maanden) valt het terug op de oude afleiding Bp min de forecast-vast. */
+  let BG=null; try{ BG=budgetPerGroep(maandVooruit()); }catch(_){}
+  const vastSom=BG?BG.vast.b:(vast+nogVast), potDeel=BG?(BG.potjes.b+BG.zonder.b):Math.max(Bp-(vast+nogVast),0);
   const vastTempo=Math.round(vastTot+achterSom), potTempo=Math.round(potDeel*E.elapsed/E.dim);
   return {m, B, uit, vast, potjes, zonder, nogVast, nogPot, boven:uit+nogVast+nogPot-B,
     tempo:vastTempo+potTempo, vastTempo, potTempo, potDeel, vastSom, el:E.elapsed, dim:E.dim, zTx, vastTx, achter, onbekend:false,
@@ -24116,9 +24163,11 @@ function insOpzijKaart(){
   if(!O || !O.ok) return '';
   const kop=`<div class="hlabel" style="margin:0 0 4px">Opzij · netto naar je spaarrekening</div>`;
   if(!O.meetbaar) return `<div class="card" id="insOpzij" data-insopzij="onbekend">${kop}<div class="small muted">Geen spaarrekening gekoppeld, dus Minder kan niet meten wat er deze periode netto opzij ging.</div></div>`;
-  const n=Math.round(O.netto||0), mnd=MFULL[+O.ym.slice(5,7)-1].toLowerCase();
+  const n=Math.round(O.netto||0);
+  /* v442 sectie 1: het label noemt de salarisperiode (salPeriode, via opzijPeriode start/eind), nooit een kalendermaand — opzij
+     wordt per salarisperiode gemeten, zoals op Plan en Grip. */
   return `<div class="card" id="insOpzij" data-insopzij="${n}">${kop}
-    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span class="muted" data-insopzijmnd>${esc(mnd)} tot nu</span><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(n)}</b></div></div>`;
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span class="muted" data-insopzijmnd>deze periode · ${esc(dagKort(O.start))} – ${esc(dagKort(O.eind))}</span><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(n)}</b></div></div>`;
 }
 function renderIns(){
   const P=insPeriode(), soort=insSoort();
@@ -26036,6 +26085,14 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
   if(zrg) zet('zorg159', benoemKandidaat(zrg)?'benoem|'+benoemKey(zrg):'eenmalig|'+zrg.id, {soort:benoemKandidaat(zrg)?'benoem':'eenmalig', partij:isTikkie(zrg)?tikkiePersoon(zrg):benoemPartij(zrg), wat:'Zorgkosten', label:'Zorgkosten', aard:'eenmalig', bedrag:159, tx:benoemKandidaat(zrg)?{[zrg.id]:{label:'Zorgkosten', bron:'jij', aard:'eenmalig'}}:[zrg.id]});
   const gem=TX.find(t=>t.amount===-484 && /GEMEENTE/.test(String(t.name||'').toUpperCase()));
   if(gem && benoemKandidaat(gem)) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
+  /* v442 sectie 4: Sport City is een vast abonnement (door jou bevestigd). Zet het als vaste last via SET.fixOvrM, zodat isFixed()
+     en recurringSchedule() het als terugkerende betaling zien en het in blok 23 een termijn op zijn eigen datum op de rekening van
+     de externe betaling krijgt (de normale vaste-lasten-machinerie van v432), en leg het vast in de kennislaag (soort vast, door
+     jou). Een keer gezaaid; haal je de markering later weg, dan blijft dat zo (het zaad in SET.kennis425 voorkomt herhalen). */
+  const sc=TX.find(t=>t.amount<0 && /SPORT ?CITY/i.test(`${t.name||''} ${t.desc||''}`));
+  if(sc && !Z.sportcity){ const sk=recurKey(sc);
+    zet('sportcity', 'vast|'+sk, {soort:'vast', partij:benoemPartij(sc), wat:'Sportabonnement', potje:kennisCatVan('Sport')||catOf(sc), aard:'terug', bron:KENNIS_BRON.jij, tx:[]});
+    SET.fixOvrM=SET.fixOvrM||{}; if(SET.fixOvrM[sk]!=='fixed') SET.fixOvrM[sk]='fixed'; }
   return gedaan; }
 
 /* v426: EEN BRON VOOR WAT JIJ AANWEES. Je holding staat sinds v426 alleen in SET.kennis (holdingMigreer()). Een lening en een
@@ -31176,6 +31233,17 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
      huur zijn eigen potje, v436). */
   { let zp=[]; try{ zp=(maandSplitsing(m).vastePotjes||[]).filter(x=>x.zonderPotje); }catch(_){}
     L.push(`  vaste lasten zonder potje: ${zp.length?zp.map(x=>`${x.naam} ${euro0(Math.round(x.eind))}`).join(', '):'geen (elke vaste last heeft een potje)'}`); }
+  /* v442 sectie 3/6: de opbouw van het budget vanaf 1 nov — zit de huur erin, of komt hij erbij? Een vaste last zonder eigen
+     potje heeft EUR 0 budget (forecast-only, telt niet in het vastgelegde totaal); met een eigen huur-potje telt hij wel. */
+  { let WF=null; try{ WF=woningForecast(nextYM(m)); }catch(_){}
+    const huurBud=Math.round(+((SET.budgets||{}).huur)||0), nx=ymFull(nextYM(m)).split(' ')[0];
+    L.push(`  OPBOUW budget vanaf 1 ${nx} (v442 sectie 3): vastgelegd ${euro0(MB.totaal)} + wijzigingen ${euro0(W.tot)} = ${euro0(W.nu.totaal)}`);
+    if(WF && WF.actief) L.push(`    de woning (${WF.naam}, ${euro0(WF.bedrag)} huur) ${huurBud>0?`zit erin via een huur-potje van ${euro0(huurBud)}`:'zit er NIET in: vaste last zonder eigen potje (budget 0), alleen in de forecast en als termijn in blok 23'}`);
+    else L.push('    geen actieve woning in de kennislaag'); }
+  /* v442 sectie 6: een opzij-label noemt nooit een kalendermaand (opzij per salarisperiode, v442 sectie 1) */
+  { let lab=''; try{ const h=insOpzijKaart(); const mm=h.match(/data-insopzijmnd[^>]*>([^<]*)</); lab=mm?mm[1]:''; }catch(_){}
+    const maand=/\b(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\b/i.test(lab);
+    L.push(`  CONTROLE opzij-label noemt geen kalendermaand: "${lab||'(geen kaart)'}" → ${maand?'VERSCHILT':'klopt'}`); }
   if(SET.mbDeInleg && (SET.mbDeInleg.geraakt||[]).length){ const DI=SET.mbDeInleg;
     L.push(`  migratie de-inleg (v440${DI.hersteld?', HERSTELD op '+dag(DI.hersteld):''}): inleg uit ${DI.geraakt.length} vastgelegd record(s) gehaald`);
     for(const x of DI.geraakt){ const tg=(x.teruggekregen||[]).map(t=>`${(CATS[t.potje]||{}).name||t.potje} +${euro0(t.bedrag)}`).join(', ');
@@ -31187,14 +31255,20 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
     if(!O || !O.ok) L.push('    geen salarisperiode herkend (geen regel of geen salarisbetaling)');
     else if(!O.meetbaar || O.netto==null) L.push(`    gedaan: onbekend (geen spaarrekening herkend) · periode ${O.start}..${O.eind}`);
     else L.push(`    gedaan ${euro0(O.netto)} (${O.start}..${O.eind}) tegen doel ${O.doel==null?'nog geen doel (geen salarisverdeling gekozen)':euro0(O.doel)+(O.pct!=null?' · '+O.pct+'%':'')}`); }
-  /* v440 item 3: INHALEN — twee definities naast elkaar. A = spaarOver().zonder (toegewezen aan doelen/buffer − dekt − saldo),
-     B = opzijInhalen() (onttrekkingen in de salarisperiode die niet zijn teruggezet). Wijken ze af, dan is Inhalen B. */
+  /* v442 sectie 2e: INHALEN — een grootboek over de salarisperiodes (vervangt de twee definities A/B van v440). Per afgesloten
+     periode met een tekort: netto, tekort (eruit), afgelost (met een overschot boven het doel of een terugzetten-bestemming) en
+     wat open blijft; daaronder het totaal open. "Toegewezen zonder geld" (spaarOver().zonder) staat erbij ter vergelijking, want
+     dat meet iets anders (een over-toewijzing, geen periode) en blijft het signaal op Grip (toewijzingBovenSaldo). */
   { let A=null; try{ A=Math.round(spaarOver().zonder); }catch(_){} let I=null; try{ I=opzijInhalen(); }catch(_){}
-    L.push('  INHALEN (v440 item 3) — twee definities naast elkaar:');
-    L.push(`    A · "toegewezen zonder geld" (spaarOver().zonder = toegewezen aan doelen/buffer − dekt − saldo): ${A==null?'onbekend':euro0(A)}  [de huidige bron van de Inhalen-regel op Plan]`);
-    if(!I || I.inhalen==null) L.push('    B · onttrekkingen in de periode niet teruggezet (opzijInhalen): onbekend (geen spaarrekening of geen salarisperiode)');
-    else { L.push(`    B · onttrekkingen in de periode niet teruggezet (opzijInhalen, ${I.start}..${I.eind}): ${euro0(I.inhalen)}  (onttrokken ${euro0(I.onttrokken)} − teruggestort ${euro0(I.teruggestort)})`);
-      if(A!=null) L.push(`    A tegen B: ${A===I.inhalen?'gelijk':'VERSCHILT ('+euro0(Math.abs(A-I.inhalen))+'); dan geldt de spec: Inhalen = B (onttrekkingen die niet zijn teruggezet)'}`); } }
+    const MNq=ym=>MNAMES[+String(ym).slice(5,7)-1]+' '+String(ym).slice(0,4);
+    L.push('  INHALEN / TERUG TE ZETTEN (v442 sectie 2) — het grootboek over de salarisperiodes:');
+    if(!I || I.inhalen==null) L.push('    onbekend (geen spaarrekening of geen salarisperiode)');
+    else { if(!I.periodes.length) L.push('    geen afgesloten periode met een tekort (netto opzij < 0)');
+      for(const r of I.periodes) L.push(`    ${MNq(r.ym)} (${r.start}..${r.eind}): netto ${euro0(r.netto)} · tekort ${euro0(r.tekort)} · teruggezet ${euro0(r.teruggezet)} · open ${euro0(r.open)}`);
+      L.push(`    afgelost met: overschot boven het doel ${euro0(I.overschotTot)} + terugzetten-bestemming ${euro0(I.terug)} (watOver.inhalen + onregBestemming.inhalen)`);
+      L.push(`    TOTAAL OPEN (terug te zetten): ${euro0(I.open)} = onttrokken ${euro0(I.onttrokkenTot)} − afgelost ${euro0(I.afgelost)}`);
+      L.push(`    CONTROLE open = onttrokken − afgelost: ${euro0(I.open)} tegen ${euro0(I.onttrokkenTot-I.afgelost)} → ${I.open===I.onttrokkenTot-I.afgelost?'klopt':'VERSCHILT'}`);
+      L.push(`    ter vergelijking · "toegewezen zonder geld" (spaarOver().zonder, een ánder getal, signaal op Grip): ${A==null?'onbekend':euro0(A)}`); } }
   if(!vk || !V || V.onbekend){ L.push('  forecast onbekend (geen drie afgeronde maanden)'); return L; }
   /* v438: per groep (de indeling van de brug, brugIndeling) het vastgelegde budget, de forecast en het verschil */
   { let I=null; try{ I=brugIndeling(V); }catch(_){}
@@ -31227,6 +31301,17 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
   try{ const T=salarisTabelData(V); if(T) sch.push(['salariskaart (budget)', T.budget]); }catch(_){}
   const ok=sch.every(x=>x[1]===MB.totaal);
   L.push(`  CONTROLE maandbudget op alle schermen = vastgelegd ${euro0(MB.totaal)}: ${sch.map(x=>`${x[0]} ${x[1]==null?'-':euro0(x[1])}`).join(' · ')} → ${ok?'klopt':'VERSCHILT'}`);
+  /* v442 sectie 5: de SPLITSING vast · potjes+zonder per scherm, uit de ENE bron budgetPerGroep. De controle hierboven toetst
+     alleen het totaal (dat klopte al bij de gebruiker); deze toetst dat vast en potjes op elk scherm gelijk zijn. Inzichten
+     (insMaandStand.vastSom/potDeel) en blok 20 punt 7 (gripGroepenVier) rekenen langs hun eigen pad; Zien leest budgetPerGroep. */
+  { let BG=null; try{ BG=budgetPerGroep(V); }catch(_){}
+    let iV=null,iP=null; try{ const S=insMaandStand(); iV=S.vastSom; iP=S.potDeel; }catch(_){}
+    let p7v=null; try{ p7v=Math.round(gripGroepenVier(V).vast.b); }catch(_){}
+    if(BG){ const bgV=BG.vast.b, bgP=BG.potjes.b+BG.zonder.b, p7p=p7v==null?null:MB.totaal-p7v;
+      const rows=[['budgetPerGroep', bgV, bgP],['Inzichten', iV, iP],['Zien', bgV, bgP],['blok 20 punt 7', p7v, p7p]];
+      const okS=rows.every(r=>r[1]===bgV && r[2]===bgP);
+      L.push(`  CONTROLE budget per groep (vast · potjes+zonder, som ${euro0(MB.totaal)}): ${rows.map(r=>`${r[0]} ${r[1]==null?'-':euro0(r[1])}·${r[2]==null?'-':euro0(r[2])}`).join(' · ')} → ${okS?'klopt':'VERSCHILT'}`); }
+    else L.push('  CONTROLE budget per groep: forecast onbekend'); }
   let mv=null; try{ mv=gripMeterBudget(V).verschil; }catch(_){}
   let tv=null; try{ const T=salarisTabelData(V); if(T) tv=T.som; }catch(_){}
   L.push(`  CONTROLE onder budget = vastgelegd - forecast: ${euro0(onder)} · Budget-meter ${mv==null?'-':euro0(-mv)} → ${mv===-onder?'klopt':'VERSCHILT'}`);
@@ -31709,6 +31794,15 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
     L.push(`  contant alleen op de rekening(en) van de opnames: ${fout.length?'VERSCHIL · '+fout.map(r=>r.naam).join(', '):'sluit'}`); }
   { const onr=onregBinnen(), onrSom=onr.reduce((a,x)=>a+x.bedrag,0), inSal=onr.some(x=>{ let s=null; try{ s=salarisBetalingLaatst(); }catch(_){} return s && s.id===x.id; });
     L.push(`  eenmalig inkomen binnen deze periode ${e(onrSom)}${onr.length?` (${onr.map(x=>x.naam).join(', ')})`:''} · zit niet in het salaris ${e(P.salaris)}: ${inSal?'VERSCHIL':'sluit'}`); }
+  /* v442 sectie 3/4/6: elke herkende vaste last met een termijn in de periode staat in blok 23 (bij een rekening, of met een reden
+     onder "niet meegeteld"). De woning (Cathalina, sectie 3) en Sport City (sectie 4) horen erbij. */
+  { let sch=[]; try{ sch=recurringSchedule(true).filter(x=>x.type==='fixed'); }catch(_){}
+    const inLijst=new Set([...P.vastAlle, ...P.vastNiet].map(x=>x.key));
+    const mist=sch.filter(x=>{ try{ return postStatus(x.key).status==='actief' && !inLijst.has(x.key); }catch(_){ return false; } });
+    let WF=null; try{ WF=woningForecast(thisYM()); }catch(_){}
+    const wonIn=!WF||!WF.actief||inLijst.has(WF.key), sc=sch.find(x=>/SPORT ?CITY/i.test(`${x.name||''} ${x.key||''}`));
+    L.push(`  elke vaste last met een termijn staat in blok 23: ${(mist.length||!wonIn)?'VERSCHIL · '+[...mist.map(x=>x.name||x.key), ...(wonIn?[]:['woning '+((WF||{}).naam||'')])].join(', '):'sluit'}`
+      +`${WF&&WF.actief?` · woning ${WF.naam} ${P.vastAlle.some(x=>x.key===WF.key)?'erbij':'ONTBREEKT'}`:''}${sc?` · Sport City ${P.vastAlle.some(x=>x.key===sc.key)?'erbij':inLijst.has(sc.key)?'niet meegeteld':'ONTBREEKT'}`:''}`); }
   /* v441 sectie 6: bestemming voor wat over is (moment 2) */
   { let W=null; try{ W=watOverPeriode(); }catch(_){} if(W && W.ok){ const vast=SET.watOver&&SET.watOver[W.key];
       L.push('', `WAT OVER IS (moment 2): ${e(W.over)} over deze periode${vast?` · vastgelegd: ${WATOVER_SOORTEN.map(s=>`${s.naam} ${e(+vast.delen[s.k]||0)}`).join(', ')}`:' · nog niet verdeeld'}`); } }

@@ -4,7 +4,7 @@
    zonder geld" (spaarOver().zonder); planCapacity leest opzij -> advies -> comfortTot (de spaarinleg is uit de terugval); en de
    te-ruim-sheet heeft geen inleg-bestemmingen meer. GETALLEN VAN DE FIXTURE (budget-fixture), NIET VAN HET TOESTEL. */
 const { test, expect } = require('@playwright/test');
-const { seed, open, MAIN, SAV, CUR } = require('./budget-fixture');
+const { seed, open, MAIN, SAV, CUR, M1 } = require('./budget-fixture');
 
 test.describe('1 · het vastgelegde budget is de som van de potjes', () => {
   test('geen aparte inleg, geen Plan-inleg op enig scherm, en totaal = som van de potjes', async ({ page }) => {
@@ -110,10 +110,12 @@ test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
 });
 
 test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
-  test('Inhalen leest opzijInhalen() (onttrekkingen-niet-teruggezet), een regel', async ({ page }) => {
+  /* v442 sectie 2: de Plan-regel heet "Terug te zetten" en leest het grootboek over de periodes (opzijInhalen().inhalen = het
+     open bedrag). De onttrekking staat in een AFGESLOTEN periode (M1), want de lopende periode telt nog niet in het grootboek. */
+  test('Terug te zetten leest opzijInhalen() (het open bedrag over de periodes), een regel', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
-    // een onttrekking van de spaarrekening deze salarisperiode (na de salarisstorting op de 5e) die niet is teruggezet
-    tx.push({ id: 'onttr1', date: `${CUR}-12`, amount: -300, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    // een onttrekking in de afgeronde periode M1 (na de salarisstorting op de 5e), groter dan wat er die periode op ging
+    tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await open(page, p);
     const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
@@ -121,27 +123,30 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
         n: document.querySelectorAll('#s-vooruit [data-planinhalen]').length, stijl: reg ? (reg.getAttribute('style') || '') : '',
         hoogte: reg ? reg.getBoundingClientRect().height : 0 }; });
     expect(r.inhalen).toBeGreaterThan(0);
-    expect(r.tekst).toContain('Inhalen');
-    expect(r.attr).toBe(r.inhalen);          // de regel leest opzijInhalen().inhalen (niet spaarOver().zonder)
+    expect(r.tekst).toContain('Terug te zetten');
+    expect(r.attr).toBe(r.inhalen);          // de regel leest opzijInhalen().inhalen (het open bedrag)
     expect(r.n).toBe(1);                      // een regel, geen dubbele kaart
-    expect(r.stijl).toContain('var(--mut)'); // mut en niet amber: er is niets mis, je haalt het in
+    expect(r.stijl).toContain('var(--mut)'); // mut en niet amber: er is niets mis, je zet het terug
     expect(r.stijl).not.toContain('amber');
-    expect(r.hoogte).toBeLessThan(45);       // de regel past op een regel (zoals de oude melding)
+    expect(r.hoogte).toBeLessThan(45);       // de regel past op een regel
   });
-  /* v440 item 3: opzijInhalen() meet "onttrekkingen in de periode die niet zijn teruggezet" (de spec), uit dezelfde bron en
-     periode als opzijPeriode. Blok 20 zet die meting (B) naast spaarOver().zonder (A); wijken ze af, dan is Inhalen B. */
-  test('opzijInhalen meet onttrekkingen-niet-teruggezet (zelfde bron als opzijPeriode), en blok 20 zet A en B naast elkaar', async ({ page }) => {
-    await open(page);
-    const r = await page.evaluate(() => { const I = opzijInhalen(), O = opzijPeriode();
-      return { meetbaar: I.meetbaar, inhalen: I.inhalen, onttrokken: I.onttrokken, teruggestort: I.teruggestort, netto: O.netto,
-        diag: diagMaandBudget(null, false, null).join('\n') }; });
+  /* v442 sectie 2: opzijInhalen() is een grootboek over de afgesloten periodes: open = onttrokken − afgelost, per periode. Blok 20
+     draagt één INHALEN / TERUG TE ZETTEN-regel met het totaal open (geen A/B meer). */
+  test('opzijInhalen is een grootboek over de periodes (open = onttrokken − afgelost), en blok 20 draagt één regel', async ({ page }) => {
+    const p = seed(); const tx = JSON.parse(p.minder_tx);
+    tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    p.minder_tx = JSON.stringify(tx);
+    await open(page, p);
+    const r = await page.evaluate(() => { const I = opzijInhalen(), V = maandVooruit();
+      return { meetbaar: I.meetbaar, open: I.open, onttrokkenTot: I.onttrokkenTot, afgelost: I.afgelost, nPer: I.periodes.length,
+        diag: diagMaandBudget(V, true, null).join('\n') }; });
     expect(r.meetbaar).toBe(true);
-    expect(r.teruggestort - r.onttrokken).toBe(r.netto);           // dezelfde bron en periode als opzijPeriode
-    expect(r.inhalen).toBe(Math.max(r.onttrokken - r.teruggestort, 0));   // onttrokken − teruggestort, niet onder nul
-    expect(r.inhalen).toBeGreaterThanOrEqual(0);
-    expect(r.diag).toContain('INHALEN (v440 item 3)');             // blok 20 zet A en B naast elkaar
-    expect(r.diag).toMatch(/A · "toegewezen zonder geld"/);
-    expect(r.diag).toMatch(/B · onttrekkingen in de periode niet teruggezet/);
+    expect(r.open).toBe(r.onttrokkenTot - r.afgelost);             // open = onttrokken − afgelost
+    expect(r.open).toBeGreaterThan(0);
+    expect(r.nPer).toBeGreaterThan(0);                             // minstens één periode met een tekort
+    expect(r.diag).toMatch(/INHALEN \/ TERUG TE ZETTEN \(v442 sectie 2\)/);
+    expect(r.diag).toContain('TOTAAL OPEN');
+    expect(r.diag).not.toContain('INHALEN (v440 item 3)');        // de oude A/B-regel is weg
   });
   test('planCapacity leest opzij -> advies -> comfortTot, en nooit de spaarinleg', async ({ page }) => {
     await open(page);
