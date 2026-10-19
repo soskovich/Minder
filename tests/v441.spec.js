@@ -265,3 +265,19 @@ test('n. de Terugblik toont wat je met het eenmalige inkomen deed', async ({ pag
   expect(t).toContain('reservering €500');
   expect(t).toContain('voor jezelf €500');
 });
+
+/* v441 sectie 6: BLOK 23 draagt het venster, de reserveringen per stuk, de route en de controles (alleen lezen). */
+test('o. blok 23: het venster, de vier nieuwe controles sluiten, en de reserveringen + route staan erin', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
+  expect(d).toContain('venster sinds de rekening-indeling');
+  expect(d).toMatch(/geen termijn buiten de periode \([^)]+\): sluit/);
+  expect(d).toContain('geen vaste last op een interne tussenrekening (de rekening is die van de externe betaling): sluit');
+  expect(d).toContain('contant alleen op de rekening(en) van de opnames: sluit');
+  expect(d).toMatch(/eenmalig inkomen binnen deze periode \d+.*zit niet in het salaris \d+: sluit/);
+  expect(d).toMatch(/RESERVERINGEN \d+ \(saldo \d+ op vervaldatum-volgorde toegerekend\)/);
+  expect(d).toContain('Autoverzekering: doel 600');
+  expect(d).toMatch(/ROUTE: salaris \d+ → .+ → /);
+  expect(d).toMatch(/de route telt op tot het salaris: \d+ tegen \d+: sluit/);
+});

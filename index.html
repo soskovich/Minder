@@ -31665,7 +31665,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   L.push(`lopende periode: verwacht ${kd(SP.cur.verwacht)} (${SP.cur.regel}), werkelijk ${kd(SP.cur.werkelijk)}${SP.cur.werkelijk!==SP.cur.verwacht?' · ANDERS DAN DE REGEL':''} · ${SP.cur.start} t/m ${SP.cur.eind} (${SP.cur.dagen} dagen)`);
   L.push(`volgende storting: verwacht ${SP.volg.regel} · periode ${SP.volg.start} t/m ${SP.volg.eind} (${SP.volg.dagen} dagen)${SP.stil?' · nu tussen de nominale dag en de verwachte storting: geen signalen':''}${SP.laat?' · TE LAAT: salaris nog niet binnen':''}`);
   L.push(`het voorstel rekent over ${P.start} t/m ${P.eind} (${P.dagen} dagen, ${P.nu?'storting vandaag':'de komende periode'}) · potjes en contant × ${P.dagen}/${P.dimStart} · Plan-inleg ${e(P.plan)}`);
-  L.push(`betaalrekeningen: ${P.BR.map(rekNaam).join(', ')} · aandelen over ${P.af.join(', ')} · contant over ${P.af6.join(', ')}`);
+  L.push(`betaalrekeningen: ${P.BR.map(rekNaam).join(', ')} · venster sinds de rekening-indeling (${rekIndelingMaand(P.BR)}): ${P.af.join(', ')} · aandeel, contant en buffer lezen dit venster`);
   for(const r of P.rekAlle){ L.push('', `${r.naam}${r.sal?' (salaris)':''}${P.rek.includes(r)?'':' · geen uitgaven verwacht, buiten het voorstel'}`);
     L.push(`  vaste lasten ${e(r.vastS)} (termijnen in de periode)`+(r.vast.length?': '+r.vast.map(x=>`${x.naam} ${x.n}× ${e(x.termijn)} = ${e(x.bedrag)}`).join(', '):'')+((r.vastBuiten||[]).length?` · geen termijn in de periode: ${r.vastBuiten.map(x=>x.naam).join(', ')}`:''));
     L.push(`  potjes ${e(r.potS)}`+(r.potDelen.length?': '+r.potDelen.map(x=>`${x.naam}${x.zonder?' (zonder potje)':''} ${pc(x.aandeel)} van ${e(x.totaal)} (${e(x.maand)} × ${P.dagen}/${P.dimStart}) = ${e(x.bedrag)}`).join(', '):''));
@@ -31700,6 +31700,18 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   L.push(`  Plan-inleg ${e(P.plan)} tegen blok 20 punt 7 (inleg in Plan: budget) ${plan20==null?'onbekend':e(plan20)}: ${plan20==null?'niet te toetsen':Math.abs(P.plan-plan20)<0.5?'gelijk':'VERSCHIL'}`);
   L.push(`  gestopte of opgezegde post die meetelt: ${gestopt.length?'JA, '+gestopt.map(x=>x.naam).join(', '):'geen'} (${P.vastNiet.length} niet meegeteld)`);
   L.push(`  overboekingen tussen eigen betaalrekeningen: ${pIds.length/2} paren${pUit.length?`, waarvan ${pUit.length} boeking(en) met een uitgavencategorie`:''} · nergens als uitgave geteld (aandeel en buffer slaan ze over)`);
+  /* v441 sectie 6: vier controles op de verdeling */
+  { const buiten=P.rekAlle.flatMap(r=>r.termijnen||[]).filter(t=>t.date<P.start || t.date>P.eind);
+    L.push(`  geen termijn buiten de periode (${P.start} t/m ${P.eind}): ${buiten.length?'VERSCHIL · '+buiten.map(t=>`${t.naam} ${t.date}`).join(', '):'sluit'}`); }
+  { const tussen=P.vastAlle.filter(x=>{ const leg=TX.filter(t=>!t.pending&&t.amount<0&&recurKey(t)===x.key&&t.acc===x.acc).sort((a,b)=>b.date.localeCompare(a.date))[0]; return leg && (CATS[catOf(leg)]||{}).type!=='expense'; });
+    L.push(`  geen vaste last op een interne tussenrekening (de rekening is die van de externe betaling): ${tussen.length?'VERSCHIL · '+tussen.map(x=>x.naam).join(', '):'sluit'}`); }
+  { const fout=P.rekAlle.filter(r=>r.kasS>0.5 && !((P.opnPer||{})[r.acc]>0));
+    L.push(`  contant alleen op de rekening(en) van de opnames: ${fout.length?'VERSCHIL · '+fout.map(r=>r.naam).join(', '):'sluit'}`); }
+  { const onr=onregBinnen(), onrSom=onr.reduce((a,x)=>a+x.bedrag,0), inSal=onr.some(x=>{ let s=null; try{ s=salarisBetalingLaatst(); }catch(_){} return s && s.id===x.id; });
+    L.push(`  eenmalig inkomen binnen deze periode ${e(onrSom)}${onr.length?` (${onr.map(x=>x.naam).join(', ')})`:''} · zit niet in het salaris ${e(P.salaris)}: ${inSal?'VERSCHIL':'sluit'}`); }
+  /* v441 sectie 6: bestemming voor wat over is (moment 2) */
+  { let W=null; try{ W=watOverPeriode(); }catch(_){} if(W && W.ok){ const vast=SET.watOver&&SET.watOver[W.key];
+      L.push('', `WAT OVER IS (moment 2): ${e(W.over)} over deze periode${vast?` · vastgelegd: ${WATOVER_SOORTEN.map(s=>`${s.naam} ${e(+vast.delen[s.k]||0)}`).join(', ')}`:' · nog niet verdeeld'}`); } }
   /* v435: de drie controles van de salarisdatum en de momenten */
   { const yms=[thisYM(), nextYM(thisYM()), nextYM(nextYM(thisYM()))], fout=[];
     for(const ym of yms){ const v=salarisVerwacht(ym, Rg), w=salWeekdag(v.datum), wn=salWeekdag(v.nominaal), goed=wn===6?rekDag(v.nominaal,2):wn===0?rekDag(v.nominaal,1):v.nominaal; if(v.datum!==goed || w===0 || w===6) fout.push(ym); }
