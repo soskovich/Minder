@@ -78,3 +78,67 @@ test('e. een herkend abonnement telt als vaste last (gepland), niet als potje', 
   expect(r.vast).toBe(true);     // Sport City staat onder gepland
   expect(r.potSport).toBe(false); // en niet als potje bij geschat
 });
+
+/* v441 sectie 2: RESERVERINGEN IN DE VERDELING. Fixture: een reserveringsrekening met EUR 300, twee reserveringen
+   (Autoverzekering EUR 600 in dec, Vakantie EUR 1.000 in mrt). Het saldo wordt op vervaldatum-volgorde toegerekend. */
+const RESACC = 'NL01RESV0000005555';
+async function metRes(page) {
+  await page.evaluate((RESACC) => {
+    if (!OWN.includes(RESACC)) OWN.push(RESACC);
+    SET.acctName = Object.assign({}, SET.acctName, { [RESACC]: 'Reserveringen' });
+    SET.savingsAcc = Object.assign({}, SET.savingsAcc, { [RESACC]: false });
+    SET.manualBal = Object.assign({}, SET.manualBal, { [RESACC]: 300 });
+    SET.resAcc = RESACC;
+    SET.reserveringen = [
+      { id: 'rA', naam: 'Autoverzekering', bedrag: 600, intervalM: 0, vervalmaand: '2026-12' },
+      { id: 'rV', naam: 'Vakantie', bedrag: 1000, intervalM: 0, vervalmaand: '2027-03' }
+    ];
+    save(); try { buildAccMeta(); } catch (_) {}
+  }, RESACC);
+}
+
+test('f. reserveringen: saldo op vervaldatum-volgorde, (doel − saldo) ÷ periodes, opzij is salaris − som − reserveringen', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  const r = await page.evaluate(() => { const P = rekVoorstel(); return { rijen: P.resRijen, totaal: P.reserveringen, stand: P.resStand, opzij: P.opzij, salaris: P.salaris, som: P.som, resOk: P.resOk }; });
+  expect(r.resOk).toBe(true);
+  expect(r.rijen.map(x => x.naam)).toEqual(['Autoverzekering', 'Vakantie']);   // op vervaldatum-volgorde (dec vóór mrt)
+  expect(r.rijen[0].saldo).toBe(300);   // het hele saldo gaat naar de eerstvolgende post
+  expect(r.rijen[1].saldo).toBe(0);
+  for (const x of r.rijen) expect(x.per).toBeCloseTo((x.doel - x.saldo) / x.periodes, 5);   // (doel − saldo) ÷ periodes
+  expect(r.totaal).toBe(Math.round(r.rijen.reduce((a, x) => a + x.per, 0)));
+  expect(r.opzij).toBeCloseTo(r.salaris - r.som - r.totaal, 5);   // opzij staat na de reserveringen
+});
+
+test('g. de verdeling toont de Reserveringen-regel met het totaal en Hoe berekend per reservering', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  await page.evaluate(() => { go('maand'); openSalVerdeling('x'); });
+  const tot = await page.evaluate(() => Math.round(rekVoorstel().reserveringen));
+  await expect(page.locator('#salVerdeling [data-salvres]')).toContainText('Reserveringen');
+  await expect(page.locator('#salVerdeling [data-salvresbedrag]')).toHaveText(new RegExp(`€${tot}`));
+  await expect(page.locator('#salVerdeling [data-salvreshoeblok]')).toHaveCount(0);
+  await page.locator('#salVerdeling [data-salvreshoe]').click();
+  const blok = page.locator('#salVerdeling [data-salvreshoeblok]');
+  await expect(blok).toContainText('Autoverzekering');
+  await expect(blok).toContainText('Vakantie');
+  await expect(blok).toContainText('doel €600');
+});
+
+test('h. moment 2 meet wat er naar de reserveringsrekening ging tegen het advies', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  const m = await page.evaluate((RESACC) => {
+    /* een afspraak van een afgelopen periode (24 aug t/m 23 sep), met een reserveringen-advies van 150 */
+    SET.salVerdeling = { op: '2026-08-24', ym: '2026-08', salYM: '2026-08', rek: {}, opzij: 2000, reserveringen: 150, resAcc: RESACC, salaris: 5216, salAcc: null, start: '2026-08-24', eind: '2026-09-23', dagen: 31, buffer: {}, verwacht: {}, voor: { laagst: {} } };
+    /* er ging netto 120 naar de reserveringsrekening in die periode */
+    const add = (d, a, n) => { const t = { id: 'm2' + d + a, date: d, amount: a, acc: RESACC, name: n, desc: n, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); OVR[t.id] = 'intern'; TX.push(t); };
+    add('2026-09-01', 120, 'OVERBOEKING NAAR RESERVERINGEN');
+    save(); try { buildAccMeta(); } catch (_) {}
+    const M = salMoment2();
+    return M ? { resW: M.resW, resAdvies: M.resAdvies } : null;
+  }, RESACC);
+  expect(m).not.toBeNull();
+  expect(m.resAdvies).toBe(150);   // het advies uit de afspraak
+  expect(m.resW).toBe(120);        // netto naar de reserveringsrekening in de periode
+});

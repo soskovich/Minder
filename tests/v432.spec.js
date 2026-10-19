@@ -114,10 +114,10 @@ test.describe('v432 · 2. laten staan per rekening', () => {
   test('2f/g. opzij is salaris min de som, de Plan-inleg apart; met een bekend saldo staat er wat er over moet', async ({ page }) => {
     await S.boot(page);
     const r = await P(page);
-    expect(r.opzij).toBeCloseTo(r.salaris - r.som, 5);
+    expect(r.opzij).toBeCloseTo(r.salaris - r.som - (r.reserveringen || 0), 5);   // v441: opzij is na de reserveringen (hier geen, dus 0)
     expect(r.som).toBe(r.rek.reduce((a, x) => a + x.laten, 0));
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
-    expect(d).toMatch(/laten staan \d+ \+ opzij \d+ = \d+ tegen salaris \d+: sluit/);
+    expect(d).toMatch(/laten staan \d+ \+ reserveringen \d+ \+ opzij \d+ = \d+ tegen salaris \d+: sluit/);
     const l = r.rek.find(x => x.acc === LEEF);
     /* v435 (3): overboeken rekent alleen op de dag van de storting; daarvoor het verwachte saldo op de verwachte storting */
     expect(d).toMatch(new RegExp(`verwacht saldo op 26 okt: -?EUR [\\d.]+ · overboeken dan ±EUR [\\d.]+`));
