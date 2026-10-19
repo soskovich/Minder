@@ -39,11 +39,13 @@ test.describe('v432 · 1. uitgave per rekening', () => {
     expect(r.rek.find(x => x.acc === LEEF).kasAandeel).toBe(1);
     await add(page, ['2026-07-03', '2026-08-03', '2026-09-03'].map(d => [MAIN, d, -50, 'Geldmaat Station', 'GEA, BETAALPAS GELDMAAT STATION']));
     r = await P(page);
-    /* Leefgeld 6 x 100, Salarisrekening 3 x 50: 600 tegen 150 */
-    expect(r.rek.find(x => x.acc === MAIN).kasAandeel).toBeCloseTo(0.2, 5);
-    expect(r.rek.find(x => x.acc === LEEF).kasAandeel).toBeCloseTo(0.8, 5);
+    /* v441 (1c): contant over hetzelfde venster als het aandeel (jul, aug, sep): Leefgeld 3 x 100 = 300, Salarisrekening 3 x 50 = 150 */
+    const af = await page.evaluate(() => rekVoorstel().af);
+    expect(af).toEqual(['2026-07', '2026-08', '2026-09']);
+    expect(r.rek.find(x => x.acc === MAIN).kasAandeel).toBeCloseTo(1 / 3, 5);
+    expect(r.rek.find(x => x.acc === LEEF).kasAandeel).toBeCloseTo(2 / 3, 5);
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
-    expect(d).toMatch(/contant \d+ tegen blok 20 \(mediaan CONTANT OPGENOMEN\) \d+: gelijk/);
+    expect(d).toMatch(/contant \d+ over het venster \([^)]+\) tegen de mediaan CONTANT OPGENOMEN daarvan \d+: gelijk/);
   });
   test('1e. een overboeking tussen eigen betaalrekeningen is geen uitgave, ook niet met een uitgavencategorie, maar telt als binnenkomend', async ({ page }) => {
     await S.boot(page);
@@ -94,8 +96,9 @@ test.describe('v432 · 2. laten staan per rekening', () => {
     for (const x of r.rek) { const b = x.bm.slice().sort((p, q) => p - q), q = (b.length - 1) * 0.75, i = Math.floor(q), p75 = b[i] + (b[Math.min(i + 1, b.length - 1)] - b[i]) * (q - i), h = b.length >> 1, med = b.length % 2 ? b[h] : (b[h - 1] + b[h]) / 2;
       expect(x.buffer).toBeCloseTo(Math.max(Math.min(p75 - med, 0.2 * x.verwacht), 50), 5);
       if (!x.tekort) expect(x.laten).toBe(Math.ceil((x.verwacht + x.buffer) / 50 - 1e-9) * 50); }
-    /* Leefgeld: de buffer is groter dan 50, de Salarisrekening ook: geen van beide valt op het minimum terug in deze stand */
-    expect(r.rek.find(x => x.acc === LEEF).buffer).toBeGreaterThan(50);
+    /* v441 (1e): de buffer leest hetzelfde venster als het aandeel (jul, aug, sep); over die drie maanden collapst de spreiding
+       van Leefgeld tot de ondergrens van 50 (de formule zelf is in de lus hierboven getoetst) */
+    expect(r.rek.find(x => x.acc === LEEF).buffer).toBe(50);
   });
   test('2e. de saldolijn zet een termijn op zijn datum: een jaarpost in de periode verhoogt het bedrag met het tekort', async ({ page }) => {
     await S.boot(page);

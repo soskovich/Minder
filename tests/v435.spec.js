@@ -83,7 +83,7 @@ test.describe('v435 · 1. Hoe berekend', () => {
     const h = page.locator(`[data-salvhoe="${LEEF}"]`);
     const P = await page.evaluate(acc => { const P = rekVoorstel(), r = P.rek.find(x => x.acc === acc); return { pot: r.potDelen.map(p => [p.naam, Math.round(p.bedrag)]), kas: Math.round(r.kasS), verwacht: Math.round(r.verwacht), buf: Math.round(r.buffer), laten: r.laten, af: Math.round(r.laten0 - (r.verwacht + r.buffer)) }; }, LEEF);   // af nagerekend uit laten0, niet uit r.afronding zelf
     const t = await h.innerText();
-    for (const [n, b] of P.pot) expect(t).toMatch(new RegExp(`${n.replace('&', '&')}: 100% × €[\\d.]+\\s+€${b}`));
+    for (const [n, b] of P.pot) expect(t).toMatch(new RegExp(`${n.replace('&', '&')}: 100% × €[\\d.]+[\\s\\S]*?gaat niet via deze rekening[\\s\\S]*?€${b}`));   // v441: de potje-rij draagt "gaat niet via deze rekening ›"
     expect(await h.locator('[data-salvhoeverwacht]').innerText()).toMatch(new RegExp(`€${P.verwacht}$`));
     expect(await h.locator('[data-salvhoebuffer]').innerText()).toMatch(/Buffer: p75 €[\d.]+ − mediaan €[\d.]+ = €[\d.]+, minstens €50, hoogstens 20% \(€[\d.]+\)\s+€\d+/);
     expect(await h.locator('[data-salvhoeafronding]').innerText()).toMatch(new RegExp(`\\+€${P.af}$`));
@@ -91,8 +91,10 @@ test.describe('v435 · 1. Hoe berekend', () => {
     const a = await h.locator('[data-salvaannames]').innerText();
     expect(a).toContain('Periode 26 okt t/m 23 nov (29 dagen): verwachte storting 26 okt, regel de 24e, in het weekend de maandag erna (24-10 za → 26-10), uit je boekingen.');
     expect(a).toContain('Potjes = wat je in oktober verwacht uit te geven, niet je budget, × 29/31 dagen.');
-    expect(a).toContain('Aandelen per rekening uit jul, aug, sep.');
-    expect(a).toContain('Contant = mediaan van apr, mei, jun, jul, aug, sep, meestal op dag 18 na je salaris.');
+    /* v441 (1b/1c): aandeel en contant uit het ene venster sinds de rekening-indeling (jul t/m sep) */
+    expect(a).toContain('Geschat (aandeel per rekening en contant) uit je boekingen sinds jul t/m sep');
+    expect(a).toContain('het venster sinds je huidige rekening-indeling');
+    expect(a).toContain('Contant meestal op dag 18 na je salaris');
     /* blok 23 noemt dezelfde getallen */
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
     expect(d).toContain(`afronding +${P.af} · laagste punt`); expect(d).toContain(`LATEN STAAN ${P.laten}`);
@@ -116,10 +118,10 @@ test.describe('v435 · 1. Hoe berekend', () => {
 });
 
 test.describe('v435 · 2/3. contant en overboeken', () => {
-  test('2a/b. contant op dag N na je salaris (de mediaan van 6 maanden), op de saldolijn op die dag; zonder patroon gelijk', async ({ page }) => {
+  test('2a/b. contant op dag N na je salaris (de mediaan van het venster sinds de rekening-indeling), op de saldolijn op die dag; zonder patroon gelijk', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(acc => { const P = rekVoorstel(), r = P.rek.find(x => x.acc === acc); return { kp: r.kasPatroon, dag: r.kasDag, start: P.start }; }, LEEF);
-    expect(r.kp).toMatchObject({ dag: 18, maanden: 6 }); expect(r.dag).toBe('2026-11-13');
+    expect(r.kp).toMatchObject({ dag: 18, maanden: 3 }); expect(r.dag).toBe('2026-11-13');   // v441: kasPatroon over het venster sinds de rekening-indeling (jul, aug, sep)
     await page.evaluate(() => { go('maand'); openSalVerdeling('x'); });
     await expect(page.locator(`[data-salvrekblok="${LEEF}"] [data-salvkasdag]`)).toHaveText('contant meestal op dag 18 na je salaris');
     /* de lijn: op 12 nov is het contant nog niet af, op 13 nov wel */
@@ -239,7 +241,7 @@ test.describe('v435 · 7. blok 23', () => {
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
     expect(d).toContain('lopende periode: verwacht 24-09 (24-09 do), werkelijk 24-09 · 2026-09-24 t/m 2026-10-25 (32 dagen)');
     expect(d).toContain('volgende storting: verwacht 24-10 za → 26-10 · periode 2026-10-26 t/m 2026-11-23 (29 dagen)');
-    expect(d).toContain('opnamedag: dag 18 na je salaris (6 opnames in 6 maanden), op de saldolijn 2026-11-13');
+    expect(d).toContain('opnamedag: dag 18 na je salaris (3 opnames in 3 maanden), op de saldolijn 2026-11-13');   // v441: het venster sinds de rekening-indeling (jul, aug, sep)
     expect(d).toContain('verwachte storting volgt de weekendregel: okt 24-10 za → 26-10 · nov 24-11 di · dec 24-12 do: ja');
     expect(d).toContain('tekort-signaal tussen de 24e en de verwachte storting: geen');
     expect(d).toMatch(/TUSSENDOOR \(verwacht saldo per dag[^\n]*\n  Salarisrekening: nu \d+ · 17-10 /);
