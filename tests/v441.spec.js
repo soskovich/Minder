@@ -160,3 +160,66 @@ test('i. de route toont salaris → rekening → delen (reserveringen, spaarreke
   const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
   expect(d).toMatch(/de route telt op tot het salaris: \d+ tegen \d+: sluit/);
 });
+
+/* v441 sectie 4: BESTEMMING VOOR WAT OVER IS. salMoment2 wordt gestubd voor een gecontroleerd moment 2
+   (Salarisrekening eind 1000 buffer 600, Leefgeld eind 400 buffer 300 → over 500). */
+async function stubMoment2(page) {
+  await page.evaluate(({ MAIN, LEEF }) => {
+    window._m2stub = () => ({ R: [{ acc: MAIN, naam: 'Salarisrekening', eind: 1000, buffer: 600, oordeel: 'paste', advies: 0, voorstel: 0, laagst: 0, laagstVerwacht: 0, ont: 0, grootste: 0, basis: 0 }, { acc: LEEF, naam: 'Leefgeld', eind: 400, buffer: 300, oordeel: 'paste', advies: 0, voorstel: 0, laagst: 0, laagstVerwacht: 0, ont: 0, grootste: 0, basis: 0 }], PV: { ym: '2026-08', start: '2026-08-24', eind: '2026-09-23', dagen: 31 }, volg: null, schaal: 1, opzijW: 0, opzijAdvies: 0, resW: 0, resAdvies: 0, salaris: 5216, som: 0, opzijVolg: 0 });
+    salMoment2 = window._m2stub;
+  }, { MAIN, LEEF });
+}
+
+test('j. wat over is = eindsaldo boven de buffer; opslaan pas als het hele bedrag een bestemming heeft', async ({ page }) => {
+  await S.boot(page);
+  await stubMoment2(page);
+  const r = await page.evaluate(() => {
+    const W = watOverPeriode(); const over = W.over;
+    /* een deel verdelen is niet genoeg: opslaan schrijft niets */
+    window._watover = { key: W.key, delen: { inhalen: 200, sparen: 0, reservering: 0, anders: 0 }, resWelke: '', anderLabel: '' };
+    watOverZet(); const naPartial = SET.watOver ? SET.watOver[W.key] : undefined;
+    /* het hele bedrag verdeeld: nu wel */
+    window._watover = { key: W.key, delen: { inhalen: 200, sparen: 200, reservering: 100, anders: 0 }, resWelke: '', anderLabel: '' };
+    watOverZet(); const naVol = SET.watOver[W.key];
+    return { over, naPartial, naVol };
+  });
+  expect(r.over).toBe(500);                 // (1000−600) + (400−300)
+  expect(r.naPartial).toBeUndefined();      // niet volledig verdeeld → niets vastgelegd
+  expect(r.naVol.delen).toEqual({ inhalen: 200, sparen: 200, reservering: 100, anders: 0 });
+});
+
+test('k. de Kiezen-kaart toont "over deze periode", Opslaan staat uit tot alles verdeeld is', async ({ page }) => {
+  await S.boot(page);
+  await stubMoment2(page);
+  await page.evaluate(() => { go('maand'); if (typeof gripKiesTab === 'function') gripKiesTab('kiezen'); renderMaand(); });
+  const k = page.locator('#gripWatOver');
+  await expect(k).toContainText('Bestemming voor wat over is');
+  await expect(k).toContainText('€500 over deze periode');
+  await expect(page.locator('#gripWatOver [data-watopslaan]')).toBeDisabled();   // niets voorgeselecteerd
+  await page.locator('#gripWatOver [data-watveld="sparen"]').fill('500');
+  await expect(page.locator('#gripWatOver [data-watopslaan]')).toBeEnabled();
+  await page.locator('#gripWatOver [data-watopslaan]').click();
+  const saved = await page.evaluate(() => SET.watOver['2026-08'].delen.sparen);
+  expect(saved).toBe(500);
+});
+
+test('l. de Terugblik meet gekozen tegen werkelijk naar je spaar- en reserveringsrekening', async ({ page }) => {
+  await S.boot(page);
+  await metRes(page);
+  await stubMoment2(page);
+  const r = await page.evaluate((RESACC) => {
+    SET.watOver = { '2026-08': { delen: { inhalen: 100, sparen: 200, reservering: 150, anders: 50 }, resWelke: '', anderLabel: 'cadeau', over: 500, op: '2026-09-23' } };
+    const T0 = watOverTerug();   // wat er zonder mijn boekingen al netto ging (de fixture heeft eigen bewegingen)
+    /* nog eens 250 naar de spaarrekening, 120 naar de reserveringsrekening in de periode */
+    const spaar = n26SavingsAccounts()[0];
+    const add = (acc, d, a) => { const t = { id: 't' + acc.slice(-4) + d + a, date: d, amount: a, acc, name: 'Eigen overboeking', desc: 'OVERBOEKING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); OVR[t.id] = 'intern'; TX.push(t); };
+    add(spaar, '2026-09-01', 250); add(RESACC, '2026-09-02', 120);
+    save();
+    const T1 = watOverTerug();
+    return { gekozenSpaar: T1.gekozenSpaar, gekozenRes: T1.gekozenRes, dSpaar: T1.naarSpaar - T0.naarSpaar, dRes: T1.naarReservering - T0.naarReservering };
+  }, RESACC);
+  expect(r.gekozenSpaar).toBe(300);       // inhalen 100 + sparen 200
+  expect(r.gekozenRes).toBe(150);
+  expect(r.dSpaar).toBe(250);             // de meting volgt wat er netto naar de spaarrekening ging
+  expect(r.dRes).toBe(120);               // en naar de reserveringsrekening
+});
