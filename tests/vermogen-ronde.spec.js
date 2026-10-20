@@ -76,8 +76,13 @@ test.describe('D · een datum per schuld', () => {
 test.describe('G en I · de schuld als lijstregel, de tekst in de sheet', () => {
   test('de rij draagt naam, datum, termijn, rest en een chevron, en verder niets', async ({ page }) => {
     await boot(page);
+    /* v447: de tekst uit de tekstknopen en niet uit innerText. innerText vraagt een layout van Vermogen (met de ▲ uit een
+       fallback-lettertype), en die hing in deze VM onder last in de renderer: GEMETEN 21 van 300 bij 8 workers en 6 van 300 bij 2;
+       met de tekstknopen 0 van 300 bij 8. Wat deze test vastlegt is de tekst van de rij, geen layout. */
     const r = await page.evaluate(() => { SET.openSchuld = true; go('vermogen'); renderVermogen();
-      const e = document.querySelector('[data-schuldrij="lease"]'); return { t: e.innerText.replace(/\s+/g, ' ').trim(), knop: e.querySelectorAll('button,.debt-upd').length }; });
+      const e = document.querySelector('[data-schuldrij="lease"]'), w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT), d = []; let n;
+      while ((n = w.nextNode())) d.push(n.nodeValue);
+      return { t: d.join(' ').replace(/\s+/g, ' ').trim(), knop: e.querySelectorAll('button,.debt-upd').length }; });
     expect(r.t).toBe('Auto Lease vrij in apr 2029 · €426 per maand €12.756 ›');
     expect(r.knop).toBe(0);
   });
