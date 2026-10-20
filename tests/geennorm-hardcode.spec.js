@@ -111,9 +111,10 @@ test('de twee gerepareerde plekken lezen de vlag en niet de sleutel', () => {
   // geenNormRegels(): loopt over CATS en leest de vlag, en tikt per categorie
   const gr = body('geenNormRegels');
   expect(gr).toMatch(/Object\.keys\(CATS\)/);
-  expect(gr).toMatch(/\.geenNorm/);
+  // sinds v447 via geenNorm(k): contant met een budget is een gewoon potje, dus de vlag alleen is niet genoeg
+  expect(gr).toMatch(/geenNorm\(k\)/);
   expect(gr).toMatch(/openCategory\('\$\{k\}'/);
   // openCategory(): de uitleg komt uit JARGON per sleutel, niet uit één vaste zin
   const oc = body('openCategory');
-  expect(oc).toMatch(/geenNorm\s*&&\s*JARGON\[k\]/);
+  expect(oc).toMatch(/geenNorm(\(k\))?\s*&&\s*JARGON\[k\]/);
 });

@@ -103,13 +103,23 @@ test.describe('a - huur valt buiten de scope', () => {
   });
 
   test('geenNorm blijft er ook uit, en dat is een andere regel dan huur', async ({ page }) => {
-    await boot(page, { budgets: { onvoorzien: 100, contant: 100 } });
-    const r = await page.evaluate(() => ({ scope: weekScope(), uit: WEEK_SCOPE_UIT }));
+    await boot(page, { budgets: { onvoorzien: 100 } });
+    const r = await page.evaluate(() => ({ scope: weekScope(), uit: WEEK_SCOPE_UIT, cn: geenNorm('contant') }));
     expect(r.scope).not.toContain('onvoorzien');
+    expect(r.cn).toBe(true);
     expect(r.scope).not.toContain('contant');
     // en ze staan niet in de uitsluitlijst: die is voor de afbakening, geenNorm heeft zijn eigen vlag
     expect(r.uit).not.toContain('onvoorzien');
     expect(r.uit).not.toContain('contant');
+  });
+
+  test('v447: contant met een budget is een gewoon potje en staat dan wel in de scope', async ({ page }) => {
+    await boot(page, { budgets: { onvoorzien: 100, contant: 100 } });
+    const r = await page.evaluate(() => ({ scope: weekScope(), cn: geenNorm('contant'), on: geenNorm('onvoorzien') }));
+    expect(r.cn).toBe(false);
+    expect(r.on).toBe(true);
+    expect(r.scope).toContain('contant');
+    expect(r.scope).not.toContain('onvoorzien');
   });
 });
 
