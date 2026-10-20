@@ -12051,7 +12051,8 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
        gepind en is je patroon pinnen na je salaris (kasPatroon.dag, minstens 3 maanden), dan wordt er tot de dag voor de volgende
        verwachte storting geen contant verwacht; dat komt in de periode erna. */
     const kasNu=(D&&D.R.slice(-1)[0]&&D.R.slice(-1)[0].ym===cur)?(D.R.slice(-1)[0].opn||[]).filter(t=>t.acc===acc).reduce((a,t)=>a-t.amount,0):0;
-    const kasNaSal=kp.dag!=null && kM>0.005 && !(kasNu>0.005) && !nu && String(SP.cur.start||'').slice(0,7)<cur;   // het salaris van deze maand is nog niet binnen
+    /* v446: of door jou: "Contant: ik pin na mijn salaris" in Wat Minder van jou weet (kasNaSalKennis()), ook zonder patroon van 3 maanden */
+    const kasKennis=!!kasNaSalKennis(), kasNaSal=(kp.dag!=null || kasKennis) && kM>0.005 && !(kasNu>0.005) && !nu && String(SP.cur.start||'').slice(0,7)<cur;   // het salaris van deze maand is nog niet binnen
     const potRestNu=pd.reduce((a,x)=>a+x.rest,0), kasRestNu=Math.max(kM-kasNu,0), restNu=potRestNu+kasRestNu;
     const potMaand=pd.reduce((a,x)=>a+x.maand*x.aandeel,0), pMaand=potMaand+kM, alleTerm={};
     for(const x of vastAlle.filter(x=>x.acc===acc)) for(const d of rekTermijnen(x.s, x.last, rekDag(vandaag,1), horizon)) alleTerm[d]=(alleTerm[d]||0)+x.termijn;
@@ -12064,7 +12065,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     /* (3) overboeken rekent alleen op de dag van de werkelijke storting, met het dan bekende saldo; daarvoor het verwachte saldo op de
        verwachte storting */
     let verwachtSaldo=null; if(!nu && saldo!=null){ verwachtSaldo=saldo; for(let d=rekDag(vandaag,1); d<start; d=rekDag(d,1)) verwachtSaldo-=uitDag(d); }
-    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, uitDagDelen, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand}; });
+    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, kasNaSalBron:kasNaSal?(kasKennis?'kennis':'patroon'):null, uitDagDelen, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand}; });
   /* een rekening zonder verwachte uitgaven en zonder vaste last laat niets staan: die valt buiten het voorstel */
   const actief=rek.filter(r=>r.vastS+r.potS+r.kasS>0.5 || r.sal);
   /* v441 sectie 2: de reserveringen staan tussen de rekeningen en opzij; opzij (naar je spaarrekening) is wat daarna overblijft */
@@ -12143,7 +12144,7 @@ function salHoeHtml(P, r){ const e=euro0, pc=v=>Math.round(v*100)+'%', R=P.SP.R,
     ${rij('<b>Laten staan</b>', `<b>${e(r.laten)}</b>`, 'data-salvhoelaten')}</div>
     <div data-salvaannames style="margin-top:6px;color:var(--mut2)">Periode ${dagKort(P.start)} t/m ${dagKort(P.eind)} (${P.dagen} dagen): ${P.nu?'je salaris kwam vandaag':`verwachte storting ${dagKort(P.start)}`}, regel ${esc(salRegelTekst(R))}${P.per0.regel && P.per0.regel.includes('→')?` (${esc(P.per0.regel)})`:''}${R.bron==='boekingen'?', uit je boekingen':', door jou'}.<br>
     Potjes = wat je in ${esc(ymFull(P.potMaand))} verwacht uit te geven, niet je budget, × ${P.dagen}/${P.dimStart} dagen.<br>
-    Geschat (aandeel per rekening en contant) uit je boekingen ${esc(sinds)}${P.af.length>1?` t/m ${mn(P.af[P.af.length-1])}`:''} · het venster sinds je huidige rekening-indeling${kp.dag!=null?`. Contant meestal op dag ${kp.dag} na je salaris`:'. Contant gelijk over de dagen (minder dan 3 maanden met een opname)'}.</div></div>`; }
+    Geschat (aandeel per rekening en contant) uit je boekingen ${esc(sinds)}${P.af.length>1?` t/m ${mn(P.af[P.af.length-1])}`:''} · het venster sinds je huidige rekening-indeling${kp.dag!=null?`. Contant meestal op dag ${kp.dag} na je salaris`:'. Contant gelijk over de dagen (minder dan 3 maanden met een opname)'}${kasNaSalKennis()?'. Jij gaf aan dat je na je salaris pint: tot je storting rekent het voorstel dan geen contant op een rekening waar je nog niet pinde':''}.</div></div>`; }
 function salGevolgHtml(P, B){ const G=salVerdelingGevolg(P, B), som=P.rek.reduce((a,r)=>a+(+B[r.acc]||0),0), opzij=P.salaris-som-(P.reserveringen||0), planMist=Math.max(P.plan-opzij,0);
   return `<b>Gevolg</b><br>${G.map(g=>`${esc(g.naam)}: laagste saldo ${euro0(g.laagst)} op ${dagKort(g.dag)}, onttrekkingen ${g.laagst>=0?euro0(0):'nodig'}`).join('<br>')}<br>${rekOpzijTekst(opzij, P.plan)}${planMist>0.5?', je doelen zijn later vol':''}`; }
 /* v441 sectie 2: de regel "Reserveringen EUR X" in de verdeling, met Hoe berekend per reservering (doel, saldo op volgorde,
@@ -26079,6 +26080,12 @@ const KENNIS_IN=[['terug','Terugbetaling'],['teruggave','Teruggave'],['gift','Gi
 const KENNIS_IN_SUB={terug:'van een lening of Tikkie', teruggave:'belasting, verzekering, winkel', extra:'bonus, vakantiegeld'};
 const KENNIS_CONTANT=['Uitgaan of eten','Boodschappen','Kinderen','Vices'];
 function kennisGet(k){ return (SET.kennis||{})[k]||null; }
+/* v446: CONTANT NA JE SALARIS, DOOR JOU. Een keuze in Wat Minder van jou weet (groep Contant): "Contant: ik pin na mijn salaris".
+   Staat hij, dan rekent het salarisvoorstel (rekVoorstelRuw, blok 23) tot je storting geen contant op een rekening waar je in de
+   lopende periode nog niet pinde, ook zonder een patroon van 3 maanden. Vergeten haalt hem weg; er verandert geen boeking. */
+const KASNASAL_KEY='kasnasal', KASNASAL_WAT='Contant: ik pin na mijn salaris';
+function kasNaSalKennis(){ const E=kennisGet(KASNASAL_KEY); return E && E.soort==='kasnasal' ? E : null; }
+function kasNaSalZet(){ if(kasNaSalKennis()) return; const herstel=kennisSnap(); kennisZet(KASNASAL_KEY, {soort:'kasnasal', partij:'Contant', wat:KASNASAL_WAT, tx:[]}); save(); keuzeKlaar('Contant: je pint na je salaris', herstel); }
 function kennisZet(k, E){ SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E); return SET.kennis[k]; }
 function kennisTekst(E){ return E? `${E.wat||'nog niet benoemd'} \u00b7 ${KENNIS_BRON[E.bron]||E.bron||'door jou'}` : ''; }
 /* De bron als link naar "Wat Minder van jou weet": een tik op een bron-regel opent het scherm. */
@@ -26144,6 +26151,10 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
      en recurringSchedule() het als terugkerende betaling zien en het in blok 23 een termijn op zijn eigen datum op de rekening van
      de externe betaling krijgt (de normale vaste-lasten-machinerie van v432), en leg het vast in de kennislaag (soort vast, door
      jou). Een keer gezaaid; haal je de markering later weg, dan blijft dat zo (het zaad in SET.kennis425 voorkomt herhalen). */
+  /* v446: jouw antwoord van 17-10 ("in oktober nog niet gepind, doe dat na mijn salaris"), een keer gezaaid als door jou, alleen bij
+     jouw salarisbron (SKF, dezelfde toets als salRegelZaai); vergeet je hem, dan blijft hij weg */
+  if(!Z.kasnasal){ let B=null; try{ B=salBron(); }catch(_){}
+    if(B && /\bSKF\b/i.test(`${B.naam} ${B.key}`)) zet('kasnasal', KASNASAL_KEY, {soort:'kasnasal', partij:'Contant', wat:KASNASAL_WAT, op:'2026-10-17', bron:'jij', grond:'in oktober nog niet gepind, doe dat na mijn salaris', tx:[]}); }
   const sc=TX.find(t=>t.amount<0 && /SPORT ?CITY/i.test(`${t.name||''} ${t.desc||''}`));
   if(sc && !Z.sportcity){ const sk=recurKey(sc);
     zet('sportcity', 'vast|'+sk, {soort:'vast', partij:benoemPartij(sc), wat:'Sportabonnement', potje:kennisCatVan('Sport')||catOf(sc), aard:'terug', bron:KENNIS_BRON.jij, tx:[]});
@@ -26398,7 +26409,7 @@ function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.q
 function kennisLijst(){ const o=[];
   holdingKeys(); try{ kennisSync(); }catch(_){}
   const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
-    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak', salaris:()=>'inkomen', saldag:()=>'inkomen'};
+    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak', salaris:()=>'inkomen', saldag:()=>'inkomen', kasnasal:()=>'opname'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
     if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId); if(!l) continue;
@@ -26483,7 +26494,9 @@ function openKennisVergeet(id){ const x=kennisLijst().find(e=>e.id===id); if(!x)
 function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
   const rij=x=>`<div data-kennisrij="${esc(x.id)}" style="padding:8px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-weight:600">${esc(x.partij||'?')}</span><span class="small">${esc(x.wat)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(KENNIS_BRON[x.bron]||x.bron)}${x.op?' \u00b7 '+esc(dagKort(x.op))+' '+String(x.op).slice(0,4):''}</span></span>
     <span class="small" data-kenniswijzig style="color:var(--teal);font-weight:700;cursor:pointer" onclick="kennisWijzig('${kk(x.id)}')">Wijzigen</span><span class="small" data-kennisvergeet style="color:var(--mut2);cursor:pointer;margin-left:10px" onclick="openKennisVergeet('${kk(x.id)}')">Vergeten</span></div></div>`;
-  const blok=KENNIS_GROEPEN.map(([g,n])=>{ const R=L.filter(x=>x.groep===g); return `<div data-kennisgroep="${g}" style="margin-top:12px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">${esc(n)}</div>${R.length?R.map(rij).join(''):'<div class="small muted" style="padding:6px 0">nog niets</div>'}</div>`; }).join('');
+  /* v446: de keuze "Contant: ik pin na mijn salaris" staat in de groep Contant zolang hij niet gezet is; gezet is hij een gewone rij */
+  const kasKeuze=kasNaSalKennis()?'':`<div class="row" data-kasnasalkeuze style="gap:8px;padding:8px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0">${esc(KASNASAL_WAT)}<span style="display:block;color:var(--mut2)">dan rekent je salarisvoorstel tot je storting geen contant</span></span><span class="small" data-kasnasalzet style="color:var(--teal);font-weight:700;cursor:pointer" onclick="kasNaSalZet()">Zet aan</span></div>`;
+  const blok=KENNIS_GROEPEN.map(([g,n])=>{ const R=L.filter(x=>x.groep===g), extra=g==='opname'?kasKeuze:''; return `<div data-kennisgroep="${g}" style="margin-top:12px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">${esc(n)}</div>${R.length?R.map(rij).join(''):(extra?'':'<div class="small muted" style="padding:6px 0">nog niets</div>')}${extra}</div>`; }).join('');
   const Q=gegevensVragen().sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0));
   const wacht=Q.length?`<div data-kennisvragen style="margin-top:14px"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Vragen (${Q.length})</div>${Q.map(q=>{ const S=kennisLaterStand(q.qkey);
       return `<div class="row small" data-kenniswacht="${esc(q.qkey)}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGegevensVragen('${kk(q.qkey)}')"><span style="flex:1;min-width:0">${esc(gegevensVraagKort(q))}<span style="display:block;color:var(--mut2)">${S.n?`${S.n}x later${S.wacht&&S.n>=KENNIS_LATER_MAX?' · komt pas terug als jij hem opent':S.wacht?' · tot '+esc(dagKort(S.tot)):''}`:'staat open'}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>`; }).join('')}</div>`:'';
@@ -31962,7 +31975,10 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
       for(let d=rekDag(vandaagYMD(),1); d<=SP.cur.eind; d=rekDag(d,1)){ const u=r.uitDagDelen(d); T.vast+=u.vast; T.pot+=u.pot; T.kas+=u.kas; n++; if(u.vast>0.005) term.push(`${d.slice(8,10)}-${d.slice(5,7)} ${e(u.vast)}`); }
       const pd=v=>n?` (${e(v/n)} per dag)`:'';
       L.push(`    daling tot de storting ${e(T.vast+T.pot+T.kas)} = vast ${e(T.vast)}${term.length?` (termijnen ${term.join(', ')})`:' (geen termijn)'} + potjes ${e(T.pot)}${pd(T.pot)} + contant ${e(T.kas)}${pd(T.kas)}`);
-      if(r.kasNaSal) L.push(`    contant: verwacht na je salaris (deze maand nog ${e(r.kasNu||0)} opgenomen; je pint gewoonlijk ${r.kasPatroon.dag} dagen na je salaris)`); } }
+      if(r.kasNaSal){ const K=kasNaSalKennis(), w=[];
+        if(K) w.push(`${KASNASAL_WAT.toLowerCase()} (${KENNIS_BRON[K.bron]||K.bron}${K.op?' op '+K.op.slice(8,10)+'-'+K.op.slice(5,7):''})`);
+        if(r.kasPatroon.dag!=null) w.push(`je pint gewoonlijk ${r.kasPatroon.dag} dagen na je salaris`);
+        L.push(`    contant: verwacht na je salaris (deze maand nog ${e(r.kasNu||0)} opgenomen; ${w.join('; ')})`); } } }
   { const A=SET.salTekort||{}, G=[]; for(const [st,P2] of Object.entries(A)) for(const [acc,x] of Object.entries(P2)) G.push(`${st} ${rekNaam(acc)}: ${x.op} tekort ${x.tekort} rond ${x.datum}${x.eerder!=null?` (eerder ${x.eerder})`:''}`); L.push(`  gegeven waarschuwingen: ${G.length?G.join(' · '):'geen'}`); }
   L.push('', 'MOMENT 2 (einde periode)');
   { const M2=salMoment2(); if(!M2) L.push(`  ${PV?`nog niet: de periode loopt t/m ${PV.eind}`:'geen afspraak'}`);
