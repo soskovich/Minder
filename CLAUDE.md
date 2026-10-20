@@ -8066,7 +8066,9 @@ vraag gaat over de app en deze over de fixture.
 achter elkaar, elk in vier shards (`TZ=Europe/Amsterdam npx playwright test --shard=N/4 --reporter=line`), gaf 3 x 4736 passed, 0 failed,
 0 flaky, 0 skipped. Elke test van de v444-lijst draaide in alle drie de runs en was groen: `een-definitie-variabel` "een overschreden
 potje", `diag-entry-merge` (beide), `telbare-cache` d, `grip-nav` c (alle vier varianten), `v420` "uitgeleend", `grip-vanaf-norm` p360/p390
-en `decimaalteken` "heel bedrag". Komt er een terug, dan hoort hij hier met zijn gemeten oorzaak. Shards zijn er omdat een herstart van de
+en `decimaalteken` "heel bedrag". SINDS `v446` WEER EEN, ZONDER GEMETEN OORZAAK: `vermogen-ronde.spec.js:77` ("de rij draagt naam, datum,
+ termijn, rest en een chevron") liep in shard 4 van de volle run van `v446` vast in `page.evaluate` tot de timeout (1 van 4736); los met
+ `--repeat-each=10` 200 van 200 groen. Dezelfde vorm als de deadlock van `v439`, maar dat is een vermoeden. Komt er een terug, dan hoort hij hier met zijn gemeten oorzaak. Shards zijn er omdat een herstart van de
 container een volle run van twintig minuten kan doden; een shard met een eigen bestand en een eigen `exit`-regel overleeft dat. Een rapport
 noemt passed + failed + skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het
 lijstaantal).
