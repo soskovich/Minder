@@ -8054,13 +8054,14 @@ naar DRIE, en dat is dezelfde reden als bij `v299`: tussen negen bekende rode va
 meer op. `index.html` is niet aangeraakt, en de dagen-conventie van `v257` blijft los daarvan staan: die
 vraag gaat over de app en deze over de fixture.
 
-**WANKEL, BIJ NAAM (v444, gevraagd door de gebruiker), zodat een nieuwe rode er niet tussen wegvalt:** `een-definitie-variabel.spec.js`
-"een overschreden potje: drie plekken en het scherm" (hangt soms, Chromium-deadlock, zie hieronder); `diag-entry-merge.spec.js` "blok 8
-noemt welke groep uit een eerdere sync komt" en "blok 13 markeert de pending-kolommen van de herkoppelde rekening" (de stub levert soms
-niet); `telbare-cache.spec.js` d "Grip en de budget-editor blijven onder de grens op toestel-omvang" (prestatiegrens onder last). Ook `grip-nav.spec.js` c "geen zichtbare tekst noemt het scherm nog Maand" en `v420.spec.js` "uitgeleend: drie leningen samen 750,99 open" (rood in een volle run op `9c8a444`, groen in de run ervoor en los 3 van 3 groen met `--repeat-each=3`; oorzaak niet gemeten). BEKEND
-ROOD, deterministisch: `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag binnen" en `grip-vanaf-norm.spec.js` 705
-"de prijs in pixels van het logboek en de uitkomst-regel" (p360/p390; rood op v442 en ouder, eigen ronde). Een rapport noemt passed + failed
-+ skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het lijstaantal).
+**WANKEL, BIJ NAAM: DE LIJST IS LEEG SINDS `v445`** (gevraagd door de gebruiker). GEMETEN op `991016c`: de volle suite drie keer
+achter elkaar, elk in vier shards (`TZ=Europe/Amsterdam npx playwright test --shard=N/4 --reporter=line`), gaf 3 x 4736 passed, 0 failed,
+0 flaky, 0 skipped. Elke test van de v444-lijst draaide in alle drie de runs en was groen: `een-definitie-variabel` "een overschreden
+potje", `diag-entry-merge` (beide), `telbare-cache` d, `grip-nav` c (alle vier varianten), `v420` "uitgeleend", `grip-vanaf-norm` p360/p390
+en `decimaalteken` "heel bedrag". Komt er een terug, dan hoort hij hier met zijn gemeten oorzaak. Shards zijn er omdat een herstart van de
+container een volle run van twintig minuten kan doden; een shard met een eigen bestand en een eigen `exit`-regel overleeft dat. Een rapport
+noemt passed + failed + skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het
+lijstaantal).
 
 **GEREPAREERD BIJ `v445`: de deadlock van Chromium in deze VM.** `@playwright/test` staat op `1.56.1`, de versie die bij build 1194
 hoort; GEMETEN 0 hangers op 300 runs (`--repeat-each=150`) tegen 1,5 tot 3 procent op 1.61. Wat hieronder staat is de meting van `v439`.
