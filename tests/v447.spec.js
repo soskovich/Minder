@@ -21,7 +21,9 @@ test.describe('1 · het potje Contant', () => {
   test('a. zonder budget blijft contant zonder norm; met budget telt het als potje en niet meer onder buiten', async ({ page }) => {
     await boot(page, '2026-10-19');
     const voor = await page.evaluate(() => ({ gn: geenNorm(CONTANT_CAT), sep: totals('2026-09').spendNorm, pot: contantPotje() }));
-    await page.evaluate(() => { potPlanZet(CONTANT_CAT, thisYM(), 400); save(); });
+    /* september draagt zijn eigen bewaarde potjes, zonder Contant: zo leest blok 20 de route via contantPotje() en niet via het budget van die maand */
+    await page.evaluate(() => { SET.budgetHist = Object.assign({}, SET.budgetHist, { '2026-09': Object.assign({}, SET.budgets) }); potPlanZet(CONTANT_CAT, thisYM(), 400); save(); });
+    expect(await page.evaluate(() => +(maandPotjes('2026-09').B[CONTANT_CAT] || 0))).toBe(0);
     const na = await page.evaluate(() => { const b = diagSalarisVerdeling().join('\n');
       return { gn: geenNorm(CONTANT_CAT), sep: totals('2026-09').spendNorm, pot: contantPotje(), sepCs: catSpendMap('2026-09')[CONTANT_CAT],
         rij: b.split('\n').find((l) => /^  Contant: /.test(l)) || '', kas: b.split('\n').find((l) => /waarvan contant \(opname/.test(l)) || '', b }; });
@@ -108,9 +110,10 @@ test.describe('3 · blok 23: te pinnen uit het budget', () => {
   test('e. zonder stand het hele budget × dagen/31 in plaats van de mediaan; tegenproef zonder potje de mediaan', async ({ page }) => {
     await boot(page, '2026-10-19');
     const zonder = await page.evaluate(() => { const P = rekVoorstel(); return { bron: P.kasBron, kasP: P.kasP, med: P.kasMed }; });
-    await page.evaluate(() => { potPlanZet(CONTANT_CAT, thisYM(), 400); save(); });
+    /* een opname in oktober, zodat het potje Contant in maandVooruit een verwacht eind draagt en dubbeltellen in het voorstel te zien is */
+    await page.evaluate((LEEF) => { const t = { id: 'kas10', date: '2026-10-05', amount: -80, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); potPlanZet(CONTANT_CAT, thisYM(), 400); save(); }, S432.LEEF);
     const met = await page.evaluate(() => { const P = rekVoorstel(); const leef = P.rek.find((x) => x.naam === 'Leefgeld');
-      return { bron: P.kasBron, kasP: P.kasP, dagen: P.dagen, dim: P.dimStart, stand: P.kasStand, kasS: leef.kasS, pot: P.potExp.map((x) => x.k), vp: (maandVooruit().potjes || []).map((x) => x.k), b23: diagRekVerdeling().join('\n') }; });
+      return { bron: P.kasBron, kasP: P.kasP, dagen: P.dagen, dim: P.dimStart, stand: P.kasStand, kasS: leef.kasS, pot: P.potExp.map((x) => x.k), vp: (maandVooruit().potjes || []).map((x) => x.k), cEind: ((maandVooruit().potjes || []).find((x) => x.k === 'contant') || {}).eindR || 0, b23: diagRekVerdeling().join('\n') }; });
     expect(zonder.bron).toBe('mediaan');
     expect(zonder.kasP).toBeCloseTo(100 * 29 / 31, 6);
     expect(met.bron).toBe('budget');
@@ -120,6 +123,7 @@ test.describe('3 · blok 23: te pinnen uit het budget', () => {
     expect(met.kasS).toBeCloseTo(374.19, 2);
     /* het potje Contant staat in maandVooruit bij de potjes, maar in het voorstel alleen als te pinnen (niet twee keer) */
     expect(met.vp).toContain('contant');
+    expect(met.cEind).toBeGreaterThan(0);
     expect(met.pot).not.toContain('contant');
     expect(met.b23).toContain('te pinnen = potje Contant 400 × 29/31 − stand portemonnee bij moment 2 onbekend (0, het hele budget); v447, in plaats van de mediaan 100');
   });
