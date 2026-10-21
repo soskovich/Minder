@@ -1452,7 +1452,7 @@ function eigenOverboekingBewijs(C){
   let sav=new Set(); try{ sav=new Set(n26SavingsAccounts()); }catch(_){}
   let ra=''; try{ ra=resAccId()||''; }catch(_){}
   const ander=t=>t.autoCat==='persoonlijk' && t.ruleCat==='persoonlijk' && (()=>{ const U=String(t.desc||'').toUpperCase(); return ANDER_KW.some(w=>U.includes(w)); })();
-  const kand=TX.filter(t=>!t.pending && !OVR[t.id] && (t.autoCat==='intern' || ander(t)) && !sav.has(t.acc) && !(ra && t.acc===ra));
+  const kand=TX.filter(t=>!t.pending && !OVR[t.id] && !t.kasTel && (t.autoCat==='intern' || ander(t)) && !sav.has(t.acc) && !(ra && t.acc===ra));   // v450: een tellingboeking (geen bank) is geen overboeking
   const paar=new Set(), opB=new Map();
   for(const u of TX){ const k=Math.round(u.amount*100); (opB.get(k)||opB.set(k,[]).get(k)).push(u); }
   for(let dd=0; dd<=3; dd++) for(const t of kand){ if(paar.has(t.id)) continue;
@@ -9715,7 +9715,8 @@ function dezeMaandBrug(V){
    ook voor de grote verschillen tegen vorige maanden (daar op de absolute afwijking). */
 function uitschieterAfw(d, basis){ return (d>=INS_PATROON.voorEuro && (!(basis>0) || d>=basis*INS_PATROON.voorDeel)) || d>=INS_PATROON.uitEuro; }
 function potjeUitschieter(x){ return uitschieterAfw(+x.overR||0, x.bud); }
-function uitschieters(V){ return ((V&&V.potjes)||[]).filter(potjeUitschieter).sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1)); }
+function uitschieters(V){ const her=V&&V.maandBudget&&V.maandBudget.herindeling;   // v450 punt 1: het potje Contant dat deze maand ontstaat is geen uitschieter (budget = forecast)
+  return ((V&&V.potjes)||[]).filter(x=>!(her && x.k===her.k) && potjeUitschieter(x)).sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1)); }
 /* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
    naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
    ruimte in de andere potjes als een bedrag. */
@@ -21487,6 +21488,7 @@ function valtOpSignals(m){
   for(const k in EB){
     const potje=Math.round(+EB[k]||0);
     if(!(potje>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;   // v234: onvoorzien heeft geen norm
+    if(k===CONTANT_CAT && contantNieuwIn(m)) continue;   // v450 punt 1: in de maand waarin het potje Contant ontstaat is er geen norm om tegen te meten (herindeling)
     const uitgegeven=Math.round(sp[k]||0);
     const over=uitgegeven-potje;
     if(over<DREMPEL_EUR) continue;

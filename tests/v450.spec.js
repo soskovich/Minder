@@ -83,6 +83,22 @@ test.describe('2 · een bron voor contant', () => {
     expect(zonder).toEqual(['contant', 'contant', 'contant']);
   });
 
+  test('a2. categorize() zelf zet een tellingboeking van voor de grens buiten de categorie, ook zonder save()', async ({ page }) => {
+    await S.boot(page);
+    const c = await page.evaluate(() => { const t = { date: '2026-10-05', amount: -80, acc: '', name: 'Contant besteed', desc: 'Contant besteed (telling)', typ: '', ref: '', src: 'contant', accName: '', refNums: [], bankRef: 'contant|2026-10-05', vasteCat: 'contant' };
+      categorize(t); return [t.autoCat, !!t.kasTel]; });
+    expect(c).toEqual(['intern', true]);
+  });
+
+  test('b2. de controle maand = periode telt de randdagen: een opname die alleen in een periode valt', async ({ page }) => {
+    await S.boot(page);
+    await page.evaluate((L) => { const t = { date: '2026-03-28', amount: -50, acc: L, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); }, S.LEEF);
+    const c = regel(await b20(page), /CONTROLE maand \(punt 3\) = periode/);
+    /* 28-03 valt in de periode 24-03 t/m 23-04, niet in de maanden vanaf april: de rand begin is −50 */
+    expect(c).toContain('− rand begin 50.00');
+    expect(c).toContain('→ sluit');
+  });
+
   test('b. contant per maand uit dezelfde berekening als per periode, en de controle maand = periode sluit', async ({ page }) => {
     await S.boot(page, { tellingen: true, vorigOpn: 400 });
     const r = await page.evaluate(() => { const D = salarisData(); return D.R.map((x) => ({ ym: x.ym, pot: Math.round((x.potjes[CONTANT_CAT] || 0) * 100) / 100, cat: x.kasCat, km: x.kasMaand && x.kasMaand.uitgegeven })); });

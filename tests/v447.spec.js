@@ -172,6 +172,8 @@ test.describe('4 · de vraag bij moment 2', () => {
 test.describe('5 · het signaal', () => {
   test('h. boven het tempo een signaal met het label nieuw; onder het tempo niets; met de maand ervoor erboven herhaalt zich', async ({ page }) => {
     await boot(page, '2026-11-10', true);
+    /* v450: in de maand waarin het potje ontstaat is er geen tempo (herindeling); hier staat Contant al in het vastgelegde budget van 1 november */
+    await page.evaluate(() => { const M = SET.maandBudget[thisYM()]; M.potjes[CONTANT_CAT] = 400; M.totaal += 400; save(); });
     const onder = await page.evaluate((LEEF) => { const t = { id: 'kt1', date: '2026-11-03', amount: -100, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
       return { kt: kasTempo(), sym: gripCyclus().sym.some((s) => s.id === 'sig:contant') }; }, S432.LEEF);
     expect(onder.kt.boven).toBe(false);
@@ -196,8 +198,10 @@ test.describe('6 · de opbouw en het zaad', () => {
   test('i. blok 20 OPBOUW: budget + Contant = budget vanaf 1 november, en de wijziging staat als door jou', async ({ page }) => {
     await boot(page, '2026-10-19', true);
     const r = await page.evaluate(() => { const L = diagMaandBudget(maandVooruit()).join('\n'), W = maandBudgetWijz(thisYM());
-      return { L, W: W.rijen.find((x) => x.k === CONTANT_CAT), vast: W.vast.totaal, nu: W.nu.totaal }; });
-    expect(r.W).toMatchObject({ d: 400, keuze: 'door jou' });
+      return { L, W: W.rijen.find((x) => x.k === CONTANT_CAT), her: W.herindeling, vast: W.vast.totaal, nu: W.nu.totaal }; });
+    /* v450 punt 1: het potje Contant ontstaat deze maand, dus een herindeling en geen wijziging */
+    expect(r.W).toBeUndefined();
+    expect(r.her).toMatchObject({ k: 'contant', bud: 400 });
     expect(r.nu - r.vast).toBe(400);
     expect(r.L).toContain(`OPBOUW vanaf 1 november met Contant (v447): €${(r.nu - 400).toLocaleString('nl-NL')} + Contant €400 = €${r.nu.toLocaleString('nl-NL')} · los van de keuze over het potje Huur`);
   });

@@ -29,7 +29,8 @@ test.describe('1 · historie', () => {
     expect(r.sep).toBe(300);
     expect(r.apr).toBe(100);
     const b = await b20(page);
-    expect(regel(b, /^  Contant: /)).toContain('apr 100 · mei 100 · jun 100 · jul 100 · aug 100 · sep 300');
+    /* v450: contant per maand komt uit de tellingen (contantMaanden), met de correctie van v449: september 300 −300 (rest 20) */
+    expect(regel(b, /^  Contant: /)).toContain('apr 100 · mei 100 · jun 100 · jul 100 · aug 100 · sep 0');
     expect(regel(b, /waarvan contant \(opname/)).toContain('sep 0');
     const c = regel(b, /CONTROLE oud "buiten · waarvan contant"/);
     expect(c).toContain('apr 100 = 100 klopt');
@@ -66,7 +67,7 @@ test.describe('1 · historie', () => {
     expect(r.cat).toBe('intern');
     expect(r.P).toBe(300);
     const b = await b20(page);
-    expect(regel(b, /^  Contant: /)).toContain('sep 300');
+    expect(regel(b, /^  Contant: /)).toContain('sep 0');   // v450: uit de tellingen, na de correctie van v449
     expect(regel(b, /CONTROLE oud "buiten · waarvan contant"/)).toContain('sep 300 = 300 klopt');
     expect(regel(b, /CONTROLE oud "buiten · waarvan contant"/)).not.toContain('LET OP');
   });
@@ -140,22 +141,23 @@ test.describe('3 · blok 23', () => {
   test('h. geen telling op moment 2: de laatste telling als schatting, gemarkeerd, en te pinnen is budget × dagen/31 − stand', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => { const P = rekVoorstel(); return { st: P.kasStand, bron: P.kasStandBron, d: P.kasStandDatum, kasP: P.kasP, bud: P.kasBud, dagen: P.dagen, dim: P.dimStart, b: diagRekVerdeling().join('\n') }; });
-    expect(r.st).toBe(720);
+    /* v450 punt 3: de schatting is de telling min het tempo sinds die telling (14 dagen × 400/31) */
+    expect(r.st).toBeCloseTo(720 - 14 * 400 / 31, 2);
     expect(r.bron).toBe('schatting');
     expect(r.d).toBe('2026-10-07');
-    expect(r.kasP).toBe(Math.max(Math.round((r.bud * r.dagen / r.dim - 720) * 100) / 100, 0));
-    expect(r.b).toContain('laatste telling 720 op 07-10, SCHATTING');
+    expect(r.kasP).toBe(Math.max(Math.round((r.bud * r.dagen / r.dim - r.st) * 100) / 100, 0));
+    expect(r.b).toContain('SCHATTING, v450: laatste telling 720 op 07-10');
   });
 
   test('i. met een kleinere schatting is te pinnen het verschil, en je antwoord bij moment 2 vervangt de schatting', async ({ page }) => {
     await S.boot(page, { dag: '2026-10-25' });
-    const r = await page.evaluate(() => { SET.contant.stand = 100; SET.contantHist[0].stand = 100; save();
+    const r = await page.evaluate(() => { SET.contant.stand = 300; SET.contantHist[0].stand = 300; save();   // v450: 300 − 18 dagen tempo
       const A = rekVoorstel(); const a = { st: A.kasStand, bron: A.kasStandBron, kasP: A.kasP, bud: A.kasBud, dagen: A.dagen, dim: A.dimStart };
       SET.kasMoment = { '2026-09-24': { keuze: 'stand', stand: 60, op: '2026-10-25' } }; save();
       const B = rekVoorstel(); return { a, b: { st: B.kasStand, bron: B.kasStandBron, kasP: B.kasP } }; });
     expect(r.a.bron).toBe('schatting');
-    expect(r.a.st).toBe(100);
-    expect(r.a.kasP).toBe(Math.round((r.a.bud * r.a.dagen / r.a.dim - 100) * 100) / 100);
+    expect(r.a.st).toBeCloseTo(300 - 18 * 400 / 31, 2);
+    expect(r.a.kasP).toBe(Math.round((r.a.bud * r.a.dagen / r.a.dim - r.a.st) * 100) / 100);
     expect(r.b.bron).toBe('moment2');
     expect(r.b.st).toBe(60);
     expect(r.b.kasP).toBe(Math.round((r.a.bud * r.a.dagen / r.a.dim - 60) * 100) / 100);
