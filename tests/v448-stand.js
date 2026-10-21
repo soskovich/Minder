@@ -11,9 +11,11 @@ async function boot(page, o) {
   await page.evaluate(({ LEEF, o }) => {
     const t = { id: 'opn2309', date: '2026-09-23', amount: -200, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
     TX.push(t);
+    if (o.vorigOpn) TX.push({ id: 'opn1009', date: '2026-09-10', amount: -o.vorigOpn, acc: LEEF, name: 'Geldmaat Station', desc: 'GEA, BETAALPAS GELDMAAT STATION', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });   // v448-nazorg: de vorige periode met meer opnames
     SET.opnameVanaf = '2026-10-07';
     SET.contant = { stand: 720, datum: '2026-10-07', op: Date.parse('2026-10-07T12:00:00') };
     SET.contantHist = [{ datum: '2026-10-07', stand: 720, op: Date.parse('2026-10-07T12:00:00'), bron: 'telling' }];
+    if (o.beginTelling != null) SET.contantHist.unshift({ datum: '2026-09-23', stand: o.beginTelling, op: Date.parse('2026-09-23T20:00:00'), bron: 'telling' });   // v448-nazorg: een telling voor de start
     SET.contantIn = [{ id: 'ciMa', datum: '2026-10-05', op: Date.parse('2026-10-05T12:00:00'), bedrag: 400, aflossing: 400, loanId: 'l1', naam: 'Ma' }];
     if (o.potje !== false) { window._bwKeuze = 'door jou'; potPlanZet(CONTANT_CAT, thisYM(), 400); window._bwKeuze = undefined; }
     if (o.lager !== false) { SET.budgetsNext = Object.assign({}, SET.budgetsNext, { vices: Math.max((+(SET.budgets || {}).vices || 0) - 10, 0) }); }

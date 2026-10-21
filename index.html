@@ -2873,6 +2873,23 @@ function contantPeriode(P){ if(!P || !P.start || !P.eind) return null; const H=c
   return {start:P.start, eind:P.eind, lopend, begin, eindT, tellingen:in_, opn:r2(opn), ontv:r2(ontv), stort:r2(stort), opnT:r2(opnT), ontvT:r2(ontvT), stortT:r2(stortT),
     naOpn:r2(naOpn), naOntv:r2(naOntv), naStort:r2(naStort), uitgegeven:r2(uitgegeven), formule:r2(formule), sluit:Math.abs(formule-uitgegeven)<0.005,
     dagenNa, verwachtNa:r2(verwachtNa), uitkomst:r2(uitgegeven+(lopend?verwachtNa:0)), ev}; }
+/* v448-nazorg: EEN NEGATIEVE UITGAVE ZONDER STAND BEGIN IS GELD UIT EEN EERDERE OPNAME (gevraagd door de gebruiker). Is uitgegeven in
+   een periode (tot de telling) onder nul en is er geen telling bij de start, dan zat er geld in je portemonnee dat de vorige periode
+   als uitgegeven telde (zonder telling is daar alles wat je pinde uitgegeven). Dat overschot gaat als correctie terug naar de vorige
+   periode: uitgegeven daar − overschot, nooit onder nul; deze periode wordt 0 tot de telling, plus het tempo daarna. Kan de vorige
+   periode het niet dragen (minder uitgegeven dan het overschot, of er is geen vorige periode in beeld), dan blijft de rest gemeld en
+   niet stil verdeeld. Alleen de vorige periode: een periode zonder telling aan het begin heeft per constructie geen telling ervoor,
+   dus ook de vorige heeft geen telling en daar is alles wat je pinde uitgegeven. De ruwe uitkomst (uitgegevenRuw) blijft staan voor de
+   controle formule = loop. Lezers: blok 20 (POTJE CONTANT) en de tests. */
+function contantCorrigeer(CP){ const r2=x=>Math.round(x*100)/100;
+  CP.forEach((x,i)=>{ if(!x || x.uitgegeven==null) return; x.uitgegevenRuw=x.uitgegeven;
+    if(x.begin || !(x.uitgegeven<-0.005)) return;
+    const over=-x.uitgegeven, prev=i>0?CP[i-1]:null, kan=prev?Math.max(+prev.uitgegeven||0,0):0, corr=r2(Math.min(over,kan));
+    x.corr={bedrag:corr, rest:r2(over-corr), overschot:r2(over), naar:prev, telling:x.eindT?x.eindT.datum:null};
+    x.uitgegeven=0; x.uitkomst=r2(x.lopend?(+x.verwachtNa||0):0);
+    if(prev && corr>0){ prev.correctie={bedrag:corr, van:x, telling:x.corr.telling}; prev.uitgegeven=r2(prev.uitgegeven-corr); if(!prev.lopend) prev.uitkomst=prev.uitgegeven; } });
+  return CP; }
+function contantPeriodenGecorr(PS){ PS=PS||contantPerioden(); return contantCorrigeer(PS.map(P=>Object.assign({P}, contantPeriode(P)||{}))); }
 /* v447: de salarisperiodes van de laatste n maanden (salPeriodeVan), oud naar nieuw; zonder salarisbron de kalendermaanden */
 function contantPerioden(n){ n=n||DIAG_SAL_MAANDEN+1; const cur=thisYM(), yms=[]; for(let i=n-1;i>=0;i--) yms.push(valtOpYmPlus(cur,-i));
   let SP=null; try{ SP=salPeriode(); }catch(_){}
@@ -31702,16 +31719,25 @@ function diagSalarisVerdeling(){
     L.push(`  POTJE CONTANT (v447/v448): ${kp?`budget ${euro0(bud(cur))} deze maand · ${euro0(bud(nextYM(cur)))} vanaf 1 ${ymFull(nextYM(cur)).split(' ')[0]}`:'geen budget voor Contant: contant blijft een uitgave zonder norm (v258)'} · uitgegeven = stand begin + opnames + ontvangen − storting − stand eind`);
     L.push('    periode | stand begin | opnames | ontvangen | telling | uitgegeven');
     let PS=[]; try{ PS=contantPerioden(); }catch(_){}
-    const CP=PS.map(P=>Object.assign({P}, contantPeriode(P)||{}));
+    const CP=contantCorrigeer(PS.map(P=>Object.assign({P}, contantPeriode(P)||{})));
     for(const x of CP){ const bs=x.begin?`${c2(x.begin.stand)} (${dd(x.begin.datum)})`:'geen telling (0)';
       const ts=x.eindT?`${c2(x.eindT.stand)} (${dd(x.eindT.datum)})${x.lopend?', tussenstand':''}${x.tellingen.length>1?` (${x.tellingen.length} tellingen)`:''}`:(x.lopend?'geen telling':'geen telling (= begin)');
       const opnS=`${c2(x.opn)}${x.stort?` min storting ${c2(x.stort)}`:''}`, ontvS=x.ontv?`${c2(x.ontv)} (${x.ev.filter(e=>e.s==='ontv').map(e=>`${dd(e.d)}${e.naam?' '+e.naam:''}`).join(', ')})`:'0.00';
-      if(!x.lopend){ L.push(`    ${dd(x.start)} t/m ${dd(x.eind)} | ${bs} | ${opnS} | ${ontvS} | ${ts} | ${c2(x.uitgegeven)}`); continue; }
-      L.push(`    ${dd(x.start)} t/m ${dd(x.eind)}* | ${bs} | ${opnS} | ${ontvS} | ${ts} | ${x.eindT?`tot de telling ${c2(x.uitgegeven)}`:`tot nu ${c2(x.uitgegeven)}`}`);
-      if(x.eindT) L.push(`      tot de telling ${dd(x.eindT.datum)}: ${c2(x.begin?x.begin.stand:0)} + opnames ${c2(x.opnT)} + ontvangen ${c2(x.ontvT)}${x.stortT?` − storting ${c2(x.stortT)}`:''} − telling ${c2(x.eindT.stand)} = ${c2(x.uitgegeven)}${x.uitgegeven<0?` (negatief: er zat meer in je portemonnee dan begin + opnames + ontvangen; ${c2(-x.uitgegeven)} kwam uit een eerdere periode, die het als uitgegeven telde)`:''}${x.naOpn||x.naOntv?` · na de telling nog opgenomen ${c2(x.naOpn)}${x.naOntv?`, ontvangen ${c2(x.naOntv)}`:''} (in je portemonnee, niet als uitgave)`:''}`);
+      const crS=x.correctie?` (was ${c2(x.uitgegevenRuw)}, correctie −${c2(x.correctie.bedrag)} uit telling ${dd(x.correctie.telling)})`:x.corr?` (was ${c2(x.uitgegevenRuw)}, overschot ${c2(x.corr.overschot)} naar de vorige periode${x.corr.rest>0.005?`, rest ${c2(x.corr.rest)} niet te verdelen`:''})`:'';
+      if(!x.lopend){ L.push(`    ${dd(x.start)} t/m ${dd(x.eind)} | ${bs} | ${opnS} | ${ontvS} | ${ts} | ${c2(x.uitgegeven)}${crS}`); continue; }
+      L.push(`    ${dd(x.start)} t/m ${dd(x.eind)}* | ${bs} | ${opnS} | ${ontvS} | ${ts} | ${x.eindT?`tot de telling ${c2(x.uitgegeven)}`:`tot nu ${c2(x.uitgegeven)}`}${crS}`);
+      if(x.eindT) L.push(`      tot de telling ${dd(x.eindT.datum)}: ${c2(x.begin?x.begin.stand:0)} + opnames ${c2(x.opnT)} + ontvangen ${c2(x.ontvT)}${x.stortT?` − storting ${c2(x.stortT)}`:''} − telling ${c2(x.eindT.stand)} = ${c2(x.uitgegevenRuw)}${x.uitgegevenRuw<0?` (negatief: er zat meer in je portemonnee dan begin + opnames + ontvangen; ${c2(-x.uitgegevenRuw)} kwam uit een eerdere periode, die het als uitgegeven telde${x.corr?`; als correctie naar die periode, deze periode ${c2(x.uitgegeven)} tot de telling`:''})`:''}${x.naOpn||x.naOntv?` · na de telling nog opgenomen ${c2(x.naOpn)}${x.naOntv?`, ontvangen ${c2(x.naOntv)}`:''} (in je portemonnee, niet als uitgave)`:''}`);
       L.push(`      daarna verwacht volgens tempo: ${x.dagenNa} dagen × budget per dag = ${c2(x.verwachtNa)} · uitkomst periode ${c2(x.uitkomst)}${x.eindT?'':' (zonder telling: de opnames tot nu zijn uitgegeven)'}`); }
     const fout=CP.filter(x=>!x.sluit);
-    L.push(`  CONTROLE formule = loop over opnames, ontvangsten, stortingen en tellingen (v448): ${CP.length?(fout.length?'VERSCHIL in '+fout.map(x=>`${dd(x.start)}: ${c2(x.formule)} tegen ${c2(x.uitgegeven)}`).join(', '):'sluit in alle '+CP.length+' periodes'):'geen periodes'}`);
+    L.push(`  CONTROLE formule = loop over opnames, ontvangsten, stortingen en tellingen (v448, voor de correctie): ${CP.length?(fout.length?'VERSCHIL in '+fout.map(x=>`${dd(x.start)}: ${c2(x.formule)} tegen ${c2(x.uitgegevenRuw)}`).join(', '):'sluit in alle '+CP.length+' periodes'):'geen periodes'}`);
+    /* v448-nazorg: elke correctie op een eigen regel: welke periode, welk bedrag, op basis van welke telling, en een rest die niet past */
+    const CR=CP.filter(x=>x.corr);
+    L.push(`  CORRECTIES negatieve uitgave zonder stand begin (v448-nazorg): ${CR.length?'':'geen'}`);
+    for(const x of CR){ const pv=x.corr.naar;
+      L.push(`    ${dd(x.start)} t/m ${dd(x.eind)}: uitgegeven ${c2(x.uitgegevenRuw)} zonder telling bij de start, dus ${c2(x.corr.overschot)} zat al in je portemonnee · `+
+        (pv&&x.corr.bedrag>0?`correctie −${c2(x.corr.bedrag)} op ${dd(pv.start)} t/m ${dd(pv.eind)} (${c2(pv.uitgegevenRuw)} -> ${c2(pv.uitgegeven)}), uit telling ${dd(x.corr.telling)}`:`geen vorige periode die het kan dragen${pv?` (${dd(pv.start)} t/m ${dd(pv.eind)} heeft ${c2(pv.uitgegevenRuw)} uitgegeven)`:''}`)+
+        ` · deze periode ${c2(x.uitgegeven)} tot de telling${x.lopend?`, daarna ${c2(x.verwachtNa)} volgens tempo = ${c2(x.uitkomst)}`:''}`+
+        (x.corr.rest>0.005?` · REST ${c2(x.corr.rest)} niet verdeeld: de vorige periode had minder uitgegeven dan het overschot (nooit onder nul)`:'')); }
     const nieuw=r=>(+(r.potjes||{})[CONTANT_CAT]||0)+(+(r.zonder||{})[CONTANT_CAT]||0)+(kp?0:(+(r.bDeel||{}).kas||0));
     const kasRest=R.filter(r=>kp && Math.abs(+(r.bDeel||{}).kas||0)>=0.5);
     L.push(`  CONTROLE oud "buiten · waarvan contant" = nieuw potje Contant, per maand (v448): ${R.map(r=>`${MN(r.ym)}${r===Rc?'*':''} ${e0(r.kasOud)} = ${e0(nieuw(r))} ${Math.abs(r.kasOud-nieuw(r))<0.5?'klopt':'VERSCHIL'}`).join(' · ')}${kasRest.length?` · LET OP: nog buiten bij een potje Contant in ${kasRest.map(r=>MN(r.ym)).join(', ')}`:''}`);

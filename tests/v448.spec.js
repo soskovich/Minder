@@ -96,7 +96,7 @@ test.describe('2 · de formule', () => {
     expect(P.verwachtNa).toBeCloseTo(400 * 18 / 31, 2);
     expect(P.uitkomst).toBeCloseTo(-320 + 400 * 18 / 31, 2);
     const b = await b20(page);
-    expect(regel(b, /^    24-09 t\/m 25-10\*/)).toContain('400.00 (05-10 Ma) | 720.00 (07-10), tussenstand | tot de telling -320.00');
+    expect(regel(b, /^    24-09 t\/m 25-10\*/)).toContain('400.00 (05-10 Ma) | 720.00 (07-10), tussenstand | tot de telling 0.00 (was -320.00');   // v448-nazorg: het overschot gaat als correctie naar de vorige periode (v448-nazorg.spec.js)
     expect(regel(b, /^      tot de telling 07-10/)).toContain('0.00 + opnames 0.00 + ontvangen 400.00 − telling 720.00 = -320.00');
     expect(regel(b, /^      daarna verwacht volgens tempo/)).toContain('18 dagen');
     expect(regel(b, /CONTROLE formule = loop/)).toContain('sluit in alle');
