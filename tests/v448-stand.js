@@ -15,6 +15,8 @@ async function boot(page, o) {
     SET.opnameVanaf = '2026-10-07';
     SET.contant = { stand: 720, datum: '2026-10-07', op: Date.parse('2026-10-07T12:00:00') };
     SET.contantHist = [{ datum: '2026-10-07', stand: 720, op: Date.parse('2026-10-07T12:00:00'), bron: 'telling' }];
+    if (o.tellingen) for (const [d, a] of [['2026-10-04', -100], ['2026-10-05', -80], ['2026-10-07', 100]]) TX.push({ date: d, amount: a, acc: '', name: 'Contant besteed', desc: 'Contant besteed (telling)', typ: '', ref: '', src: 'contant', accName: '', refNums: [], bankRef: 'contant|' + d, ruleCat: 'contant', autoCat: 'contant', vasteCat: 'contant' });   // v450: de tellingboekingen van voor de grens (04-10 100, 05-10 80, 07-10 −100)
+    if (o.opnNa) TX.push({ id: 'opn1510', date: '2026-10-15', amount: -o.opnNa, acc: LEEF, name: 'Geldmaat Station', desc: 'GEA, BETAALPAS GELDMAAT STATION', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });   // v450: een opname na de telling
     if (o.beginTelling != null) SET.contantHist.unshift({ datum: '2026-09-23', stand: o.beginTelling, op: Date.parse('2026-09-23T20:00:00'), bron: 'telling' });   // v448-nazorg: een telling voor de start
     SET.contantIn = [{ id: 'ciMa', datum: '2026-10-05', op: Date.parse('2026-10-05T12:00:00'), bedrag: 400, aflossing: 400, loanId: 'l1', naam: 'Ma' }];
     if (o.potje !== false) { window._bwKeuze = 'door jou'; potPlanZet(CONTANT_CAT, thisYM(), 400); window._bwKeuze = undefined; }
