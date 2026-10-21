@@ -30,16 +30,17 @@ async function boot(page, p) {
 async function zetCat(page, cat) {
   await page.evaluate((c) => { const t = TX.find((x) => /SLEEPBEDRIJF/.test(x.desc)); setCat(t.id, c); }, cat);
 }
-/* v449: de sheet (go('ins') met layout) en het rekenwerk in twee page.evaluate-aanroepen. Rekenen en daarna layout in een aanroep
+/* v449: go('ins'), de sheet (layout) en het rekenwerk elk in een eigen page.evaluate-aanroep. Rekenen en daarna layout in een aanroep
    lokt de Chromium-deadlock van v439 uit (gemeten: 4 van 130 runs hingen op v449 en 1 van 130 op v448, telkens in deze evaluate). */
 const meet = async (page, m) => {
   /* v359: de stand-kaart is vervallen; wat buiten je potjes valt staat in de sheet achter de tegel Uitgegeven,
      onder "Niet in dit bedrag". Die sheet gaat over de lopende maand. */
-  const blok = await page.evaluate((mm) => {
-    if (mm !== thisYM()) return '';
-    go('ins'); openInsTegel('uitgegeven'); const d = document.createElement('div'); d.innerHTML = $('#insTegelSheet').innerHTML; closeSheet();
-    return d.textContent.replace(/\s+/g, ' ');
-  }, m);
+  let blok = '';
+  if (await page.evaluate((mm) => mm === thisYM(), m)) {
+    await page.evaluate(() => { go('ins'); });
+    blok = await page.evaluate(() => { openInsTegel('uitgegeven'); const d = document.createElement('div'); d.innerHTML = $('#insTegelSheet').innerHTML; closeSheet();
+      return d.textContent.replace(/\s+/g, ' '); });
+  }
   const r = await page.evaluate((mm) => {
     const t = totals(mm);
     const sp = catSpendMap(mm);
