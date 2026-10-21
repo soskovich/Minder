@@ -30,21 +30,29 @@ async function boot(page, p) {
 async function zetCat(page, cat) {
   await page.evaluate((c) => { const t = TX.find((x) => /SLEEPBEDRIJF/.test(x.desc)); setCat(t.id, c); }, cat);
 }
-const meet = (page, m) => page.evaluate((mm) => {
-  const t = totals(mm);
-  const sp = catSpendMap(mm);
-  const mv = monthVsPrevInner(mm); const ex = new Set([...mv.drivers, ...budgetFlaggedCats(mm)]);
+/* v449: de sheet (go('ins') met layout) en het rekenwerk in twee page.evaluate-aanroepen. Rekenen en daarna layout in een aanroep
+   lokt de Chromium-deadlock van v439 uit (gemeten: 4 van 130 runs hingen op v449 en 1 van 130 op v448, telkens in deze evaluate). */
+const meet = async (page, m) => {
   /* v359: de stand-kaart is vervallen; wat buiten je potjes valt staat in de sheet achter de tegel Uitgegeven,
      onder "Niet in dit bedrag". Die sheet gaat over de lopende maand. */
-  const d = document.createElement('div');
-  if (mm === thisYM()) { go('ins'); openInsTegel('uitgegeven'); d.innerHTML = $('#insTegelSheet').innerHTML; closeSheet(); }
-  return { spend: Math.round(t.spend), spendNorm: Math.round(t.spendNorm), buiten: Math.round(t.buitenNorm), budget: Math.round(t.budget),
-    onv: Math.round(sp.onvoorzien || 0), netSpend: Math.round(netSpend(txOfMonth(mm))),
-    varRest: varPlanRemaining(mm), potjes: Object.keys(SET.budgets || {}),
-    signalen: insSignals(mm, ex).map((s) => s.kpiLabel), over: budgetOverCat(mm), lek: noPotLeak(mm),
-    big: scoreNotifs({ negeerSnooze: true }).filter((n) => n.key.indexOf('big-') === 0).map((n) => n.l1),
-    blok: d.innerText.replace(/\s+/g, ' '), split: splitFixedVar(mm), safe: Math.round(safeToSpend().safe), baseline: baselineSpend() };
-}, m);
+  const blok = await page.evaluate((mm) => {
+    if (mm !== thisYM()) return '';
+    go('ins'); openInsTegel('uitgegeven'); const d = document.createElement('div'); d.innerHTML = $('#insTegelSheet').innerHTML; closeSheet();
+    return d.textContent.replace(/\s+/g, ' ');
+  }, m);
+  const r = await page.evaluate((mm) => {
+    const t = totals(mm);
+    const sp = catSpendMap(mm);
+    const mv = monthVsPrevInner(mm); const ex = new Set([...mv.drivers, ...budgetFlaggedCats(mm)]);
+    return { spend: Math.round(t.spend), spendNorm: Math.round(t.spendNorm), buiten: Math.round(t.buitenNorm), budget: Math.round(t.budget),
+      onv: Math.round(sp.onvoorzien || 0), netSpend: Math.round(netSpend(txOfMonth(mm))),
+      varRest: varPlanRemaining(mm), potjes: Object.keys(SET.budgets || {}),
+      signalen: insSignals(mm, ex).map((s) => s.kpiLabel), over: budgetOverCat(mm), lek: noPotLeak(mm),
+      big: scoreNotifs({ negeerSnooze: true }).filter((n) => n.key.indexOf('big-') === 0).map((n) => n.l1),
+      split: splitFixedVar(mm), safe: Math.round(safeToSpend().safe), baseline: baselineSpend() };
+  }, m);
+  return Object.assign(r, { blok });
+};
 
 test.describe('a - de categorie bestaat, zonder potje', () => {
   test('type expense met geenNorm, en te kiezen in de transactie', async ({ page }) => {
