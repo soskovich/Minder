@@ -8120,7 +8120,7 @@ en `decimaalteken` "heel bedrag". `vermogen-ronde.spec.js:77` ("de rij draagt na
  workers) hing hij 21 keer, ALTIJD in de `innerText`-evaluate van het Vermogen-scherm, met de renderer stil in een futex: dezelfde
  Chromium-deadlock als `v439`, die terugkomt onder CPU-last ook met de passende Playwright. Wat hem uitlokt is de layout van tekst met een
  teken uit een terugval-lettertype (het ▲ van de grafiek, DejaVu Sans): zonder ▲ 1 van 300, met `textContent` 0 van 300. De test leest nu
- de tekstknopen (TreeWalker) in plaats van `innerText`: 300 van 300 groen onder 8 workers. Komt er een terug, dan hoort hij hier met zijn gemeten oorzaak. Shards zijn er omdat een herstart van de
+ de tekstknopen (TreeWalker) in plaats van `innerText`: 300 van 300 groen onder 8 workers. Komt er een terug, dan hoort hij hier met zijn gemeten oorzaak. `onvoorzien.spec.js` b/c/d (v449): onder last hangt een `page.evaluate` (ook `page.goto`) tot de timeout, OOK OP v448 (1 van 130 runs alleen, 5 van 160 naast een draaiende shard); los en in een volle run zonder parallelle last groen (840/840 met `valt-op-signalen`). Het opsplitsen van `meet()` in drie evaluates hielp onder last niet. Zelfde Chromium-deadlock als `v439`/`v447`; geen oorzaak in de app. Draai de suite dus zonder parallelle Playwright-runs. Shards zijn er omdat een herstart van de
 container een volle run van twintig minuten kan doden; een shard met een eigen bestand en een eigen `exit`-regel overleeft dat. Een rapport
 noemt passed + failed + skipped van een GEDRAAIDE run en nooit het aantal van `--list` (v442 meldde "4709 passed, 0 failed" en dat was het
 lijstaantal).
