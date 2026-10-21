@@ -36,7 +36,7 @@ test.describe('1 · het potje Contant', () => {
     expect(na.sep - voor.sep).toBe(100);
     expect(na.rij).toContain('sep 100');
     expect(na.kas).toContain('sep 0');
-    expect(na.b).toContain('CONTROLE oud "buiten · waarvan contant" = nieuw potje Contant, maanden zonder telling (v447): apr 100 = 100 klopt');
+    expect(na.b).toContain('CONTROLE oud "buiten · waarvan contant" = nieuw potje Contant, per maand (v448): apr 100 = 100 klopt');   // v448: per maand, ook met een telling
     expect(na.b).not.toMatch(/waarvan contant[^\n]*\n[^\n]*VERSCHIL/);
   });
 
@@ -50,7 +50,7 @@ test.describe('1 · het potje Contant', () => {
       SET.contant = { stand: 50, datum: '2026-09-20', op: 1 }; SET.contantHist = [{ datum: '2026-09-20', stand: 50, op: 1, bron: 'telling' }]; save();
       contantOpslaan('30', 'test');
       const P = contantPeriode({ start: '2026-09-24', eind: '2026-10-25' }), b = diagSalarisVerdeling().join('\n');
-      return { P, rij: b.split('\n').find((l) => /^    24-09 t\/m 25-10/.test(l)) || '', ctrl: b.split('\n').find((l) => /CONTROLE opnames \+ begin/.test(l)) || '' };
+      return { P, rij: b.split('\n').find((l) => /^    24-09 t\/m 25-10/.test(l)) || '', ctrl: b.split('\n').find((l) => /CONTROLE formule = loop/.test(l)) || '' };
     }, S432.LEEF);
     expect(r.P.opn).toBe(100);
     expect(r.P.begin.stand).toBe(50);
@@ -58,8 +58,8 @@ test.describe('1 · het potje Contant', () => {
     expect(r.P.uitgegeven).toBe(120);
     expect(r.P.formule).toBe(120);
     expect(r.P.sluit).toBe(true);
-    expect(r.rij).toContain('| 100.00 | 50.00 (20-09) | 30.00 (25-10) | 120.00');
-    expect(r.ctrl).toContain('klopt in alle');
+    expect(r.rij).toContain('| 50.00 (20-09) | 100.00 | 0.00 | 30.00 (25-10), tussenstand | tot de telling 120.00');   // v448: begin, opnames, ontvangen, telling, uitgegeven
+    expect(r.ctrl).toContain('sluit in alle');   // v448: de formule tegen de loop over de gebeurtenissen
   });
 
   test('c. zonder telling is uitgegeven de opnames, en zonder eerdere telling is begin 0', async ({ page }) => {
@@ -125,7 +125,7 @@ test.describe('3 · blok 23: te pinnen uit het budget', () => {
     expect(met.vp).toContain('contant');
     expect(met.cEind).toBeGreaterThan(0);
     expect(met.pot).not.toContain('contant');
-    expect(met.b23).toContain('te pinnen = potje Contant 400 × 29/31 − stand portemonnee bij moment 2 onbekend (0, het hele budget); v447, in plaats van de mediaan 100');
+    expect(met.b23).toContain('te pinnen = potje Contant 400 × 29/31 − stand portemonnee bij moment 2 onbekend (0, het hele budget) = 374 (minimaal 0); v447, in plaats van de mediaan 100');
   });
 });
 

@@ -57,7 +57,7 @@ test.describe('v428 · Grip als cyclus', () => {
     /* dezelfde getallen als blok 20 punt 6 (percentages) */
     const b20 = await page.evaluate(() => diagSalarisVerdeling().find(l => l.startsWith('  okt*:') && l.includes('%')));
     const pct = await page.evaluate(() => { const D = salarisData(1), SB = salarisBalk(D, D.Rc); return SB.delen.map(d => d.pct + '%'); });
-    expect(b20).toContain(`${pct[0]} | ${pct[1]} | ${pct[3]}`);
+    expect(b20).toContain(`${pct[0]} | ${pct[1]} | loopt nog`);   // v448 punt 5: opzij van de lopende maand loopt nog (per salarisperiode)
   });
 
   test('1c. Openstaand: Pam EUR 300 open, de tik opent de lijst met de lening', async ({ page }) => {

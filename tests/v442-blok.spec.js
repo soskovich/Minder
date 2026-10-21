@@ -28,7 +28,7 @@ test('b. blok 20 toont de opbouw van het budget vanaf 1 nov, met de woning erbij
   const r = await bootBlok(page);
   const op = regel(r.b20, 'OPBOUW budget vanaf 1');
   expect(op).toBeTruthy();
-  expect(op).toMatch(/vastgelegd .* \+ wijzigingen .* =/);
+  expect(op).toMatch(/: €[\d.]+ = vastgelegd .* \+ wijzigingen €/);   // v448: een bedrag (budgetVanaf) en zijn opbouw
   expect(r.b20).toMatch(/de woning \(Nathaniel Cathalina/);   // de huur staat in de opbouw (zonder eigen potje: niet in het budget)
 });
 

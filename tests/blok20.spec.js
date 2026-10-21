@@ -53,9 +53,13 @@ test.describe('blok 20: salaris over vast, potjes en opzij', () => {
     const kol = kop => { const r = L.find(x => x.startsWith(kop)); return r.slice(kop.length).split(' · ').map(x => +x.trim().split(' ').pop()); };
     const sal = sectie(L, '1. INKOMSTEN').filter(r => /^  [a-z]{3}\*?: salaris/.test(r)).map(r => +r.match(/salaris (-?\d+)/)[1]);
     const vast = kol('  TOTAAL VAST: '), pot = kol('  TOTAAL POTJES: '), opz = kol('  NETTO OPZIJ: ');
-    const rest = L[L.indexOf('5. REST = salaris - vast - potjes - netto opzij') + 1].trim().split(' · ').map(x => +x.split(' ').pop());
+    const restR = L[L.indexOf('5. REST = salaris - vast - potjes - netto opzij') + 1].trim().split(' · '), rest = restR.map(x => +x.split(' ').pop());
     expect(rest.length).toBe(7);
-    for (let i = 0; i < 7; i++) expect(Math.abs(rest[i] - (sal[i] - vast[i] - pot[i] - opz[i]))).toBeLessThanOrEqual(2);   // elk getal is apart afgerond, de rest uit de onafgeronde som
+    /* v448 punt 5: de lopende maand heeft geen netto opzij per kalendermaand (opzij wordt per salarisperiode gemeten), dus rest en
+       opzij zeggen daar "loopt nog"; de zes afgeronde maanden rekenen zoals voorheen */
+    for (let i = 0; i < 6; i++) expect(Math.abs(rest[i] - (sal[i] - vast[i] - pot[i] - opz[i]))).toBeLessThanOrEqual(2);   // elk getal is apart afgerond, de rest uit de onafgeronde som
+    expect(restR[6]).toMatch(/^okt\* loopt nog/);
+    expect(L.find(x => x.startsWith('  NETTO OPZIJ: '))).toMatch(/okt\* loopt nog · deze periode -?\d+ \(opzijPeriode/);
     expect(L.find(x => x.startsWith('  okt*: salaris'))).toContain('= geboekt 0 + nog te ontvangen 5216');
   });
   test('de lopende maand in groepen telt op tot V.budget en V.projectie, en noemt wat bij geen potje staat', async ({ page }) => {

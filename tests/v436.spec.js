@@ -73,7 +73,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     await page.locator('#gripGroepKaart [data-budgetwijz="40"]').click();
     const L = await page.locator('#budgetWijzSheet [data-budgetwijzrij]').evaluateAll(es => es.map(e => [e.dataset.budgetwijzrij, +e.dataset.v, e.innerText.replace(/\s+/g, ' ')]));
     expect(L).toEqual([['huur', 77, '16 okt · Shurgard geaccepteerd · Huur forecast €0 +€77'], ['verzekering', -37, '16 okt · herzien · Verzekeringen forecast €0 −€37']]);   // v438: met het effect op de forecast
-    await expect(page.locator('#budgetWijzSheet')).toContainText('Het nieuwe budget van €3.135 geldt vanaf 1 november');
+    await expect(page.locator('#budgetWijzSheet')).toContainText('Het budget vanaf 1 november is €3.135');
     expect(L.reduce((a, x) => a + x[1], 0)).toBe(40);
   });
   test('1e. oktober herstellen: zonder vastlegging is het het budget van nu min de gelogde wijzigingen; bij de boot met logs wordt het opgeslagen', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('v436 · 1. het maandbudget ligt vast per maand', () => {
     expect(t).toMatch(/MAANDBUDGET \(v436\/v437\/v438\)/);
     expect(t).toMatch(/vastgelegd €3\.095 op 01-10 \(herstel/);
     expect(t).toMatch(/16-10 · Shurgard geaccepteerd · Huur \+€77/);
-    expect(t).toMatch(/budget van nu €3\.135 = vastgelegd €3\.095 \+ wijzigingen €40: klopt · dit wordt het budget vanaf 1 november/);
+    expect(t).toMatch(/budget van nu €3\.135 = vastgelegd €3\.095 \+ wijzigingen €40: klopt\n  budget vanaf 1 november: €3\.135 \(gelijk aan het budget van nu\)/);   // v448: een eigen regel uit budgetVanaf
     expect(t).toMatch(/CONTROLE maandbudget op alle schermen = vastgelegd €3\.095: .* → klopt/);
     expect(t).toMatch(/CONTROLE onder budget = vastgelegd - forecast: .* → klopt/);
   });
