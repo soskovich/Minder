@@ -179,12 +179,18 @@ test.describe('5 · het signaal', () => {
     expect(onder.kt.boven).toBe(false);
     expect(onder.sym).toBe(false);
     const boven = await page.evaluate((LEEF) => { const t = { id: 'kt2', date: '2026-11-08', amount: -200, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
-      go('maand'); const e = document.querySelector('#gripSignalen [data-signaal="sig:contant"]'); return { kt: kasTempo(), t: e ? e.innerText : '' }; }, S432.LEEF);
+      go('maand'); const es = [...document.querySelectorAll('#gripSignalen [data-signaal]')].filter((x) => /^Contant boven je/.test(x.innerText));
+      const c = maandVooruit().potjes.find((x) => x.k === CONTANT_CAT);
+      return { kt: kasTempo(), n: es.length, id: es[0] ? es[0].dataset.signaal : '', t: es[0] ? es[0].innerText : '', eind: c ? c.eindR : null }; }, S432.LEEF);
     expect(boven.kt.uit).toBe(300);
     expect(Math.round(boven.kt.tempo)).toBe(133);
     expect(boven.kt.boven).toBe(true);
-    expect(boven.t).toContain('Contant boven je tempo');
-    expect(boven.t).toContain('nieuw deze maand');
+    /* v453: de forecast van het potje Contant komt uit contantMaanden() (300 gepind, zonder telling uitgegeven, plus het tempo van 11 t/m
+       30 november = 566,67 > 400), dus het potje eindigt boven zijn bedrag en het patroon "boven je potje" neemt het over: een signaal per potje */
+    expect(boven.eind).toBeCloseTo(566.67, 1);
+    expect(boven.n).toBe(1);
+    expect(boven.id).toBe('pat:pot:contant');
+    expect(boven.t).toContain('Contant boven je potje');
     const herh = await page.evaluate((LEEF) => { const t = { id: 'kt3', date: '2026-10-12', amount: -450, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
       go('maand'); const e = [...document.querySelectorAll('#gripSignalen [data-signaal]')].find((x) => /^Contant boven je/.test(x.innerText)); return { l: kasTempo().label, t: e ? e.innerText : '', id: e ? e.dataset.signaal : '' }; }, S432.LEEF);
     expect(herh.l).toMatchObject({ soort: 'herhaalt', t: 'herhaalt zich · 2e maand', b: 'okt +€50' });

@@ -1637,7 +1637,7 @@ function csvDubbel(t){
 /* DE MAAT IS WAT HET GETAL OP DE KAART DRAAGT: netto uitgave in een categorie MET norm, dus precies de
    bijdrage aan spendNorm die wegvalt. Een uitgesloten overboeking of een uitgesloten inkomen telde daar
    per constructie nooit in mee, en die staan daarom niet in het bedrag maar wel in de sheet erachter. */
-function dubbelBronTelt(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c)); }
+function dubbelBronTelt(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !geenNormTx(t)); }
 
 /* ===== v304: DEZELFDE REKENING, TWEE BRONNEN BINNEN ZICHZELF =====
    DE AANLEIDING IS GEMETEN IN SECTIE 4d VAN BLOK 10. Rekening `521200806` draagt psd2 EN mt940, en van
@@ -1926,6 +1926,22 @@ function catOf(t){ return OVR[t.id]||t.autoCat; }
 // (positief bedrag = terugstorting, verlaagt de som). Nog nergens aangeroepen; puur additief.
 function isExpenseTx(t){ const c=CATS[catOf(t)]; return !!c && c.type==='expense'; }
 function geenNorm(k){ return !!(CATS[k]&&CATS[k].geenNorm) && !(k===CONTANT_CAT && contantPotje()); }   // v234: een uitgavencategorie zonder potje en buiten de normsignalen
+/* v453: EENMALIG IS EEN VLAG, GEEN CATEGORIE (gevraagd door de gebruiker). Een boeking met het label "eenmalig" uit Wat Minder van jou
+   weet valt buiten vast en potjes, met "geen norm", ongeacht zijn categorie. Het label staat expliciet op de boeking: een antwoord in
+   SET.kennis met die boeking in tx en aard eenmalig (een benoemde uitgave, een antwoord op een boeking), of "Klopt, eenmalig"
+   (SET.eenmaligOk). Een gelijkende betaling van dezelfde partij krijgt het label NIET (dat is de herkenning van benoemStand, en een
+   volgende betaling van Lausa Eriksson is juist uit de reservering). eenmaligLabel(t) geeft de tekst of '', geenNormTx(t) is de ENE
+   toets per boeking (de categorie zonder norm, of het label), met als lezers totals (buitenNorm), catSpendMap, uitReserveringBedrag,
+   piekInScope, insInNorm, diagGroep en blok 20. Gememoiseerd op _dataGen; kennisZet() vergeet hem. */
+let _eenm=null, _eenmGen=-1;
+function eenmaligLabels(){ if(_eenm && _eenmGen===_dataGen) return _eenm; const M=new Map();
+  for(const [id,v] of Object.entries(SET.eenmaligOk||{})) if(v) M.set(id, 'Klopt, eenmalig (door jou)');
+  for(const E of Object.values(SET.kennis||{})){ if(!E || !E.tx) continue;
+    if(Array.isArray(E.tx)){ if(E.soort==='eenmalig' || E.aard==='eenmalig') for(const id of E.tx) M.set(id, `${E.label||E.wat||'eenmalig'} \u00b7 eenmalig (door jou)`); continue; }
+    for(const [id,P] of Object.entries(E.tx)){ if(P && (P.aard||E.aard)==='eenmalig') M.set(id, `${P.label||E.label||E.wat||'eenmalig'} \u00b7 eenmalig (door jou)`); } }
+  _eenm=M; _eenmGen=_dataGen; return M; }
+function eenmaligLabel(t){ return (t && t.id && eenmaligLabels().get(t.id)) || ''; }
+function geenNormTx(t){ return geenNorm(catOf(t)) || !!eenmaligLabel(t); }
 /* v447: CONTANT IS EEN POTJE ZODRA JIJ HET EEN BUDGET GEEFT (gevraagd door de gebruiker: budget is wat je contant UITGEEFT, niet wat je
    pint). Zonder budget blijft contant een uitgave zonder norm (v258), zodat er niets verandert voor wie geen potje Contant heeft; met
    een budget (deze maand, volgende maand of later gepland) telt contant overal als gewoon potje, ook in eerdere maanden, en dus niet
@@ -2419,7 +2435,7 @@ function toggleOnregelmatig(id){
 function uitReserveringBedrag(t){
   if(!t || !(t.amount<0)) return 0;
   const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) return 0;
-  if(geenNorm(c)) return 0;
+  if(geenNormTx(t)) return 0;   // v453: ook een boeking met het label eenmalig
   const U=SET.uitReservering||{};
   /* v452: een eigen keuze op de boeking wint (ook 0: "niet uit de reservering"); zonder keuze herkent een reservering met een partij
      en een startmaand (resPartijVoor) de betaling van die partij vanaf die maand als uit de reservering betaald, tot het bedrag van de post. */
@@ -2509,7 +2525,7 @@ function totals(m){
   for(const t of list){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
-    if(meta.type==='expense'){ spend+=-t.amount; if(geenNorm(c)) buitenNorm+=-t.amount; else if(!isUitgave(t, BU)){ persoonlijk+=uitgaveNorm(t); persTx.push(t); } }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
+    if(meta.type==='expense'){ spend+=-t.amount; if(geenNormTx(t)) buitenNorm+=-t.amount; else if(!isUitgave(t, BU)){ persoonlijk+=uitgaveNorm(t); persTx.push(t); } }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
     /* v269: de derde term in dezelfde aftrekking, naast buitenNorm. uitResCat draagt hem per
        categorie zodat de regel op Inzichten per constructie optelt tot uitReservering, precies
@@ -5689,7 +5705,7 @@ function noPotLeak(m){   // grootste NETTO uitgave per winkel zonder potje, gesp
   for(const x of txOfMonth(m)){
     if(!(isUitgave(x, BU) && !isFixed(x))) continue;   // v405: de ene definitie van uitgave
     if(+EB[catOf(x)]>0) continue;                        // categorie heeft al een potje → valt onder budget-logica
-    if(geenNorm(catOf(x))) continue;                     // v234: een uitgave die je niet kon vermijden is geen impuls en geen lek
+    if(geenNormTx(x)) continue;                          // v234 (v453: ook het label eenmalig): een uitgave die je niet kon vermijden is geen impuls en geen lek
     const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop');
     const e=(byM[nm]=byM[nm]||{name:nm,net:0,k:catOf(x),rec:isRecurringMerchant(x.name)});
     e.net+=uitgaveNorm(x); perCat[catOf(x)]=(perCat[catOf(x)]||0)+uitgaveNorm(x);                               // netto: terugstorting verrekent per winkel (v405: uitgaveNorm, zoals overal)
@@ -9492,7 +9508,7 @@ function maandSplitsing(m, L){
   /* Het vaste deel dat al betaald is, per categorie: de herkende incasso's van deze maand (de aanvulling op
      piekInScope() binnen de uitgaven met een norm, v285). */
   const fBet={};
-  for(const t of txOfMonth(m)){ const c=catOf(t); if(piekInScope(t) || !inNorm(c)) continue; fBet[c]=(fBet[c]||0)+uitgaveNorm(t); }
+  for(const t of txOfMonth(m)){ const c=catOf(t); if(piekInScope(t) || !inNorm(c) || eenmaligLabel(t)) continue; fBet[c]=(fBet[c]||0)+uitgaveNorm(t); }   // v453: een eenmalig gelabelde boeking is geen vaste last
   let geenExtra=0; const vastePotjes=[], potBasis=[];
   for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || !CATS[k] || geenNorm(k)) continue;
     const isUit=CATS[k].type==='expense';
@@ -9554,7 +9570,16 @@ function maandVooruit(){
   /* v402: wat er nog verwacht wordt is per potje niet onder nul (zoals het potje zelf al rekent) en zonder potje alleen
      voor een categorie die er vaker is (zonderPotjeStand); een persoonlijke overboeking zonder potje telt niet mee. */
   const Z=zonderPotjeStand(m, restCat, perMaand), B0=SET.budgets||{};
-  let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0) restTot+=Math.max(+restCat[c]||0,0); }
+  /* v453: CONTANT, EEN BEREKENING (gevraagd door de gebruiker). Met een potje Contant is de forecast van dat potje de uitkomst van
+     contantMaanden() voor de lopende maand (uitgegeven tot de telling plus het tempo daarna, met de correctie van de maand ervoor), niet
+     het gemiddelde patroon. De rest van het potje is die uitkomst min wat er in de categorie al uit is, en mag onder nul (geld dat al als
+     uitgegeven telde maar nog in je portemonnee zat). V.contant draagt de bron voor de controle in blok 20. */
+  let cRest=null, Vc=null;
+  try{ if(contantPotje() && (+B0[CONTANT_CAT]||0)>0){ const CM=contantMaanden([valtOpYmPlus(m,-1), m]), C=CM[CM.length-1];
+    const bC=(SP.potBasis||[]).find(b=>b.k===CONTANT_CAT), uC=bC?+bC.u||0:0;
+    if(C && C.uitkomst!=null){ cRest=C.uitkomst-uC; Vc={uitkomst:C.uitkomst, uit:uC, bron:'contantMaanden'}; } } }catch(_){}
+  let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0 && !(c===CONTANT_CAT && cRest!=null)) restTot+=Math.max(+restCat[c]||0,0); }
+  if(cRest!=null) restTot+=cRest;
   /* v403: spendNorm draagt de persoonlijke overboeking zonder potje al niet (buitenUitgave), dus er gaat niets meer af:
      Z.uitgesloten is wat blok 19 noemt. */
   const rest=Math.round(Math.max(restTot,0)), uitZ=uit;
@@ -9570,7 +9595,7 @@ function maandVooruit(){
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Het variabele deel van elk potje
      uit maandSplitsing(); een potje dat helemaal vast is staat daar niet in. */
   const potjes=[]; let potKlein=0;   // v404: een potje zonder variabel deel met een uitgave onder de euro telt mee in variabel, zonder eigen regel
-  for(const b of SP.potBasis){ const k=b.k, u=b.u, vBud=b.vBud, fE=b.fE, r=Math.max(+restCat[k]||0,0);
+  for(const b of SP.potBasis){ const k=b.k, u=b.u, vBud=b.vBud, fE=b.fE, r=(k===CONTANT_CAT && cRest!=null)?cRest:Math.max(+restCat[k]||0,0);
     const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
     if(!(vBud>0) && Math.round(u+r)===0){ potKlein+=u+r; continue; }
     potjes.push({k, naam:b.naam, bud:Math.round(vBud), potje:Math.round(b.bud), vastDeel:Math.round(fE), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
@@ -9632,7 +9657,7 @@ function maandVooruit(){
   try{ if(MBV && contantNieuwIn(m)){ const c=potjes.find(x=>x.k===CONTANT_CAT), f=Math.round(c?c.eindR:0);
     MBV=Object.assign({}, MBV, {potjes:Object.assign({}, MBV.potjes||{}, {[CONTANT_CAT]:f}), totaal:Math.round(+MBV.totaal||0)+f, herindeling:{k:CONTANT_CAT, f, bud:Math.round(+(SET.budgets||{})[CONTANT_CAT]||0)}});
     budget=Math.round(MBV.totaal); wijz=budgetNu-budget; } }catch(_){}
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, budgetNu, wijz, maandBudget:MBV, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, contant:Vc, projectie, budget, budgetNu, wijz, maandBudget:MBV, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact, zonder:Math.round(zonderExact), zonderExact, zonderBreed, zonderStand:Z, zonderLos, zonderLosPosten:losP, zonderRest:zonderLos-losSom, inleg, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -11641,8 +11666,9 @@ function oorzaakKs(s){ if(s.k) return [s.k]; const P=s.p||null; if(P && P.id==='
    niet mee als gedrag (metEenmalig: wel, voor de toets eenmalig zelf) */
 function oorzaakTx(ks, ym, metEenmalig){ return txOfMonth(ym).filter(t=>t.amount<0 && !t.pending && (ks.length?ks.includes(catOf(t)) && !isFixed(t):piekInScope(t)) && (metEenmalig || !eenmaligBevestigd(t))); }
 /* uitgegeven en budget van potje k in maand ym; de lopende maand is het verwachte eind (maandVooruit, dezelfde bron als de brug) */
-/* v430 (R4): wat jij als eenmalig bevestigde telt in geen enkele toets mee, dus ook niet in het uitgegeven bedrag van een potje */
-function eenmaligInCat(k, ym){ return txOfMonth(ym).filter(t=>t.amount<0 && !t.pending && catOf(t)===k && eenmaligBevestigd(t)).reduce((a,t)=>a+uitgaveNorm(t),0); }
+/* v430 (R4): wat jij als eenmalig bevestigde telt in geen enkele toets mee, dus ook niet in het uitgegeven bedrag van een potje.
+   v453: een boeking met het label eenmalig staat al niet in catSpendMap (geenNormTx), dus hier telt alleen de herkenning zonder label. */
+function eenmaligInCat(k, ym){ return txOfMonth(ym).filter(t=>t.amount<0 && !t.pending && catOf(t)===k && eenmaligBevestigd(t) && !eenmaligLabel(t)).reduce((a,t)=>a+uitgaveNorm(t),0); }
 function oorzaakUitBud(k, ym, V){ const R=oorzaakUitBudRuw(k, ym, V), e=eenmaligInCat(k, ym); return e>0.005?{uit:Math.round(R.uit-e), bud:R.bud, eenmalig:Math.round(e)}:R; }
 /* v430 (R4): is een symptoom leeg zonder wat jij als eenmalig bevestigde? Een potje: de overschrijding van deze maand bestond
    alleen uit dat bedrag. Zonder potje (eenmalig, de lek-regel, zonder potje): wat overblijft haalt de drempel van een signaal
@@ -14046,6 +14072,11 @@ function verplichtingen(maanden){
    gedektTot        : chronologisch aftellen vanaf de huidige stand; de laatste maand die je nog
                       volledig kunt betalen. `gat` is het eerste voorkomen dat niet meer past.
    Nooit doorrekenen op een onbekend saldo, nooit een schatting invullen (v59/v73). */
+/* v453: WAT ER OP DE VOLGENDE TERMIJN VAN EEN RESERVERING MET EEN STARTMAAND GERESERVEERD STAAT: het maandbedrag (bedrag door interval)
+   maal de maanden van vanaf t/m de termijnmaand, hooguit het bedrag van de post. Zonder vanaf of termijn null (niet te zeggen). */
+function resOpTermijn(r){ if(!r || !r.vanaf || !r.vervalmaand) return null; const iv=Math.max(+r.intervalM||0,0); if(!iv) return null;
+  const pm=(+r.bedrag||0)/iv; let n=0, y=String(r.vanaf); for(let i=0;i<240 && y<=r.vervalmaand;i++){ n++; y=nextYM(y); }
+  return {ym:r.vervalmaand, n, pm, op:Math.min(n*pm, +r.bedrag||0)}; }
 function dekking(maanden){
   const H=Math.max(Math.round(+maanden||12),1);
   const lijst=resLijst();
@@ -14345,7 +14376,7 @@ function resBoekingKandidaten(v){
   try{ L=txOfMonth(m); }catch(_){ return []; }
   const cat=(v&&v.cat&&CATS[v.cat])?v.cat:'';
   return L.filter(t=>t.amount<0 && CATS[catOf(t)] && CATS[catOf(t)].type==='expense'
-                     && !geenNorm(catOf(t)) && !isUitReservering(t))
+                     && !geenNormTx(t) && !isUitReservering(t))
     .sort((a,b)=>{ const pa=(cat&&catOf(a)===cat)?0:1, pb=(cat&&catOf(b)===cat)?0:1;
                    return pa-pb || b.date.localeCompare(a.date) || (-b.amount)-(-a.amount); });
 }
@@ -21205,7 +21236,7 @@ function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
    renderCatBreak() en renderTxList() tellen hun eigen lijst op en komen hier niet langs, dus hun
    totaal blijft per constructie gelijk aan de rijen eronder. Daarom kon deze functie de norm
    worden in plaats van dat er een tweede map naast kwam. */
-function catSpendMap(m){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+function catSpendMap(m){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
@@ -21810,7 +21841,7 @@ const PIEK_MIN_DAGEN = 14;
    buiten de snede uit elkaar moet houden (blok 9 doet dat, voor zijn "niet meegeteld"-regels).
    ZONDER MAAND IS HET DE HELE TELBARE IMPORT, en dat is geen terugval maar de vraag van blok 9 en
    blok 10: die meten over alle maanden en niet over een. */
-function piekInScope(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); }
+function piekInScope(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNormTx(t)); }
 function piekScope(m){ return (m==null?telbareTx():txOfMonth(m)).filter(piekInScope); }
 function piekVerdeling(m, negeerWinkel){
   const lijst=piekScope(m);
@@ -23682,7 +23713,7 @@ function openInsFilter(){
    v355), variabel de rest; samen zijn ze per constructie spendNorm (de uitgaven met een norm), en dat
    staat als assertie vast. Dezelfde snede als maandVooruit(): daar valt een herkende incasso buiten
    piekInScope() en een heel vast potje buiten het gemiddelde. */
-function insInNorm(t, B){ return isUitgave(t, B) && !geenNorm(catOf(t)); }   // v405: de ene definitie (isUitgave), zonder geenNorm
+function insInNorm(t, B){ return isUitgave(t, B) && !geenNormTx(t); }   // v405: de ene definitie (isUitgave), zonder geenNorm
 function insVastTx(t){ return isFixed(t) || potHeelVast(catOf(t)); }
 function insSoortUit(m, soort){
   if(soort!=='var' && soort!=='vast') return totals(m).spendNorm;
@@ -24997,7 +25028,7 @@ function onregelmatigBlok(t){
    inputmode="decimal" (v215) omdat een gedeeltelijke dekking centen kan hebben. */
 function uitReserveringBlok(t){
   const c=catOf(t);
-  if(!(t.amount<0 && CATS[c] && CATS[c].type==='expense') || geenNorm(c)) return '';
+  if(!(t.amount<0 && CATS[c] && CATS[c].type==='expense') || geenNormTx(t)) return '';
   const b=uitReserveringBedrag(t), aan=b>0;
   const heel=Math.abs(b-(-t.amount))<0.01;
   return `<label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)">
@@ -26205,7 +26236,7 @@ function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SO
 function benoemKandidaat(t){
   if(!t || t.pending || !t.acc || !(t.amount<=-BENOEM_MIN) || isOpnameTx(t)) return false;
   const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || buitenUitgave(c)) return false;
-  return geenNorm(c) || zonderPotjeCat(c); }
+  return geenNormTx(t) || zonderPotjeCat(c); }   // v453: ook een boeking met het label eenmalig, in een categorie met potje
 /* De hint uit de omschrijving: het kenmerk (het woord dat hem gaf) en het voorstel. */
 function benoemHint(t){ const s=`${t.name||''} ${t.desc||''}`, H=BENOEM_SOORTEN[benoemSoort(t)].hints;
   for(const [re,label] of H){ const m=s.match(re); if(m) return {kenmerk:m[0].toUpperCase(), label}; }
@@ -26322,7 +26353,7 @@ function contantNaarDelen(ym){ const E=contantNaarKennis(); if(!E) return null; 
   return {kas, rijen:CONTANTNAAR_CATS.filter(k=>(+E.verdeling[k]||0)>0).map(k=>{ const pct=+E.verdeling[k]||0, eigen=Math.max(+cs[k]||0,0), deel=kas*pct/100;
     return {k, naam:(CATS[k]||{}).name||k, pct, eigen, deel, incl:eigen+deel}; })}; }
 function kasNaSalZet(){ if(kasNaSalKennis()) return; const herstel=kennisSnap(); kennisZet(KASNASAL_KEY, {soort:'kasnasal', partij:'Contant', wat:KASNASAL_WAT, tx:[]}); save(); keuzeKlaar('Contant: je pint na je salaris', herstel); }
-function kennisZet(k, E){ SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E); return SET.kennis[k]; }
+function kennisZet(k, E){ _eenm=null; SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E); return SET.kennis[k]; }
 function kennisTekst(E){ return E? `${E.wat||'nog niet benoemd'} \u00b7 ${KENNIS_BRON[E.bron]||E.bron||'door jou'}` : ''; }
 /* De bron als link naar "Wat Minder van jou weet": een tik op een bron-regel opent het scherm. */
 function kennisBronLink(txt){ return `<span data-kennisbron role="button" style="cursor:pointer;text-decoration:underline dotted" onclick="event.stopPropagation();openKennis()">${esc(txt)}</span>`; }
@@ -26341,7 +26372,7 @@ function kennisMigreer(){ if(!SET.benoemd) return false; SET.kennis=SET.kennis||
   delete SET.benoemd; return true; }
 /* De antwoorden die je al gaf (bericht van de gebruiker bij v425), een keer per antwoord en alleen als de boeking of de partij er
    is. Wat al een eigen plek had (holding, leningen, Health Club) staat daar en wordt niet nog eens geschreven. */
-let laserOvrGezet=false;   // v452: het zaad laser452 schreef OVR; load() bewaart OVR dan ook
+let laserOvrGezet=false;   // v453: de rechtzetting laser453 schreef OVR terug; load() bewaart OVR dan ook
 function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false;
   const zet=(n,k,E)=>{ if(Z[n]) return; if(!kennisGet(k)) kennisZet(k, Object.assign({op:vandaagYMD(), zaad:n}, E)); Z[n]=vandaagYMD(); gedaan=true; };
   const nik=TX.find(t=>t.amount<0 && /^NIKKI\b/.test(recurKey(t)));
@@ -26383,7 +26414,7 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
     Z.zorg427=vandaagYMD(); gedaan=true; }
   if(zrg) zet('zorg159', benoemKandidaat(zrg)?'benoem|'+benoemKey(zrg):'eenmalig|'+zrg.id, {soort:benoemKandidaat(zrg)?'benoem':'eenmalig', partij:isTikkie(zrg)?tikkiePersoon(zrg):benoemPartij(zrg), wat:'Zorgkosten', label:'Zorgkosten', aard:'eenmalig', bedrag:159, tx:benoemKandidaat(zrg)?{[zrg.id]:{label:'Zorgkosten', bron:'jij', aard:'eenmalig'}}:[zrg.id]});
   const gem=TX.find(t=>t.amount===-484 && /GEMEENTE/.test(String(t.name||'').toUpperCase()));
-  if(gem && benoemKandidaat(gem)) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
+  if(gem && gem.amount<0 && gem.acc && !gem.pending) zet('gemeente484', 'benoem|'+benoemKey(gem), {soort:'benoem', partij:benoemPartij(gem), wat:'Boete of wegslepen', label:'Boete of wegslepen', aard:'eenmalig', bedrag:484, tx:{[gem.id]:{label:'Boete of wegslepen', bron:'jij', aard:'eenmalig'}}});
   /* v442 sectie 4: Sport City is een vast abonnement (door jou bevestigd). Zet het als vaste last via SET.fixOvrM, zodat isFixed()
      en recurringSchedule() het als terugkerende betaling zien en het in blok 23 een termijn op zijn eigen datum op de rekening van
      de externe betaling krijgt (de normale vaste-lasten-machinerie van v432), en leg het vast in de kennislaag (soort vast, door
@@ -26401,25 +26432,29 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
         try{ potPlanZet(CONTANT_CAT, thisYM(), CONTANT_ZAAD.bedrag); } finally{ window._bwKeuze=oud; }
         const Lg=SET.budgetWijzLog||[]; for(let i=Lg.length-1;i>=0;i--) if(Lg[i].k===CONTANT_CAT){ Lg[i].bron='jij'; if(String(Lg[i].op||'').slice(0,7)===CONTANT_ZAAD.op.slice(0,7)) Lg[i].op=CONTANT_ZAAD.op; break; } }
       Z.contant447=vandaagYMD(); gedaan=true; } }
-  /* v452: LAUSA ERIKSSON EUR 159 IN OKTOBER IS EENMALIG, MET DE REGEL VAN GEMEENTE EUR 484 (gevraagd door de gebruiker): de boeking gaat
-     op Onvoorzien (buiten vast en potjes, geen norm) in plaats van in het potje Zorg, het antwoord staat als benoemde uitgave (eenmalig,
-     door jou) zodat er geen vraag "wat is dit?" volgt, en vanaf 1 november is er een reservering Laserbehandeling (EUR 159 per 6 maanden,
-     EUR 27 per maand, partij Lausa Eriksson) die de volgende betaling van die partij herkent als uit de reservering betaald. Een keer
-     (SET.kennis425.laser452); zonder de boeking gebeurt er niets. */
+  /* v452/v453: LAUSA ERIKSSON EUR 159 IN OKTOBER IS EENMALIG (gevraagd door de gebruiker). Sinds v453 blijft de boeking in haar eigen
+     categorie (Zorg & apotheek): het label eenmalig (een benoemde uitgave Laserbehandeling, door jou) zet hem buiten vast en potjes met
+     geen norm (geenNormTx), zoals Gemeente EUR 484 via zijn eigen label. Geen verwijzing naar de categorie van een andere boeking.
+     Vanaf 1 november een reservering Laserbehandeling (EUR 159 per 6 maanden, EUR 27 per maand, partij Lausa Eriksson) die de volgende
+     betaling van die partij herkent als uit de reservering betaald. Een keer (SET.kennis425.laser452); zonder de boeking gebeurt er niets. */
   if(!Z.laser452){ const kand=TX.filter(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`) && String(t.date).slice(0,7)==='2026-10');
     const lt=kand.find(t=>t.date==='2026-10-15')||kand[0];
-    /* de categorie van Gemeente EUR 484 (de regel die de gebruiker noemde), en zonder die boeking de categorie zonder norm die
-       geen Contant is; de sleutel staat niet bij naam in de code (geennorm-hardcode.spec.js) */
-    const gemC=gem?catOf(gem):'', ONV=(gemC && geenNorm(gemC) && gemC!==CONTANT_CAT)?gemC:Object.keys(CATS).find(k=>geenNorm(k) && k!==CONTANT_CAT && CATS[k].type==='expense');
-    if(lt && ONV){ const catVoor=catOf(lt)||'zorg';
-      OVR[lt.id]=ONV; laserOvrGezet=true;
+    if(lt){ const catVoor=catOf(lt)||'zorg';
       for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || !E.tx) continue; const ids=Array.isArray(E.tx)?E.tx:Object.keys(E.tx);
         if(ids.includes(lt.id) && (E.soort==='eenmalig' || E.zaad==='zorg159')) delete SET.kennis[k]; }
       const ptn=isTikkie(lt)?tikkiePersoon(lt):benoemPartij(lt);
       kennisZet('benoem|'+benoemKey(lt), {soort:'benoem', partij:ptn, wat:'Laserbehandeling', label:'Laserbehandeling', aard:'eenmalig', bedrag:159, zaad:'laser452', tx:{[lt.id]:{label:'Laserbehandeling', bron:'jij', aard:'eenmalig'}}});
       if(!resLijst().some(r=>r && r.bron==='laser452')){ SET.reserveringen=resLijst().slice();
         SET.reserveringen.push({id:'r'+Date.now().toString(36)+'l', naam:'Laserbehandeling', bedrag:159, intervalM:6, vervalmaand:'2027-04', cat:CATS[catVoor]&&!geenNorm(catVoor)?catVoor:'zorg', bron:'laser452', partij:'Lausa Eriksson', vanaf:'2026-11'}); }
-      Z.laser452=vandaagYMD(); gedaan=true; } }
+      Z.laser452=vandaagYMD(); Z.laser453=vandaagYMD(); gedaan=true; } }
+  /* v453: DE CATEGORIE VAN LAUSA TERUG (een keer, SET.kennis425.laser453). Het zaad van v452 zette de boeking met een eigen keuze (OVR)
+     op de categorie zonder norm; die keuze gaat terug naar de categorie van de reservering Laserbehandeling (Zorg & apotheek), of weg
+     als de regels de boeking daar zelf al zetten. Een keuze die geen categorie zonder norm is, is van jou en blijft staan. */
+  if(Z.laser452 && !Z.laser453){ const r=resLijst().find(x=>x && x.bron==='laser452'), cat=(r && CATS[r.cat])?r.cat:'zorg';
+    for(const E of Object.values(SET.kennis||{})){ if(!E || E.zaad!=='laser452' || !E.tx) continue;
+      for(const id of Object.keys(E.tx)){ const t=TX.find(x=>x.id===id); if(!t || !OVR[id] || !geenNorm(OVR[id])) continue;
+        if(t.autoCat===cat) delete OVR[id]; else OVR[id]=cat; laserOvrGezet=true; } }
+    Z.laser453=vandaagYMD(); gedaan=true; }
   const sc=TX.find(t=>t.amount<0 && /SPORT ?CITY/i.test(`${t.name||''} ${t.desc||''}`));
   if(sc && !Z.sportcity){ const sk=recurKey(sc);
     zet('sportcity', 'vast|'+sk, {soort:'vast', partij:benoemPartij(sc), wat:'Sportabonnement', potje:kennisCatVan('Sport')||catOf(sc), aard:'terug', bron:KENNIS_BRON.jij, tx:[]});
@@ -28475,9 +28510,18 @@ function diagRekeningen(){
   L.push('');
   L.push('  aantal afgeleide verbindingen:     '+gk.length);
   L.push('  laatste import (globaal):          '+_dV(()=>SET.psd2LastSync?new Date(SET.psd2LastSync).toString():'nooit'));
-  L.push('  laatste import per rekening:       bestaat niet, er is geen veld');
-  L.push('  bewaarde foutstatus:               bestaat niet, er is geen veld');
-  L.push('  dichtstbijzijnde per-rekening bewijs dat de saldo-aanroep lukte: ACCMETA[a].date hierboven');
+  /* v453: de twee regels "laatste import per rekening" en "bewaarde foutstatus" zeiden "bestaat niet"; sinds v279/v298 bewaart
+     SET.psd2Diag per rekening de laatste sync (_op) en per groep (transactie, saldo, pending) de velden met hun eigen stempel, ook
+     de fout van de bank. Hier staat wat er werkelijk bewaard is, zonder iets te herberekenen. */
+  const PD=_dT(()=>SET.psd2Diag,{})||{}, tijd=v=>{ const d=new Date(+v); return isNaN(d)?'-':`${ymdVan(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+  const pdk=Object.keys(PD).filter(a=>PD[a] && typeof PD[a]==='object' && !Array.isArray(PD[a]));
+  L.push('  bewaard per rekening (SET.psd2Diag, v279/v298): '+(pdk.length?pdk.length+' rekening(en)':'nog niets bewaard (er is sinds v279 niet gesynchroniseerd)'));
+  for(const a of pdk){ const E=PD[a], VO=E._veldOp||{};
+    L.push(`    ${a}   laatste sync ${E._op?tijd(E._op):(E.op||'onbekend')}`);
+    for(const [g,velden] of Object.entries(PSD2DIAG_GROEPEN)){ const aanw=velden.filter(f=>f in E);
+      const fout=velden.filter(f=>/Fout$/.test(f) && E[f]).map(f=>`${f}=${String(E[f]).slice(0,80)}`);
+      L.push(`      ${g}: ${aanw.length?aanw.map(f=>{ const v=E[f]; const txt=v==null?'-':typeof v==='object'?'{..}':String(v).slice(0,40); return `${f}=${txt}${VO[f]?' ('+tijd(VO[f])+')':''}`; }).join(' · '):'niet bewaard'}${fout.length?' · FOUTSTATUS '+fout.join(' · '):(aanw.length?' · foutstatus: geen':'')}`); } }
+  L.push('  dichtstbijzijnde per-rekening bewijs dat de saldo-aanroep lukte: ACCMETA[a].date hierboven, en balGeland hier');
   L.push('');
   const leeg=_dT(()=>rekZonderBoekingen(),[])||[];
   L.push('gekoppeld zonder boekingen: '+(leeg.length?leeg.join(', '):'geen'));
@@ -31412,7 +31456,7 @@ const DIAG_SAL_MAANDEN=6;
 function diagGroep(t, B){ const c=catOf(t), m=CATS[c]||{};
   if(m.type==='income') return 'inkomen';
   if(m.type!=='expense') return c==='holding'?'holding':(c===LOAN_CAT.uit||c===LOAN_CAT.in)?'uitgeleend':'intern (geen uitgave)';
-  if(geenNorm(c) || !isUitgave(t,B)) return 'buiten vast en potjes';
+  if(geenNormTx(t) || !isUitgave(t,B)) return 'buiten vast en potjes';
   if(isFixed(t) || potHeelVast(c)) return 'vast';
   return ((+B[c]||0)>0 || (c===CONTANT_CAT && contantPotje())) ? 'potjes (variabel)' : 'zonder potje (variabel)'; }
 /* v421: DE STAND VAN v419, IN HET GEHEUGEN NAGEREKEND (alleen lezen, geen save()). De regels van v419 (RULES_V419), geen holding,
@@ -31554,7 +31598,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
         if(isSal(t) && v-o>0.005){ salaris+=v-o; salTx.push(t); if(o>0) overTx.push({t, v:o, onr:true}); } else if(v>0.005) overTx.push({t, v, onr:o>0}); continue; }
       if(meta.type!=='expense') continue;
       const geld=-t.amount, vn=uitgaveNorm(t);
-      if(geenNorm(c) || !isUitgave(t, B)){ const g=!geenNorm(c)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm';
+      if(geenNormTx(t) || !isUitgave(t, B)){ const g=!geenNormTx(t)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm';
         buiten+=geld; bDeel[g]+=geld; bTx.push({t, v:geld}); bSoort.push({t, g, v:geld}); continue; }
       buiten+=geld-vn; bDeel.uitres+=geld-vn; if(Math.abs(geld-vn)>=0.005) bSoort.push({t, g:'uitres', v:geld-vn});
       /* v420: de woning per partij, uit alles wat in Huur als vast telt (een post of het vaste potje); v440: of wat op IBAN
@@ -31851,7 +31895,13 @@ function diagSalarisVerdeling(){
       const randS=sM<sP?U(sM, rekDag(sP,-1)):-U(sP, rekDag(sM,-1)), randE=eM>eP?U(rekDag(eP,1), eM):-U(rekDag(eM,1), eP);
       const aM=som(KMs,x=>x.uitgegevenRuw), aP=som(CP,x=>x.uitgegevenRuw), rM=som(KMs,x=>x.corr&&x.corr.rest), rP=som(CP,x=>x.corr&&x.corr.rest), ok=Math.abs(aM-(aP+randS+randE))<0.005;
       L.push(`  CONTROLE maand (punt 3) = periode (deze tabel), v450: maanden ${dd(sM)} t/m ${dd(eM)} ${c2(aM)} = periodes ${dd(sP)} t/m ${dd(eP)} ${c2(aP)} ${randS>=0?'+':'−'} rand begin ${c2(Math.abs(randS))} ${randE>=0?'+':'−'} rand eind ${c2(Math.abs(randE))} → ${ok?'sluit':'VERSCHIL '+c2(aM-aP-randS-randE)} · na de correctie: maanden ${c2(som(KMs,x=>x.uitgegeven))}, periodes ${c2(som(CP,x=>x.uitgegeven))}${rM||rP?` (rest niet verdeeld: maanden ${c2(rM)}, periodes ${c2(rP)})`:''}`);
-      L.push(`  CONTANT PER MAAND (v450, punt 3): ${KMs.map(x=>`${MN(x.start.slice(0,7))}${x.lopend?'*':''} ${c2(x.uitgegeven)}${x.correctie?` (was ${c2(x.uitgegevenRuw)}, correctie −${c2(x.correctie.bedrag)} uit telling ${dd(x.correctie.telling)})`:x.corr?` (was ${c2(x.uitgegevenRuw)}${x.corr.rest>0.005?`, rest ${c2(x.corr.rest)}`:''})`:''}`).join(' · ')} · in de boekingen (categorie): ${R.filter(r=>r.kasMaand).map(r=>`${MN(r.ym)} ${c2(r.kasCat)}`).join(' · ')}`); }
+      L.push(`  CONTANT PER MAAND (v450, punt 3): ${KMs.map(x=>`${MN(x.start.slice(0,7))}${x.lopend?'*':''} ${c2(x.uitgegeven)}${x.correctie?` (was ${c2(x.uitgegevenRuw)}, correctie −${c2(x.correctie.bedrag)} uit telling ${dd(x.correctie.telling)})`:x.corr?` (was ${c2(x.uitgegevenRuw)}${x.corr.rest>0.005?`, rest ${c2(x.corr.rest)}`:''})`:''}`).join(' · ')} · in de boekingen (categorie): ${R.filter(r=>r.kasMaand).map(r=>`${MN(r.ym)} ${c2(r.kasCat)}`).join(' · ')}`); 
+    /* v453: de forecast van het potje Contant in maandVooruit() tegen contantMaanden() voor de lopende maand: een berekening */
+    { let V=null; try{ V=maandVooruit(); }catch(_){}
+      const cur=thisYM(), CM=contantMaanden([valtOpYmPlus(cur,-1), cur]), C=CM[CM.length-1], pc=V&&V.potjes?V.potjes.find(x=>x.k===CONTANT_CAT):null;
+      L.push(pc && C && C.uitkomst!=null
+        ? `  CONTROLE Contant ${MN(cur)} (v453): volgens maandVooruit ${c2(pc.eindR)} = contantMaanden ${c2(C.uitkomst)} → ${Math.abs(pc.eindR-C.uitkomst)<0.005?'klopt':'VERSCHIL '+c2(pc.eindR-C.uitkomst)}${V.contant?` (bron ${V.contant.bron}, al uit in de categorie ${c2(V.contant.uit)})`:''}`
+        : `  CONTROLE Contant ${MN(cur)} (v453): niet te zeggen (${!V||V.onbekend?'geen vooruitblik':!pc?'geen potje Contant in de vooruitblik':'geen uitkomst van contantMaanden'})`); } }
     const nieuw=r=>(r.kasMaand?(+r.kasCat||0):(+(r.potjes||{})[CONTANT_CAT]||0))+(+(r.zonder||{})[CONTANT_CAT]||0)+(kp?0:(+(r.bDeel||{}).kas||0));   // v450: de boekingen (kasCat), het potje komt nu uit de tellingen
     const kasRest=R.filter(r=>kp && Math.abs(+(r.bDeel||{}).kas||0)>=0.5);
     L.push(`  CONTROLE oud "buiten · waarvan contant" = nieuw potje Contant, per maand (v448): ${R.map(r=>`${MN(r.ym)}${r===Rc?'*':''} ${e0(r.kasOud)} = ${e0(nieuw(r))} ${Math.abs(r.kasOud-nieuw(r))<0.5?'klopt':'VERSCHIL'}`).join(' · ')}${kasRest.length?` · LET OP: nog buiten bij een potje Contant in ${kasRest.map(r=>MN(r.ym)).join(', ')}`:''}`);
@@ -31876,11 +31926,15 @@ function diagSalarisVerdeling(){
   /* v452: DE GEEN-NORM-BOEKINGEN VAN DE LOPENDE MAAND (dezelfde bSoort als de regel hierboven, nu voor de maand die loopt), en de
      reserveringen die een partij herkennen: per post bedrag, interval, per maand, vanaf en welke betalingen hij als uit de reservering herkent. */
   { const xs=(Rc&&Rc.bSoort||[]).filter(x=>x.g==='geennorm').sort((a,b)=>a.t.date<b.t.date?-1:1);
-    L.push(`  GEEN NORM IN ${MN(Rc?Rc.ym:thisYM()).toUpperCase()}* (v452, buiten vast en potjes): ${xs.length?xs.map(x=>{ const t=x.t, bn=benoemTekst(t); return `${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${(CATS[catOf(t)]||{}).name||catOf(t)}]${bn?' · '+bn:''}`; }).join(' · '):'geen'}`);
+    /* v453: per boeking de categorie en wat hem hier zet: het label eenmalig (eenmaligLabel, ongeacht de categorie) of een categorie
+       zonder norm (geenNorm). Dezelfde toets als de sommen (geenNormTx). */
+    L.push(`  GEEN NORM IN ${MN(Rc?Rc.ym:thisYM()).toUpperCase()}* (v453, buiten vast en potjes): ${xs.length?xs.map(x=>{ const t=x.t, el=eenmaligLabel(t); return `${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} · categorie ${(CATS[catOf(t)]||{}).name||catOf(t)} · ${el?'label: '+el:'categorie zonder norm'}`; }).join(' · '):'geen'}`);
     const RP=resLijst().filter(r=>r && r.partij);
     L.push(`  RESERVERINGEN MET EEN PARTIJ (v452): ${RP.length?'':'geen'}`);
     for(const r of RP){ const iv=Math.max(+r.intervalM||0,0), pm=iv?(+r.bedrag||0)/iv:0, her=telbareTx().filter(t=>resPartijVoor(t)===r);
-      L.push(`    ${r.naam} · partij ${r.partij} · ${euro0(+r.bedrag||0)}${iv?` per ${iv} maanden = ${euro0(Math.round(pm))} per maand`:' eenmalig'} · vanaf 1 ${ymFull(r.vanaf)} · volgende termijn ${r.vervalmaand||'-'} · herkend als uit de reservering betaald: ${her.length?her.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(uitReserveringBedrag(t))}`).join(', '):'nog geen betaling'}`); } }
+      L.push(`    ${r.naam} · partij ${r.partij} · ${euro0(+r.bedrag||0)}${iv?` per ${iv} maanden = ${euro0(Math.round(pm))} per maand`:' eenmalig'} · vanaf 1 ${ymFull(r.vanaf)} · volgende termijn ${r.vervalmaand||'-'} · herkend als uit de reservering betaald: ${her.length?her.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(uitReserveringBedrag(t))}`).join(', '):'nog geen betaling'}`);
+      const O=resOpTermijn(r);   // v453: wat er op de termijn gereserveerd staat tegen het bedrag van de post
+      L.push(O?`      op de termijn (${MN(O.ym)} ${O.ym.slice(0,4)}) gereserveerd: ${O.n} maanden (${MN(r.vanaf)} ${String(r.vanaf).slice(0,4)} t/m ${MN(O.ym)} ${O.ym.slice(0,4)}) x ${c2(O.pm)} = ${c2(O.op)} tegen ${c2(+r.bedrag||0)}: ${O.op+0.005>=(+r.bedrag||0)?'gedekt':'TEKORT '+c2((+r.bedrag||0)-O.op)}`:'      op de termijn gereserveerd: niet te zeggen (geen vanaf of geen termijn)'); } }
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
   { let n=0; for(const r of R) if(r.wissel.length){ n++;
       L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.wissel.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(w=>`${w.t.date.slice(8,10)}-${w.t.date.slice(5,7)} ${c2(w.t.amount)} ${titleCase(cleanMerch(w.t.name)||w.t.name||'?')} -> ${w.g==='kas'?'uitgave in contant':w.g==='potje'?'potje Contant (v448)':'persoonlijke overboeking'}${w.omgezet?' (omgezet)':w.wacht?' (wacht op je bevestiging)':''}`).join(', ')}`); }
@@ -32376,12 +32430,35 @@ const DIAG_BLOKKEN=[
   {titel:'Oorzaken: per symptoom de toetsen, de bevestigde oorzaak, de testweek en de keuze', lees:diagOorzaken},
   {titel:'Laten staan per rekening: wat er per betaalrekening nodig is tot je volgende salaris, en opzij', lees:diagRekVerdeling},
   {titel:'gedeelde transactie-ids na categorize()', lees:diagGedeeldeIds},
+  {titel:'heen en terug op dezelfde rekening met je eigen naam, per maand', lees:diagEigenParen},
 ];
 /* ===== GEDEELDE IDS NA categorize() (v451, alleen lezen) =====
    Elke import-route slaat een bestaande id over, dus via een import kan een id niet twee keer in TX komen. Wel bij het
    opstarten: `categorize()` rekent elke id opnieuw uit, en twee boekingen met een eerder andere id (een pending-regel
    die zijn `_p` verliest, een id uit een oudere vorm) kunnen dan dezelfde krijgen. Dit blok telt dat over de hele
    historie en schrijft niets. */
+/* v453: PAREN OP DEZELFDE REKENING (gevraagd door de gebruiker, alleen lezen, raakt geen scherm): dezelfde rekening, dezelfde dag,
+   tegengesteld bedrag, en je eigen naam (eigenNaamIn) in minstens een van de twee. Een boeking zit in hooguit een paar. Per maand het
+   aantal paren en de som (het bedrag van een kant per paar). Over de hele import (TX), want de vraag is wat er binnenkwam. */
+function diagEigenParen(){
+  const c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), r4=a=>'··'+String(a||'-').slice(-4);
+  const groep=new Map(); for(const t of TX){ if(t.pending || !t.acc || !(+t.amount)) continue; const k=`${t.acc}|${String(t.date).slice(0,10)}|${Math.round(Math.abs(t.amount)*100)}`; if(!groep.has(k)) groep.set(k,[]); groep.get(k).push(t); }
+  const paren=[];
+  for(const xs of groep.values()){ const af=xs.filter(t=>t.amount<0), bij=xs.filter(t=>t.amount>0), weg=new Set();
+    for(const a of af){ const b=bij.find(x=>!weg.has(x.id) && (eigenNaamIn(a) || eigenNaamIn(x))); if(!b) continue; weg.add(b.id); paren.push({a, b, v:-a.amount}); } }
+  paren.sort((p,q)=>String(p.a.date).localeCompare(String(q.a.date)));
+  const per={}; for(const P of paren){ const ym=String(P.a.date).slice(0,7); (per[ym]=per[ym]||{n:0, som:0}); per[ym].n++; per[ym].som+=P.v; }
+  const L=['HEEN EN TERUG OP DEZELFDE REKENING MET JE EIGEN NAAM (v453) · alleen lezen · over de hele import',
+    `  paren: ${paren.length} (dezelfde rekening, dezelfde dag, tegengesteld bedrag, je eigen naam in minstens een van de twee)`];
+  const yms=Object.keys(per).sort();
+  if(!yms.length){ L.push('  geen'); return L; }
+  L.push('  per maand: aantal · som');
+  for(const ym of yms) L.push(`    ${ym}  ${per[ym].n} · ${c2(per[ym].som)}`);
+  L.push(`  samen: ${paren.length} · ${c2(paren.reduce((a,P)=>a+P.v,0))}`);
+  L.push('  de laatste 10:');
+  for(const P of paren.slice(-10)){ const n=t=>titleCase(cleanMerch(t.name)||t.name||'?');
+    L.push(`    ${P.a.date} ${r4(P.a.acc)} ${c2(P.v)} · af ${n(P.a)} [${(CATS[catOf(P.a)]||{}).name||catOf(P.a)}] · bij ${n(P.b)} [${(CATS[catOf(P.b)]||{}).name||catOf(P.b)}] · eigen naam in ${eigenNaamIn(P.a)&&eigenNaamIn(P.b)?'beide':eigenNaamIn(P.a)?'de afschrijving':'de bijschrijving'}`); }
+  return L; }
 function diagGedeeldeIds(){
   const per=new Map(); for(const t of TX){ const k=String(t.id); if(!per.has(k)) per.set(k,[]); per.get(k).push(t); }
   const dub=[...per.values()].filter(x=>x.length>1).sort((a,b)=>String(a[0].date).localeCompare(String(b[0].date)));

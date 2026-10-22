@@ -175,7 +175,7 @@ test.describe('c - buiten de signalen die tegen een norm of je historie meten', 
     }));
     const recent = src.lezer.slice(src.lezer.indexOf('const recent='), src.lezer.indexOf('let big=null'));
     expect(recent).toContain('piekScope()');
-    expect(src.snede).toContain('!geenNorm(c)');
+    expect(src.snede).toContain('!geenNormTx(t)');   // v453: de categorie zonder norm of het label eenmalig, een toets per boeking
   });
 
   test('geen aandeel- of trendsignaal op de afgeronde maand', async ({ page }) => {

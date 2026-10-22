@@ -21,7 +21,7 @@ async function boot(page, zaai) {
 const lausa = page => page.evaluate(() => TX.find(t => t.amount === -159 && /ERIKSSON/.test(t.desc)).id);
 
 test.describe('v452 · Lausa eenmalig en de reservering Laserbehandeling', () => {
-  test('a. de boeking gaat van het potje Zorg naar Onvoorzien (buiten vast en potjes, geen norm), eenmalig door jou, zonder vraag', async ({ page }) => {
+  test('a. (v453) de boeking blijft in Zorg en valt door het label eenmalig buiten vast en potjes (geen norm), eenmalig door jou, zonder vraag', async ({ page }) => {
     await boot(page, false);
     const id = await lausa(page);
     const voor = await page.evaluate(id => { delete SET.kennis425.laser452; const t = TX.find(x => x.id === id);
@@ -29,13 +29,13 @@ test.describe('v452 · Lausa eenmalig en de reservering Laserbehandeling', () =>
     expect(voor.cat).toBe('zorg');
     expect(voor.groep).toBe('potjes (variabel)');
     const na = await page.evaluate(id => { const g = kennisZaai(); save(); const t = TX.find(x => x.id === id);
-      return { g, cat: catOf(t), geenNorm: geenNorm(catOf(t)), zorg: catSpendMap('2026-10').zorg || 0, groep: diagGroep(t, maandPotjes('2026-10').B),
+      return { g, cat: catOf(t), geenNorm: geenNormTx(t), zorg: catSpendMap('2026-10').zorg || 0, groep: diagGroep(t, maandPotjes('2026-10').B),
         B: benoemStand(t), een: eenmaligBevestigd(t), vraag: gegevensVragen().some(q => q.t && q.t.id === id),
         zorg159: Object.values(SET.kennis).filter(E => E.zaad === 'zorg159').length,
         laser: Object.values(SET.kennis).filter(E => E.zaad === 'laser452').map(E => [E.soort, E.label, E.aard, E.partij]),
         nog: kennisZaai() }; }, id);
     expect(na.g).toBe(true);
-    expect([na.cat, na.geenNorm, na.groep]).toEqual(['onvoorzien', true, 'buiten vast en potjes']);
+    expect([na.cat, na.geenNorm, na.groep]).toEqual(['zorg', true, 'buiten vast en potjes']);
     expect(Math.round(voor.zorg - na.zorg)).toBe(159);
     expect([na.B.laag, na.B.aard, na.B.label]).toEqual(['antw', 'eenmalig', 'Laserbehandeling']);
     expect(na.een).toBeTruthy();
@@ -67,20 +67,23 @@ test.describe('v452 · Lausa eenmalig en de reservering Laserbehandeling', () =>
     expect(r.terug).toBe(159);
   });
 
-  test('c. het zaad draait in load() en bewaart OVR, zodat de boeking na een herstart op Onvoorzien blijft', async ({ page }) => {
-    await boot(page, false);
+  test('c. (v453) de rechtzetting laser453 zet de keuze Onvoorzien van v452 terug naar Zorg, in load() en bewaard in OVR', async ({ page }) => {
+    await boot(page, true);
     const id = await lausa(page);
-    const ovr = await page.evaluate(id => { delete SET.kennis425.laser452; SET.reserveringen = resLijst().filter(x => x.bron !== 'laser452'); save();
-      load(); return JSON.parse(localStorage.getItem('minder_ovr') || '{}')[id]; }, id);
-    expect(ovr).toBe('onvoorzien');
+    const r = await page.evaluate(id => { const onv = Object.keys(CATS).find(k => geenNorm(k) && k !== CONTANT_CAT && CATS[k].type === 'expense');
+      OVR[id] = onv; delete SET.kennis425.laser453; save();
+      const voor = catOf(TX.find(x => x.id === id));
+      load(); const t = TX.find(x => x.id === id);
+      return { onv, voor, na: catOf(t), ovr: JSON.parse(localStorage.getItem('minder_ovr') || '{}')[id], vlag: !!SET.kennis425.laser453, gn: geenNormTx(t) }; }, id);
+    expect(r.voor).toBe(r.onv);
+    expect([r.na, r.ovr, r.vlag, r.gn]).toEqual(['zorg', 'zorg', true, true]);
   });
 
   test('d. blok 20 toont Lausa onder geen norm in oktober en de reserveringspost met EUR 27 per maand', async ({ page }) => {
     await boot(page, true);
     const L = await page.evaluate(() => diagSalarisVerdeling());
     const gn = L.find(r => /GEEN NORM IN OKT/i.test(r)) || '';
-    expect(gn).toMatch(/09-10 159\.00 Lausa Eriksson via Tikki \[Onvoorzien\]/);
-    expect(gn).toMatch(/Laserbehandeling/);
+    expect(gn).toMatch(/09-10 159\.00 Lausa Eriksson via Tikki · categorie Zorg & apotheek · label: Laserbehandeling · eenmalig \(door jou\)/);
     const i = L.findIndex(r => /RESERVERINGEN MET EEN PARTIJ/.test(r));
     expect(i).toBeGreaterThan(-1);
     expect(L[i + 1]).toMatch(/Laserbehandeling · partij Lausa Eriksson · €159 per 6 maanden = €27 per maand · vanaf 1 november/);

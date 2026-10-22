@@ -281,8 +281,9 @@ test.describe('d - wat de app over de verbindingen weet, en niet weet', () => {
     expect(r).toContain('N26 | consent tot 2027-03-01');
     expect(r).toContain('N26 | consent tot 2026-11-01');
     expect(r).toContain('aantal afgeleide verbindingen:     2');
-    expect(r).toContain('laatste import per rekening:       bestaat niet, er is geen veld');
-    expect(r).toContain('bewaarde foutstatus:               bestaat niet, er is geen veld');
+    // v453: de verouderde regels "bestaat niet" zijn vervangen door wat SET.psd2Diag per rekening bewaart (zie v453.spec.js)
+    expect(r).not.toContain('bestaat niet, er is geen veld');
+    expect(r).toContain('bewaard per rekening (SET.psd2Diag, v279/v298):');
   });
 
   test('er is geen per-rekening tijdstip en geen foutveld in SET', async ({ page }) => {

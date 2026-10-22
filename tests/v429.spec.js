@@ -108,7 +108,9 @@ test.describe('v429 · 1. mogelijke oorzaken per symptoom', () => {
     x = await X(page, 'pat:pot:boodschappen');
     expect(x).toBeNull();
     const k = await page.evaluate(() => { const C = gripCyclusLees(); return { leeg: C.leeg.map(z => z.id), te: C.kies.filter(y => y.sym === 'pat:pot:boodschappen').length, wacht: C.wacht.filter(y => y.sym === 'pat:pot:boodschappen').length }; });
-    expect(k).toEqual({ leeg: ['pat:pot:boodschappen'], te: 0, wacht: 0 });   // geen keuze: telt niet als gedrag
+    /* v453: het label eenmalig zet de boeking buiten vast en potjes (geenNormTx), dus het symptoom ontstaat niet eens meer en hoeft niet
+       als weggevallen te staan; geen keuze, telt niet als gedrag */
+    expect(k).toEqual({ leeg: [], te: 0, wacht: 0 });
   });
   test('salaris-effect: de helft of meer in de 7 dagen na je salaris, in 2 van 3 maanden', async ({ page }) => {
     await V.boot(page);
