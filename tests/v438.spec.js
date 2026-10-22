@@ -12,7 +12,8 @@ test.describe('v438 · 1. een brug, geen dubbeltelling', () => {
   test('1a/1d. de staven zijn budget · vast · zonder potje · N boven · N onder · verwacht, zonder staaf wijzigingen', async ({ page }) => {
     await boot(page);
     const b = await brug(page);
-    expect(b.st).toEqual(['budget:3095', 'vast:-629', 'zonder potje:394', '1 boven:66', '9 onder:-639', 'verwacht:2287']);   // v440: budget en verwacht −€280 (Plan-inleg weg)
+      /* v453: Zorg EUR 159 draagt het label eenmalig en valt daardoor buiten vast en potjes (geen norm): zonder potje en de forecast -159 */
+    expect(b.st).toEqual(['budget:3095', 'vast:-629', 'zonder potje:235', '1 boven:66', '9 onder:-639', 'verwacht:2128']);   // v440: budget en verwacht −€280 (Plan-inleg weg)
     /* de invoer draagt het geval: er zijn deze maand wijzigingen (+40) */
     expect(await page.evaluate(() => maandVooruit().wijz)).toBe(40);
     const geen = await page.evaluate(() => { const V = maandVooruit(); return [gripGroepBrug(V), gripZienBrug(V), dezeMaandBrug(V)].map(B => B.stappen.filter(s => s.soort === 'wijz' || /wijziging/.test(String(s.label || ''))).length); });
@@ -39,7 +40,7 @@ test.describe('v438 · 1. een brug, geen dubbeltelling', () => {
   test('1b. een geaccepteerde vaste last verandert de forecast niet', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), E = wijzForecastEffect(V); return { rijen: E.rijen.map(x => `${x.k} ${x.effect}`), Pz: E.Pzonder, P0: E.P0, tot: E.tot }; });
-    expect(r).toEqual({ rijen: ['huur 0', 'verzekering 0'], Pz: 2287, P0: 2287, tot: 0 });   // v440: forecast −€280 (Plan-inleg weg)
+    expect(r).toEqual({ rijen: ['huur 0', 'verzekering 0'], Pz: 2128, P0: 2128, tot: 0 });   // v453: Zorg 159 eenmalig buiten de norm   // v440: forecast −€280 (Plan-inleg weg)
     const L = await blok20(page);
     expect(L.find(l => l.includes('CONTROLE forecast zonder wijzigingen'))).toMatch(/→ klopt$/);
   });
@@ -68,10 +69,10 @@ test.describe('v438 · 1. een brug, geen dubbeltelling', () => {
     await page.evaluate(() => { go('maand'); gripKiesTab('begrijpen'); });
     await page.locator('#gripGroepKaart [data-brugtik]').nth(2).click();
     const sh = page.locator('#zonderPotjeSheet');
-    await expect(sh).toHaveAttribute('data-zonder', '394');
+    await expect(sh).toHaveAttribute('data-zonder', '235');   // v453: Zorg 159 met het label eenmalig staat buiten vast en potjes
     const rij = await page.$$eval('#zonderPotjeSheet [data-zondercat]', L => L.map(x => `${x.dataset.zondercat} ${x.querySelector('[data-zondercatg]').dataset.zondercatg}`));
-    expect(rij.sort()).toEqual(['goededoel 15', 'vakantie 220', 'zorg 159']);
-    await expect(sh.locator('[data-zondercat="zorg"] [data-zondereenmalig]')).toHaveAttribute('data-zondereenmalig', '159');
+    expect(rij.sort()).toEqual(['goededoel 15', 'vakantie 220']);
+    await expect(sh.locator('[data-zondercat="zorg"]')).toHaveCount(0);
     await expect(sh.locator('[data-zondercat="vakantie"] [data-zondereenmalig]')).toHaveCount(0);
   });
   for (const w of [390, 360]) test(`1d. de staven passen op ${w}px zonder afgesneden labels`, async ({ page }) => {
@@ -84,10 +85,10 @@ test.describe('v438 · 1. een brug, geen dubbeltelling', () => {
   test('1e. per groep, de salariskaart en blok 20 hebben dezelfde indeling; som salariskaart = onder budget', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), T = salarisTabelData(V); return { T: T.rijen.map(x => `${x.k} ${x.d}`), som: T.som, onder: Math.round(V.projectie) - V.budget }; });
-    expect(r).toEqual({ T: ['vast -629', 'zonder 394', 'boven 66', 'onder -639'], som: -808, onder: -808 });   // v440: geen inleg-rij meer
+    expect(r).toEqual({ T: ['vast -629', 'zonder 235', 'boven 66', 'onder -639'], som: -967, onder: -967 });   // v453: Zorg 159 eenmalig buiten de norm   // v440: geen inleg-rij meer
     await page.evaluate(() => openGripGroepen());
     const g = await page.$$eval('#gripGroepen [data-groep]', L => L.map(x => `${x.dataset.groep} ${x.querySelector('[data-groepdiff]').dataset.groepdiff}`));
-    expect(g).toEqual(['vast -629', 'zonder 394', 'boven 66', 'onder -639']);   // v440: geen inleg-groep meer
+    expect(g).toEqual(['vast -629', 'zonder 235', 'boven 66', 'onder -639']);   // v440: geen inleg-groep meer
     await page.evaluate(() => { closeSheet(); openGripKant('onder'); });
     await expect(page.locator('#gripKant')).toHaveAttribute('data-kantwaarde', '-639');
     const s = await page.$$eval('[data-kantpotje]', L => L.reduce((a, x) => a + +x.dataset.v, 0));
@@ -96,7 +97,7 @@ test.describe('v438 · 1. een brug, geen dubbeltelling', () => {
     for (const c of ['CONTROLE budget + verschillen = forecast', 'CONTROLE geen staaf "wijzigingen"', 'CONTROLE som van de salariskaart-verschillen', 'CONTROLE som van de groepen = vastgelegd'])
       expect(B.find(l => l.includes(c)), c).toMatch(/→ klopt$/);
     const i = B.findIndex(l => l.includes('per groep (vastgelegd budget · forecast · verschil)'));
-    expect(B.slice(i + 1, i + 5)).toEqual(['    vast: €1.517 · €888 · -€629', '    zonder potje: €0 · €394 · +€394', '    1 boven: €400 · €466 · +€66 (Boodschappen +€66)', '    9 onder: €1.178 · €539 · -€639']);   // v440: geen Plan-inleg-groep meer
+    expect(B.slice(i + 1, i + 5)).toEqual(['    vast: €1.517 · €888 · -€629', '    zonder potje: €0 · €235 · +€235', '    1 boven: €400 · €466 · +€66 (Boodschappen +€66)', '    9 onder: €1.178 · €539 · -€639']);   // v440: geen Plan-inleg-groep meer
   });
 });
 

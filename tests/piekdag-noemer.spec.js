@@ -120,7 +120,7 @@ test.describe('onvoorzien telt niet mee in het losse geld', () => {
       poort: piekScope.toString(),
     }));
     expect(r2.lezer).toContain('piekScope(m)');
-    expect(r2.snede).toContain('geenNorm(c)');
+    expect(r2.snede).toMatch(/geenNorm(Tx\(t\)|\(c\))/);   // v453: geenNormTx(t), de categorie zonder norm of het label eenmalig
     expect(r2.poort).toContain('piekInScope');
   });
 });

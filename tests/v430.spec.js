@@ -130,10 +130,11 @@ test.describe('v430 · R4 eenmalig door jou gaat voor alles', () => {
     await page.evaluate(() => { const t = TX.find(x => x.date === '2026-10-05' && x.amount === -283); SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [t.id]: { op: '2026-10-10' } }); save(); renderMaand(); });
     C = await cyc(page);
     expect(C.sym).not.toContain('pat:pot:boodschappen');
-    expect(C.leeg).toContain('pat:pot:boodschappen');
+    /* v453: het label eenmalig zet de boeking buiten vast en potjes, dus het symptoom ontstaat niet meer en hoeft niet als weggevallen te staan */
+    expect(C.leeg).not.toContain('pat:pot:boodschappen');
     expect(C.kies.concat(C.wacht).some(k => k[1] === 'pat:pot:boodschappen')).toBe(false);
     const b22 = await page.evaluate(() => diagOorzaken().join('\n'));
-    expect(b22).toMatch(/weggevallen, alleen eenmalig door jou: .*pat:pot:boodschappen/);
+    expect(b22).not.toMatch(/weggevallen, alleen eenmalig door jou: .*pat:pot:boodschappen/);
     expect(b22).toContain('symptoom alleen uit een als eenmalig bevestigd bedrag (alle soorten): geen');
   });
   test('R4b. elke soort, ook de lek-regel: zonder het eenmalige bedrag onder de drempel is leeg', async ({ page }) => {

@@ -131,7 +131,7 @@ test.describe('1 · de snede staat op een plek', () => {
     const src = fs.readFileSync('index.html', 'utf8');
     const treffers = src.split('\n')
       .map((r, i) => ({ r, i }))
-      .filter((x) => /isFixed\(/.test(x.r) && /geenNorm\(/.test(x.r));
+      .filter((x) => /isFixed\(/.test(x.r) && /geenNorm(Tx)?\(/.test(x.r));   // v453: geenNormTx(t), de toets per boeking
     expect(treffers.length).toBe(2);
     expect(treffers[0].r).toContain('function piekInScope(t)');
     /* de tweede staat in diagCsvPsd2(), dat bewust TX leest: dat blok MEET wat de poort kost en zou

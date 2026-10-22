@@ -102,7 +102,7 @@ test.describe('v434 · 1. Signalen in Zien volgen de cyclus', () => {
       gripKiesTab('begrijpen'); const b = [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => e.dataset.symptoom);
       return { leeg: C.leeg.map(x => x.id), z, b }; });
     /* met de 159 als eenmalig wordt het een lek-regel over Zorg die zonder dat bedrag leeg is (v430 R4): weggevallen */
-    expect(r.leeg).toContain('lo:lek:zorg');
+    expect(r.leeg).not.toContain('lo:lek:zorg');   // v453: met het label eenmalig valt de 159 buiten de norm; het symptoom ontstaat niet meer
     expect(r.z.filter(id => /:zorg$/.test(id))).toEqual([]); expect(r.b.filter(id => /:zorg$/.test(id))).toEqual([]);
     for (const id of r.z) expect(r.b).toContain(id);
   });
@@ -175,6 +175,7 @@ test.describe('v434 · 4. blok 22: drie controles op Zien', () => {
     expect(L).toContain('  signaal in Zien zonder symptoom in Begrijpen: JA');
     expect(L).toContain('nergens');
     expect(L).toContain('  afgehandeld signaal in de open lijst: JA · vast:gestegen');
-    expect(L).toContain('  weggevallen symptoom in Zien: JA · lo:lek:zorg');
+    /* v453: met het label eenmalig is er geen weggevallen symptoom meer; het nep-signaal lo:lek:zorg wordt dan als signaal zonder symptoom gezien */
+    expect(L).toMatch(/signaal in Zien zonder symptoom in Begrijpen: JA[^\n]*lo:lek:zorg/);
   });
 });
