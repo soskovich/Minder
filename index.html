@@ -28264,6 +28264,12 @@ function diagRekeningen(){
       L.push('    balances-aanroep:   '+(dg.balFout?('FOUT: '+dg.balFout)
         :(dg.balGeland?('gelukt, saldo '+Math.round(dg.balUit)+', landde in ACCMETA'):'GEEN SALDO, niets naar ACCMETA'))
         +'   lijst '+(dg.balLijst==null?'?':dg.balLijst)+' entries'+(dg.balTypes?(' ['+dg.balTypes+']'):''));
+      /* v451: welke saldosoorten de bank aanbiedt en welke Minder gebruikt (overal geboekt: CLBD, dan ITBD) */
+      { const ts=String(dg.balTypes||'').split(',').map(x=>x.trim().toUpperCase()).filter(x=>x&&x!=='-'), gk=String(dg.balGekozen||'').toUpperCase();
+        const geb=ts.filter(x=>x==='CLBD'||x==='ITBD');
+        const gebr=gk?(' · gebruikt '+gk+(gk==='CLBD'||gk==='ITBD'?' (geboekt)':' (NIET geboekt)')):'';
+        L.push('    saldosoorten:       '+(ts.length?('bank biedt ['+ts.join(',')+']'+gebr+(geb.length?'':' · GEEN geboekt saldo aangeboden')):'niet vastgelegd (nog geen sync sinds v279)')); }
+      L.push('    eigen id van de bank: '+(dg.txBankId?dg.txBankId:(dg.txN?'niet vastgelegd (nog geen sync sinds v451)':'geen regels om te tellen')));
       if(!dg.balGeland && !dg.balFout) L.push('      reden: '+(dg.balReden||'onbekend')
         +(dg.balGekozen?('   gekozen entry: '+dg.balGekozen):'')+(dg.balRuw?('   ruw bedrag: "'+dg.balRuw+'"'):''));
       if(!dg.balGeland) L.push('      GEVOLG: het saldo hierboven is van '+(meta.date||'onbekend')+' en niet van de laatste sync');
@@ -32329,7 +32335,24 @@ const DIAG_BLOKKEN=[
   {titel:'Grip-cyclus: waar elk oud element van Grip nu staat, en of de brug en het aantal keuzes sluiten', lees:diagGripCyclus},
   {titel:'Oorzaken: per symptoom de toetsen, de bevestigde oorzaak, de testweek en de keuze', lees:diagOorzaken},
   {titel:'Laten staan per rekening: wat er per betaalrekening nodig is tot je volgende salaris, en opzij', lees:diagRekVerdeling},
+  {titel:'gedeelde transactie-ids na categorize()', lees:diagGedeeldeIds},
 ];
+/* ===== GEDEELDE IDS NA categorize() (v451, alleen lezen) =====
+   Elke import-route slaat een bestaande id over, dus via een import kan een id niet twee keer in TX komen. Wel bij het
+   opstarten: `categorize()` rekent elke id opnieuw uit, en twee boekingen met een eerder andere id (een pending-regel
+   die zijn `_p` verliest, een id uit een oudere vorm) kunnen dan dezelfde krijgen. Dit blok telt dat over de hele
+   historie en schrijft niets. */
+function diagGedeeldeIds(){
+  const per=new Map(); for(const t of TX){ const k=String(t.id); if(!per.has(k)) per.set(k,[]); per.get(k).push(t); }
+  const dub=[...per.values()].filter(x=>x.length>1).sort((a,b)=>String(a[0].date).localeCompare(String(b[0].date)));
+  const c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), r4=a=>{ const s=String(a||'-'); return '··'+s.slice(-4); };
+  const L=['GEDEELDE TRANSACTIE-IDS (v451) · alleen lezen · over de hele historie',
+    `boekingen ${TX.length} · verschillende ids ${per.size} · gedeeld: ${dub.length} id(s), samen ${dub.reduce((a,x)=>a+x.length,0)} boekingen`];
+  if(!dub.length){ L.push('  geen: elke boeking heeft een eigen id'); return L; }
+  for(const x of dub){ const t=x[0];
+    L.push(`  ${t.date} · ${c2(t.amount)} · rekening ${r4(t.acc)} · ${x.length}x · bron ${[...new Set(x.map(y=>y.src||'-'))].join('+')}${x.some(y=>y.pending)?' · waarvan pending '+x.filter(y=>y.pending).length:''}`); }
+  return L;
+}
 
 async function diagTekst(){
   const L=['=== MINDER DIAGNOSE ===','tijd: '+new Date().toString()];
@@ -32818,12 +32841,13 @@ async function psd2Refresh(silent){
   const allTx=[]; const pend=[]; const balances={}; let authFail=false, anyOk=false;
   for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
     let cont=null, guard=0, txN=0, txFout='';
+    const bim=bankIdMeting();
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
       let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); anyOk=true; }
       catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; txFout=String((e&&e.message)||e).slice(0,90); break; }
       const rij=(d.transactions||[]); txN+=rij.length;
-      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     const bu={}; let bal=null, balFout='';
@@ -32844,7 +32868,7 @@ async function psd2Refresh(silent){
       const prij=(dp.transactions||[]); pendN=prij.length;
       for(const raw of prij){ const t=mapPsd2Tx(raw, accId, true); if(t){ pend.push(t); pendMap++; } }
     }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); }
-    psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
+    psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'',
       pendN, pendMap, pendFout, pendGeland:!pendFout});
     /* v296: DE MARKERING DAT DEZE REKENING IS GESYNCHRONISEERD. Zonder hem bestaat er voor deze rekening
@@ -33025,19 +33049,20 @@ async function psd2IngestSession(s){
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
     meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'', sessie:s.session_id||'' };
     let cont=null, guard=0, txN=0, txFout='';
+    const bim=bankIdMeting();
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
       let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); }
       catch(e){ txFout=String((e&&e.message)||e).slice(0,90); toast('Transacties ophalen mislukt: '+e.message); break; }
       const rij=(d.transactions||[]); txN+=rij.length;
-      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     const bu={}; let bal=null, balFout='';
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
     if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()};
-    psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
+    psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
     /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is. DEZE ROUTE LEGT DE
        PENDING-AANROEP NIET VAST, en dat is geen omissie maar de stand die v270 heeft gemeten en die
@@ -33055,6 +33080,19 @@ async function psd2IngestSession(s){
 }
 // Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
 
+/* ===== HEEFT DE BANK EEN EIGEN ID PER TRANSACTIE (v451, alleen meten) =====
+   `t.id` hasht over rekening, datum, bedrag en omschrijving, dus twee echte, gelijke betalingen krijgen dezelfde id
+   en de tweede valt bij de import weg. Levert de bank `transaction_id` of `entry_reference`, dan kan deel B die in de
+   id opnemen. Deze meting telt per rekening hoe vaak die velden er zijn, hoeveel uniek, en hoe vaak twee regels met
+   DEZELFDE Minder-id een ANDERE bank-id dragen (dat zijn de betalingen die nu wegvallen). Er verandert geen id. */
+function bankIdMeting(){ return {n:0, tidN:0, tid:new Set(), erefN:0, eref:new Set(), per:new Map()}; }
+function bankIdTel(M, raw, t){ if(!M || !raw) return; M.n++;
+  const tid=raw.transaction_id||raw.transactionId, er=raw.entry_reference||raw.entryReference;
+  if(tid){ M.tidN++; M.tid.add(String(tid)); } if(er){ M.erefN++; M.eref.add(String(er)); }
+  const b=tid||er; if(t && b){ const k=String(t.id); if(!M.per.has(k)) M.per.set(k,new Set()); M.per.get(k).add(String(b)); } }
+function bankIdTekst(M){ if(!M || !M.n) return '';
+  let botst=0; for(const v of M.per.values()) if(v.size>1) botst+=v.size-1;
+  return `transaction_id ${M.tidN}/${M.n} (${M.tid.size} uniek) · entry_reference ${M.erefN}/${M.n} (${M.eref.size} uniek) · zelfde Minder-id met een andere bank-id: ${botst}`; }
 function mapPsd2Tx(raw, accId, pending){
   const amtObj = raw.transaction_amount || raw.amount || {};
   const val = parseFloat(amtObj.amount); if(isNaN(val)) return null;
@@ -33147,7 +33185,7 @@ function psd2DiagVers(d, veld){
    route schrijft of juist niet schrijft. Een vierde aanroep hoort hier een groep te krijgen, anders
    zwijgt de herkomst over precies het veld dat nieuw is. */
 const PSD2DIAG_GROEPEN={
-  transactie:['txN','txPag','txFout'],
+  transactie:['txN','txPag','txFout','txBankId'],
   saldo:['balUit','balGeland','balFout','balLijst','balTypes','balGekozen','balRuw','balReden'],
   pending:['pendN','pendMap','pendFout','pendGeland']
 };
@@ -33238,7 +33276,12 @@ function pickBalance(b, uitleg){
   if(uitleg){ uitleg.lijst = Array.isArray(arr) ? arr.length : -1;
     uitleg.types = Array.isArray(arr) ? arr.map(x=>String((x&&(x.balance_type||x.type))||'-')).slice(0,6).join(',') : String(typeof arr); }
   if(!Array.isArray(arr)||!arr.length) return stop(Array.isArray(arr)?'de balances-lijst is leeg':'geen balances-lijst in de respons');
-  const pref = arr.find(x=>/CLBD|ITAV|XPCD|PRCD/i.test(x.balance_type||x.type||'')) || arr[0];
+  /* v451: OVERAL GEBOEKT (keuze van de gebruiker). Eerst CLBD (closing booked), dan ITBD (interim booked), en pas
+     daarna de oude volgorde. ABN biedt ITBD en dat stond niet in de lijst, dus daar viel de keuze op het eerste item;
+     N26 biedt (gemeten bij v297) alleen XPCD, een verwacht saldo met wat nog niet geboekt is. De aansluiting van deel B
+     vergelijkt een saldo met GEBOEKTE transacties, en dat sluit alleen met een geboekt saldo. */
+  const bt=x=>String((x&&(x.balance_type||x.type))||'').toUpperCase();
+  const pref = arr.find(x=>bt(x)==='CLBD') || arr.find(x=>bt(x)==='ITBD') || arr.find(x=>/CLBD|ITAV|XPCD|PRCD/i.test(x.balance_type||x.type||'')) || arr[0];
   if(uitleg) uitleg.gekozen=String((pref&&(pref.balance_type||pref.type))||'-');
   const v = pref&&(pref.balance_amount||pref.amount); if(!v) return stop('de gekozen entry draagt geen bedrag');
   if(uitleg) uitleg.ruw=String(v.amount).slice(0,20);
