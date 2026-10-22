@@ -35,8 +35,11 @@ test.describe('v427', () => {
   test('1. Zorg EUR 159 staat op de Tikkie aan Lausa Eriksson; Posh Clinic is weer nog niet benoemd; de vraag over Lausa Eriksson is uit OPEN VRAGEN', async ({ page }) => {
     await boot(page);
     const [P, L] = [await tid(page, 'Posh Clinic', -159), await tid(page, 'Lausa Eriksson via Tikki', -159)];
-    const E = await page.evaluate(() => Object.values(SET.kennis).find(E => E.zaad === 'zorg159'));
-    expect([E.partij, E.wat, E.bron, Array.isArray(E.tx) ? E.tx : Object.keys(E.tx)]).toEqual(['Lausa Eriksson', 'Zorgkosten', 'jij', [L]]);
+    /* v452: het antwoord over Lausa Eriksson is sinds het zaad laser452 een benoemde uitgave Laserbehandeling (eenmalig, door jou, met de
+       regel van Gemeente EUR 484); het zaad zorg159 is daarin opgegaan en staat dus niet meer los */
+    const E = await page.evaluate(() => Object.values(SET.kennis).find(E => E.zaad === 'laser452'));
+    expect([E.partij, E.wat, E.bron, Array.isArray(E.tx) ? E.tx : Object.keys(E.tx)]).toEqual(['Lausa Eriksson', 'Laserbehandeling', 'jij', [L]]);
+    expect(await page.evaluate(() => Object.values(SET.kennis).filter(E => E.zaad === 'zorg159').length)).toBe(0);
     expect(await page.evaluate(id => benoemTekst(TX.find(t => t.id === id)), P)).toBe('Posh Clinic · nog niet benoemd');
     const Q = sectie(await lees(page), 'OPEN VRAGEN');
     expect(Q.length).toBeGreaterThan(1);
@@ -46,7 +49,8 @@ test.describe('v427', () => {
       SET.kennis['eenmalig|' + P] = { soort: 'eenmalig', partij: 'Posh Clinic', wat: 'Zorgkosten', bron: 'jij', op: '2026-10-10', zaad: 'zorg159', tx: [P] };
       delete SET.kennis425.zorg427; SET.kennis425.zorg159 = '2026-10-10';
       kennisZaai(); return [!!SET.kennis['eenmalig|' + P], Object.values(SET.kennis).filter(E => E.zaad === 'zorg159').map(E => (Array.isArray(E.tx) ? E.tx : Object.keys(E.tx))[0])]; }, [P, L]);
-    expect(na).toEqual([false, [L]]);
+    expect(na).toEqual([false, []]);   // v452: het zaad op Posh Clinic gaat weg; het antwoord over Lausa staat als laser452
+    expect(await page.evaluate(() => Object.values(SET.kennis).some(E => E.zaad === 'laser452'))).toBe(true);
     /* een keer: opnieuw zaaien verandert niets */
     expect(await page.evaluate(() => kennisZaai())).toBe(false);
   });

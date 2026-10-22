@@ -978,7 +978,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} if(a||b||c||d||e) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} if(a||b||c||d||e) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -2420,10 +2420,21 @@ function uitReserveringBedrag(t){
   if(!t || !(t.amount<0)) return 0;
   const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) return 0;
   if(geenNorm(c)) return 0;
-  const v=+((SET.uitReservering||{})[t.id]); if(!(v>0)) return 0;
-  return Math.min(v, -t.amount);
+  const U=SET.uitReservering||{};
+  /* v452: een eigen keuze op de boeking wint (ook 0: "niet uit de reservering"); zonder keuze herkent een reservering met een partij
+     en een startmaand (resPartijVoor) de betaling van die partij vanaf die maand als uit de reservering betaald, tot het bedrag van de post. */
+  if(Object.prototype.hasOwnProperty.call(U, t.id)){ const v=+U[t.id]; return v>0?Math.min(v, -t.amount):0; }
+  const R=resPartijVoor(t); return R?Math.min(+R.bedrag||0, -t.amount):0;
 }
 function isUitReservering(t){ return uitReserveringBedrag(t)>0; }
+/* v452: DE PARTIJ VAN EEN BOEKING ZOALS EEN RESERVERING HEM HERKENT: bij een Tikkie de persoon (tikkiePersoon), anders de opgeschoonde
+   naam; vergeleken zonder spaties en leestekens. Een reservering met `partij` en `vanaf` (jjjj-mm) herkent elke afschrijving van die
+   partij vanaf de 1e van die maand. Een lezer: uitReserveringBedrag(). */
+function resPartijNorm(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function resPartijVoor(t){ if(!t || !(t.amount<0) || !t.date) return null;
+  const L=resLijst().filter(r=>r && r.partij && r.vanaf); if(!L.length) return null;
+  let p=''; try{ p=resPartijNorm(isTikkie(t)?tikkiePersoon(t):benoemPartij(t)); }catch(_){ return null; } if(!p) return null;
+  return L.find(r=>String(t.date)>=r.vanaf+'-01' && p.includes(resPartijNorm(r.partij)))||null; }
 /* v308: DE UITGAVE ZOALS EEN NORM HEM TELT, en dat is het bedrag min het deel dat uit een
    reservering is betaald. Deze uitdrukking stond alleen IN catSpendMap(), en daardoor telde de
    piekdag en de grootste uitgave het volle bedrag: GEMELD op 30 september stond er "Grootste
@@ -2458,7 +2469,8 @@ function zetUitReservering(id, bedrag, heropen){
   const t=TX.find(x=>x.id===id); if(!t) return;
   SET.uitReservering=SET.uitReservering||{};
   const v=Math.min(Math.max(Math.round((+bedrag||0)*100)/100,0), Math.max(-t.amount,0));
-  if(v>0) SET.uitReservering[id]=v; else delete SET.uitReservering[id];
+  const w=v>0?v:(resPartijVoor(t)?0:null);   // v452: nee op een betaling die een reservering herkent wordt bewaard als 0
+  if(w==null) delete SET.uitReservering[id]; else SET.uitReservering[id]=w;
   save(); render();
   /* heropen=false voor de picker bij 'betaald': die staat zelf in de sheet, en zonder deze uitweg
      zou hij zich door de boekingssheet laten vervangen. Eén schrijver, geen tweede opslag. */
@@ -26329,6 +26341,7 @@ function kennisMigreer(){ if(!SET.benoemd) return false; SET.kennis=SET.kennis||
   delete SET.benoemd; return true; }
 /* De antwoorden die je al gaf (bericht van de gebruiker bij v425), een keer per antwoord en alleen als de boeking of de partij er
    is. Wat al een eigen plek had (holding, leningen, Health Club) staat daar en wordt niet nog eens geschreven. */
+let laserOvrGezet=false;   // v452: het zaad laser452 schreef OVR; load() bewaart OVR dan ook
 function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false;
   const zet=(n,k,E)=>{ if(Z[n]) return; if(!kennisGet(k)) kennisZet(k, Object.assign({op:vandaagYMD(), zaad:n}, E)); Z[n]=vandaagYMD(); gedaan=true; };
   const nik=TX.find(t=>t.amount<0 && /^NIKKI\b/.test(recurKey(t)));
@@ -26388,6 +26401,25 @@ function kennisZaai(){ const Z=SET.kennis425=SET.kennis425||{}; let gedaan=false
         try{ potPlanZet(CONTANT_CAT, thisYM(), CONTANT_ZAAD.bedrag); } finally{ window._bwKeuze=oud; }
         const Lg=SET.budgetWijzLog||[]; for(let i=Lg.length-1;i>=0;i--) if(Lg[i].k===CONTANT_CAT){ Lg[i].bron='jij'; if(String(Lg[i].op||'').slice(0,7)===CONTANT_ZAAD.op.slice(0,7)) Lg[i].op=CONTANT_ZAAD.op; break; } }
       Z.contant447=vandaagYMD(); gedaan=true; } }
+  /* v452: LAUSA ERIKSSON EUR 159 IN OKTOBER IS EENMALIG, MET DE REGEL VAN GEMEENTE EUR 484 (gevraagd door de gebruiker): de boeking gaat
+     op Onvoorzien (buiten vast en potjes, geen norm) in plaats van in het potje Zorg, het antwoord staat als benoemde uitgave (eenmalig,
+     door jou) zodat er geen vraag "wat is dit?" volgt, en vanaf 1 november is er een reservering Laserbehandeling (EUR 159 per 6 maanden,
+     EUR 27 per maand, partij Lausa Eriksson) die de volgende betaling van die partij herkent als uit de reservering betaald. Een keer
+     (SET.kennis425.laser452); zonder de boeking gebeurt er niets. */
+  if(!Z.laser452){ const kand=TX.filter(t=>t.amount===-159 && /ERIKSSON/i.test(`${t.name||''} ${t.desc||''}`) && String(t.date).slice(0,7)==='2026-10');
+    const lt=kand.find(t=>t.date==='2026-10-15')||kand[0];
+    /* de categorie van Gemeente EUR 484 (de regel die de gebruiker noemde), en zonder die boeking de categorie zonder norm die
+       geen Contant is; de sleutel staat niet bij naam in de code (geennorm-hardcode.spec.js) */
+    const gemC=gem?catOf(gem):'', ONV=(gemC && geenNorm(gemC) && gemC!==CONTANT_CAT)?gemC:Object.keys(CATS).find(k=>geenNorm(k) && k!==CONTANT_CAT && CATS[k].type==='expense');
+    if(lt && ONV){ const catVoor=catOf(lt)||'zorg';
+      OVR[lt.id]=ONV; laserOvrGezet=true;
+      for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || !E.tx) continue; const ids=Array.isArray(E.tx)?E.tx:Object.keys(E.tx);
+        if(ids.includes(lt.id) && (E.soort==='eenmalig' || E.zaad==='zorg159')) delete SET.kennis[k]; }
+      const ptn=isTikkie(lt)?tikkiePersoon(lt):benoemPartij(lt);
+      kennisZet('benoem|'+benoemKey(lt), {soort:'benoem', partij:ptn, wat:'Laserbehandeling', label:'Laserbehandeling', aard:'eenmalig', bedrag:159, zaad:'laser452', tx:{[lt.id]:{label:'Laserbehandeling', bron:'jij', aard:'eenmalig'}}});
+      if(!resLijst().some(r=>r && r.bron==='laser452')){ SET.reserveringen=resLijst().slice();
+        SET.reserveringen.push({id:'r'+Date.now().toString(36)+'l', naam:'Laserbehandeling', bedrag:159, intervalM:6, vervalmaand:'2027-04', cat:CATS[catVoor]&&!geenNorm(catVoor)?catVoor:'zorg', bron:'laser452', partij:'Lausa Eriksson', vanaf:'2026-11'}); }
+      Z.laser452=vandaagYMD(); gedaan=true; } }
   const sc=TX.find(t=>t.amount<0 && /SPORT ?CITY/i.test(`${t.name||''} ${t.desc||''}`));
   if(sc && !Z.sportcity){ const sk=recurKey(sc);
     zet('sportcity', 'vast|'+sk, {soort:'vast', partij:benoemPartij(sc), wat:'Sportabonnement', potje:kennisCatVan('Sport')||catOf(sc), aard:'terug', bron:KENNIS_BRON.jij, tx:[]});
@@ -31841,6 +31873,14 @@ function diagSalarisVerdeling(){
           const bn=benoemTekst(t);   // v424: de naam en de bron, of "nog niet benoemd"
           L.push(`      ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${cat}]${waarom}${bn?` · ${bn}`:''}`); } }
       L.push(`    samen ${c2(somAll)} tegen buiten vast en potjes ${c2(Ra.buiten)}: ${Math.abs(somAll-Ra.buiten)<0.005?'sluit':'VERSCHILT '+c2(somAll-Ra.buiten)}`); } }
+  /* v452: DE GEEN-NORM-BOEKINGEN VAN DE LOPENDE MAAND (dezelfde bSoort als de regel hierboven, nu voor de maand die loopt), en de
+     reserveringen die een partij herkennen: per post bedrag, interval, per maand, vanaf en welke betalingen hij als uit de reservering herkent. */
+  { const xs=(Rc&&Rc.bSoort||[]).filter(x=>x.g==='geennorm').sort((a,b)=>a.t.date<b.t.date?-1:1);
+    L.push(`  GEEN NORM IN ${MN(Rc?Rc.ym:thisYM()).toUpperCase()}* (v452, buiten vast en potjes): ${xs.length?xs.map(x=>{ const t=x.t, bn=benoemTekst(t); return `${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} [${(CATS[catOf(t)]||{}).name||catOf(t)}]${bn?' · '+bn:''}`; }).join(' · '):'geen'}`);
+    const RP=resLijst().filter(r=>r && r.partij);
+    L.push(`  RESERVERINGEN MET EEN PARTIJ (v452): ${RP.length?'':'geen'}`);
+    for(const r of RP){ const iv=Math.max(+r.intervalM||0,0), pm=iv?(+r.bedrag||0)/iv:0, her=telbareTx().filter(t=>resPartijVoor(t)===r);
+      L.push(`    ${r.naam} · partij ${r.partij} · ${euro0(+r.bedrag||0)}${iv?` per ${iv} maanden = ${euro0(Math.round(pm))} per maand`:' eenmalig'} · vanaf 1 ${ymFull(r.vanaf)} · volgende termijn ${r.vervalmaand||'-'} · herkend als uit de reservering betaald: ${her.length?her.map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(uitReserveringBedrag(t))}`).join(', '):'nog geen betaling'}`); } }
   L.push('  WISSELT VAN GROEP (v419/v420): eigen rekening zonder bewijs; "omgezet" staat in de app al op Persoonlijke overboeking, "wacht" tot je het in Zien bevestigt');
   { let n=0; for(const r of R) if(r.wissel.length){ n++;
       L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.wissel.slice().sort((a,b)=>a.t.date<b.t.date?-1:1).map(w=>`${w.t.date.slice(8,10)}-${w.t.date.slice(5,7)} ${c2(w.t.amount)} ${titleCase(cleanMerch(w.t.name)||w.t.name||'?')} -> ${w.g==='kas'?'uitgave in contant':w.g==='potje'?'potje Contant (v448)':'persoonlijke overboeking'}${w.omgezet?' (omgezet)':w.wacht?' (wacht op je bevestiging)':''}`).join(', ')}`); }

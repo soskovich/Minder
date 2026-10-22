@@ -100,7 +100,7 @@ test.describe('v426', () => {
       '  Vaste lasten | Nikki | Voetbalcontributie · Kinderen | door jou | 10-10-2026',
       '  Vaste lasten | Health Club | Gestopt | door jou | 20-09-2026',
       '  Eenmalige uitgaven | Gemeente Utrecht | Boete of wegslepen · eenmalig | door jou | 10-10-2026',
-      '  Eenmalige uitgaven | Lausa Eriksson | Zorgkosten | door jou | 10-10-2026',
+      '  Eenmalige uitgaven | Lausa Eriksson | Laserbehandeling · eenmalig | door jou | 10-10-2026',   // v452: het zaad laser452 vervangt zorg159 (eenmalig, met de regel van Gemeente EUR 484)
       '  Contant | Contant | Contant: ik pin na mijn salaris | door jou | 17-10-2026']) expect(K).toContain(r);   // v446
     expect(K.length).toBe(12);   // kop + 11 (v435: de salarisregel; v446: contant na je salaris)
   });
