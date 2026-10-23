@@ -69,7 +69,10 @@ test.describe('a · de lopende maand is de standaard', () => {
     /* v340: SET.afsluitPopup draagt de maand die je afsluit, en dat is per constructie de vorige maand
        (afsluitMaand()), los van de kiezer. Die ene sleutel telt daarom niet als de keuze. */
     const opslag = await page.evaluate(() => { const S = Object.assign({}, SET);
-      const af = S.afsluitPopup; delete S.afsluitPopup; return { rest: JSON.stringify(S), af: af ? af.maand : null, afMaand: afsluitMaand() }; });
+      const af = S.afsluitPopup; delete S.afsluitPopup;
+      /* v460: SET.controles is de opgeslagen uitkomst van de controles; die draagt de maanden van verklaarde en gearchiveerde controles
+         (een historie, los van de kiezer), dus ook de vorige maand. */
+      delete S.controles; return { rest: JSON.stringify(S), af: af ? af.maand : null, afMaand: afsluitMaand() }; });
     expect(opslag.rest).not.toContain(VORIGE);
     if (opslag.af) expect(opslag.af).toBe(opslag.afMaand);
   });

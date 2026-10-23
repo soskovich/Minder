@@ -32672,7 +32672,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
    het teken kunnen omdraaien. */
 const CONTROLE_KEUZE_DREMPEL=0.10, AANSL_TOLERANTIE_DAGEN=3, CONTROLE_LOG_MAX=400;
 const CONTROLE_GETAL_NAAM={onderBudget:'onder budget', saldo:'totaal saldo'};
-const CONTROLE_ONDERWERP_VOLG=['budget','contant','woning','terug te zetten','verdeling','voorautorisaties','boekingen','rekeningen'];
+const CONTROLE_ONDERWERP_VOLG=['budget',CONTANT_CAT,'woning','terug te zetten','verdeling','voorautorisaties','boekingen','rekeningen'];
 /* de vier eisen van soort 1, per correctie uitgeschreven (B2) */
 const CONTROLE_CORRECTIES={
   voraut:{naam:'Voorautorisaties', wijst:'per geval de afschrijving A en de vrijgave V (vorautPatroon)', bron:'de betaling B is de juiste; A en V zijn een reservering en haar vrijgave', alleenBerekening:'A en V blijven in je transacties, ze tellen niet mee (vorautWeg)', zichtbaar:'het log hieronder, en per geval terug te draaien in Wat Minder van jou weet'},
@@ -32684,7 +32684,7 @@ function appVersie(){ if(window._appVersie) return window._appVersie; let s=''; 
   return (window._appVersie='c'+(h>>>0).toString(36)+'.'+s.length.toString(36)); }
 function controlesLees(){ return (typeof SET!=='undefined' && SET.controles) || {}; }
 function controleOnderwerp(blok, tekst){ const t=String(tekst||'');
-  if(/contant/i.test(t)) return 'contant'; if(/woning/i.test(t)) return 'woning'; if(/terug te zetten|inhalen|onttrokken/i.test(t)) return 'terug te zetten';
+  if(/contant/i.test(t)) return CONTANT_CAT; if(/woning/i.test(t)) return 'woning'; if(/terug te zetten|inhalen|onttrokken/i.test(t)) return 'terug te zetten';
   if(/voorautorisatie/i.test(t)) return 'voorautorisaties';
   return {20:'budget', 23:'verdeling', 24:'boekingen', 25:'boekingen', 26:'voorautorisaties'}[blok]||'budget'; }
 const CONTROLE_BLOKKEN=()=>[[20,diagSalarisVerdeling],[23,diagRekVerdeling],[24,diagGedeeldeIds],[25,diagEigenParen],[26,diagVorautPatroon]];
@@ -32741,9 +32741,9 @@ function aanslNaam(acc){ let n=''; try{ n=accLabel(acc)||''; }catch(_){} const b
 function correctieZonderVoraut(){ const P=SET.vorautPaar||{}, M=Object.entries(P).filter(([k,e])=>e && e.bron==='minder' && Array.isArray(e.weg) && e.weg.length);
   if(!M.length) return null;
   const byId=new Map(TX.map(t=>[String(t.id),t])), maanden=[...new Set(M.map(([k])=>String((byId.get(k)||{}).date||'').slice(0,7)).filter(Boolean))];
-  const meet=()=>{ telbaarVergeten(); _dataGen++; return JSON.stringify(maanden.map(ym=>catSpendMap(ym))); };
+  const meet=()=>{ _dataGen++; return JSON.stringify(maanden.map(ym=>catSpendMap(ym))); };
   const met=meet(); const kopie=Object.assign({}, P); for(const [k] of M) delete SET.vorautPaar[k];
-  let zonder=null; try{ zonder=meet(); } finally { SET.vorautPaar=kopie; telbaarVergeten(); _dataGen++; }
+  let zonder=null; try{ zonder=meet(); } finally { SET.vorautPaar=kopie; _dataGen++; }
   return {nodig:met!==zonder, n:M.length, sleutels:M.map(([k])=>k)}; }
 function controleLog(C, e){ C.log=Array.isArray(C.log)?C.log:[]; if(e.ref && C.log.some(x=>x.ref===e.ref)) return;
   C.log.push(Object.assign({datum:vandaagYMD()}, e)); if(C.log.length>CONTROLE_LOG_MAX) C.log=C.log.slice(-CONTROLE_LOG_MAX); }
@@ -32779,7 +32779,7 @@ function runControles(bron){ const t0=performance.now(), nu=Date.now(), C=SET.co
       tekst:C.uit.voraut?`correctie uit sinds ${C.uit.voraut.op}`:`${euroC(som)} telt niet dubbel${namen.length?' · '+opsomming(namen)+' herstelt Minder zelf':''}`});
     const open=K.filter(k=>!k.keuze && !vorautAutoActief(k.partij));
     if(open.length) U.push({id:'voraut-vraag', soort:3, status:'vraag', onderwerp:'voorautorisaties', raakt:[], bedrag:open.reduce((a,k)=>a+k.echt/100,0), titel:`Voorautorisatie: ${open.length} vraag in Kloppen mijn gegevens?`, tekst:open.map(k=>`${k.voor.date} ${titleCase(cleanMerch(k.voor.name)||'')}`).join(' · ')}); }catch(_){}
-  U.push({id:'contant-telling', soort:1, status:'gecorrigeerd', uit:true, onderwerp:'contant', raakt:[], titel:'Contant: tellingboekingen dubbel', tekst:'opgelost in de code (v450) · correctie uit'});
+  U.push({id:'contant-telling', soort:1, status:'gecorrigeerd', uit:true, onderwerp:CONTANT_CAT, raakt:[], titel:'Contant: tellingboekingen dubbel', tekst:'opgelost in de code (v450) · correctie uit'});
   /* de getallen die een keuze kan raken */
   const getallen={}; let V=null, MB=null;
   try{ V=maandVooruit(); MB=maandBudgetWijz(thisYM()).vast; if(V && !V.onbekend && MB) getallen.onderBudget=MB.totaal-Math.round(V.projectie); }catch(_){}
@@ -32840,7 +32840,7 @@ function vorautNaamOordeel(k, wat){ const C=SET.controles=SET.controles||{}; C.t
    Aansluiting per rekening · wacht op de bouwer · gecorrigeerd · kleine vragen · klopt (per onderwerp, met aantal) · archief · log.
    Alleen lezen: het scherm toont de OPGESLAGEN uitkomst van de laatste run en rekent niets na. Elke controle draagt een kopieerbare
    tekst voor de bouwer. De enige handelingen zijn je oordeel over een nieuw geval zonder partij-eis en het log exporteren. */
-function controleKopie(u){ return [`controle ${u.id} · soort ${u.soort} · ${u.status}${u.bedrag?` · bedrag ${(+u.bedrag).toFixed(2)}`:''}${(u.raakt||[]).length?` · raakt ${u.raakt.join(', ')}`:''}${u.sinds?` · sinds ${new Date(u.sinds).toISOString()}`:''}`, String(u.tekst||'')].join('\n'); }
+function controleKopie(u){ return [`controle ${u.id} · soort ${u.soort} · ${u.status}${u.bedrag?` · bedrag ${(+u.bedrag).toFixed(2)}`:''}${(u.raakt||[]).length?` · raakt ${u.raakt.join(', ')}`:''}${u.sinds?` · sinds ${ymdVan(new Date(u.sinds))} ${controleDagTijd(u.sinds).slice(6)}`:''}`, String(u.tekst||'')].join('\n'); }
 function controleDagTijd(ms){ const d=new Date(ms); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}, nu=Date.now();
   const accs=[...new Set(Object.keys(SET.psd2Accounts||{}).concat(Object.keys(A)))];
