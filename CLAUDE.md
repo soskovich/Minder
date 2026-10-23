@@ -151,7 +151,16 @@ genoemde versietag.)*
   BEWUST INERT: kan het teken omdraaien, dan is de band minstens het getal en dus altijd meer dan 10% ervan. (4) UITGEZOCHT, NIET
   AANGEPAST: het doel van opzij (EUR 1.766 per salarisperiode) is `SET.salVerdeling.opzij`, gezet door `salVerdelingZet()` bij Advies
   volgen of Deze kiezen in Kiezen: salaris min de som van "laten staan" per betaalrekening min de reserveringen; de EUR 2.200 op Plan is
-  `monthlySavingTarget()`, sinds v440 geen opzij-getal. Spec `v461.spec.js` (10 tests, 11 sabotages rood); `v460` b wacht op fase B.
+  `monthlySavingTarget()`, sinds v440 geen opzij-getal. (5) AANSLUITING: een verwacht saldo (XPCD, N26) start bij de tweede sync en
+  sluit binnen de tolerantie. Tot v461 begon de aansluiting na een nieuwe koppeling opnieuw (de 24 maanden die hij ophaalt raken het
+  saldo niet), en dat zette N26 na de nieuwe koppeling van 23-10 weer op start. Nu draagt elke vastlegging `vanaf` en `somVanaf` (de
+  geboekte boekingen vanaf `AANSL_VENSTER_DAGEN`, 7, dagen voor de sync); de volgende sync vergelijkt het saldo met wat er in dat
+  venster bijkwam (`aanslSomVanaf()`), dus een nieuwe koppeling begint niet meer opnieuw; alleen een vastlegging van voor v461 nog wel.
+  Een rekening op start zegt in Diagnose waarom. `psd2Vervangen(acc)`: een entry in `SET.psd2Accounts` waarvan de laatste sync geen saldo
+  gaf met een sessie- of toestemmingsfout, terwijl dezelfde bank een koppeling met een latere `exp` heeft die wel lukte (gemeld:
+  psd2_94a07621, EXPIRED_SESSION sinds 28-09). Die telt niet in `psd2Falend()`, de sync roept hem niet meer aan, de aansluiting noemt hem
+  vervangen; er wordt niets weggehaald. `controleDagTijd()` geeft Nederlandse tijd (Intl, Europe/Amsterdam), ook als de browser UTC
+  meldt (gemeld: 19:01 voor een sync om 21:01). Spec `v461.spec.js` (14 tests, 18 sabotages rood); `v460` b wacht op fase B.
 - **v460: DEEL B FASE 1, DE MOTOR VAN DE CONTROLES** (`v460`, gevraagd door de gebruiker, ontwerp "Controles deel B"). `runControles(bron)` is
   de ENE run: na elke geslaagde sync (beide routes, na `applyPending()`, voor de ene `render()`), direct na een antwoord (`vorautAntw()`,
   `vorautZet()`, `keuzeKlaar()` en `keuzeOngedaan()`) en een keer bij het eerste opstarten van een nieuwe versie (`controlesBijStart()`,

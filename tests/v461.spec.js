@@ -153,3 +153,51 @@ test.describe('3 · een keuze over een potje hangt aan de forecast van dat potje
     expect(typeof r.vervoer).toBe('number');
   });
 });
+
+/* 5 · de aansluiting voor N26 (alleen XPCD), een nieuwe koppeling, een vervangen koppeling en de Nederlandse tijd */
+const stand = (page, acc) => page.evaluate((acc) => { const R = SET.controles.aansluiting[acc]; return { h: R.hist.length, s: aanslStatus(acc, R, Date.now()).status }; }, acc);
+const vastleggen = (page, acc, saldo, opnieuw) => page.evaluate(({ acc, saldo, opnieuw }) => aansluitingVastleggen({ [acc]: { saldo, soort: 'XPCD' } }, opnieuw), { acc, saldo, opnieuw });
+test.describe('5 · aansluiting: N26 start met een verwacht saldo', () => {
+  test('k. een rekening met alleen XPCD start bij de tweede sync en sluit binnen de tolerantie', async ({ page }) => {
+    await boot(page);
+    await vastleggen(page, N26, 1000); expect(await stand(page, N26)).toEqual({ h: 1, s: 'start' });
+    /* tweede sync: EUR 20 in het saldo die nog niet geboekt is (een verwacht saldo bevat wat in behandeling is): binnen de tolerantie */
+    await vastleggen(page, N26, 980); expect(await stand(page, N26)).toEqual({ h: 2, s: 'verklaard' });
+    /* de betaling boekt: saldo blijft, de boeking komt binnen; het verschil is weg */
+    await page.evaluate((acc) => { const t = { id: 'k20', date: vandaagYMD(), amount: -20, acc, src: 'psd2', name: 'Albert Heijn', desc: 'Albert Heijn PMNT', typ: '', ref: '', accName: '', refNums: [] }; categorize(t); TX.push(t); save(); }, N26);
+    await vastleggen(page, N26, 980); expect(await stand(page, N26)).toEqual({ h: 3, s: 'klopt' });
+    const d = await page.evaluate((acc) => { runControles('sync'); return (controleAanslRegels().find((x) => x.acc === acc) || {}).status; }, N26);
+    expect(d).toBe('klopt');
+  });
+  test('l. een nieuwe koppeling begint niet opnieuw: de oude boekingen die hij binnenhaalt vallen buiten het venster', async ({ page }) => {
+    await boot(page);
+    await vastleggen(page, N26, 1000); await vastleggen(page, N26, 1000);
+    await page.evaluate((acc) => { for (let i = 0; i < 6; i++) { const t = { id: 'oud' + i, date: `2025-0${i + 1}-15`, amount: -50, acc, src: 'psd2', name: 'Oud', desc: 'Oud PMNT', typ: '', ref: '', accName: '', refNums: [] }; categorize(t); TX.push(t); } save(); }, N26);
+    await vastleggen(page, N26, 1000, true);
+    expect(await stand(page, N26)).toEqual({ h: 3, s: 'klopt' });
+    /* een vastlegging van voor v461 (zonder venster) begint na een nieuwe koppeling wel opnieuw */
+    const oud = await page.evaluate((acc) => { const R = SET.controles.aansluiting[acc]; delete R.laatste.vanaf; delete R.laatste.somVanaf; aansluitingVastleggen({ [acc]: { saldo: 1000, soort: 'XPCD' } }, true); return aanslStatus(acc, R, Date.now()).status; }, N26);
+    expect(oud).toBe('start');
+  });
+  test('m. een koppeling die door een nieuwere van dezelfde bank is vervangen telt niet als "haalt geen saldo op" en wordt niet meer aangeroepen', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(async () => { const OUD = 'psd2_94a07621';
+      SET.psd2Accounts[OUD] = { uid: 'oud-uid', iban: '', label: 'Reservering', bank: 'N26', exp: '2026-12-01' };
+      SET.psd2Accounts['DE89370400440532013000'].exp = '2027-04-21';
+      SET.psd2Diag = { [OUD]: { op: '2026-10-23', balGeland: false, balFout: 'EXPIRED_SESSION' }, DE89370400440532013000: { op: '2026-10-23', balGeland: true }, 521200806: { op: '2026-10-23', balGeland: true } }; save();
+      const voor = psd2Falend().map((x) => x.acc); const aanroep = [];
+      psd2Api = async (pad) => { aanroep.push(pad); if (/\/balances/.test(pad)) return { balances: [{ balance_type: 'XPCD', balance_amount: { amount: '1000' } }] }; return { transactions: [] }; };
+      await psd2Refresh(true);
+      return { voor, oudAangeroepen: aanroep.some((p) => /oud-uid/.test(p)), na: psd2Falend().map((x) => x.acc), rij: (controleAanslRegels().find((x) => x.acc === OUD) || {}).status }; });
+    expect(r).toEqual({ voor: [], oudAangeroepen: false, na: [], rij: 'vervangen' });
+  });
+});
+test.describe('5 · de tijd in Diagnose is Nederlandse tijd', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('n. een sync om 21:01 (19:01 UTC) heet 21:01, ook als de browser UTC meldt', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone, t: controleDagTijd(Date.UTC(2026, 9, 23, 19, 1)) }));
+    expect(r.tz).toBe('UTC');
+    expect(r.t).toBe('23-10 21:01');
+  });
+});

@@ -32690,7 +32690,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
    SOORT 2 WACHT OP DE BOUWER: alleen in Diagnose, nooit een label, bandbreedte of melding op een scherm. Een keuze in Kiezen die aan een
    geraakt getal hangt wacht alleen als de open controles samen meer dan CONTROLE_KEUZE_DREMPEL (10%) van dat getal kunnen schelen of
    het teken kunnen omdraaien. */
-const CONTROLE_KEUZE_DREMPEL=0.10, AANSL_TOLERANTIE_DAGEN=3, CONTROLE_LOG_MAX=400;
+const CONTROLE_KEUZE_DREMPEL=0.10, AANSL_TOLERANTIE_DAGEN=3, AANSL_VENSTER_DAGEN=7, CONTROLE_LOG_MAX=400;
 const CONTROLE_GETAL_NAAM={onderBudget:'onder budget', saldo:'totaal saldo'};
 const CONTROLE_ONDERWERP_VOLG=['budget',CONTANT_CAT,'woning','terug te zetten','verdeling','voorautorisaties','boekingen','rekeningen'];
 /* de vier eisen van soort 1, per correctie uitgeschreven (B2) */
@@ -32746,11 +32746,20 @@ function controleMaandVan(ab){ const i=MNAMES.findIndex(x=>x===ab); let ym=thisY
    blijven staan en pas na AANSL_TOLERANTIE_DAGEN (3) dagen is het soort 2. Na een nieuwe koppeling begint de aansluiting opnieuw: er
    kunnen oude boekingen binnenkomen die het saldo niet raken. */
 function aanslGeboekt(soort){ return /CLBD|ITBD/i.test(String(soort||'')); }
+/* v461 (punt 5): HET VENSTER. Een nieuwe koppeling haalt 24 maanden op, en die oude boekingen raken het saldo niet; tot v461 begon de
+   aansluiting daarom opnieuw (een sync "start"), en dat zette N26 na de nieuwe koppeling op 23-10 weer op start. Nu draagt elke vastlegging
+   de som van de geboekte boekingen vanaf AANSL_VENSTER_DAGEN (7) dagen voor die sync (somVanaf); de volgende sync vergelijkt het saldo met
+   wat er in DAT venster sindsdien bijkwam. Een oude boeking die een nieuwe koppeling binnenhaalt valt buiten het venster, dus een nieuwe
+   koppeling hoeft niet opnieuw te beginnen, ook niet met alleen een verwacht saldo (XPCD). Alleen een vastlegging van voor v461 (zonder
+   venster) begint na een nieuwe koppeling nog opnieuw. */
+function aanslSomVanaf(acc, vanaf){ return TX.filter(t=>t.acc===acc && !t.pending && String(t.date)>=vanaf).reduce((a,t)=>a+Math.round((+t.amount||0)*100),0); }
 function aansluitingVastleggen(snap, opnieuw){ const C=SET.controles=SET.controles||{}, A=C.aansluiting=C.aansluiting||{}, nu=Date.now();
+  const vanaf=ymdVan(new Date(nu-AANSL_VENSTER_DAGEN*864e5));
   for(const acc in (snap||{})){ const s=snap[acc]; if(!s || s.saldo==null || isNaN(+s.saldo)) continue;
     const som=TX.filter(t=>t.acc===acc && !t.pending).reduce((a,t)=>a+Math.round((+t.amount||0)*100),0);
-    const R=A[acc]=A[acc]||{hist:[]}; const v=R.laatste, cur={tijd:nu, saldo:Math.round(s.saldo*100), soort:String(s.soort||''), som};
-    if(v && !opnieuw){ cur.dSaldo=cur.saldo-v.saldo; cur.dBoek=som-v.som; cur.verschil=cur.dSaldo-cur.dBoek;
+    const R=A[acc]=A[acc]||{hist:[]}; const v=R.laatste, cur={tijd:nu, saldo:Math.round(s.saldo*100), soort:String(s.soort||''), som, vanaf, somVanaf:aanslSomVanaf(acc, vanaf)};
+    if(opnieuw) cur.koppeling=true;
+    if(v && (!opnieuw || v.vanaf)){ cur.dSaldo=cur.saldo-v.saldo; cur.dBoek=v.vanaf?aanslSomVanaf(acc, v.vanaf)-v.somVanaf:som-v.som; cur.verschil=cur.dSaldo-cur.dBoek;
       const open=(R.open?R.open.bedrag:0)+cur.verschil;
       R.open=Math.abs(open)<1?null:{bedrag:open, sinds:R.open?R.open.sinds:nu, syncs:(R.open?R.open.syncs:0)+1}; }
     else { R.open=null; if(opnieuw && v) cur.opnieuw=true; }
@@ -32849,9 +32858,9 @@ function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), 
   try{ const per=new Map(); for(const t of TX){ const k=String(t.id); per.set(k,(per.get(k)||0)+1); } const n=[...per.values()].filter(x=>x>1).length;
     U.push({id:'gedeelde-ids', blok:24, soort:2, status:n?'wacht':'klopt', onderwerp:'boekingen', raakt:[], titel:'Gedeelde transactie-ids', tekst:n?`${n} id(s) gedeeld`:'elke boeking heeft een eigen id'}); }catch(_){}
   /* soort 2: aansluiting per rekening */
-  for(const [acc,R] of Object.entries(C.aansluiting||{})){ const S=aanslStatus(acc, R, nu); if(!S || S.status==='start') continue;
+  for(const [acc,R] of Object.entries(C.aansluiting||{})){ if(psd2Vervangen(acc)) continue; const S=aanslStatus(acc, R, nu); if(!S || S.status==='start') continue;
     U.push({id:'aansl:'+acc, soort:2, status:S.status, onderwerp:'rekeningen', raakt:['saldo'], bedrag:S.bedrag||0, reden:S.reden||'', titel:`Aansluiting ${aanslNaam(acc)}`,
-      tekst:S.status==='klopt'?'saldo nu − saldo vorige sync = geboekt sindsdien':`saldo en geboekt lopen ${euroC(S.bedrag)} uiteen sinds ${new Date(R.open.sinds).toLocaleString('nl-NL')} (${R.open.syncs} sync(s), saldosoort ${R.laatste.soort||'-'})`}); }
+      tekst:S.status==='klopt'?'saldo nu − saldo vorige sync = geboekt sindsdien':`saldo en geboekt lopen ${euroC(S.bedrag)} uiteen sinds ${controleDagTijd(R.open.sinds)} (${R.open.syncs} sync(s), saldosoort ${R.laatste.soort||'-'})`}); }
   /* blok 26: de gevallen zonder partij-eis. De eerste run legt de toevalsgevallen van nu vast als bekend toeval; een nieuw geval
      (nog niet bekend, nog geen oordeel) wacht op de bouwer (soort 2), ook als het op toeval lijkt. */
   try{ const G=vorautZonderGevallen(); const ks=G.map(g=>g.g.sleutel);
@@ -32924,14 +32933,24 @@ function vorautNaamOordeel(k, wat){ const C=SET.controles=SET.controles||{}; C.t
    Aansluiting per rekening · wacht op de bouwer · gecorrigeerd · kleine vragen · klopt (per onderwerp, met aantal) · archief · log.
    Alleen lezen: het scherm toont de OPGESLAGEN uitkomst van de laatste run en rekent niets na. Elke controle draagt een kopieerbare
    tekst voor de bouwer. De enige handelingen zijn je oordeel over een nieuw geval zonder partij-eis en het log exporteren. */
-function controleKopie(u){ return [`controle ${u.id} · soort ${u.soort} · ${u.status}${u.bedrag?` · bedrag ${(+u.bedrag).toFixed(2)}`:''}${(u.raakt||[]).length?` · raakt ${u.raakt.join(', ')}`:''}${u.sinds?` · sinds ${ymdVan(new Date(u.sinds))} ${controleDagTijd(u.sinds).slice(6)}`:''}`, String(u.tekst||'')].join('\n'); }
-function controleDagTijd(ms){ const d=new Date(ms); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function controleKopie(u){ return [`controle ${u.id} · soort ${u.soort} · ${u.status}${u.bedrag?` · bedrag ${(+u.bedrag).toFixed(2)}`:''}${(u.raakt||[]).length?` · raakt ${u.raakt.join(', ')}`:''}${u.sinds?` · sinds ${controleDagTijd(u.sinds)}`:''}`, String(u.tekst||'')].join('\n'); }
+/* v461 (punt 5): DE TIJD IN NEDERLANDSE TIJD (Europe/Amsterdam), ook als de browser een andere tijdzone meldt. Gemeld: "sinds 23-10
+   19:01" was een sync om 21:01; de browser gaf UTC. Zonder Intl valt hij terug op de tijd van het toestel. */
+function controleDagTijd(ms){ try{ const P={}; for(const x of new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).formatToParts(new Date(ms))) P[x.type]=x.value;
+    if(P.day && P.hour) return `${P.day}-${P.month} ${P.hour}:${P.minute}`; }catch(_){}
+  const d=new Date(ms); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}, nu=Date.now();
   const accs=[...new Set(Object.keys(SET.psd2Accounts||{}).concat(Object.keys(A)))];
   const MN=ym=>MNAMES[+ym.slice(5,7)-1];
   return accs.map(acc=>{ const R=A[acc], eYm=R&&R.eerste?ymdVan(new Date(R.eerste)).slice(0,7):thisYM(), van=prevYM(prevYM(eYm));
     const voor=`${MN(van)}–${MN(eYm)}: niet te meten, geen saldo`;
-    if(!R || (R.hist||[]).length<2 || R.laatste.opnieuw) return {acc, status:'start', tekst:`${voor} · vanaf de volgende sync start`};
+    if(psd2Vervangen(acc)) return {acc, status:'vervangen', tekst:`vervangen door een nieuwere koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'dezelfde bank'} · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen saldo').slice(0,60)} · telt niet mee in de aansluiting`};
+    /* v461: waarom een rekening nog niet vergelijkt, zodat het van het scherm af te lezen is */
+    if(!R || (R.hist||[]).length<2 || R.laatste.opnieuw){ const d=(SET.psd2Diag||{})[acc]||{}, L=R&&R.laatste;
+      const waarom=!R?(d.balGeland===false?`nog geen saldo vastgelegd: de laatste sync gaf geen saldo (${String(d.balFout||d.txFout||'onbekend').slice(0,60)})`:'nog geen saldo vastgelegd')
+        :L.opnieuw?`de laatste vastlegging (${controleDagTijd(L.tijd)}) was een nieuwe koppeling van voor v461; de aansluiting begon daar opnieuw`
+        :`een saldo vastgelegd (${controleDagTijd(L.tijd)}${L.koppeling?', nieuwe koppeling':''}, saldosoort ${L.soort||'-'})`;
+      return {acc, status:'start', tekst:`${voor} · ${waarom} · vanaf de volgende sync start`}; }
     const S=aanslStatus(acc, R, nu)||{status:'start'}, eerst=controleDagTijd(R.eerste);
     const t=S.status==='klopt'?`sinds ${eerst}: ${R.hist.length} syncs · sluit`:S.status==='verklaard'?`sinds ${eerst}: verschil ${euroC(S.bedrag)} · ${S.reden}`:`sinds ${eerst}: VERSCHIL ${euroC(S.bedrag)} sinds ${controleDagTijd(R.open.sinds)} (${R.open.syncs} sync(s), saldosoort ${R.laatste.soort||'-'})`;
     return {acc, status:S.status, tekst:`${voor} · ${t}`}; }); }
@@ -33653,7 +33672,7 @@ async function psd2Refresh(silent){
      middernacht en 02:00 zomertijd stempelt die gisteren, waardoor een vers opgehaald saldo als
      achterlopend zou lezen. De datums in TX zijn lokale kalenderdagen (v177), dus deze ook. */
   const allTx=[]; const pend=[]; const balances={}, aanslSnap={}; let authFail=false, anyOk=false;
-  for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
+  for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue; if(psd2Vervangen(accId)) continue;   // v461: vervangen, geen aanroep met een verlopen sessie
     let cont=null, guard=0, txN=0, txFout='';
     const bim=bankIdMeting();
     do{
@@ -34053,9 +34072,20 @@ function psd2DiagOpruim(){ const D=SET.psd2Diag, ps=SET.psd2Accounts||{}; if(!D 
 function psd2DiagActief(){ const D=SET.psd2Diag||{}, ps=SET.psd2Accounts||{}, o={};
   for(const a of Object.keys(ps)){ const E=D[a]; if(E && typeof E==='object' && !Array.isArray(E) && !E.vervangen) o[a]=E; }
   return o; }
+/* v461 (punt 5): EEN KOPPELING DIE DOOR EEN NIEUWERE VAN DEZELFDE BANK IS VERVANGEN. Krijgt een rekening bij een nieuwe koppeling een
+   andere id (een Space zonder eigen IBAN, psd2_<uid>), dan blijft de oude entry in SET.psd2Accounts staan met zijn oude, verlopen
+   toestemming en faalt hij bij elke sync (gemeld: psd2_94a07621, EXPIRED_SESSION sinds 28-09). Zo'n entry is vervangen als zijn laatste
+   sync geen saldo gaf met een fout over de sessie of de toestemming, en er een koppeling van dezelfde bank is met een latere geldigheid
+   (exp) waarvan de laatste sync wel lukte. Hij telt dan niet als "haalt geen saldo op", de sync slaat hem over (geen aanroep met een
+   verlopen sessie), en de aansluiting noemt hem vervangen. Er wordt niets weggehaald: dat blijft jouw keuze (Bank & rekeningen). */
+function psd2Vervangen(a){ const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, e=ps[a], d=D[a]; if(!e || !d || typeof d!=='object' || d.balGeland!==false) return false;
+  if(!/expired|session|consent|verlop|toestemming|40[13]/i.test(String(d.balFout||d.txFout||''))) return false;
+  const bank=String(e.bank||'').toLowerCase(), exp=String(e.exp||'');
+  return Object.keys(ps).some(b=>b!==a && String(ps[b].bank||'').toLowerCase()===bank && String(ps[b].exp||'')>exp && D[b] && D[b].balGeland===true); }
 function psd2Falend(){
   const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, uit=[];
   for(const a of Object.keys(ps)){
+    if(psd2Vervangen(a)) continue;
     const d=D[a];
     if(!d || typeof d!=='object' || !Object.prototype.hasOwnProperty.call(d,'balGeland')) continue;
     if(d.balGeland) continue;
