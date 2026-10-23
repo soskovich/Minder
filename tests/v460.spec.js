@@ -68,6 +68,8 @@ test.describe('B1 · een run, opgeslagen', () => {
     await boot(page);
     const k = await page.evaluate(() => String(TX.find((t) => t.date === '2026-08-05' && t.amount === -125).id));
     await page.evaluate((k) => vorautAntw(k, 1), k);
+    /* v461 (route 2): fase B draait na het tekenen (een timer); wacht tot hij er is */
+    await page.waitForFunction(() => !window._ctrlTimer && SET.controles.run.bron === 'antwoord');
     expect(await page.evaluate(() => SET.controles.run.bron)).toBe('antwoord');
   });
 });

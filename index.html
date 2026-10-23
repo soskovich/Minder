@@ -2690,7 +2690,8 @@ function monthAgg(m){ const income=maandInkomen(m).norm;
 function regSlope(arr){ const n=arr.length; if(n<2) return 0; const xm=(n-1)/2; const ym=arr.reduce((a,b)=>a+b,0)/n; let num=0,den=0;
   for(let i=0;i<n;i++){ num+=(i-xm)*(arr[i]-ym); den+=(i-xm)**2; } return den?num/den:0; }
 function nextMonths(m,k){ const out=[]; let [y,mo]=m.split('-').map(Number); for(let i=0;i<k;i++){ mo++; if(mo>12){mo=1;y++;} out.push({y,mo,label:MNAMES[mo-1],full:MFULL[mo-1]+' '+y}); } return out; }
-function forecastModel(){
+function forecastModel(){ return runMemo('forecastModel', '', forecastModelKern); }
+function forecastModelKern(){
   const ms=months(); if(ms.length<2) return null;
   const agg=ms.map(monthAgg).filter(a=>a.spend>0||a.income>0);   // (nog) lege maanden tellen niet mee in de statistiek
   if(agg.length<2) return null;
@@ -3554,7 +3555,9 @@ function shiftWeekendToMonday(d){ const x=new Date(d); const w=x.getDay(); if(w=
    `oud:true`. De gewone aanroep (alle lezers die rekenen: nog te betalen, isFixed, recurringCats, potNodig) laat hem weg,
    tenzij jij hem op "nog actief" zette (SET.postStatus[key] actief bij die laatste betaling): dan telt hij weer. Lezers met
    `metOud`: postStatusMap() (dus Let op en de status), postZet(), openPostStatus(), blok 19 en Vaste lasten. */
-function recurringSchedule(metOud){
+/* v461: binnen een run van de controles een keer per stand (runMemo); daarbuiten ongewijzigd */
+function recurringSchedule(metOud){ return runMemo('recurringSchedule', !!metOud, ()=>recurringScheduleKern(metOud)); }
+function recurringScheduleKern(metOud){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
@@ -3956,7 +3959,8 @@ function monthLiquidity(){
   try{ L.projected=maandVerloop(L).eind; }catch(_){ L.projected=null; }
   return L;
 }
-function maandLiqBasis(){
+function maandLiqBasis(){ return runMemo('maandLiqBasis', '', maandLiqBasisKern); }
+function maandLiqBasisKern(){
   const sched=recurringSchedule(), f=forecastModel();
   const now=new Date(); const dom=now.getDate(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   const daysLeft=Math.max(dim-dom,0);
@@ -5159,13 +5163,13 @@ function setSnapAlles(){ const o=JSON.parse(JSON.stringify(SET));
   return ()=>{ for(const k of Object.keys(SET)) if(!(k in o)) delete SET[k]; Object.assign(SET, JSON.parse(JSON.stringify(o))); save(); try{ render(); }catch(_){} }; }
 function keuzeKlaar(tekst, herstel, gedraaid){
   /* v460: een keuze of antwoord is een moment voor een run van de controles (deel B), voor het tekenen */
-  try{ closeSheet(); }catch(_){} if(!gedraaid) try{ runControles('antwoord'); }catch(_){} try{ render(); }catch(_){}
+  try{ closeSheet(); }catch(_){} if(!gedraaid) try{ controlesNaAntwoord(); }catch(_){} try{ render(); }catch(_){}
   window._ongedaan=herstel||null;
   let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); }
   el.innerHTML=`${ICON('check')} ${esc(tekst)}${herstel?` \u00b7 <span data-ongedaan role="button" style="text-decoration:underline;cursor:pointer" onclick="keuzeOngedaan()">ongedaan maken</span>`:''}`;
   el.className='show'+(herstel?' actie':''); clearTimeout(window._tt);
   window._tt=setTimeout(()=>{ el.className=''; window._ongedaan=null; }, KEUZE_TOAST_MS); }
-function keuzeOngedaan(){ const f=window._ongedaan; window._ongedaan=null; const el=document.getElementById('toast'); if(el) el.className=''; if(f){ f(); try{ runControles('antwoord'); render(); }catch(_){} } }
+function keuzeOngedaan(){ const f=window._ongedaan; window._ongedaan=null; const el=document.getElementById('toast'); if(el) el.className=''; if(f){ f(); try{ controlesNaAntwoord(); render(); }catch(_){} } }
 function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.innerHTML=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
 
 /* ----- MICRO-UITLEG bij vaktermen -----
@@ -9571,7 +9575,8 @@ function potVarMaanden(m){
   const perMaand=P.map(p=>{ const pm={}; for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const c=catOf(t); if(potHeelVast(c)) continue; pm[c]=(pm[c]||0)+uitgaveNorm(t); } return pm; });
   return (_potVarMemo.m[m]={P, perMaand});
 }
-function maandVooruit(){
+function maandVooruit(){ return runMemo('maandVooruit', '', maandVooruitKern); }
+function maandVooruitKern(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
   const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
   if(P.some(p=>!txOfMonth(p).length)) return {onbekend:true, m, el, dim:E.dim};
@@ -11610,7 +11615,7 @@ function gripCyclus(SIG){
   const inkGekozen=N3 && (SET.inkomenVerdeeld||{})[N3.ym];
   if(N3 && !inkGekozen) kies.push({id:'inkomen:verdeel', sym:'inkomen:na', bron:'inkomen', naam:'Verhoging verdelen', reden:`vast inkomen +${euro0(N3.d)} (+${N3.pct}%) vanaf ${f3MN(N3.ym)}${N3.geenNa?'':' · '+naJeSalarisTekst(N3)}`, act:'openVerhogingVerdelen()'});
   let H=[]; try{ H=gripTeRuimHerzien(); }catch(_){}
-  for(const x of H) kies.push({id:'herz:'+x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e maand · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
+  for(const x of H) kies.push({id:'herz:'+x.k, k:x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e maand · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
   let A=[]; try{ A=overboekActiesOpen(); }catch(_){}
   for(const a of A) kies.push({id:'actie:'+a.soort, bron:'actie', naam:overboekActieTekst(a), reden:`bij je bank · sinds ${gripKortDatum(a.op)} · nog niet gezien`, act:'', a});
   /* v443: is het potje Huur lager dan de verwachte huur plus de andere vaste posten in Huur vanaf volgende maand, dan een keuze */
@@ -11619,16 +11624,16 @@ function gripCyclus(SIG){
   let BR=[]; try{ BR=benoemTerugVoorstellen(); }catch(_){}
   for(const x of BR){ const kk=esc(x.key).replace(/'/g,"\\'");
     kies.push({id:'benoem:'+x.key, bron:'benoem', naam:`${x.naam} komt terug · reservering?`, reden:`${x.partij} · ${euro0(-x.t.amount)} op ${dagKort(x.t.date)} · ${BENOEM_BRON[x.A.bron]||x.A.bron} · voorstel ${euro0(-x.t.amount)} per jaar`, act:`benoemResVoorstel('${kk}')`, x}); }
-  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, sym:'pat:'+p.id, bron:'patroon', p, naam:p.id==='spaargeld'?GRIP_SPAAR_KEUZE:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
+  for(const p of P) if(!K[p.id]) kies.push({id:'pat:'+p.id, sym:'pat:'+p.id, k:p.id==='spaargeld'?null:(((p.sig||[]).find(g=>g.soort==='potje' && g.k))||{}).k||null, bron:'patroon', p, naam:p.id==='spaargeld'?GRIP_SPAAR_KEUZE:p.naam, reden:p.bewijs||'', bevestigd:!!O[p.id], bedrag:gripBedragLabel(p), act:`openGripKeuze('${esc(p.id)}')`});
   /* De handelingen van een signaal binnen een patroon (tot v428 een tik op die tak in Begrijpen, gripSigTik): een potje boven
      zijn grens (bijstellen, volgende maand anders, grens, zo laten) en inleg vóór je fundament (doorgaan of stilzetten). */
   let BVv=[]; try{ BVv=belegVragen(m); }catch(_){}
   for(const p of P) for(const g of (p.sig||[])){
     if(g.soort==='potje' && g.k){ const id=valtOpId(m, g.k), sg=(SIG||[]).find(x=>x.id===id); if(!sg || (sg.potjeId && potLaten(sg.potjeId))) continue;
-      kies.push({id:'sig:'+id, sym:p.id==='spaargeld'?'sig:'+g.k:'pat:'+p.id, bron:'letop', soort:'sig', naam:`${sg.naam}: bijstellen of grens`, reden:`signaal: ${euro0(sg.over)} boven je potje · in ${p.naam}`, act:`openGripLetOp('sig','${esc(id)}')`}); }
+      kies.push({id:'sig:'+id, sym:p.id==='spaargeld'?'sig:'+g.k:'pat:'+p.id, k:g.k, bron:'letop', soort:'sig', naam:`${sg.naam}: bijstellen of grens`, reden:`signaal: ${euro0(sg.over)} boven je potje · in ${p.naam}`, act:`openGripLetOp('sig','${esc(id)}')`}); }
     if(g.soort==='inleg' && g.id && BVv.some(v=>v.asset.id===g.id)) kies.push({id:'beleg:'+g.id, sym:'pat:'+p.id, bron:'letop', soort:'beleg', naam:`${g.naam}: bewust doorgaan of inleg stilzetten`, reden:`signaal: ${g.sub||'voorwaarden nog niet gehaald'} · in ${p.naam}`, act:`openBelegVraag('${esc(g.id)}')`}); }
   for(const x of LZ){ if(GRIP_LETOP_TERUG.has(x.soort) || GRIP_LETOP_FEIT.has(x.soort)) continue;
-    const t=gripKiesTitel(x); kies.push({id:lid(x), sym:sym.some(z=>z.id===lid(x))?lid(x):null, bron:'letop', soort:x.soort, naam:t, reden:t===x.naam?(x.sub||''):x.naam+(x.sub?' · '+x.sub:''), act:x.act, x}); }
+    const t=gripKiesTitel(x); kies.push({id:lid(x), sym:sym.some(z=>z.id===lid(x))?lid(x):null, k:(x.key && CATS[x.key] && CATS[x.key].type==='expense')?x.key:null, bron:'letop', soort:x.soort, naam:t, reden:t===x.naam?(x.sub||''):x.naam+(x.sub?' · '+x.sub:''), act:x.act, x}); }
   const mee=L.filter(x=>GRIP_LETOP_TERUG.has(x.soort));
   const gekozen=P.filter(p=>K[p.id]).map(p=>({id:'pat:'+p.id, p, k:K[p.id]}));
   let uitg=[]; try{ uitg=gripTeRuimUitgevoerd(m); }catch(_){}
@@ -26244,7 +26249,7 @@ function vorautAntw(sleutel, ja){ const K=vorautKandidaten().find(x=>x.sleutel==
   const herstel=kennisSnap(), naam=benoemPartij(K.voor);
   SET.vorautPaar=SET.vorautPaar||{};
   SET.vorautPaar[sleutel]={weg:(+ja?[String(K.voor.id), String(K.terug.id)]:[]), op:vandaagYMD(), bron:'jij', partij:K.partij};
-  save(); try{ buildAccMeta(); }catch(_){} let n=0; try{ n=runControles('antwoord').run.hersteld||0; }catch(_){}   // v460: de controles direct na een antwoord
+  save(); try{ buildAccMeta(); }catch(_){} let n=0; try{ n=controlesNaAntwoord().hersteld||0; }catch(_){}   // v460/v461: fase A direct (het zelf herstellen), fase B na het tekenen
   keuzeKlaar(`${naam}: ${+ja?'voorautorisatie, telt niet mee':'drie echte boekingen'}${n||vorautAutoActief(K.partij)?` · Minder herstelt dit voortaan zelf bij ${naam}`:''}`, herstel, true); }
 /* terugdraaien: een antwoord van jou gaat weg (de vraag staat weer open); een herstel door Minder wordt een Nee van jou */
 function vorautTerugKern(sleutel){ const e=(SET.vorautPaar||{})[sleutel]; if(!e) return false;
@@ -27354,7 +27359,7 @@ function vorautZet(sleutel, echt){
   if(!K || K.keuze) return;
   SET.vorautPaar=SET.vorautPaar||{};
   SET.vorautPaar[sleutel]={weg: (+echt? [String(K.voor.id), String(K.terug.id)] : []), op:vandaagYMD(), bron:'jij', partij:K.partij};   // v457: bron en partij voor het zelf herstellen
-  save(); buildAccMeta(); try{ runControles('antwoord'); }catch(_){} render(); openVoraut();
+  save(); buildAccMeta(); try{ controlesNaAntwoord(); }catch(_){} render(); openVoraut();
   toast(`${ICON('check')} ${+echt?'Vastgelegd als reservering':'Vastgelegd als drie boekingen'}`);
 }
 function vorautTerug(sleutel){
@@ -31903,7 +31908,8 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
    betaling blijft wat hij is) heeft effect EUR 0; alleen een potje waarvan het resterende verwachte bedrag op het budget rust (een vast
    potje zonder betaling, dat met zijn hele bedrag meetelt) verschuift de forecast. De inleg in Plan gaat verwacht volledig uit: zijn
    effect is de wijziging zelf. Twee lezers: blok 20 (MAANDBUDGET) en de lijst achter "wijzigingen deze maand". */
-function wijzForecastEffect(V){ V=V||maandVooruit(); const m=thisYM(), W=maandBudgetWijz(m), P0=Math.round(V.projectie), out=[];
+function wijzForecastEffect(V){ return runMemo('wijzForecastEffect', '', ()=>wijzForecastEffectKern(V)); }
+function wijzForecastEffectKern(V){ V=V||maandVooruit(); const m=thisYM(), W=maandBudgetWijz(m), P0=Math.round(V.projectie), out=[];
   const budgetRust=k=>{ const x=(V.vastePotjes||[]).find(y=>y.k===k); return !!(x && x.geen); };
   const zonder=ks=>{ const B=Object.assign({}, SET.budgets||{}); for(const r of W.rijen) if(ks.includes(r.k) && r.k!=='~inleg') B[r.k]=(+B[r.k]||0)-r.d;
     let P=null; try{ P=potSimuleer(B, ()=>Math.round(maandVooruit().projectie)); }catch(_){} return P; };
@@ -32045,7 +32051,9 @@ function salarisBalk(D, r){ const tot=(k)=>D.tot(r,k), sal=tot('salaris');
   return {ym:r.ym, lopend:r===D.Rc, salaris:sal, overige:r.overige, delen:delen.map(([k,l,v])=>({k, l, v, pct:sal>0?Math.round(v/sal*100):null})), rest, rest5:sal-tot('vast')-tot('pot')-tot('opzij')}; }
 function diagSalarisVerdeling(){
   const L=[], e0=x=>Math.round(+x||0), c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
+  const sek=ctrlSek(20, L), run=diagRun();
   const D=salarisData(DIAG_SAL_MAANDEN), {cur, ms, af, inkTx, bronMnd, terugk, bronSom, salBron, salNaam, sav, resA, opzijRek, EC, R, Rc, V, Lq, S, vk, tot}=D;
+  sek('salarisData (de maanden van blok 20)');
   L.push('DEFINITIE VAN VAST (v355/v383, dezelfde als Grip en Inzichten via maandSplitsing): een uitgave is vast als de app hem als terugkerende betaling herkent (isFixed: een herkende herhaling, of jouw keuze per boeking of per winkel) of als het potje door jou op vast staat (potHeelVast). Alle andere uitgaven met een norm zijn potjes (de snede van piekInScope), met of zonder potje. Uitgaven zonder norm (onvoorzien, contant), een persoonlijke overboeking zonder potje en het deel dat je uit een reservering betaalde zijn geen van beide en staan apart als "buiten vast en potjes".');
   L.push(`Maanden: ${af.map(MN).join(' · ')} afgerond, ${MN(cur)} lopend (geboekt plus verwacht). Eigen overboekingen (intern) tellen nergens als inkomen of uitgave. Afgerond wordt pas na het optellen.`);
   { const SP=salPeriode(); if(SP) L.push(`VERWACHTE STORTING (v435, salPeriode, dezelfde als blok 23): regel ${salRegelTekst(SP.R)} (${SP.R.bron==='boekingen'?'uit je boekingen':'door jou'}) · lopend ${SP.cur.start} t/m ${SP.cur.eind} (${SP.cur.dagen} dagen) · volgende ${SP.volg.regel} (${SP.volg.dagen} dagen)`); }
@@ -32067,6 +32075,7 @@ function diagSalarisVerdeling(){
       /* v438: eenmalig inkomen (een bonus) telt niet als salaris en staat hier apart */
       if(een.length) L.push(`      overige inkomsten · eenmalig ${e0(een.reduce((a,o)=>a+o.v,0))}: ${een.map(o=>`${nm(o)} ${c2(o.v)} (${onregelmatigBedrag(o.t)>0?'door jou onregelmatig genoemd':'lijkt op je verwachte bonus, nog niet bevestigd'})`).join(', ')}`); } }
   /* 2. vast */
+  sek('1 inkomsten');
   L.push('', '2. VAST: per post het bedrag in die maand (status nu), de vaste delen van je potjes, en het totaal');
   let sched=[]; try{ sched=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){}
   const keys=[...new Set(R.flatMap(r=>Object.keys(r.posten)))];
@@ -32083,6 +32092,7 @@ function diagSalarisVerdeling(){
     L.push(`  ${MN(cur)} nog verwacht: ${e0(Rc.vastVerwacht)} (maandVooruit: vaste lasten verwacht ${e0(V.vasteEindR)} + vaste lasten zonder categorie ${e0((V.zonderLosPosten||[]).reduce((a,x)=>a+x.bedrag,0))} min geboekt ${e0(Rc.vast)})${open.length?'; nog te betalen: '+open.map(x=>`${titleCase(cleanMerch(x.name)||x.name||x.key)} ${e0(x.amount)}`).join(', '):''}`); }
   L.push(`  TOTAAL VAST: ${kol(r=>tot(r,'vast'))}`);
   /* 3. potjes */
+  sek('2 vast');
   L.push('', '3. POTJES: variabele uitgaven per potje (met een potje in die maand), zonder potje apart');
   const pK=[...new Set(R.flatMap(r=>Object.keys(r.potjes)))], zK=[...new Set(R.flatMap(r=>Object.keys(r.zonder)))];
   const srt=(arr,f)=>arr.sort((a,b)=>R.reduce((s,r)=>s+(f(r)[b]||0),0)-R.reduce((s,r)=>s+(f(r)[a]||0),0));
@@ -32199,7 +32209,8 @@ function diagSalarisVerdeling(){
   /* v421: WAT v420 EN v421 AAN DE GROEPEN VERANDERDEN. De stand van v419 wordt in het geheugen nagerekend (diagV419Stand(), niets
      opgeslagen) en per boeking naast de groep van nu gelegd, voor de lopende maand en de drie maanden waaruit de verwachting
      haar patroon haalt. Daarnaast wat dat met de verwachting van de lopende maand doet. Alleen uitleggen, niets veranderen. */
-  { let S=null; try{ S=diagV419Stand(R.slice(-4).map(r=>r.ym)); }catch(e){ L.push('  (de stand van v419 is niet na te rekenen: '+e.message+')'); }
+  sek('3 potjes, contant, buiten');
+  if(!run){ let S=null; try{ S=diagV419Stand(R.slice(-4).map(r=>r.ym)); }catch(e){ L.push('  (de stand van v419 is niet na te rekenen: '+e.message+')'); }
     if(S){ const vO=S.oud.V, vN=S.nu.V, ok=vO&&!vO.onbekend&&vN&&!vN.onbekend;
       L.push(`  VERSCHUIVING DOOR DE REGELS VAN v420/v421 (${MN(cur)}*, nagerekend met de regels van v419 op dezelfde dag en dezelfde boekingen):`);
       if(ok){ L.push(`      potjes (variabel) verwacht: v419 ${c2(vO.varEindR)} -> nu ${c2(vN.varEindR)} (${vN.varEindR-vO.varEindR>=0?'+':''}${c2(vN.varEindR-vO.varEindR)})`);
@@ -32214,6 +32225,7 @@ function diagSalarisVerdeling(){
       for(const t of rij.slice(0,40)){ const o=S.oud.g[t.id], n=S.nu.g[t.id];
         L.push(`        ${MN(t.date.slice(0,7))} ${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}: ${o.g} [${cn(o.c)}] -> ${n.g} [${cn(n.c)}]`); }
       if(rij.length>40) L.push(`        en ${rij.length-40} meer`); } }
+  sek('verschuiving v419 (niet in de run)');
   /* 4. opzij */
   L.push('', '4. OPZIJ (vermogensInleg: netto naar je spaarrekening, je reserveringen en je beleggingen)');
   L.push(`  naar Plan en sparen (spaarrekening, netto): ${kol(r=>r.spaar)}`);
@@ -32239,7 +32251,8 @@ function diagSalarisVerdeling(){
   L.push(`  NETTO OPZIJ: ${R.map(r=>r===Rc?`${MN(r.ym)}* ${opzijLopend}`:`${MN(r.ym)} ${e0(tot(r,'opzij'))}`).join(' · ')}${R.some(r=>r!==Rc && !r.VIbekend)?' (een maand zonder spaar- of reserveringsrekening en zonder beleggingsboeking telt als 0: niet gemeten)':''}`);
   /* v421: HOLDING. De partij die jij aanwees ("Dit is mijn holding"). De terugkerende maandbetaling is inkomen (punt 1); de rest
      staat hier, geen inkomen en geen uitgave, per maand netto met de boekingen erachter. */
-  { const HK=holdingKeys();
+  sek('4 opzij');
+  if(!run){ const HK=holdingKeys();
     L.push('', `HOLDING (v421)${HK.size?': '+[...HK].map(k=>holdingNaam(k)).join(', '):''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
     if(!HK.size) L.push('  geen holding aangewezen: kies bij een boeking van je holding "Dit is mijn holding"');
     else { for(const k of HK){ const M=holdingMaandbetaling(k);
@@ -32256,7 +32269,7 @@ function diagSalarisVerdeling(){
   /* v423: per lening sluit bedrag = terugbetaald + nog open + niet meer terug (loanStand(), de bron van de leningsheet en de
      vraag in Zien). Per lening ook hoe het restant ontstond: de knop en de dag uit de log, of wat er van een oudere lening
      vastligt. Een verschil zonder verklaring staat er met de vraag die Zien stelt. */
-  { const LL=loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar');
+  if(!run){ const LL=loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar');
     L.push('', 'UITGELEEND (v420/v423): per lening datum | bedrag | terugbetaald | nog open | niet meer terug verwacht · sluit');
     let tot=0, totN=0, nOnv=0;
     for(const l of LL.slice().sort((a,b)=>String(a.datum)<String(b.datum)?-1:1)){ const S=loanStand(l);
@@ -32272,10 +32285,11 @@ function diagSalarisVerdeling(){
     L.push(`  netto in je gegevens per maand (- = uitgeleend, + = terug of niet meer terug): ${kol(r=>r.leenNet)}`); }
   /* 5. rest en 6. percentages */
   const rest=r=>tot(r,'salaris')-tot(r,'vast')-tot(r,'pot')-tot(r,'opzij');
-  L.push('', '5. REST = salaris - vast - potjes - netto opzij');
+  sek('holding, uitgeleend (niet in de run)');
+  if(!run){ L.push('', '5. REST = salaris - vast - potjes - netto opzij');
   L.push(`  ${R.map(r=>r===Rc?`${MN(r.ym)}* loopt nog (opzij per salarisperiode, zie punt 4)`:`${MN(r.ym)} ${e0(rest(r))}`).join(' · ')}`);
-  L.push('', '6. PERCENTAGES van het salaris: vast | potjes | netto opzij');
-  for(const r of R){ const s=tot(r,'salaris'), p=x=>s>0?Math.round(x/s*100)+'%':'-';
+  L.push('', '6. PERCENTAGES van het salaris: vast | potjes | netto opzij'); }
+  if(!run) for(const r of R){ const s=tot(r,'salaris'), p=x=>s>0?Math.round(x/s*100)+'%':'-';
     L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: ${p(tot(r,'vast'))} | ${p(tot(r,'pot'))} | ${r===Rc?'loopt nog':p(tot(r,'opzij'))}${s>0?'':' (geen salaris)'}`); }
   /* de controle: links wat er gemeten naar vast, potjes, buiten en opzij ging plus wat er op je betaalrekeningen bleef, rechts
      wat er binnenkwam. Alleen de afgeronde maanden: verwacht is geen meting. */
@@ -32310,10 +32324,12 @@ function diagSalarisVerdeling(){
       L.push(`      het verschil bij naam (samen ${c2(verkl)}${Math.abs(rest)>=0.005?`, rest zonder naam ${c2(rest)}`:', sluit'}):`);
       for(const x of it.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v))) L.push(`        ${x.n}`); } }
   if(Rc.buiten<-0.005){ L.push(`  ${MN(cur)}* (lopend, geen controle):`); letOp(Rc); }
+  sek('controle afgeronde maanden');
   /* v436: MAANDBUDGET, het vastgelegde bedrag van deze maand, de wijzigingen (alleen forecast) en de twee controles */
   try{ L.push(...diagMaandBudget(V, vk, D)); }catch(e){ L.push('', 'MAANDBUDGET: fout '+(e&&e.message)); }
+  sek('maandbudget');
   /* 7. de lopende maand in groepen, uit maandVooruit() */
-  L.push('', `7. ${MN(cur).toUpperCase()} IN GROEPEN: budget | verwacht | onder/boven (maandVooruit, de getallen van Grip)`);
+  if(!run){ L.push('', `7. ${MN(cur).toUpperCase()} IN GROEPEN: budget | verwacht | onder/boven (maandVooruit, de getallen van Grip)`);
   if(!vk) L.push('  geen drie afgeronde maanden: maandVooruit() is onbekend');
   else {
     const G7=maandGroepen(V, Lq), g=G7.g, bBuiten=G7.bBuiten, vzpS=G7.vzpS, losS=G7.losS, zS=G7.zS, Z=V.zonderStand, losP=V.zonderLosPosten||[], vzp=(V.vastePotjes||[]).filter(x=>x.zonderPotje);
@@ -32331,9 +32347,9 @@ function diagSalarisVerdeling(){
     if(Math.abs(+V.zonderRest||0)>=0.005) L.push(`    rest zonder naam: ${c2(V.zonderRest)} | centen uit de afronding van de delen`);
     const naam=vzpS+losS+zS+(+V.zonderRest||0);
     L.push(`    samen ${c2(naam)}: ${Math.abs(naam-(V.projectieExact-inPot))<0.01?'klopt':'VERSCHILT '+c2(naam-(V.projectieExact-inPot))}`);
-  }
+  } }
   /* 8. veranderingen in de vaste lasten over de afgeronde maanden */
-  L.push('', `8. VASTE LASTEN ${MN(af[0])} TEGEN ${MN(af[af.length-1])}: per post de eerste en de laatste afgeronde maand`);
+  if(!run){ L.push('', `8. VASTE LASTEN ${MN(af[0])} TEGEN ${MN(af[af.length-1])}: per post de eerste en de laatste afgeronde maand`);
   const A=R.slice(0,-1), eerste=A[0], laatste=A[A.length-1];
   for(const k of keys){ const a=eerste.posten[k]||0, b=laatste.posten[k]||0; const s=sched.find(x=>x.key===k), per=s&&((+s.intervalM||1)>1||s.cadans==='4w');
     const regs=A.flatMap(r=>(r.postTx[k]||[]).slice().sort((x,y)=>x.date<y.date?-1:1).map(t=>uitgaveNorm(t))).filter(x=>x>0);
@@ -32349,7 +32365,8 @@ function diagSalarisVerdeling(){
     L.push(`  GESTOPT EN DAARNA NOG BETAALD (v421): ${na.length?na.join(', '):'geen'}`);
     L.push(`  OPGEZEGD, LOOPT AF (v421): ${af.length?af.join(', '):'geen'}`); }
   const dv=laatste.vast-eerste.vast;
-  L.push(`  TOTAAL VAST: ${MN(eerste.ym)} ${e0(eerste.vast)} -> ${MN(laatste.ym)} ${e0(laatste.vast)} (${dv>=0?'+':''}${e0(dv)})`);
+  L.push(`  TOTAAL VAST: ${MN(eerste.ym)} ${e0(eerste.vast)} -> ${MN(laatste.ym)} ${e0(laatste.vast)} (${dv>=0?'+':''}${e0(dv)})`); }
+  sek('7 groepen, 8 vaste lasten (niet in de run)');
   /* v420: UITGAVEN ZONDER WONING EN STUDIESCHULD (gevraagd door de gebruiker): vast + potjes + buiten, min de woning (de grootste
      vaste post in Huur over deze maanden) en min Studieschuld. De namen komen uit je gegevens en staan in de kop. */
   { const WK=woningKeuze(R), wkey=WK.wkey, wnaam=WK.wnaam, wbron=WK.wbron;
@@ -32367,7 +32384,8 @@ function diagSalarisVerdeling(){
   /* v425: KENNIS: alles wat Minder van jou weet, uit de ene lezer kennisLijst(), met bron en datum. OPEN VRAGEN: de wachtrij in
      "Kloppen mijn gegevens?" op bedrag, met hoe vaak "later". CONTANT NAAR: waar je contante geld volgens jou heen ging (een tik,
      het verandert geen boekingen). Alleen uitleg. */
-  { const KL=kennisLijst();
+  sek('woningen per maand');
+  if(!run){ const KL=kennisLijst();
     L.push('', `KENNIS (v425/v426): ${KL.length} ${KL.length===1?'antwoord':'antwoorden'} · soort | partij | wat | bron | datum`);
     if(!KL.length) L.push('  geen');
     for(const [g,n] of KENNIS_GROEPEN) for(const x of KL.filter(e=>e.groep===g)){ L.push(`  ${n} | ${x.partij||'-'} | ${x.wat} | ${KENNIS_BRON[x.bron]||x.bron} | ${x.op?x.op.slice(8,10)+'-'+x.op.slice(5,7)+'-'+x.op.slice(0,4):'-'}`);
@@ -32383,16 +32401,18 @@ function diagSalarisVerdeling(){
     if(!cn) L.push('  geen antwoord'); }
   /* v424: GROTE UITGAVEN ZONDER POTJE OF ZONDER NORM (vanaf BENOEM_MIN), met hun naam en de bron, of "nog niet benoemd". Over de
      maanden van dit blok; alleen uitleg, er verandert niets. */
-  { const E=R.flatMap(r=>benoemMaand(r.ym));
+  if(!run){ const E=R.flatMap(r=>benoemMaand(r.ym));
     L.push('', `BENOEMDE UITGAVEN (v424): zonder potje of zonder norm, vanaf ${BENOEM_MIN} · datum | bedrag | partij [categorie] | naam · bron | eenmalig of komt terug`);
     if(!E.length) L.push('  geen');
     for(const B of E){ const t=B.t, cat=(CATS[catOf(t)]||{}).name||catOf(t);
       L.push(`  ${t.date.slice(8,10)}-${t.date.slice(5,7)}-${t.date.slice(0,4)} | ${c2(B.bedrag)} | ${B.partij} [${cat}] | ${B.label?`${B.label} · ${BENOEM_BRON[B.bron]||B.bron}`:(B.weetniet?'nog niet benoemd (jij: weet ik niet)':`nog niet benoemd · vraag in Zien${B.laag==='b'?` met voorstel ${B.voorstel} (uit de omschrijving: ${B.kenmerk.toLowerCase()})`:''}`)} | ${B.aard==='eenmalig'?'eenmalig, telt niet als gedrag':B.aard==='terug'?'komt terug':B.laag==='a'?'nog niet bepaald (een tik in Zien: eenmalig of komt terug)':'-'}`); }
     const T=benoemTerugVoorstellen(); if(T.length) L.push(`  komt terug zonder reservering (voorstel in Kiezen): ${T.map(x=>x.naam+' '+c2(-x.t.amount)).join(', ')}`); }
+  sek('kennis, open vragen, benoemd (niet in de run)');
   /* v423: bovenaan hoeveel regels het blok heeft, zodat je ziet of wat aankwam compleet is (de regel zelf telt mee) */
   /* v460 (B1): de duur van een run van de controles, gemeten op dit toestel */
   { const C=(SET.controles||{}), R=C.run, U=C.uitkomst||[], n=s=>U.filter(u=>u.status===s).length;
-    L.push('', R?`RUN VAN DE CONTROLES (deel B, v460): ${controleDagTijd(R.tijd)} · na ${R.bron} · duur ${R.duur} ms · ${U.length} controles: ${n('klopt')} klopt, ${n('wacht')} wacht, ${n('verklaard')} verklaard, ${n('gecorrigeerd')} gecorrigeerd, ${n('vraag')} vraag`:'RUN VAN DE CONTROLES (deel B, v460): nog geen run'); }
+    L.push('', R?`RUN VAN DE CONTROLES (deel B, v460): ${controleDagTijd(R.tijd)} · na ${R.bron} · duur ${R.duur} ms · ${U.length} controles: ${n('klopt')} klopt, ${n('wacht')} wacht, ${n('verklaard')} verklaard, ${n('gecorrigeerd')} gecorrigeerd, ${n('vraag')} vraag`:'RUN VAN DE CONTROLES (deel B, v460): nog geen run');
+    if(R) L.push(...controleDuurRegels(R, U)); }
   L.unshift(`deel 1 van 1 · ${L.length+1} regels`);
   return L;
 }
@@ -32698,18 +32718,26 @@ function controleRegelsVan(blok, L){ const U=[], gezien={};
     if(maandStand){ if(!r.trim()){ maandStand=false; continue; }
       const m=r.match(/^  ([a-z]{3}): .*: (klopt|VERSCHILT (\S+))$/); if(!m) continue;
       const ym=controleMaandVan(m[1]); const id=`b${blok}:afgerond:${ym}`;
-      if(m[2]==='klopt'){ U.push({id, blok, soort:2, status:'klopt', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]} sluit`, maand:ym, tekst:r.trim()}); continue; }
+      if(m[2]==='klopt'){ U.push({id, blok, regel:i, soort:2, status:'klopt', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]} sluit`, maand:ym, tekst:r.trim()}); continue; }
       const d=parseFloat(String(m[3]).replace(/[^\d.,-]/g,'').replace(',','.'))||0, nxt=String(L[i+1]||'');
       const sluit=/het verschil bij naam \(.*sluit\)/.test(nxt), rest=nxt.match(/rest zonder naam (-?[\d.]+)/);
       const blokTekst=[r.trim()]; for(let j=i+1;j<L.length && /^      /.test(String(L[j])); j++) blokTekst.push(String(L[j]).trim());
-      U.push({id, blok, soort:2, status:sluit?'verklaard':'wacht', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]}: verschil ${sluit?'bij naam verklaard':'niet helemaal bij naam'}`, maand:ym,
+      U.push({id, blok, regel:i, soort:2, status:sluit?'verklaard':'wacht', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]}: verschil ${sluit?'bij naam verklaard':'niet helemaal bij naam'}`, maand:ym,
         bedrag:Math.abs(rest?+rest[1]:d), reden:sluit?'het verschil staat bij naam (blok 20)':'', tekst:blokTekst.join('\n')});
+      /* v461 (punt 2): is de rest zonder naam precies EEN boeking van die maand, dan is het een boeking in een andere groep, en alleen
+         jij weet in welke: een kleine vraag (soort 3), niet "wacht op de bouwer". De vraag zelf komt in fase 3. */
+      if(!sluit){ const KV=maandsomKleineVraag(ym, rest?+rest[1]:d); if(KV){ const u=U[U.length-1]; Object.assign(u, {soort:3, status:'vraag', klein:true, onderwerp:'boekingen',
+        titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]}: ${KV.naam} ${euroC(Math.abs(KV.t.amount))} (${KV.t.date.slice(8,10)}-${KV.t.date.slice(5,7)}) in welke groep?`,
+        reden:'het verschil is precies deze boeking; alleen jij weet in welke groep hij hoort', boeking:String(KV.t.id)}); } }
       continue; }
     if(!/CONTROLE/.test(r) || /forecast zonder wijzigingen|open telt dubbel|^RUN VAN DE CONTROLES/.test(r)) continue;
     const st=/VERSCHIL/.test(r)?'wacht':/(→|:)\s*(klopt|sluit)|sluit in alle|→ klopt/.test(r)?'klopt':null; if(!st) continue;
     let lb=label(r)||'controle'; gezien[lb]=(gezien[lb]||0)+1; if(gezien[lb]>1) lb+=' #'+gezien[lb];
-    U.push({id:`b${blok}:${lb}`, blok, soort:2, status:st, onderwerp:controleOnderwerp(blok, r), titel:lb, tekst:r.trim()}); }
+    U.push({id:`b${blok}:${lb}`, blok, regel:i, soort:2, status:st, onderwerp:controleOnderwerp(blok, r), titel:lb, tekst:r.trim()}); }
   return U; }
+function maandsomKleineVraag(ym, rest){ const v=Math.abs(+rest||0); if(!(v>=0.005)) return null;
+  let L=[]; try{ L=telbareTx().filter(t=>String(t.date).slice(0,7)===ym && Math.abs(Math.abs(+t.amount||0)-v)<0.005); }catch(_){ return null; }
+  if(L.length!==1) return null; const t=L[0]; return {t, naam:titleCase(cleanMerch(t.name)||t.name||'?')}; }
 function controleMaandVan(ab){ const i=MNAMES.findIndex(x=>x===ab); let ym=thisYM();
   for(let k=0;k<24;k++){ ym=k?prevYM(ym):ym; if(+ym.slice(5,7)-1===i && ym<thisYM()) return ym; } return thisYM(); }
 /* AANSLUITING PER REKENING (B3): bij elke geslaagde sync per rekening het saldo, de saldosoort en de tijd, en de som van de geboekte
@@ -32755,16 +32783,40 @@ function controleLogBij(C){ const c2=x=>euro(+x||0), pn=p=>p?titleCase(String(p)
   controleLog(C, {controle:'contant-telling', ref:'contant-v450', aan:false, effect:'tellingboekingen van voor de v420-grens telden dubbel in het potje Contant · opgelost in de code (v450) · correctie uit'}); }
 /* B3: wacht een keuze die aan dit getal hangt? */
 function keuzeWacht(getal, C){ C=C||controlesLees(); const w=(C.getallen||{})[getal]; if(w==null) return {wacht:false};
-  const U=(C.uitkomst||[]).filter(u=>u.status==='wacht' && u.soort===2 && (u.raakt||[]).includes(getal) && +u.bedrag>0);
-  const band=U.reduce((a,u)=>a+(+u.bedrag||0),0); if(!band) return {wacht:false, band:0, waarde:w};
+  const deel=u=>u.perGetal && u.perGetal[getal]!=null ? +u.perGetal[getal]||0 : +u.bedrag||0;
+  const U=(C.uitkomst||[]).filter(u=>u.status==='wacht' && u.soort===2 && (u.raakt||[]).includes(getal) && deel(u)>0);
+  const band=U.reduce((a,u)=>a+deel(u),0); if(!band) return {wacht:false, band:0, waarde:w};
   const pct=Math.abs(w)>0?band/Math.abs(w):Infinity, omdraai=band>=Math.abs(w);
-  return {wacht:pct>CONTROLE_KEUZE_DREMPEL || omdraai, band, waarde:w, pct, omdraai, naam:CONTROLE_GETAL_NAAM[getal]||getal}; }
-function kiesRaakt(x){ return x && ['herzien','letop','patroon'].includes(x.bron) ? 'onderBudget' : null; }
+  return {wacht:pct>CONTROLE_KEUZE_DREMPEL || omdraai, band, waarde:w, pct, omdraai, naam:controleGetalNaam(getal)}; }
+function controleGetalNaam(g){ return CONTROLE_GETAL_NAAM[g] || (/^pot:/.test(g) ? 'de forecast van '+(((CATS[g.slice(4)]||{}).name)||g.slice(4)) : g); }
+/* v461 (punt 3): de forecast per potje, budget min verwacht eind; een keuze over een potje (herzien, Let op, patroon) wacht alleen op
+   een open controle die DAT potje raakt. Alleen een keuze over het geheel hangt aan onder budget. */
+function potForecastGetallen(V, G){ if(!V || V.onbekend) return G; const bud={}, eind={};
+  for(const x of (V.potjes||[])){ if(!x || !x.k) continue; bud[x.k]=+x.potje||0; eind[x.k]=(eind[x.k]||0)+(+x.eindR||0); }
+  for(const x of (V.vastePotjes||[])){ if(!x || !x.k) continue; if(bud[x.k]==null) bud[x.k]=+x.potje||0; eind[x.k]=(eind[x.k]||0)+(+x.eindR||0); }
+  for(const k in bud) G['pot:'+k]=Math.round(bud[k]-eind[k]);
+  return G; }
+/* v461: DE SNELHEID VAN DE RUN. Binnen een run (window._ctrlRun) rekent een zware functie die alleen de stand leest een keer per
+   stand: de sleutel is _dataGen (elke simulatie die de stand verandert hoogt hem op) plus de dag en de argumenten, en de aanroeper
+   krijgt een kopie (structuredClone), dus wat hij eraan verandert raakt de volgende niet. Buiten de run rekent alles zoals altijd.
+   ctrlSek() meet per onderdeel van een blok de duur en tot welke regel het liep, zodat elke CONTROLE-regel de duur van zijn onderdeel
+   draagt; diagRun() zegt een blok dat het in de run zit en de stukken zonder CONTROLE kan overslaan (die rekent het pas als je het
+   blok opent of deelt, met dezelfde functies). */
+function runMemo(naam, arg, fn){ const R=window._ctrlRun; if(!R || !R.memo) return fn();
+  const k=naam+'|'+_dataGen+'|'+vandaagYMD()+'|'+arg; if(R.memo.has(k)){ R.treffers=(R.treffers||0)+1; return structuredClone(R.memo.get(k)); }
+  const r=fn(); try{ R.memo.set(k, structuredClone(r)); }catch(_){} return r; }
+function diagRun(){ return !!(window._ctrlRun && window._ctrlRun.alleenControles); }
+function ctrlSek(blok, L){ let t=performance.now(); return naam=>{ const n=performance.now(); const R=window._ctrlRun; if(R) R.secties.push({blok, naam, ms:n-t, tot:L.length}); t=n; }; }
+function ctrlStap(R, naam, fn, U){ const t=performance.now(), n0=U?U.length:0; try{ return fn(); } finally { const ms=performance.now()-t; R.stappen.push({naam, ms}); if(U) for(let i=n0;i<U.length;i++) if(U[i].ms==null){ U[i].ms=Math.round(ms); U[i].sectie=naam; } } }
+function kiesRaakt(x){ if(!x || !['herzien','letop','patroon'].includes(x.bron)) return null; return x.k ? 'pot:'+x.k : 'onderBudget'; }
 /* DE RUN */
-function runControles(bron){ const t0=performance.now(), nu=Date.now(), C=SET.controles=SET.controles||{};
+function runControles(bron){ const vorRun=window._ctrlRun, RT=window._ctrlRun={memo:new Map(), alleenControles:true, stappen:[], secties:[], treffers:0};
+  try{ return runControlesKern(bron, RT); } finally { window._ctrlRun=vorRun||null; } }
+function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), C=SET.controles=SET.controles||{};
   const vorig=Array.isArray(C.uitkomst)?C.uitkomst:[], vorigId=new Map(vorig.map(u=>[u.id,u])), U=[];
   C.uit=C.uit||{}; let hersteld=0;
   /* soort 1: na een nieuwe versie een keer zonder correctie */
+  ctrlStap(RT, 'soort 1: voorautorisatie (na een nieuwe versie zonder correctie, zelf herstellen, vragen)', ()=>{
   if(bron==='versie' && !C.uit.voraut){ let Z=null; try{ Z=correctieZonderVoraut(); }catch(_){}
     if(Z && !Z.nodig){ for(const k of Z.sleutels) delete SET.vorautPaar[k]; C.uit.voraut={op:vandaagYMD()};
       controleLog(C, {controle:'voorautorisatie', ref:'voraut-uit|'+vandaagYMD(), aan:false, effect:`${Z.n} geval(len): zonder correctie hetzelfde getal · opgelost in de code · correctie uit`}); } }
@@ -32778,18 +32830,22 @@ function runControles(bron){ const t0=performance.now(), nu=Date.now(), C=SET.co
       titel:C.uit.voraut?'Voorautorisaties: opgelost in de code':`Voorautorisaties: ${weg.length}${van?' sinds '+MFULL[+van.slice(5,7)-1]:''}`,
       tekst:C.uit.voraut?`correctie uit sinds ${C.uit.voraut.op}`:`${euroC(som)} telt niet dubbel${namen.length?' · '+opsomming(namen)+' herstelt Minder zelf':''}`});
     const open=K.filter(k=>!k.keuze && !vorautAutoActief(k.partij));
-    if(open.length) U.push({id:'voraut-vraag', soort:3, status:'vraag', onderwerp:'voorautorisaties', raakt:[], bedrag:open.reduce((a,k)=>a+k.echt/100,0), titel:`Voorautorisatie: ${open.length} vraag in Kloppen mijn gegevens?`, tekst:open.map(k=>`${k.voor.date} ${titleCase(cleanMerch(k.voor.name)||'')}`).join(' · ')}); }catch(_){}
+    if(open.length) U.push({id:'voraut-vraag', soort:3, status:'vraag', onderwerp:'voorautorisaties', raakt:[], bedrag:open.reduce((a,k)=>a+k.echt/100,0), titel:`Voorautorisatie: ${open.length} vraag in Kloppen mijn gegevens?`, tekst:open.map(k=>`${k.voor.date} ${titleCase(cleanMerch(k.voor.name)||'')}`).join(' · ')}); }catch(_){} }, U);
   U.push({id:'contant-telling', soort:1, status:'gecorrigeerd', uit:true, onderwerp:CONTANT_CAT, raakt:[], titel:'Contant: tellingboekingen dubbel', tekst:'opgelost in de code (v450) · correctie uit'});
   /* de getallen die een keuze kan raken */
   const getallen={}; let V=null, MB=null;
+  ctrlStap(RT, 'getallen (onder budget, saldo, forecast per potje)', ()=>{
   try{ V=maandVooruit(); MB=maandBudgetWijz(thisYM()).vast; if(V && !V.onbekend && MB) getallen.onderBudget=MB.totaal-Math.round(V.projectie); }catch(_){}
   try{ getallen.saldo=Math.round(totalBalance().sum); }catch(_){}
+  try{ potForecastGetallen(V, getallen); }catch(_){} });
   /* soort 2: de wijzigingen werken anders door dan hun budget (blok 20), met bedrag en het getal dat ze raken */
+  ctrlStap(RT, 'soort 2: wijzigingen (blok 20)', ()=>{
   try{ const E=V && !V.onbekend ? wijzForecastEffect(V) : null, fout=E?E.rijen.filter(x=>!x.inleg && x.effect && !x.rust):[];
-    const b=fout.reduce((a,x)=>a+Math.abs(x.effect),0);
-    U.push({id:'wijzigingen', blok:20, soort:2, status:fout.length?'wacht':'klopt', onderwerp:'budget', raakt:['onderBudget'], bedrag:b, titel:'Wijzigingen werken anders door',
-      tekst:fout.length?fout.map(x=>`${euroC(Math.abs(x.effect))} ${x.naam}`).join(' · '):'elke wijziging werkt door met zijn budget'}); }catch(_){}
+    const b=fout.reduce((a,x)=>a+Math.abs(x.effect),0), per={onderBudget:b}; for(const x of fout) per['pot:'+x.k]=(per['pot:'+x.k]||0)+Math.abs(x.effect);
+    U.push({id:'wijzigingen', blok:20, soort:2, status:fout.length?'wacht':'klopt', onderwerp:'budget', raakt:Object.keys(per), perGetal:per, bedrag:b, titel:'Wijzigingen werken anders door',
+      tekst:fout.length?fout.map(x=>`${euroC(Math.abs(x.effect))} ${x.naam}`).join(' · '):'elke wijziging werkt door met zijn budget'}); }catch(_){} }, U);
   /* soort 2: gedeelde ids (blok 24) */
+  ctrlStap(RT, 'soort 2: gedeelde ids, aansluiting, blok 26 toeval', ()=>{
   try{ const per=new Map(); for(const t of TX){ const k=String(t.id); per.set(k,(per.get(k)||0)+1); } const n=[...per.values()].filter(x=>x>1).length;
     U.push({id:'gedeelde-ids', blok:24, soort:2, status:n?'wacht':'klopt', onderwerp:'boekingen', raakt:[], titel:'Gedeelde transactie-ids', tekst:n?`${n} id(s) gedeeld`:'elke boeking heeft een eigen id'}); }catch(_){}
   /* soort 2: aansluiting per rekening */
@@ -32805,10 +32861,13 @@ function runControles(bron){ const t0=performance.now(), nu=Date.now(), C=SET.co
     for(const x of G){ const k=x.g.sleutel; if(bekend.has(k) || oord[k]) continue; const nieuw=!vorige.has(k); if(nieuw) nNieuw++;
       U.push({id:'vorautnaam:'+k, blok:26, soort:2, status:'wacht', onderwerp:'voorautorisaties', raakt:[], bedrag:x.g.dubbel/100, nieuw,
         titel:'Mogelijke voorautorisatie, andere naam aan een kant', tekst:`${x.g.A.date} · ${x.zelfde?'lijkt echt':'lijkt toeval'}${nieuw?' · nieuw sinds de vorige run':''} · A ${euroC(-x.g.A.amount)} V ${euroC(x.g.V.amount)} B ${euroC(-x.g.B.amount)}`}); }
-    C.zonderVorigeVoorRun=[...vorige]; C.zonderVorige=ks; C.zonderNieuw=nNieuw; }catch(_){}
+    C.zonderVorigeVoorRun=[...vorige]; C.zonderVorige=ks; C.zonderNieuw=nNieuw; }catch(_){} }, U);
   /* de CONTROLE-regels van blok 20, 23, 24, 25 en 26 */
-  for(const [n,f] of CONTROLE_BLOKKEN()){ let L=[]; try{ L=f()||[]; }catch(e){ U.push({id:`b${n}:fout`, blok:n, soort:2, status:'wacht', onderwerp:controleOnderwerp(n,''), titel:`blok ${n} gaf een fout`, tekst:String(e&&e.message)}); continue; }
-    for(const u of controleRegelsVan(n, L)) if(!U.some(x=>x.id===u.id)) U.push(u); }
+  for(const [n,f] of CONTROLE_BLOKKEN()){ let L=[]; const s0=RT.secties.length;
+    try{ L=ctrlStap(RT, 'blok '+n, ()=>f()||[]); }catch(e){ U.push({id:`b${n}:fout`, blok:n, soort:2, status:'wacht', onderwerp:controleOnderwerp(n,''), titel:`blok ${n} gaf een fout`, tekst:String(e&&e.message)}); continue; }
+    const sek=RT.secties.slice(s0).filter(x=>x.blok===n), schuif=/^deel 1 van /.test(String(L[0]||''))?1:0, blokMs=RT.stappen[RT.stappen.length-1].ms;
+    for(const u of controleRegelsVan(n, L)){ const sx=sek.find(x=>u.regel<x.tot+schuif); u.ms=Math.round(sx?sx.ms:blokMs); u.sectie=sx?sx.naam:'blok '+n;
+      if(!U.some(x=>x.id===u.id)) U.push(u); } }
   /* B8: verklaard (C.verklaard, een antwoord "weet ik niet" in fase 3) dekt een wachtende controle zolang het bedrag gelijk blijft;
      verandert het bedrag, dan wacht hij weer. Komt dezelfde reden in een nieuwe maand terug, dan wordt het een vraag. Een verklaarde
      controle van een afgesloten maand gaat naar het archief. Verklaard wordt nooit rood op tijd. */
@@ -32824,8 +32883,33 @@ function runControles(bron){ const t0=performance.now(), nu=Date.now(), C=SET.co
   for(const g of oudWacht) if(!nuWacht.includes(g)) C.keuzeTerug={getal:g, op:nu};
   C.wachtGetallen=nuWacht;
   C.versie=appVersie();
-  C.run={tijd:nu, bron:bron||'?', duur:Math.round(performance.now()-t0), hersteld};
+  C.run={tijd:nu, bron:bron||'?', duur:Math.round(performance.now()-t0), hersteld,
+    stappen:RT.stappen.map(x=>({naam:x.naam, ms:Math.round(x.ms)})), secties:RT.secties.map(x=>({blok:x.blok, naam:x.naam, ms:Math.round(x.ms)})), memo:RT.treffers};
   save(); return C; }
+/* v461 (ROUTE 2): EEN SYNC OF EEN ANTWOORD IN TWEE FASEN. Fase A (voor het tekenen): de soort-1-correcties die een getal op het scherm
+   veranderen (het zelf herstellen van de voorautorisatie, v457); de getallen gaan daarna in een keer naar het scherm. Fase B (na het
+   tekenen, naVerf()): de volle run, de soort-2-controles; die veranderen geen getal op het scherm, alleen Diagnose en het wachten van een
+   keuze, en verandert dat wachten (of komt een keuze terug), dan tekent het scherm opnieuw. De duur van beide staat in blok 20. */
+/* v461 (punt 1): DE DUUR, GEMETEN OP DIT TOESTEL. Fase A (voor het scherm) en fase B (de run, na het scherm), per stap van de run,
+   per onderdeel van blok 20 en per controle (de duur van het onderdeel dat de controle maakte; een onderdeel maakt soms meer
+   controles). "niet in de run" is een onderdeel dat de run overslaat: dat rekent pas als je het blok opent of deelt. */
+function controleDuurRegels(R, U){ const L=[];
+  L.push(`  DUUR (v461): fase A, voor het scherm (soort 1): ${R.faseA!=null?R.faseA+' ms':'-'} · fase B, de run (soort 2, na het scherm): ${R.duur} ms${R.memo!=null?` · ${R.memo} keer een berekening hergebruikt`:''}`);
+  for(const x of (R.stappen||[])) L.push(`    stap ${x.naam}: ${x.ms} ms`);
+  for(const x of (R.secties||[])) L.push(`    blok ${x.blok} · ${x.naam}: ${x.ms} ms`);
+  const P=(U||[]).filter(u=>u.ms!=null).slice().sort((a,b)=>b.ms-a.ms);
+  if(P.length) L.push('  PER CONTROLE (de duur van het onderdeel dat hem maakte):', ...P.map(u=>`    ${u.ms} ms · ${u.titel} (${u.sectie||'blok '+u.blok})`));
+  return L; }
+function controlesFaseA(bron){ const t=performance.now(), C=SET.controles=SET.controles||{}; let h=0;
+  try{ if(!(C.uit||{}).voraut) h=vorautAutoHerstel()||0; }catch(_){}
+  return (window._ctrlFaseA={bron, ms:Math.round(performance.now()-t), hersteld:h, tijd:Date.now()}); }
+function controlesFaseB(bron){ const C0=SET.controles||{}, sleutel=C=>JSON.stringify([C.wachtGetallen||[], (C.keuzeTerug||{}).op||0]), oud=sleutel(C0);
+  const C=runControles(bron), A=window._ctrlFaseA; if(A && A.bron===bron){ C.run.faseA=A.ms; C.run.hersteld=(C.run.hersteld||0)+(A.hersteld||0); window._ctrlFaseA=null; save(); }
+  return sleutel(C)!==oud; }
+function naVerf(){ return new Promise(r=>{ let klaar=false; const f=()=>{ if(!klaar){ klaar=true; r(); } };
+  try{ requestAnimationFrame(()=>setTimeout(f,0)); }catch(_){} setTimeout(f,150); }); }
+function controlesNaAntwoord(){ const A=controlesFaseA('antwoord'); clearTimeout(window._ctrlTimer);
+  window._ctrlTimer=setTimeout(()=>{ window._ctrlTimer=null; try{ if(controlesFaseB('antwoord')) render(); }catch(_){} }, 0); return A; }
 /* bij het opstarten: alleen een run als de versie nieuw is; anders de opgeslagen uitkomst */
 function controlesBijStart(){ const C=controlesLees(); if(C.versie===appVersie() && Array.isArray(C.uitkomst)) return false; runControles('versie'); return true; }
 /* blok 26 en de motor: de gevallen die alleen zonder de partij-eis gevonden worden, met het oordeel van de naamkern */
@@ -32835,7 +32919,7 @@ function vorautZonderGevallen(){ let D=[], Z=[]; try{ D=vorautPatroon().filter(g
 /* je oordeel over een nieuw geval zonder partij-eis: toeval gaat naar de bekende lijst, echt wordt een vraag (soort 3) */
 function vorautNaamOordeel(k, wat){ const C=SET.controles=SET.controles||{}; C.toevalOordeel=C.toevalOordeel||{}; C.toevalOordeel[k]=wat==='echt'?'echt':'toeval';
   if(wat!=='echt'){ C.bekendToeval=[...new Set((C.bekendToeval||[]).concat([k]))]; }
-  save(); runControles('antwoord'); try{ render(); }catch(_){} diagOpen(); }
+  save(); runControles('antwoord'); try{ render(); }catch(_){} diagOpen(); }   /* v461: in Diagnose staat de uitkomst er direct, dus hier blijft de run in een keer */
 /* ===== v460 B7: DIAGNOSE, DE CONTROLES IN VOLGORDE =====
    Aansluiting per rekening · wacht op de bouwer · gecorrigeerd · kleine vragen · klopt (per onderwerp, met aantal) · archief · log.
    Alleen lezen: het scherm toont de OPGESLAGEN uitkomst van de laatste run en rekent niets na. Elke controle draagt een kopieerbare
@@ -33621,10 +33705,12 @@ async function psd2Refresh(silent){
   applyPending(pend);
   /* v460 (deel B): na een geslaagde sync de aansluiting per rekening en een run van de controles (ook het zelf herstellen van v457);
      daarna gaan de nieuwe getallen en de uitkomst in een keer naar het scherm */
-  try{ aansluitingVastleggen(aanslSnap); }catch(_){} try{ runControles('sync'); }catch(_){}
+  try{ aansluitingVastleggen(aanslSnap); }catch(_){} try{ controlesFaseA('sync'); }catch(_){}
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
   if(!silent) psd2SyncToast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
+  /* v461 (route 2): de soort-2-controles na het tekenen; ze veranderen geen getal op het scherm */
+  await naVerf(); try{ if(controlesFaseB('sync')) render(); }catch(_){}
 }
 /* v181: hier stond een toast plus SET.advBank=true. De toast ("Stel eerst je bank-verbinding in")
    zei niet wat een bank-verbinding is of waar hij vandaan komt, en het omzetten van advBank
@@ -33809,9 +33895,10 @@ async function psd2IngestSession(s){
   const added=commitTx(allTx, balances);
   applyPending(pend);
   /* v460: na een nieuwe koppeling begint de aansluiting opnieuw (oude boekingen kunnen binnenkomen zonder het saldo te raken) */
-  try{ aansluitingVastleggen(aanslSnap, true); }catch(_){} try{ runControles('sync'); }catch(_){}
+  try{ aansluitingVastleggen(aanslSnap, true); }catch(_){} try{ controlesFaseA('sync'); }catch(_){}
   curMonth=null; render();
   psd2SyncToast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
+  await naVerf(); try{ if(controlesFaseB('sync')) render(); }catch(_){}
 }
 // Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
 
