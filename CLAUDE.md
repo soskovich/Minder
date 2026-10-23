@@ -141,7 +141,10 @@ genoemde versietag.)*
   boekingen zonder je eigen keuzes (alleen de csv- en mt940-poort). Er verandert niets; jij beslist per geval. (4) `vorautAutoHerstel()`
   draait in beide sync-routes na `applyPending()` en na een antwoord. HIJ DRAAIT NU OOK BIJ HET OPSTARTEN (gemeld); in deel B (B-c) leest
   het opstarten alleen de opgeslagen uitkomst en verhuist die aanroep. Test g pint de huidige stand en valt dan met opzet. Spec
-  `v458.spec.js` (7 tests, 8 sabotages rood).
+  `v458.spec.js` (8 tests, 13 sabotages rood). (5) Blok 26 draagt `vorautZonderPartij()` (alleen lezen): de gevallen die alleen
+  zonder de partij-eis gevonden worden, met datum, rekening en van A, V en B het bedrag, de omschrijving en de recurKey (die is op 20
+  tekens afgekapt). Het oordeel is een AANWIJZING: dezelfde naamkern (eerste vijf letters van de opgeschoonde naam) aan alle drie de
+  kanten heet "LIJKT ECHT" met de kant waarvan de partij-sleutel afwijkt en "telt nu dubbel B", anders "LIJKT TOEVAL". Niets gekoppeld.
 - **v457: DE VOORAUTORISATIE AAN DE POMP IS EEN PATROON OP EEN REKENING, EEN VRAAG PER GEVAL, EN NA 3X JA HERSTELT MINDER ZELF** (`v457`,
   gevraagd door de gebruiker, punt 7; GEMELD 21-10 Tango N26: EUR 150,00 + vrijgave EUR 52,79 + EUR 97,21, alle drie in Vervoer & auto).
   `vorautPatroon()` (memo op `_dataGen`, kern `vorautPatroonKern(bron, partijEis)`) is de ENE detectie: dezelfde rekening, dezelfde

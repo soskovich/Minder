@@ -32748,12 +32748,32 @@ function diagVorautPatroon(){
   let zonder=[]; try{ zonder=vorautPatroonKern(vorautBron(), false).filter(g=>g.soort==='deels'); }catch(_){}
   const metIds=new Set(D.map(g=>g.sleutel));
   L.push(`  zonder de partij-eis (alleen dezelfde rekening): ${zonder.length} gevallen, waarvan ${zonder.filter(g=>!metIds.has(g.sleutel)).length} niet in de lijst hierboven (een andere partij-sleutel aan een van de kanten)`);
+  for(const r of vorautZonderPartij(zonder.filter(g=>!metIds.has(g.sleutel)))) L.push(r);
   L.push(`  PER GEVAL (de laatste ${Math.min(G.length, DIAG_PAAR_MAX)}):`);
   const cat=t=>(CATS[catOf(t)]||{}).name||catOf(t);
   for(const g of G.slice(0, DIAG_PAAR_MAX)) L.push(`    ${g.A.date} ${r4(g.acc)} ${titleCase(cleanMerch(g.A.name)||g.A.name||'?')} · A ${c2(-g.A.amount)} [${cat(g.A)}${g.A.pending?', pending':''}] · V ${c2(g.V.amount)} op ${g.V.date} [${cat(g.V)}${g.V.pending?', pending':''}]`
     +(g.B?` · B ${c2(-g.B.amount)} op ${g.B.date} [${cat(g.B)}${g.B.pending?', pending':''}] · ${stand(g)} · v293: ${oud.has(g.sleutel)?'kandidaat':'GEEN kandidaat'}`:' · A = V, telt al nul'));
   if(G.length>DIAG_PAAR_MAX) L.push(`    ... en ${G.length-DIAG_PAAR_MAX} meer`);
   for(const r of vorautOudVergelijk().regels) L.push(r);
+  return L; }
+/* v458 (punt 5): DE GEVALLEN DIE ALLEEN ZONDER DE PARTIJ-EIS GEVONDEN WORDEN, alleen lezen. Per geval datum, rekening, en van A, V en B
+   het bedrag, de omschrijving en de recurKey. Het OORDEEL is een aanwijzing en geen vaststelling: dezelfde naamkern (de eerste vijf
+   letters van de opgeschoonde naam) aan alle drie de kanten lijkt een echte voorautorisatie waarvan de partij-sleutel aan een kant
+   afwijkt, en dan telt B nu dubbel (A en V tellen mee, want de vraag en het herstel lezen alleen de detectie MET de partij-eis); een
+   andere naam lijkt toeval. Er wordt niets gekoppeld (MECHANISM_SPEC.defaultEffect): wie een geval wil laten vallen, doet dat zelf. */
+function vorautZonderPartij(G){
+  const c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), r4=a=>'··'+String(a||'-').slice(-4);
+  const rk=t=>_dT(()=>recurKey(t),'')||'-', kern=t=>String(cleanMerch(t.name)||t.name||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,5);
+  const kant=(lbl,t,teken)=>`      ${lbl} ${c2(teken*t.amount)} op ${t.date} · "${String(t.desc||t.name||'').slice(0,70)}" · recurKey ${rk(t)}`;
+  const L=[`  ZONDER DE PARTIJ-EIS (v458): ${G.length} geval(len) die de detectie met de partij-eis niet vindt · niets wordt gekoppeld`];
+  let echt=0, dubbel=0;
+  for(const g of G){ const ks=[rk(g.A), rk(g.V), rk(g.B)], kk=[kern(g.A), kern(g.V), kern(g.B)];
+    const wijkt=ks[0]===ks[2]&&ks[1]!==ks[0]?'V':ks[0]===ks[1]&&ks[2]!==ks[0]?'B':ks[1]===ks[2]&&ks[0]!==ks[1]?'A':'meer dan een kant';
+    const zelfde=!!kk[0] && kk.every(x=>x===kk[0]);
+    if(zelfde){ echt++; dubbel+=g.dubbel/100; }
+    L.push(`    ${g.A.date} ${r4(g.acc)} · ${zelfde?`LIJKT ECHT: dezelfde naam, de partij-sleutel van ${wijkt} wijkt af · telt nu dubbel ${c2(g.dubbel/100)}`:`LIJKT TOEVAL: andere namen (${kk.map(x=>x||'-').join(' / ')})`}`);
+    L.push(kant('A', g.A, -1)); L.push(kant('V', g.V, 1)); L.push(kant('B', g.B, -1)); }
+  if(G.length) L.push(`    samen: ${echt} lijkt echt (telt nu dubbel ${c2(dubbel)}) · ${G.length-echt} lijkt toeval`);
   return L; }
 /* v458 (punt 3): OUDE BEVESTIGINGEN TEGEN DE NIEUWE DETECTIE, alleen lezen. Een koppeling die je bevestigde voor v457 (v293: een
    reservering en haar vrijgave in SET.vorautPaar zonder bron; v288: een dubbele kant in SET.dubbelPaar) kan door de detectie van

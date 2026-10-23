@@ -3,6 +3,8 @@
    2. na een Nee of een teruggedraaid geval herstelt Minder bij die partij niets meer zelf, maar de vraag komt per nieuw geval terug;
    3. blok 26 zet eerder bevestigde koppelingen (v293 in SET.vorautPaar zonder bron, v288 in SET.dubbelPaar) naast de nieuwe detectie,
       en verandert niets;
+   5. blok 26 toont de gevallen die alleen zonder de partij-eis gevonden worden, met per kant omschrijving en recurKey, en zegt per
+      geval of het lijkt op een echte voorautorisatie met een afwijkende partij-sleutel (telt nu dubbel) of op toeval; niets gekoppeld;
    4. het zelf herstellen draait in de sync; het draait TOT DEEL B ook bij het opstarten (gemeld, vastgelegd voor deel B).
    GECONSTRUEERDE fixture: die van v457 (het Tango-geval van 21-10, drie oudere Tango-gevallen en de bijna-gevallen). */
 const { test, expect } = require('@playwright/test');
@@ -163,5 +165,31 @@ test.describe('4 · wanneer het zelf herstellen draait', () => {
     await page.reload();
     await page.waitForFunction(() => typeof vorautPatroon === 'function');
     expect(await page.evaluate((k) => ((SET.vorautPaar || {})[k] || {}).bron || null, k)).toBe('minder');
+  });
+});
+
+test.describe('5 · de gevallen alleen zonder de partij-eis', () => {
+  const extra = [
+    /* echt: dezelfde naamkern, de vrijgave met een andere partij-sleutel */
+    ['2026-10-17', -125, 'Shell Station Zaandam'], ['2026-10-18', 40, 'Shell Nederland Bv'], ['2026-10-17', -85, 'Shell Station Zaandam'],
+    /* toeval: drie verschillende partijen op dezelfde rekening die toevallig optellen */
+    ['2026-10-19', -30, 'Kruidvat Purmerend'], ['2026-10-19', 10, 'Jan de Vries'], ['2026-10-19', -20, 'Bol Com'],
+  ];
+  test('h. per geval datum, rekening, A V B met omschrijving en recurKey, en echt (telt dubbel) of toeval; niets gekoppeld', async ({ page }) => {
+    await boot(page, extra);
+    const r = await page.evaluate(() => { let w = 0; const o = localStorage.setItem; localStorage.setItem = function () { w++; return o.apply(this, arguments); };
+      try { return { L: diagVorautPatroon(), w, paar: JSON.stringify(SET.vorautPaar || {}) }; } finally { localStorage.setItem = o; } });
+    const t = r.L.join('\n');
+    expect(r.w).toBe(0);
+    expect(r.paar).toBe('{}');
+    expect(t).toContain('ZONDER DE PARTIJ-EIS (v458): 2 geval(len) die de detectie met de partij-eis niet vindt · niets wordt gekoppeld');
+    expect(t).toContain('2026-10-17 ··3000 · LIJKT ECHT: dezelfde naam, de partij-sleutel van V wijkt af · telt nu dubbel 85.00');
+    expect(t).toContain('A 125.00 op 2026-10-17 · "Shell Station Zaandam PMNT" · recurKey SHELL STATION ZAANDA');
+    expect(t).toContain('V 40.00 op 2026-10-18 · "Shell Nederland Bv PMNT" · recurKey SHELL NEDERLAND BV');
+    expect(t).toContain('B 85.00 op 2026-10-17 · "Shell Station Zaandam PMNT" · recurKey SHELL STATION ZAANDA');
+    expect(t).toMatch(/2026-10-19 ··3000 · LIJKT TOEVAL: andere namen \(KRUID \/ JANDE \/ BOLCO\)/);
+    expect(t).toContain('samen: 1 lijkt echt (telt nu dubbel 85.00) · 1 lijkt toeval');
+    /* de detectie met de partij-eis vindt ze niet, en de vraag ook niet */
+    expect(await page.evaluate(() => vorautKandidaten().some((k) => /Shell Station|Kruidvat/.test(k.voor.name)))).toBe(false);
   });
 });
