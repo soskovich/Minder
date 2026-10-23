@@ -976,3 +976,9 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - Oude bevestigingen worden naast de nieuwe detectie gezet en niet omgezet: een v293-koppeling die anders koppelt kan juist zijn (MECHANISM_SPEC.defaultEffect). De vergelijking draait op de boekingen zonder eigen keuzes, anders verbergt een bevestiging de regel waarmee hij vergeleken wordt.
 - Het herstel hoort in de sync; dat het nu ook bij het opstarten draait is gemeld en verhuist in deel B (B-c).
 - Een geval dat alleen zonder de partij-eis gevonden wordt krijgt een aanwijzing (dezelfde naamkern of niet) en geen koppeling: de partij-eis loslaten zou drie toevallig optellende boekingen van verschillende winkels als voorautorisatie lezen, en de naamkern is een vermoeden en geen identiteit.
+
+## v459 · blok 26 toont toeval alleen als telling
+- **Gemeten op het toestel:** de 14 gevallen die alleen zonder de partij-eis gevonden worden waren alle 14 toeval: A, V en B zijn drie verschillende partijen en de som klopt door ronde bedragen. Geen enkele was een voorautorisatie. **De partij-eis blijft.**
+- **Waarom toeval alleen als telling:** veertien uitgeschreven gevallen waarvan geen enkele iets vraagt, verbergen het ene geval dat wel telt. Een geval dat lijkt echt (dezelfde naamkern aan alle drie de kanten) blijft per geval staan met A, V en B, want daar telt B nu dubbel. Het aantal toevalsgevallen blijft zichtbaar, zodat een ander aantal op een volgend toestel opvalt.
+- **Valkuil:** het oordeel blijft een aanwijzing op de naamkern. Een echte voorautorisatie met drie verschillende naamkernen zou als toeval geteld en niet getoond worden; de telling is dan de enige drager. Er wordt niets gekoppeld.
+- **Oude bevestigingen (v458 punt 3):** 10 van 10 gelijk aan de nieuwe detectie, niets te doen.

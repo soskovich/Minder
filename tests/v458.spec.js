@@ -187,9 +187,23 @@ test.describe('5 · de gevallen alleen zonder de partij-eis', () => {
     expect(t).toContain('A 125.00 op 2026-10-17 · "Shell Station Zaandam PMNT" · recurKey SHELL STATION ZAANDA');
     expect(t).toContain('V 40.00 op 2026-10-18 · "Shell Nederland Bv PMNT" · recurKey SHELL NEDERLAND BV');
     expect(t).toContain('B 85.00 op 2026-10-17 · "Shell Station Zaandam PMNT" · recurKey SHELL STATION ZAANDA');
-    expect(t).toMatch(/2026-10-19 ··3000 · LIJKT TOEVAL: andere namen \(KRUID \/ JANDE \/ BOLCO\)/);
-    expect(t).toContain('samen: 1 lijkt echt (telt nu dubbel 85.00) · 1 lijkt toeval');
+    /* sinds v459 staat toeval niet meer per geval in de uitvoer, alleen in de telling */
+    expect(t).not.toContain('LIJKT TOEVAL');
+    expect(t).toContain('samen: 1 lijkt echt (telt nu dubbel 85.00) · 1 lijkt toeval (alleen geteld, niet per geval getoond)');
     /* de detectie met de partij-eis vindt ze niet, en de vraag ook niet */
     expect(await page.evaluate(() => vorautKandidaten().some((k) => /Shell Station|Kruidvat/.test(k.voor.name)))).toBe(false);
+  });
+  /* v459 (gevraagd door de gebruiker: op het toestel waren alle 14 gevallen toeval): alleen LIJKT ECHT staat per geval in blok 26,
+     LIJKT TOEVAL alleen als telling. Twee toevalsgevallen naast een echt geval, zodat de telling meer dan een geval draagt. */
+  test('i. v459: per geval alleen LIJKT ECHT; toeval wordt geteld en niet getoond, met geen enkele kant ervan in de uitvoer', async ({ page }) => {
+    await boot(page, [...extra, ['2026-10-20', -45, 'Hema Zaandam'], ['2026-10-20', 15, 'Piet Jansen'], ['2026-10-20', -30, 'Coolblue Bv']]);
+    const t = (await page.evaluate(() => diagVorautPatroon())).join('\n');
+    /* invoermeting: alle drie de gevallen worden zonder de partij-eis gevonden */
+    expect(t).toContain('ZONDER DE PARTIJ-EIS (v458): 3 geval(len)');
+    expect(t).toContain('2026-10-17 ··3000 · LIJKT ECHT: dezelfde naam, de partij-sleutel van V wijkt af · telt nu dubbel 85.00');
+    expect(t).toContain('V 40.00 op 2026-10-18 · "Shell Nederland Bv PMNT"');
+    expect(t).not.toContain('LIJKT TOEVAL');
+    for (const naam of ['Kruidvat Purmerend', 'Jan de Vries', 'Bol Com', 'Hema Zaandam', 'Piet Jansen', 'Coolblue Bv']) expect(t).not.toContain(`"${naam} PMNT"`);
+    expect(t).toContain('samen: 1 lijkt echt (telt nu dubbel 85.00) · 2 lijkt toeval (alleen geteld, niet per geval getoond)');
   });
 });
