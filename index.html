@@ -32753,7 +32753,35 @@ function diagVorautPatroon(){
   for(const g of G.slice(0, DIAG_PAAR_MAX)) L.push(`    ${g.A.date} ${r4(g.acc)} ${titleCase(cleanMerch(g.A.name)||g.A.name||'?')} · A ${c2(-g.A.amount)} [${cat(g.A)}${g.A.pending?', pending':''}] · V ${c2(g.V.amount)} op ${g.V.date} [${cat(g.V)}${g.V.pending?', pending':''}]`
     +(g.B?` · B ${c2(-g.B.amount)} op ${g.B.date} [${cat(g.B)}${g.B.pending?', pending':''}] · ${stand(g)} · v293: ${oud.has(g.sleutel)?'kandidaat':'GEEN kandidaat'}`:' · A = V, telt al nul'));
   if(G.length>DIAG_PAAR_MAX) L.push(`    ... en ${G.length-DIAG_PAAR_MAX} meer`);
+  for(const r of vorautOudVergelijk().regels) L.push(r);
   return L; }
+/* v458 (punt 3): OUDE BEVESTIGINGEN TEGEN DE NIEUWE DETECTIE, alleen lezen. Een koppeling die je bevestigde voor v457 (v293: een
+   reservering en haar vrijgave in SET.vorautPaar zonder bron; v288: een dubbele kant in SET.dubbelPaar) kan door de detectie van
+   v457 anders worden gekoppeld of niet worden gevonden. De nieuwe detectie draait hier op de boekingen ZONDER je eigen keuzes (alleen
+   de csv- en mt940-poort), anders verbergt een bevestiging precies de regel waarmee hij vergeleken wordt. Er verandert niets: jij
+   beslist per geval (MECHANISM_SPEC.defaultEffect). */
+function vorautOudVergelijk(){
+  const c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), byTx=new Map(TX.map(t=>[String(t.id),t]));
+  let N=[]; try{ N=vorautPatroonKern(TX.filter(t=>!csvDubbel(t) && !mt940Dubbel(t)), true); }catch(_){ N=[]; }
+  const rol=new Map(); for(const g of N){ rol.set(String(g.A.id),{g,r:'A'}); rol.set(String(g.V.id),{g,r:'V'}); if(g.B) rol.set(String(g.B.id),{g,r:'B'}); }
+  const naam=t=>t?titleCase(cleanMerch(t.name)||t.name||'?'):'?';
+  const nieuw=g=>g.soort==='deels'?`A ${c2(-g.A.amount)} op ${g.A.date} · V ${c2(g.V.amount)} op ${g.V.date} · B ${c2(-g.B.amount)} op ${g.B.date}`:`A ${c2(-g.A.amount)} op ${g.A.date} = V ${c2(g.V.amount)} op ${g.V.date} (vrijgave volledig)`;
+  const rij=[], P=SET.vorautPaar||{}, D=SET.dubbelPaar||{}; let gelijk=0, n293=0, n288=0;
+  for(const [k,e] of Object.entries(P)){ if(!e || e.bron || !Array.isArray(e.weg) || !e.weg.length) continue; n293++;
+    const A=byTx.get(String(e.weg[0])), V=byTx.get(String(e.weg[1]||'')), hA=rol.get(String(e.weg[0])), hV=rol.get(String(e.weg[1]||''));
+    const oud=`A ${A?c2(-A.amount):'?'} op ${A?A.date:'?'} · V ${V?c2(V.amount):'?'} op ${V?V.date:'?'}${A&&V?` (B zou ${c2(-A.amount-V.amount)} zijn)`:''}`;
+    if(hA && hA.r==='A' && hV && hV.g===hA.g && hV.r==='V'){ gelijk++; continue; }
+    const h=hA||hV;
+    rij.push({datum:A?A.date:(e.op||'?'), t:`    ${A?A.date:'?'} · ${naam(A)} · v293 · oud: ${oud} → ${h?`ANDERS GEKOPPELD, nieuw: ${nieuw(h.g)}`:'NIET GEVONDEN door de nieuwe detectie'}`}); }
+  for(const [k,e] of Object.entries(D)){ if(!e || !e.weg) continue; const h=rol.get(String(e.weg)); if(!h) continue; n288++;
+    const w=byTx.get(String(e.weg));
+    rij.push({datum:w?w.date:'?', t:`    ${w?w.date:'?'} · ${naam(w)} · v288 · oud: dubbele kant ${w?c2(-w.amount):'?'} op ${w?w.date:'?'} telt niet mee → ANDERS GEKOPPELD, nieuw: deze boeking is ${h.r} in ${nieuw(h.g)}`}); }
+  rij.sort((a,b)=>String(b.datum).localeCompare(String(a.datum)));
+  const regels=[`  OUDE BEVESTIGINGEN (v288/v293) TEGEN DE NIEUWE DETECTIE (v458) · niets wordt veranderd, jij beslist per geval`,
+    `    v293: ${n293} bevestigde koppeling(en), waarvan ${gelijk} gelijk aan de nieuwe detectie · v288: ${n288} dubbele kant(en) die de nieuwe detectie in een voorautorisatie plaatst`];
+  if(!rij.length) regels.push('    geen verschil');
+  for(const r of rij) regels.push(r.t);
+  return {regels, rij, gelijk, n293, n288}; }
 function diagGedeeldeIds(){
   const per=new Map(); for(const t of TX){ const k=String(t.id); if(!per.has(k)) per.set(k,[]); per.get(k).push(t); }
   const dub=[...per.values()].filter(x=>x.length>1).sort((a,b)=>String(a[0].date).localeCompare(String(b[0].date)));
