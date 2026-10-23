@@ -178,16 +178,25 @@ test.describe('5 · het signaal', () => {
       return { kt: kasTempo(), sym: gripCyclus().sym.some((s) => s.id === 'sig:contant') }; }, S432.LEEF);
     expect(onder.kt.boven).toBe(false);
     expect(onder.sym).toBe(false);
-    const boven = await page.evaluate((LEEF) => { const t = { id: 'kt2', date: '2026-11-08', amount: -200, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
+    /* v454: zonder telling is uitgegeven een schatting (tempo x dagen), dus pinnen alleen geeft geen signaal: eerst geen, dan een
+       telling van EUR 50 op 10-11, en daarna is 300 − 50 = 250 tot de telling uitgegeven */
+    const zonder = await page.evaluate((LEEF) => { const t = { id: 'kt2', date: '2026-11-08', amount: -200, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
+      return { kt: kasTempo(), sym: gripCyclus().sym.some((s) => s.id === 'sig:contant' || s.id === 'pat:pot:contant'), eind: maandVooruit().potjes.find((x) => x.k === CONTANT_CAT).eindR }; }, S432.LEEF);
+    expect(zonder.kt.bron).toBe('schatting');
+    expect(zonder.kt.boven).toBe(false);
+    expect(zonder.sym).toBe(false);
+    expect(zonder.eind).toBeCloseTo(400, 1);
+    const boven = await page.evaluate(() => { contantOpslaan(50, 'telling');
       go('maand'); const es = [...document.querySelectorAll('#gripSignalen [data-signaal]')].filter((x) => /^Contant boven je/.test(x.innerText));
       const c = maandVooruit().potjes.find((x) => x.k === CONTANT_CAT);
-      return { kt: kasTempo(), n: es.length, id: es[0] ? es[0].dataset.signaal : '', t: es[0] ? es[0].innerText : '', eind: c ? c.eindR : null }; }, S432.LEEF);
-    expect(boven.kt.uit).toBe(300);
+      return { kt: kasTempo(), n: es.length, id: es[0] ? es[0].dataset.signaal : '', t: es[0] ? es[0].innerText : '', eind: c ? c.eindR : null }; });
+    expect(boven.kt.bron).toBe('telling');
+    expect(boven.kt.uit).toBe(250);
     expect(Math.round(boven.kt.tempo)).toBe(133);
     expect(boven.kt.boven).toBe(true);
-    /* v453: de forecast van het potje Contant komt uit contantMaanden() (300 gepind, zonder telling uitgegeven, plus het tempo van 11 t/m
-       30 november = 566,67 > 400), dus het potje eindigt boven zijn bedrag en het patroon "boven je potje" neemt het over: een signaal per potje */
-    expect(boven.eind).toBeCloseTo(566.67, 1);
+    /* v453/v454: de forecast van het potje Contant komt uit contantMaanden() (250 tot de telling plus het tempo van 11 t/m 30 november
+       = 516,67 > 400), dus het potje eindigt boven zijn bedrag en het patroon "boven je potje" neemt het over: een signaal per potje */
+    expect(boven.eind).toBeCloseTo(516.67, 1);
     expect(boven.n).toBe(1);
     expect(boven.id).toBe('pat:pot:contant');
     expect(boven.t).toContain('Contant boven je potje');
