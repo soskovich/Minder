@@ -27,41 +27,43 @@ async function boot(page) {
 const regel = (L, re) => L.find(l => re.test(l)) || '';
 
 test.describe('1 · eenmalig: rekenen ja, verbergen nee', () => {
-  test('a. Zien en Inzichten: een regel met het bedrag en het aantal van de boekingen met het label, en de sheet telt daarop op', async ({ page }) => {
+  /* v455: de regel is "buiten je potjes" met geenNormTx() als bron (ook de categorie zonder norm zonder label); de vorm staat in
+     v455.spec.js. Hier blijft wat v454 vastlegde: de boekingen met het label staan erin en de sheet telt daarop op. */
+  test('a. Zien en Inzichten: de boekingen met het label staan in de regel (v455: buiten je potjes), en de sheet telt daarop op', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
-      /* de invoer draagt het geval: een categorie zonder norm (60) zonder label telt NIET mee, Lausa (159) en Gemeente (484) wel */
       const okt = TX.filter(t => t.date.startsWith('2026-10') && t.amount < 0);
       const inv = { label: okt.filter(t => eenmaligLabel(t)).map(t => -t.amount).sort((a, b) => a - b), geenNormZonder: okt.filter(t => geenNormTx(t) && !eenmaligLabel(t)).map(t => -t.amount) };
-      go('maand'); const z = document.querySelector('#gripZienStand [data-eenmaligregel]');
-      go('ins'); const i = document.querySelector('#insMaand [data-eenmaligregel]');
-      i.click(); const sh = document.querySelector('#eenmaligMaandSheet'), rijen = [...document.querySelectorAll('#eenmaligMaandSheet [data-eenmaligrij]')].map(e => +e.dataset.eenmaligrij);
-      return { inv, z: z ? [z.innerText, z.dataset.eenmaligregel, z.dataset.n] : null, i: i ? [i.innerText, i.dataset.eenmaligregel, i.dataset.n] : null, sh: sh ? sh.dataset.inswaarde : null, rijen, kop: sh ? sh.innerText : '' }; });
+      go('maand'); const z = document.querySelector('#gripZienStand [data-buitenregel]');
+      go('ins'); const i = document.querySelector('#insMaand [data-buitenregel]');
+      i.click(); const sh = document.querySelector('#buitenMaandSheet'), rijen = [...document.querySelectorAll('#buitenMaandSheet [data-buitengroep="eenmalig"] [data-buitenrij]')].map(e => +e.dataset.buitenrij);
+      return { inv, z: z ? [z.dataset.eenmalig, z.dataset.n] : null, i: i ? [i.dataset.eenmalig, i.dataset.n] : null, sh: sh ? sh.dataset.inswaarde : null, rijen, kop: sh ? sh.innerText : '' }; });
     expect(r.inv.label).toEqual([159, 484]);
     expect(r.inv.geenNormZonder).toEqual([60]);
-    expect(r.z).toEqual(['eenmalig buiten je potjes deze maand: €643 (2 boekingen) ›', '643', '2']);
-    expect(r.i).toEqual(['eenmalig buiten je potjes deze maand: €643 (2 boekingen) ›', '643', '2']);
+    expect(r.z).toEqual(['643', '3']);
+    expect(r.i).toEqual(['643', '3']);
     expect(r.rijen.sort((a, b) => a - b)).toEqual([159, 484]);
-    expect(+r.sh).toBe(643);
+    expect(+r.sh).toBe(703);
     expect(r.kop).toMatch(/Laserbehandeling · eenmalig \(door jou\)/);
   });
 
-  test('b. zonder label geen regel; met "Klopt, eenmalig" telt de boeking erbij', async ({ page }) => {
+  test('b. zonder label alleen de categorie zonder norm; met "Klopt, eenmalig" telt de boeking bij eenmalig', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { const A = TX.find(t => t.name === 'Albert Heijn' && t.amount === -120);
-      SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [A.id]: '2026-10-10' }); save(); const met = eenmaligMaand(['2026-10']);
+      SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [A.id]: '2026-10-10' }); save(); const met = buitenMaand(['2026-10']).eenmalig;
       const E = Object.values(SET.kennis || {}); for (const e of E) if (e && e.tx) e.tx = Array.isArray(e.tx) ? [] : {}; delete SET.eenmaligOk[A.id]; save();
-      go('maand'); return { met: [met.n, met.bedrag], leeg: eenmaligMaand(['2026-10']).n, z: !!document.querySelector('#gripZienStand [data-eenmaligregel]') }; });
+      go('maand'); const B = buitenMaand(['2026-10']), z = document.querySelector('#gripZienStand [data-buitenregel]');
+      return { met: [met.n, met.bedrag], leeg: B.eenmalig.n, z: z ? [z.dataset.eenmalig, z.dataset.zonderlabel] : null }; });
     expect(r.met).toEqual([3, 763]);
     expect(r.leeg).toBe(0);
-    expect(r.z).toBe(false);
+    expect(r.z).toEqual(['0', '60']);
   });
 
-  test('c. blok 20: eenmalig per maand (bedrag, aantal) over apr t/m okt', async ({ page }) => {
+  test('c. blok 20: eenmalig per maand (bedrag, aantal) over apr t/m okt (v455: in de regel BUITEN JE POTJES)', async ({ page }) => {
     await boot(page);
     const L = await page.evaluate(() => diagSalarisVerdeling());
-    const e = regel(L, /EENMALIG BUITEN JE POTJES PER MAAND \(v454/);
-    expect(e).toMatch(/apr 0\.00 \(0\) · mei 0\.00 \(0\) · jun 0\.00 \(0\) · jul 0\.00 \(0\) · aug 0\.00 \(0\) · sep 0\.00 \(0\) · okt\* 643\.00 \(2\)$/);
+    const e = regel(L, /BUITEN JE POTJES PER MAAND \(v455/);
+    expect(e).toMatch(/apr 0\.00 eenmalig \(0\) .* okt\* 643\.00 eenmalig \(2\) \+ 60\.00 zonder label \(1\) = 703\.00$/);
   });
 });
 

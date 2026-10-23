@@ -9770,7 +9770,7 @@ function dezeMaandBrug(V){
 function uitschieterAfw(d, basis){ return (d>=INS_PATROON.voorEuro && (!(basis>0) || d>=basis*INS_PATROON.voorDeel)) || d>=INS_PATROON.uitEuro; }
 function potjeUitschieter(x){ return uitschieterAfw(+x.overR||0, x.bud); }
 function uitschieters(V){ const her=V&&V.maandBudget&&V.maandBudget.herindeling;   // v450 punt 1: het potje Contant dat deze maand ontstaat is geen uitschieter (budget = forecast)
-  const ong=contantOngeteld();   // v454 punt 2: zonder telling geen uitschieter Contant
+  const ong=contantOngeteld();   // v454 punt 2: zonder telling geen uitschieter Contant; BEWUST INERT (v455): een schatting is per constructie tempo x dagen, dus nooit boven het potje; de guard staat er voor een ronde die de schatting verandert
   return ((V&&V.potjes)||[]).filter(x=>!(her && x.k===her.k) && !(ong && x.k===CONTANT_CAT) && potjeUitschieter(x)).sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1)); }
 /* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
    naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
@@ -11552,7 +11552,7 @@ function kasTempo(m){ m=m||thisYM(); const bud=Math.round(+((m===thisYM()?SET.bu
   if(uit==null) uit=Math.max(+catSpendMap(m)[CONTANT_CAT]||0,0);
   if(tempo==null) tempo=bud*E.elapsed/E.dim;
   const over=uit-tempo;
-  const boven=bron!=='schatting' && over>=INS_PATROON.voorEuro && over>=INS_PATROON.voorDeel*tempo;
+  const boven=bron!=='schatting' && over>=INS_PATROON.voorEuro && over>=INS_PATROON.voorDeel*tempo;   // v455: bron!=='schatting' is BEWUST INERT (een schatting is tempo x dagen, dus over is 0); niet weghalen als dode code
   let n=0, eerste=null; for(let ym=prevYM(m), i=0; i<12; ym=prevYM(ym), i++){ const u=Math.max(+catSpendMap(ym)[CONTANT_CAT]||0,0); if(u>bud+0.5){ n++; if(!eerste) eerste={ym, over:u-bud}; } else break; }
   const mn=ym=>MNAMES[+String(ym).slice(5,7)-1];
   const label=n?{soort:'herhaalt', t:`herhaalt zich · ${n+1}e maand`, b:`${mn(eerste.ym)} +${euro0(eerste.over)}`}:{soort:'nieuw', t:'nieuw deze maand', b:`budget ${euro0(bud)}`};
@@ -12891,7 +12891,7 @@ function gripZienTabel(){
     ${rij('potjes','potjes',potB,potV,SALBALK_KLEUR.potjes)}
     <div data-zienrij="budget" data-budget="${totB}" data-verwacht="${totV}" data-verschil="${totD}" style="${col};padding:6px 0 4px;border-top:2px solid var(--line);font-weight:800"><span>budget</span>${num(euro0(totB))}${num(euro0(totV))}${num(`${euro0(Math.abs(totD))} ${totD>0?'boven':'onder'}`,`;color:${kl(totD)}`)}</div>
     <div data-zienopzij data-doel="${O&&O.doel!=null?O.doel:''}" data-gedaan="${O&&O.netto!=null?O.netto:''}" style="${col};padding:6px 0 2px;border-top:1px solid var(--line);font-size:var(--fs-sm)"><span>${dot(SALBALK_KLEUR.opzij)}opzij</span><span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">doel ${O&&O.doel!=null?euro0(O.doel):'nog geen'}</span>${gedaan}<span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">${O&&O.netto!=null&&O.netto<0?'uit spaargeld':'gedaan'}</span></div>
-    <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="small" data-zienbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${eenmaligRegel([m], true)}${budgetWijzRegel()}</div>`;
+    <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="small" data-zienbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${buitenRegel([m], true)}${budgetWijzRegel()}</div>`;
 }
 /* Openstaand: wat je uitleende en nog open staat (loanStand(), de bron van de leningsheet en blok 20). */
 function gripOpenLeningen(){ return loans().filter(l=>l.richting!=='in' && l.soort!=='bewaar').map(l=>({l, S:loanStand(l)})).filter(x=>x.S && x.S.open>0.005); }
@@ -24069,7 +24069,7 @@ function insMaandKaart(P, soort){
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px" role="button" onclick="openInsTegel('uitgegeven')"><span><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b>${bud>0?` <span class="muted" data-insgetal>van ${euro0(bud)}</span>`:''}</span>${bud>0?`<span class="small" style="font-weight:700;color:${over<0?'var(--amber)':'var(--green)'}" data-insgetal>${euro0(Math.abs(over))} ${over<0?'boven':'onder'} budget</span>`:''}</div>
       <div class="ins-mb" style="margin:8px 0 4px">${segs}</div>
       <div class="ins-leg2">${delen.filter(d=>d.v!==0).map(d=>insLegRij(d.k, d.v)).join('')}</div>
-      ${soort!=='alle'?`<div class="small" style="color:var(--mut2);margin-top:4px">Een budget is niet per soort te splitsen.</div>`:''}${insPersRegel(S)}${eenmaligRegel(P.maanden)}</div>`;
+      ${soort!=='alle'?`<div class="small" style="color:var(--mut2);margin-top:4px">Een budget is niet per soort te splitsen.</div>`:''}${insPersRegel(S)}${buitenRegel(P.maanden)}</div>`;
   }
   const S=insMaandStand();
   if(!(S.B>0) && !(S.uit>0)) return `<div class="card" id="insMaand" data-insmaand="leeg"><div class="hlabel" style="margin:0 0 4px">Maandbudget ${esc(ymFull(m))}</div><div class="small muted">Je hebt nog geen potjes. Zet ze op Grip met "Budget aanpassen".</div></div>`;
@@ -24100,7 +24100,7 @@ function insMaandKaart(P, soort){
       <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${pbud>0?16:4}px">${segs}${streep}</div>
       ${pbud>0?`<div class="small muted" data-instempopot="${pt}">tempo potjes <span data-insgetal>${euro0(pt)}</span> op ${esc(dagTxt)} (${pct}% van de maand)</div>`:''}
       <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk" data-inslegnog>Nog verwacht</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0))}</div>
-      <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${eenmaligRegel([m])}${insSaldoEindRegel()}</div>`;
+      <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${buitenRegel([m])}${insSaldoEindRegel()}</div>`;
   }
   /* Per soort: variabel is potjes en zonder potje tegen het potjesdeel, vast is de vaste lasten tegen hun som. */
   const delen=insSoortDelen(S, soort);
@@ -24132,7 +24132,7 @@ function insMaandKaart(P, soort){
     ${inlegTxt}<div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${bud>0?20:4}px">${segs}${streep}</div>
     <div class="ins-leg2"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>
       ${insLegPaar(delen.filter(d=>d.v!==0), nog.filter(d=>d.v!==0))}
-</div>${insPersRegel(S)}${eenmaligRegel([m])}${fc}</div>`;
+</div>${insPersRegel(S)}${buitenRegel([m])}${fc}</div>`;
 }
 /* v443 1c: UITGEGEVEN + NOG TE GAAN PER GROEP = DE FORECAST VAN DIE GROEP. De forecast komt uit budgetPerGroep() (blok 20 punt 7,
    maandGroepen): vast = de vaste delen van je potjes plus de vaste lasten zonder potje (de woning), potjes = de variabele potjes
@@ -24173,24 +24173,32 @@ function insLegPaar(links, rechts){
 /* v403: NIET STIL. Wat er als persoonlijke overboeking zonder potje buiten de kaart valt (buitenUitgave) staat eronder
    als een grijze regel, alleen als er deze maand iets is. De tik opent de boekingen, met per boeking "categorie geven"
    (de bestaande categoriekeuze, openSheet): een boeking met een andere categorie telt gewoon mee. */
-/* v454 punt 1: EENMALIG: REKENEN JA, VERBERGEN NEE (gevraagd door de gebruiker). Een boeking met het label eenmalig (eenmaligLabel,
-   het deel van geenNormTx() dat op de boeking staat en niet op de categorie) telt buiten de forecast, buiten "zonder potje" en buiten de
-   symptomen (v453), en staat op Zien en Inzichten als EEN regel "eenmalig buiten je potjes deze maand: EUR X (n boekingen)" met de
-   boekingen in een sheet (openEenmaligMaand). eenmaligMaand(ms) is de ENE bron: de regel, de sheet en blok 20 lezen hem. */
-function eenmaligMaand(ms){ ms=(Array.isArray(ms)?ms:String(ms||thisYM()).split(',')).filter(Boolean); const tx=[];
-  for(const m of ms) for(const t of txOfMonth(m)) if(t.amount<0 && !t.pending && eenmaligLabel(t)) tx.push(t);
-  tx.sort((a,b)=>b.date.localeCompare(a.date));
-  return {ms, tx, n:tx.length, bedrag:Math.round(tx.reduce((a,t)=>a-t.amount,0)*100)/100}; }
-function eenmaligRegel(ms, zien){ const E=eenmaligMaand(ms); if(!E.n) return '';
-  const wanneer=E.ms.length===1&&E.ms[0]===thisYM()?'deze maand':`in ${E.ms.length===1?ymFull(E.ms[0]):E.ms.length+' maanden'}`;
-  return `<div class="small" data-eenmaligregel="${E.bedrag}" data-n="${E.n}" role="button" onclick="openEenmaligMaand('${esc(E.ms.join(','))}')" style="color:var(--mut2);margin-top:${zien?6:8}px;cursor:pointer">eenmalig buiten je potjes ${wanneer}: ${euro0(E.bedrag)} (${E.n} ${E.n===1?'boeking':'boekingen'}) ›</div>`; }
-function openEenmaligMaand(ms){ const E=eenmaligMaand(ms);
-  const lab=E.ms.length===1?ymFull(E.ms[0]):`${ymFull(E.ms[E.ms.length-1])} tot ${ymFull(E.ms[0])}`;
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligMaandSheet" data-inswaarde="${E.bedrag}">${insSheetKop('Eenmalig buiten je potjes · '+esc(lab), 'telt niet in je potjes, je forecast of de signalen', euro0(E.bedrag))}
-    <div class="small muted" style="margin:0 2px 10px;line-height:1.5">Het geld is wel uitgegeven en telt in je saldo en in je maandtotaal. Deze boekingen dragen het label eenmalig, door jou gegeven. Klopt een label niet meer, pas het dan aan in Wat Minder van jou weet.</div>
-    ${E.tx.map(t=>`<div class="tx" data-eenmaligrij="${-t.amount}" role="button" onclick="openSheet('${esc(t.id)}')" style="cursor:pointer">
-      <div class="info"><div class="nm">${esc(txNaam(t))}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})} · ${esc((CATS[catOf(t)]||{}).name||catOf(t))} · ${esc(eenmaligLabel(t))}</div></div>
-      <div style="text-align:right"><div class="amt neg">${euro(t.amount)}</div></div></div>`).join('')}</div>`;
+/* v455 punt 1: BUITEN JE POTJES: ALLES TONEN (gevraagd door de gebruiker als antwoord op v454). De regel van v454 toonde alleen de
+   boekingen met het label eenmalig; een boeking in een categorie zonder norm zonder label (Onvoorzien EUR 60) viel wel buiten de potjes
+   maar stond nergens in beeld. buitenMaand(ms) is nu de ENE bron, met geenNormTx() als toets: elke boeking in een uitgavencategorie
+   die buiten de norm valt (de categorie zonder norm, of het label eenmalig), netto, precies wat totals(m).buitenNorm optelt. Hij
+   splitst in twee groepen: "eenmalig (door jou)" (eenmaligLabel) en "zonder label". De regel "buiten je potjes deze maand: EUR X (n) ›"
+   staat op Zien en in de drie vormen van de Inzichten-kaart, de sheet (openBuitenMaand) toont de twee groepen, en blok 20 legt per
+   maand eenmalig + zonder label naast totals().buitenNorm (CONTROLE → klopt). */
+function buitenMaand(ms){ ms=(Array.isArray(ms)?ms:String(ms||thisYM()).split(',')).filter(Boolean);
+  const E={tx:[], n:0, bedrag:0}, Z={tx:[], n:0, bedrag:0};
+  for(const m of ms) for(const t of txOfMonth(m)){ const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || !geenNormTx(t)) continue;
+    const G=eenmaligLabel(t)?E:Z; G.tx.push(t); G.n++; G.bedrag-=t.amount; }
+  for(const G of [E,Z]){ G.tx.sort((a,b)=>b.date.localeCompare(a.date)); G.bedrag=Math.round(G.bedrag*100)/100; }
+  return {ms, eenmalig:E, zonder:Z, n:E.n+Z.n, bedrag:Math.round((E.bedrag+Z.bedrag)*100)/100}; }
+function buitenRegel(ms, zien){ const B=buitenMaand(ms); if(!B.n) return '';
+  const wanneer=B.ms.length===1&&B.ms[0]===thisYM()?'deze maand':`in ${B.ms.length===1?ymFull(B.ms[0]):B.ms.length+' maanden'}`;
+  return `<div class="small" data-buitenregel="${B.bedrag}" data-n="${B.n}" data-eenmalig="${B.eenmalig.bedrag}" data-zonderlabel="${B.zonder.bedrag}" role="button" onclick="openBuitenMaand('${esc(B.ms.join(','))}')" style="color:var(--mut2);margin-top:${zien?6:8}px;cursor:pointer">buiten je potjes ${wanneer}: ${euro0(B.bedrag)} (${B.n}) ›</div>`; }
+function openBuitenMaand(ms){ const B=buitenMaand(ms);
+  const lab=B.ms.length===1?ymFull(B.ms[0]):`${ymFull(B.ms[B.ms.length-1])} tot ${ymFull(B.ms[0])}`;
+  const rij=t=>`<div class="tx" data-buitenrij="${-t.amount}" role="button" onclick="openSheet('${esc(t.id)}')" style="cursor:pointer">
+      <div class="info"><div class="nm">${esc(txNaam(t))}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})} · ${esc((CATS[catOf(t)]||{}).name||catOf(t))}${eenmaligLabel(t)?' · '+esc(eenmaligLabel(t)):''}</div></div>
+      <div style="text-align:right"><div class="amt neg">${euro(t.amount)}</div></div></div>`;
+  const groep=(k,naam,uitleg,G)=>G.n?`<div data-buitengroep="${k}" data-bedrag="${G.bedrag}" data-n="${G.n}" style="margin-top:10px"><div class="row" style="justify-content:space-between;gap:8px"><span class="hlabel">${naam} · ${G.n}</span><span class="small" style="font-weight:700">${euro0(G.bedrag)}</span></div><div class="small muted" style="margin:2px 2px 4px;line-height:1.5">${uitleg}</div>${G.tx.map(rij).join('')}</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="buitenMaandSheet" data-inswaarde="${B.bedrag}">${insSheetKop('Buiten je potjes · '+esc(lab), 'telt niet in je potjes, je forecast of de signalen', euro0(B.bedrag))}
+    <div class="small muted" style="margin:0 2px 4px;line-height:1.5">Het geld is wel uitgegeven en telt in je saldo en in je maandtotaal.</div>
+    ${groep('eenmalig','eenmalig (door jou)','Deze boekingen dragen het label eenmalig, door jou gegeven. Klopt een label niet meer, pas het dan aan in Wat Minder van jou weet.',B.eenmalig)}
+    ${groep('zonder','zonder label','Een categorie zonder norm, zonder dat je zei wat het was. Minder vraagt het je onder Kloppen mijn gegevens?',B.zonder)}</div>`;
   showSheetBg(); }
 function insPersRegel(S){
   if(!(S.pers>0)) return '';
@@ -26212,7 +26220,7 @@ function gegevensVragen(){ const out=[];
   for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
   try{ out.push(...salAfwijkVragen()); }catch(_){}   // v435: salaris op een andere dag dan de regel
   /* v425: wat Minder alleen van jou kan weten */
-  const bron=[kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
+  const bron=[buitenVragen, kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
   for(const f of bron){ try{ out.push(...f()); }catch(_){} }
   /* v427: EEN BOEKING IS HOOGUIT EEN VRAAG. Een boeking waar je al iets over zei (een antwoord met die boeking erin) vraagt niets
      meer; een Tikkie krijgt de Tikkie-vraag en niet ook "wat was dit?"; en een bedrag dat dezelfde dag even groot terugkomt van
@@ -26540,6 +26548,38 @@ function kennisUitZet(id, keuze, tekst){ const t=TX.find(x=>x.id===id); if(!t) r
   else save();
   keuzeKlaar(`${p}: ${wat||'weet ik niet'}`, herstel); }
 
+/* ---- v455: BUITEN JE POTJES ZONDER LABEL: "Wat was dit?" (gevraagd door de gebruiker) ----
+   Een uitgave in een categorie zonder norm en zonder label eenmalig (Onvoorzien EUR 60) valt buiten de potjes zonder dat je zei wat
+   het was. Vanaf BUITEN_VRAAG_MIN (25) in de laatste BENOEM_DAGEN, of elk bedrag in de lopende salarisperiode (anders de lopende
+   maand), vraagt Minder het een keer per boeking: Eenmalig (het label: de boeking blijft buiten je potjes, nu met naam) / Hoort in een
+   potje (kies welk: de boeking krijgt die categorie en telt in dat potje; Vergeten zet de oude categorie terug) / Weet ik niet (de
+   vraag vervalt, de boeking blijft zonder label). Niets voorgeselecteerd; het antwoord staat in SET.kennis['buiten|'+id] met de
+   boeking in tx, dus de vraag komt niet terug. Geen opname (de contant-vragen), geen boeking zonder bank (een telling), geen Tikkie
+   (de Tikkie-vraag) en geen lening. Vanaf BENOEM_MIN (100) gaat de benoem-vraag van v424 voor (een vraag per boeking, v427); die
+   heeft Eenmalig als een van zijn antwoorden. */
+const BUITEN_VRAAG_MIN=25;
+function buitenLopend(t){ let P=null; try{ P=salPeriode(); }catch(_){}
+  if(P && P.cur && P.cur.start && P.cur.eind) return t.date>=P.cur.start && t.date<=P.cur.eind;
+  return t.date.slice(0,7)===thisYM(); }
+function buitenVragen(){ const o=[];
+  for(const t of telbareTx()){ if(t.pending || !t.acc || !(t.amount<0) || isOpnameTx(t) || isTikkie(t) || loanFor(t.id)) continue;
+    const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || !geenNorm(c) || eenmaligLabel(t)) continue;
+    if(kennisGet('buiten|'+t.id)) continue;
+    if(!((-t.amount>=BUITEN_VRAAG_MIN && kennisRecent(t)) || buitenLopend(t))) continue;
+    o.push({soort:'buiten', qkey:'buiten|'+t.id, t, partij:benoemPartij(t), bedrag:-t.amount, datum:t.date, cat:c}); }
+  return o; }
+function buitenKies(id, keuze){ if(keuze==='potje'){ window._kennisKeuze=window._kennisKeuze||{}; window._kennisKeuze[id]={keuze}; openGegevensVragen(window._gegevensFocus||''); return; } buitenZet(id, keuze); }
+function buitenZet(id, keuze, pot){ const t=TX.find(x=>x.id===id); if(!t) return; const k='buiten|'+id, p=benoemPartij(t);
+  if(keuze==='potje' && !(CATS[pot] && kennisPotjes().includes(pot))) return;
+  if(!['eenmalig','potje','weetniet'].includes(keuze)) return;
+  const herstel=kennisSnap(), bedrag=Math.round(-t.amount*100)/100;
+  if(keuze==='eenmalig') kennisZet(k, {soort:'eenmalig', partij:p, label:p, wat:'Eenmalig', aard:'eenmalig', bedrag, tx:[id]});
+  else if(keuze==='potje'){ const voor=OVR[id]||''; OVR[id]=pot;
+    kennisZet(k, {soort:'buiten', partij:p, wat:`Hoort in ${CATS[pot].name}`, aard:'potje', potje:pot, bedrag, tx:[id], effect:{ovr:{[id]:voor}}}); }
+  else kennisZet(k, {soort:'buiten', partij:p, wat:null, aard:'weetniet', bedrag, tx:[id]});
+  if(window._kennisKeuze) delete window._kennisKeuze[id];
+  save(); keuzeKlaar(`${p}: ${keuze==='eenmalig'?'eenmalig':keuze==='potje'?'in '+CATS[pot].name:'weet ik niet'}`, herstel); }
+
 /* ---- b. ONBEKENDE BIJSCHRIJVING vanaf KENNIS_MIN ---- */
 function kennisSalarisKeys(){ const S=new Set(); try{ for(const k of holdingKeys()) S.add(k); }catch(_){}
   try{ const sl=salarisBetalingLaatst(valtOpYmPlus(thisYM(),1)); if(sl) S.add(recurKey(sl)); }catch(_){}
@@ -26753,7 +26793,7 @@ function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.q
 /* ---- DE ENE LEZER: alles wat Minder van jou weet, met bron en datum ---- */
 function kennisLijst(){ const o=[];
   holdingKeys(); try{ kennisSync(); }catch(_){}
-  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
+  const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', buiten:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
     holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak', salaris:()=>'inkomen', saldag:()=>'inkomen', kasnasal:()=>'opname', contantnaar:()=>'opname'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
@@ -26896,6 +26936,10 @@ function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q
     else if(K && K.keuze==='deel'){ const C=kennisCats();
       body=`<div class="small" data-kennisstap style="margin-top:6px">Jouw deel van gedeelde kosten \u00b7 welke categorie?</div><div class="chips" style="margin-top:6px">${C.map(k=>chip(`kennisTikkieZet('${id}','deel','${k}')`, CATS[k].name, `data-kenniscat="${k}"`)).join('')}</div>`; }
     else body=`<div class="chips" style="margin-top:6px">${chip(`kennisTikkieKies('${id}','deel')`,'Jouw deel van gedeelde kosten','data-kennisoptie="deel"')}${chip(`kennisTikkieKies('${id}','lening')`,'Lening','data-kennisoptie="lening"')}</div>${anders(`(v=>kennisTikkieZet('${id}','anders',null,v))`)}`; }
+  if(q.soort==='buiten'){ kop=`${euro(q.bedrag)} aan ${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 Wat was dit?`; sub=`${esc((CATS[q.cat]||{}).name||q.cat)} \u00b7 een categorie zonder norm, dus buiten je potjes`;   // v455
+    if(K && K.keuze==='potje'){ const P=kennisPotjes();
+      body=`<div class="small" data-kennisstap style="margin-top:6px">In welk potje hoort hij? Hij krijgt die categorie en telt dan in dat potje.</div><div class="chips" style="margin-top:6px">${P.map(k=>chip(`buitenZet('${id}','potje','${k}')`, CATS[k].name, `data-kennispotje="${k}"`)).join('')}</div>`; }
+    else body=`<div class="chips" style="margin-top:6px">${chip(`buitenKies('${id}','eenmalig')`,'Eenmalig','data-kennisoptie="eenmalig"')}${chip(`buitenKies('${id}','potje')`,'Hoort in een potje','data-kennisoptie="potje"')}${chip(`buitenKies('${id}','weetniet')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>`; }
   if(q.soort==='opname'){ kop=`Waar ging de ${euro0(q.bedrag)} contant vooral naar?`; sub=`${esc(q.partij)} \u00b7 ${esc(dagKort(q.datum))} \u00b7 een tik; het verandert geen boekingen`;
     body=`<div class="chips" style="margin-top:6px">${KENNIS_CONTANT.map(w=>chip(`kennisContantZet('${id}','${kk(w)}')`, w, `data-kennisoptie="${esc(w)}"`)).join('')}${chip(`kennisContantZet('${id}','Anders')`,'Anders','data-kennisoptie="Anders"')}${chip(`kennisContantZet('${id}','')`,'Weet ik niet','data-kennisoptie="weetniet"')}</div>`; }
   return `<div data-gegevensvraag="${q.soort}" data-qkey="${esc(q.qkey)}"${q.t?` data-tx="${esc(q.t.id)}"`:''} style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">${kop}</div><div class="small muted" style="margin-top:2px">${sub}</div>${body}</div>`; }
@@ -26915,7 +26959,7 @@ function openGegevensVragen(focus){
   if(!Q.length){ if(focus && focus!=='alle'){ window._gegevensFocus=''; return openGegevensVragen(); } closeSheet(); return; }
   const wacht=focus?0:alleQ.length-Q.length;
   const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
-    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname'].includes(q.soort)) return kennisVraagRij(q);   // v425
+    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname','buiten'].includes(q.soort)) return kennisVraagRij(q);   // v425
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='saldag'){ const dq=esc(q.datum);   // v435
       return `<div data-gegevensvraag="saldag" data-saldag="${dq}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Salaris kwam op ${esc(dagKort(q.datum))} in plaats van ${esc(dagKort(q.verwacht))}. Klopt de regel nog?</div>
@@ -31974,8 +32018,11 @@ function diagSalarisVerdeling(){
     /* v453: per boeking de categorie en wat hem hier zet: het label eenmalig (eenmaligLabel, ongeacht de categorie) of een categorie
        zonder norm (geenNorm). Dezelfde toets als de sommen (geenNormTx). */
     L.push(`  GEEN NORM IN ${MN(Rc?Rc.ym:thisYM()).toUpperCase()}* (v453, buiten vast en potjes): ${xs.length?xs.map(x=>{ const t=x.t, el=eenmaligLabel(t); return `${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(x.v)} ${titleCase(cleanMerch(t.name)||t.name||'?')} · categorie ${(CATS[catOf(t)]||{}).name||catOf(t)} · ${el?'label: '+el:'categorie zonder norm'}`; }).join(' · '):'geen'}`);
-    /* v454 punt 1: eenmalig per maand (bedrag, aantal), uit eenmaligMaand(), de bron van de regel op Zien en Inzichten */
-    L.push(`  EENMALIG BUITEN JE POTJES PER MAAND (v454, label eenmalig): ${R.map(r=>{ const E=eenmaligMaand([r.ym]); return `${MN(r.ym)}${r===Rc?'*':''} ${c2(E.bedrag)} (${E.n})`; }).join(' · ')}`);
+    /* v455 punt 1: buiten je potjes per maand = eenmalig + zonder label, uit buitenMaand(), de bron van de regel op Zien en Inzichten,
+       met de controle dat de twee optellen tot totals().buitenNorm (de som van geenNormTx() in die maand) */
+    L.push(`  BUITEN JE POTJES PER MAAND (v455, geenNormTx): ${R.map(r=>{ const B=buitenMaand([r.ym]); return `${MN(r.ym)}${r===Rc?'*':''} ${c2(B.eenmalig.bedrag)} eenmalig (${B.eenmalig.n}) + ${c2(B.zonder.bedrag)} zonder label (${B.zonder.n}) = ${c2(B.bedrag)}`; }).join(' · ')}`);
+    { const fout=R.map(r=>{ const B=buitenMaand([r.ym]), g=Math.round(totals(r.ym).buitenNorm*100)/100; return Math.abs(Math.round((B.eenmalig.bedrag+B.zonder.bedrag)*100)/100-g)>0.005?`${MN(r.ym)} ${c2(B.eenmalig.bedrag+B.zonder.bedrag)} tegen ${c2(g)}`:''; }).filter(Boolean);
+      L.push(`  CONTROLE buiten = eenmalig + zonder label = geenNormTx (totals buitenNorm) per maand: ${fout.length?'VERSCHIL '+fout.join(' · '):'klopt'}`); }
     const RP=resLijst().filter(r=>r && r.partij);
     L.push(`  RESERVERINGEN MET EEN PARTIJ (v452): ${RP.length?'':'geen'}`);
     for(const r of RP){ const iv=Math.max(+r.intervalM||0,0), pm=iv?(+r.bedrag||0)/iv:0, her=telbareTx().filter(t=>resPartijVoor(t)===r);
