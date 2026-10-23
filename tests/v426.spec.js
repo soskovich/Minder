@@ -116,7 +116,8 @@ test.describe('v426', () => {
     expect(rij).toContain('€150,00 aan Cjib Verkeersboetes · 25 sep · Verkeersboete');
     expect(rij).toContain('uit de omschrijving · eenmalig of komt het terug?');
     expect(rij).not.toContain('wat was dit');
-    expect(await page.locator('[data-benoemlaag="a"] [data-benoemoptie]').count()).toBe(0);
+    /* v456 punt 5: laag a heeft alleen de optie Hoort in een potje naast Eenmalig en Komt terug */
+    expect(await page.locator('[data-benoemlaag="a"] [data-benoemoptie]').allInnerTexts()).toEqual(['Hoort in een potje']);
     /* Terugblik: nog niet bepaald, niet in de score en niet bij eenmalig */
     const T = await page.evaluate(() => { const T = gripTerugblik('2026-09'); return { onb: T.onbepaald.map(B => B.label), een: T.eenmalig.map(B => B.label) }; });
     expect(T).toEqual({ onb: ['Verkeersboete'], een: ['Boete of wegslepen'] });
@@ -133,13 +134,13 @@ test.describe('v426', () => {
     await boot(page);
     const opties = id => page.evaluate(id => { openGegevensVragen('benoemtx|' + id); return [...document.querySelectorAll(`[data-tx="${id}"] [data-benoemoptie]`)].map(e => e.innerText); }, id);
     const TR = await tid(page, '2026-10-06', -150);
-    expect(await opties(TR)).toEqual(['Reis', 'Eenmalige aankoop', 'Anders…', 'Weet ik niet']);
+    expect(await opties(TR)).toEqual(['Reis', 'Eenmalige aankoop', 'Anders…', 'Hoort in een potje', 'Weet ik niet']);   // v456: Hoort in een potje
     const AP = await page.evaluate(() => TX.find(t => t.name === 'Apotheek De Brug').id);
     expect((await opties(AP))[0]).toBe('Zorg');
     const ZW = await page.evaluate(() => TX.find(t => /ZWEMLES/i.test(t.name + t.desc) && t.amount <= -100).id);
     expect((await opties(ZW)).slice(0, 2)).toEqual(['Kinderen', 'Sport']);
     const RO = await tid(page, '2026-10-01', -210);
-    expect(await opties(RO)).toEqual(['Boete', 'Belasting', 'Anders…', 'Weet ik niet']);
+    expect(await opties(RO)).toEqual(['Boete', 'Belasting', 'Anders…', 'Hoort in een potje', 'Weet ik niet']);
     for (const id of [TR, AP, ZW]) { const o = await opties(id); expect(o).not.toContain('Boete'); expect(o).not.toContain('Belasting'); }
     /* een voorgesteld antwoord is "voorstel, door jou bevestigd" en verhuist de boeking niet */
     await page.evaluate(id => { benoemKies(id, 'Reis'); benoemAard(id, 'eenmalig'); }, TR);

@@ -111,7 +111,9 @@ test.describe('3 · blok 23: te pinnen uit het budget', () => {
     await boot(page, '2026-10-19');
     const zonder = await page.evaluate(() => { const P = rekVoorstel(); return { bron: P.kasBron, kasP: P.kasP, med: P.kasMed }; });
     /* een opname in oktober, zodat het potje Contant in maandVooruit een verwacht eind draagt en dubbeltellen in het voorstel te zien is */
-    await page.evaluate((LEEF) => { const t = { id: 'kas10', date: '2026-10-05', amount: -80, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); potPlanZet(CONTANT_CAT, thisYM(), 400); save(); }, S432.LEEF);
+    await page.evaluate((LEEF) => { const t = { id: 'kas10', date: '2026-10-05', amount: -80, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); potPlanZet(CONTANT_CAT, thisYM(), 400);
+      /* v456 punt 1: in de maand waarin het potje ontstaat telt Contant niet mee; hier stond het al in het vastgelegde budget van de 1e */
+      const ym = thisYM(); SET.maandBudget[ym].potjes[CONTANT_CAT] = 400; SET.maandBudget[ym].totaal += 400; save(); }, S432.LEEF);
     const met = await page.evaluate(() => { const P = rekVoorstel(); const leef = P.rek.find((x) => x.naam === 'Leefgeld');
       return { bron: P.kasBron, kasP: P.kasP, dagen: P.dagen, dim: P.dimStart, stand: P.kasStand, kasS: leef.kasS, pot: P.potExp.map((x) => x.k), vp: (maandVooruit().potjes || []).map((x) => x.k), cEind: ((maandVooruit().potjes || []).find((x) => x.k === 'contant') || {}).eindR || 0, b23: diagRekVerdeling().join('\n') }; });
     expect(zonder.bron).toBe('mediaan');
@@ -213,8 +215,8 @@ test.describe('6 · de opbouw en het zaad', () => {
   test('i. blok 20 OPBOUW: budget + Contant = budget vanaf 1 november, en de wijziging staat als door jou', async ({ page }) => {
     await boot(page, '2026-10-19', true);
     const r = await page.evaluate(() => { const L = diagMaandBudget(maandVooruit()).join('\n'), W = maandBudgetWijz(thisYM());
-      return { L, W: W.rijen.find((x) => x.k === CONTANT_CAT), her: W.herindeling, vast: W.vast.totaal, nu: W.nu.totaal }; });
-    /* v450 punt 1: het potje Contant ontstaat deze maand, dus een herindeling en geen wijziging */
+      return { L, W: W.rijen.find((x) => x.k === CONTANT_CAT), her: W.later, vast: W.vast.totaal, nu: W.nu.totaal }; });
+    /* v450/v456 punt 1: het potje Contant ontstaat deze maand, dus geen wijziging (W.later) */
     expect(r.W).toBeUndefined();
     expect(r.her).toMatchObject({ k: 'contant', bud: 400 });
     expect(r.nu - r.vast).toBe(400);

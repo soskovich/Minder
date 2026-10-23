@@ -107,6 +107,8 @@ test.describe('3 · blok 8 toont wat er per rekening bewaard wordt', () => {
 test.describe('4 · Contant: een berekening', () => {
   test('f. de forecast van het potje Contant in maandVooruit is de uitkomst van contantMaanden, en blok 20 zegt klopt', async ({ page }) => {
     await S8.boot(page);
+    /* v456 punt 1: in de maand waarin het potje ontstaat telt Contant niet mee; hier stond het al in het vastgelegde budget van de 1e */
+    await page.evaluate(() => { const ym = thisYM(); SET.maandBudget[ym].potjes[CONTANT_CAT] = 400; SET.maandBudget[ym].totaal += 400; save(); });
     const r = await page.evaluate(() => { const V = maandVooruit(), c = V.potjes.find(x => x.k === CONTANT_CAT), cur = thisYM(), CM = contantMaanden([valtOpYmPlus(cur, -1), cur]);
       const L = diagSalarisVerdeling(); return { eind: c ? c.eindR : null, uitkomst: CM[CM.length - 1].uitkomst, bron: V.contant && V.contant.bron, regel: L.find(l => /CONTROLE Contant/.test(l)) || '', patroon: c ? c.uit + Math.max(+V.restCat[CONTANT_CAT] || 0, 0) : null }; });
     /* de invoer draagt het geval: het oude patroon geeft een ander eind dan contantMaanden */
@@ -127,9 +129,9 @@ test.describe('5 · heen en terug op dezelfde rekening met je eigen naam', () =>
       add('2026-09-09', -40, 'Ve Sumter'); add('2026-09-09', 40, 'Ve Sumter', 'NL99ANDERS0001');
       save(); const L = diagEigenParen(); return { L, schoon: JSON.stringify(SET) === voor || true }; }, { MAIN: S.MAIN });
     const j = r.L.join('\n');
-    expect(j).toMatch(/HEEN EN TERUG OP DEZELFDE REKENING MET JE EIGEN NAAM \(v453\)/);
-    expect(j).toMatch(/\n    2026-06  1 · 50\.00/);   // de stand van het toestel: 16-06 -50 From Main to Zakgeld en +50 Ve Sumter
-    expect(j).toMatch(/\n    2026-09  1 · 80\.00/);
+    expect(j).toMatch(/HEEN EN TERUG OP DEZELFDE REKENING MET JE EIGEN NAAM \(v453\/v456\)/);
+    expect(j).toMatch(/\n      2026-06  1 · 50\.00/);   // de stand van het toestel: 16-06 -50 From Main to Zakgeld en +50 Ve Sumter
+    expect(j).toMatch(/\n      2026-09  1 · 80\.00/);
     expect(j).toMatch(/eigen naam in de bijschrijving/);
     expect(j).not.toMatch(/Bakker Jansen/);
   });

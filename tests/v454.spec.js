@@ -159,8 +159,8 @@ test.describe('4 · blok 25', () => {
       add('2026-08-05', -70, 'Ve Sumter'); add('2026-08-05', 70, 'Bakker Jansen');
       add('2026-07-05', -30, 'Bakker Jansen'); add('2026-07-05', 30, 'Bakker Jansen');
       save(); return diagEigenParen().join('\n'); }, { MAIN: S.MAIN });
-    expect(j).toMatch(/\n    2026-09  1 · 80\.00/);
-    expect(j).toMatch(/\n    2026-08  1 · 70\.00/);
-    expect(j).not.toMatch(/\n    2026-07 /);
+    expect(j).toMatch(/\n      2026-09  1 · 80\.00/);
+    expect(j).toMatch(/\n      2026-08  1 · 70\.00/);
+    expect(j).not.toMatch(/\n      2026-07 /);
   });
 });

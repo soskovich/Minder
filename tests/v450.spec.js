@@ -12,33 +12,30 @@ const b20 = (page) => page.evaluate(() => diagSalarisVerdeling().join('\n'));
 const b23 = (page) => page.evaluate(() => diagRekVerdeling().join('\n'));
 const regel = (b, re) => b.split('\n').find((l) => re.test(l)) || '';
 const stand = (page) => page.evaluate(() => { const V = maandVooruit(), I = brugIndeling(V), c = I.groepen.flatMap((g) => g.pots || []).find((x) => x.k === CONTANT_CAT);
-  return { budget: V.budget, proj: V.projectie, onder: V.budget - V.projectie, her: V.maandBudget && V.maandBudget.herindeling, cd: c ? c.d : null,
+  return { budget: V.budget, proj: V.projectie, onder: V.budget - V.projectie, later: V.contantLater, cd: c ? c.d : null,
     kas: kasTempo(), W: maandBudgetWijz(), meter: gripMeterBudget(V), BG: budgetPerGroep(V), ins: insMaandStand().Bvast, regel: budgetWijzRegel() }; });
 
-test.describe('1 · oktober: herindeling', () => {
-  test('a. budget Contant = forecast Contant, verschil EUR 0, en onder budget gelijk aan zonder potje', async ({ page }) => {
+/* v456 punt 1: de herindeling van v450 is vervallen; in de maand waarin het potje Contant ontstaat valt Contant aan beide kanten weg.
+   Deze tests zijn gemigreerd en lezen V.contantLater en W.later; de volle toets staat in v456.spec.js. */
+test.describe('1 · oktober: Contant telt nog niet mee (v456, was de herindeling)', () => {
+  test('a. budget = vastgelegd budget, forecast zonder Contant, onder budget gelijk aan zonder potje', async ({ page }) => {
     await S.boot(page, { potje: false });
     const zonder = await stand(page);
     await S.boot(page);
     const met = await stand(page);
-    /* de invoer draagt het geval: het potje is er nu, het vastgelegde budget van 1 oktober niet, en Contant heeft een forecast */
     expect(await page.evaluate(() => [contantNieuwIn(), +(maandBudgetVast().potjes || {})[CONTANT_CAT] || 0, +(SET.budgets || {})[CONTANT_CAT]])).toEqual([true, 0, 400]);
-    expect(met.her.k).toBe('contant');
-    expect(met.her.f).toBeGreaterThan(0);
-    expect(met.proj - zonder.proj).toBe(met.her.f);
-    expect(met.budget).toBe(zonder.budget + met.her.f);
+    expect(met.later).toMatchObject({ k: 'contant', bud: 400 });
+    expect(met.budget).toBe(zonder.budget);
+    expect(met.proj).toBe(zonder.proj);
     expect(met.onder).toBe(zonder.onder);
-    expect(Math.abs(met.cd)).toBeLessThan(0.5);
-    /* Zien, de meter, Inzichten en budget per groep lezen hetzelfde budget */
+    expect(met.cd).toBeNull();
     expect(met.meter.budget).toBe(met.budget);
-    expect(met.meter.verschil).toBe(zonder.meter.verschil);
     expect(met.ins).toBe(met.budget);
     expect(met.BG.som).toBe(met.budget);
-    /* geen wijziging: de herindeling staat apart met het label */
     expect(met.W.tot).toBe(0);
     expect(met.W.rijen.find((r) => r.k === 'contant')).toBeUndefined();
-    expect(met.W.herindeling.label).toBe('nieuw potje deze maand · telt vanaf 1 november mee');
-    expect(met.regel).toContain('data-herindeling="contant"');
+    expect(met.W.later.label).toBe('nieuw potje deze maand · telt vanaf 1 november mee');
+    expect(met.regel).toContain('data-contantlater="contant"');
     expect(met.regel).toContain('nieuw potje deze maand · telt vanaf 1 november mee');
   });
 
@@ -49,22 +46,21 @@ test.describe('1 · oktober: herindeling', () => {
     expect(r.sym).not.toContain('sig:contant');
   });
 
-  test('c. blok 20: de herindeling met het bedrag, en alle controles kloppen', async ({ page }) => {
+  test('c. blok 20: CONTANT LATER en alle controles kloppen', async ({ page }) => {
     await S.boot(page);
-    const b = await b20(page), m = await stand(page);
-    expect(regel(b, /HERINDELING \(v450\)/)).toContain(`Contant €400 · nieuw potje deze maand · telt vanaf 1 november mee · deze maand budget Contant = forecast Contant €${m.her.f}, verschil EUR 0`);
-    expect(regel(b, /HERINDELING \(v450\)/)).toContain('(klopt met V.budget)');
+    const b = await b20(page);
+    expect(regel(b, /CONTANT LATER \(v456\)/)).toContain('Contant €400 · nieuw potje deze maand · telt vanaf 1 november mee');
     expect(regel(b, /budget van nu .* = vastgelegd/)).toContain('+ nieuw potje Contant €400: klopt');
-    for (const re of [/CONTROLE maandbudget op alle schermen/, /CONTROLE budget per groep/, /CONTROLE onder budget = vastgelegd/, /CONTROLE som van de salariskaart/, /CONTROLE som van de groepen = vastgelegd/, /CONTROLE budget \+ verschillen = forecast/])
+    for (const re of [/CONTROLE maandbudget op alle schermen/, /CONTROLE budget per groep/, /CONTROLE onder budget = vastgelegd/, /CONTROLE som van de salariskaart/, /CONTROLE som van de groepen = vastgelegd/, /CONTROLE budget \+ verschillen = forecast/, /CONTROLE budget oktober = budget op 01-10/])
       expect(regel(b, re)).toContain('klopt');
   });
 
-  test('d. een maand waarin het potje al in het vastgelegde budget stond: geen herindeling, wel tempo', async ({ page }) => {
+  test('d. een maand waarin het potje al in het vastgelegde budget stond: niets apart, wel tempo', async ({ page }) => {
     await S.boot(page);
     const r = await page.evaluate(() => { const ym = thisYM(); SET.maandBudget[ym].potjes[CONTANT_CAT] = 400; SET.maandBudget[ym].totaal += 400; save();
-      const V = maandVooruit(); return { nieuw: contantNieuwIn(), her: V.maandBudget && V.maandBudget.herindeling, kas: kasTempo(), W: maandBudgetWijz().herindeling }; });
+      const V = maandVooruit(); return { nieuw: contantNieuwIn(), later: V.contantLater, kas: kasTempo(), W: maandBudgetWijz().later }; });
     expect(r.nieuw).toBe(false);
-    expect(r.her).toBeFalsy();
+    expect(r.later).toBeFalsy();
     expect(r.W).toBeFalsy();
     expect(r.kas).not.toBeNull();
   });

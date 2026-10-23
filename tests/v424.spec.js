@@ -49,8 +49,8 @@ test.describe('v424', () => {
     await boot(page);
     const Q = await page.evaluate(ids => { openGegevensVragen('alle'); return [...document.querySelectorAll('[data-gegevensvraag="benoem"]')].filter(e => ids.includes(e.dataset.tx)).map(e => ({ tx: e.dataset.tx, laag: e.dataset.benoemlaag, kop: e.querySelector('div').innerText, opties: [...e.querySelectorAll('[data-benoemoptie]')].map(o => o.innerText) })); }, [G484, G120]);
     expect(Q).toEqual([
-      { tx: G484, laag: 'c', kop: '€484,00 aan Gemeente Utrecht · 18 sep · wat was dit?', opties: ['Gemeentebelasting', 'Boete of wegslepen', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] },
-      { tx: G120, laag: 'b', kop: '€120,00 aan Gemeente Utrecht · 3 okt · wat was dit?', opties: ['Boete of wegslepen · klopt', 'Gemeentebelasting', 'Leges of vergunning', 'Anders…', 'Weet ik niet'] }]);   /* v425: op bedrag */
+      { tx: G484, laag: 'c', kop: '€484,00 aan Gemeente Utrecht · 18 sep · wat was dit?', opties: ['Gemeentebelasting', 'Boete of wegslepen', 'Leges of vergunning', 'Anders…', 'Hoort in een potje', 'Weet ik niet'] },
+      { tx: G120, laag: 'b', kop: '€120,00 aan Gemeente Utrecht · 3 okt · wat was dit?', opties: ['Boete of wegslepen · klopt', 'Gemeentebelasting', 'Leges of vergunning', 'Anders…', 'Hoort in een potje', 'Weet ik niet'] }]);   /* v425: op bedrag; v456: Hoort in een potje */
     expect(await page.locator(`[data-tx="${G120}"] [data-benoemvoorstel]`).innerText()).toBe('voorstel: Boete of wegslepen · uit de omschrijving: "naheffing"');
     /* openen schrijft niets; de eerste tik ook niet */
     await page.locator(`[data-tx="${G484}"] [data-benoemoptie="Boete of wegslepen"]`).click();
