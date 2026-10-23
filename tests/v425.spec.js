@@ -224,7 +224,7 @@ test.describe('v425', () => {
     const A = await id(page, '2026-10-02', -250);
     await page.evaluate(A => kennisUitZet(A, 'gift'), A);
     await page.evaluate(() => openKennis());
-    expect(await page.locator('[data-kennisgroep]').evaluateAll(E => E.map(e => e.dataset.kennisgroep))).toEqual(['inkomen', 'woning', 'leningen', 'vast', 'tikkie', 'eenmalig', 'opname', 'oorzaak']);   // v429: Oorzaken (Grip)
+    expect(await page.locator('[data-kennisgroep]').evaluateAll(E => E.map(e => e.dataset.kennisgroep))).toEqual(['inkomen', 'woning', 'leningen', 'vast', 'tikkie', 'eenmalig', 'opname', 'voraut', 'oorzaak']);   // v429: Oorzaken (Grip), v457: Voorautorisaties
     const r = (await page.locator('[data-kennisrij="k:uit|j bakker"]').innerText()).replace(/\s+/g, ' ');
     expect(r).toBe('J Bakker Gift door jou · 10 okt 2026 Wijzigen Vergeten');
     /* Vergeten zonder bedrag in je maanden zegt dat */

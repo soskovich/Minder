@@ -325,8 +325,10 @@ test.describe('v293 de reservering aan de pomp', () => {
     expect(bron.split('function vorautDrietallen(').length - 1).toBe(1);
     expect(bron.split('const terugAlle=').length - 1).toBe(1);
     expect(bron.split("vorm='3 (").length - 1).toBe(1);
-    /* de kandidatenlijst drukt de vorm-keuze niet opnieuw uit: hij LEEST het vorm-veld */
-    expect(bron.split("String(r.vorm).charAt(0)!=='3'").length - 1).toBe(1);
+    /* v457: de kandidatenlijst leest de ENE detectie van het patroon A − V = B (vorautPatroon), niet een eigen afleiding; blok 12
+       houdt vorautDrietallen als meting van v293 */
+    expect(bron.split('function vorautPatroonKern(').length - 1).toBe(1);
+    expect(bron.split("vorautPatroon().filter(g=>g.soort==='deels'").length - 1).toBe(1);
     /* EN DE POORT STAAT OP EEN PLEK, MET vorautBron() ERUIT AFGELEID. Deze assertie ankerde tot v304 op
        de letterlijke regel `vorautBron().filter(t=>!vorautWeg(t))`, en dat is een anker op een SPELLING
        en niet op de eigenschap (v276). Sinds v304 staat de poort als lijst met een naam per poort, zodat

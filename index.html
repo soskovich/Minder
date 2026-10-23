@@ -26153,28 +26153,93 @@ function dubbelParenTerug(sleutel){
    gebruiken (v281). Twee reserveringen van hetzelfde bedrag bij dezelfde tegenpartij op dezelfde dag
    zouden diezelfde id hebben en kunnen dus per constructie niet naast elkaar in `TX` staan. */
 function vorautSleutel(r){ return String((r&&r.t&&r.t.id)||''); }
+/* ===== v457: DE VOORAUTORISATIE ALS PATROON OP EEN REKENING (gevraagd door de gebruiker, punt 7) =====
+   GEMELD: 21-10, Tango, N26: EUR 150,00 (voorautorisatie), +EUR 52,79 (vrijgave), EUR 97,21 (betaling), alle drie in Vervoer &
+   auto, dus EUR 194,42 waar EUR 97,21 klopt. HET PATROON (de woorden van de gebruiker): dezelfde rekening, dezelfde partij
+   (`recurKey`), binnen VORAUT_DAGEN (3) dagen, een afschrijving A en een bijschrijving V met A − V = B, waarbij B een andere
+   afschrijving bij die partij is, TOT OP DE CENT. De variant A = V (vrijgave volledig) staat in de meting en telt al nul.
+   `vorautPatroon()` is de ENE detectie (v104): het meetblok, de vraag, het zelf herstellen en blok 20 lezen hem. Tot v457 had de
+   sheet in Instellingen (v293) een eigen afleiding over 14 dagen en elke rekening; die is vervangen, zodat er geen tweede waarheid
+   over dezelfde drie boekingen bestaat. Een bijschrijving hoort bij precies een afschrijving, het grootste bedrag eerst. */
+const VORAUT_DAGEN=3, VORAUT_AUTO_JA=3;
+let _vpMemo=null;
+function vorautPatroonKern(bron, partijEis){
+  const cent=a=>Math.round(Math.abs(+a||0)*100), dag=d=>Math.round(Date.parse(String(d).slice(0,10)+'T00:00:00Z')/864e5);
+  const groep={};
+  for(const t of bron){ if(!t || !t.acc || !(+t.amount)) continue; const p=_dT(()=>recurKey(t),'')||''; if(partijEis && !p) continue;
+    const g=t.acc+'|'+(partijEis?p:''); (groep[g]=groep[g]||[]).push(t); }
+  const r=[];
+  for(const L of Object.values(groep)){
+    const af=L.filter(t=>t.amount<0), bij=L.filter(t=>t.amount>0).sort((a,b)=>String(a.date).localeCompare(String(b.date))||(String(a.id)<String(b.id)?-1:1));
+    if(!af.length || !bij.length) continue;
+    const claim=new Set();
+    for(const V of bij){
+      const kand=af.filter(A=>!claim.has(A) && cent(A.amount)>=cent(V.amount) && Math.abs(dag(A.date)-dag(V.date))<=VORAUT_DAGEN)
+        .sort((a,b)=>cent(b.amount)-cent(a.amount) || Math.abs(dag(a.date)-dag(V.date))-Math.abs(dag(b.date)-dag(V.date)) || (String(a.id)<String(b.id)?-1:1));
+      let hit=null;
+      for(const A of kand){ const d=cent(A.amount)-cent(V.amount); if(d<=0) continue;
+        const B=af.filter(x=>x!==A && !claim.has(x) && cent(x.amount)===d
+            && Math.max(dag(A.date),dag(V.date),dag(x.date))-Math.min(dag(A.date),dag(V.date),dag(x.date))<=VORAUT_DAGEN)
+          .sort((a,b)=>Math.abs(dag(a.date)-dag(A.date))-Math.abs(dag(b.date)-dag(A.date)) || (String(a.id)<String(b.id)?-1:1))[0];
+        if(B){ hit={A,B}; break; } }
+      if(hit){ claim.add(hit.A); claim.add(hit.B);
+        r.push({soort:'deels', sleutel:String(hit.A.id), acc:hit.A.acc, partij:_dT(()=>recurKey(hit.A),'')||'', A:hit.A, V, B:hit.B, dubbel:cent(hit.B.amount), ym:String(hit.A.date).slice(0,7)}); continue; }
+      const vol=kand.find(A=>cent(A.amount)===cent(V.amount));
+      if(vol){ claim.add(vol); r.push({soort:'volledig', sleutel:String(vol.id), acc:vol.acc, partij:_dT(()=>recurKey(vol),'')||'', A:vol, V, B:null, dubbel:0, ym:String(vol.date).slice(0,7)}); }
+    } }
+  return r.sort((a,b)=>String(b.A.date).localeCompare(String(a.A.date)) || (a.sleutel<b.sleutel?-1:1)); }
+/* de scope is `vorautBron()`: de telbare boekingen zonder de eigen uitkomst van deze poort, anders verdwijnt een bevestigd geval uit
+   de lijst en is het niet terug te draaien (v293) */
+function vorautPatroon(){ const g=_dataGen; if(_vpMemo && _vpMemo.g===g) return _vpMemo.r;
+  let r=[]; try{ r=vorautPatroonKern(vorautBron(), true); }catch(_){ r=[]; }
+  _vpMemo={g, r}; return r; }
+/* DE KANDIDATEN: de gevallen 'deels' waarin A en B uitgaven zijn en V geen interne boeking. Een interne vorm (een Geldmaat-drietal)
+   heeft deze vorm om een andere reden (v288). Zonder keuze telt alles mee: de kant die TE VEEL telt is zichtbaar (v168). */
 function vorautKandidaten(){
   const isUitgave=t=>{ try{ const c=CATS[catOf(t)]; return !!(c && c.type==='expense'); }catch(_){ return false; } };
-  let rij=[];
-  try{ rij=vorautDrietallen(vorautBron().filter(isUitgave)); }catch(_){ return []; }
   const P=(typeof SET!=='undefined'&&SET.vorautPaar)||{};
-  const uit=[];
-  for(const r of rij){
-    if(String(r.vorm).charAt(0)!=='3') continue;
-    const D=vorautDelen(r);
-    /* DEZE GUARD KAN VANUIT DE HUIDIGE STAND NIET VALLEN, en dat staat erbij in plaats van dat hij weg
-       gaat (v284): vorm 3 BETEKENT dat er een terugboeking en een tweede afschrijving zijn, dus hij is
-       per constructie waar zolang alleen vorm 3 wordt voorgelegd. Een sabotage erop blijft daarom groen
-       (meetles r: het geval valt al op een andere eis). Hij blijft staan als vangnet voor een ronde die
-       vorm 1 erbij zou halen, want daar is `bij` null en zou de kaart eronder gooien. De EIGENSCHAP dat
-       elke kandidaat drie regels draagt is apart getoetst. */
-    if(!D.terug || !D.bij) continue;
-    const k=vorautSleutel(r); if(!k) continue;
-    uit.push({sleutel:k, voor:r.t, terug:D.terug, bij:D.bij, echt:r.echt, keuze:P[k]||null});
-  }
-  uit.sort((a,b)=>String(b.voor.date).localeCompare(String(a.voor.date)) || (a.sleutel<b.sleutel?-1:1));
-  return uit;
-}
+  return vorautPatroon().filter(g=>g.soort==='deels' && isUitgave(g.A) && isUitgave(g.B) && catOf(g.V)!=='intern')
+    .map(g=>({sleutel:g.sleutel, voor:g.A, terug:g.V, bij:g.B, echt:g.dubbel, partij:g.partij, acc:g.acc, keuze:P[g.sleutel]||null})); }
+/* ===== v457: DE VRAAG (soort 3) EN HET ZELF HERSTELLEN (soort 1) =====
+   Per partij: na VORAUT_AUTO_JA (3) keer Ja zonder een Nee herstelt Minder het patroon bij die partij voortaan zelf. Het staat in
+   "Wat Minder van jou weet" (groep Voorautorisaties, bron "door Minder hersteld") en in de log (SET.vorautLog), en is per geval terug
+   te draaien. Terugdraaien van een geval dat Minder herstelde telt als Nee: dan herstelt Minder bij die partij niets meer zelf.
+   Een antwoord staat in SET.vorautPaar[A.id]={weg, op, bron, partij}, de bron van de poort `vorautWeg()`. */
+/* blok 20: per maand van A het aantal gevallen en het bedrag (B) dat open staat, door jou bevestigd is of door Minder hersteld */
+function vorautControleRegels(){ const K=vorautKandidaten(), per={}, c2=x=>(Math.round((+x||0)*100)/100).toFixed(2);
+  for(const k of K){ const ym=String(k.voor.date).slice(0,7), o=per[ym]=per[ym]||{open:[0,0], bev:[0,0], zelf:[0,0], nee:[0,0]}, b=k.echt/100;
+    const s=!k.keuze?'open':k.keuze.bron==='minder'?'zelf':(Array.isArray(k.keuze.weg)&&k.keuze.weg.length?'bev':'nee'); o[s][0]++; o[s][1]+=b; }
+  const L=[`  VOORAUTORISATIE (v457): ${K.length} geval(len) A − V = B onder je uitgaven${K.length?' · per maand: open · bevestigd · zelf hersteld · nee (aantal en bedrag B)':''}`];
+  for(const ym of Object.keys(per).sort()){ const o=per[ym]; L.push(`    ${ym}  open ${o.open[0]} (${c2(o.open[1])}) · bevestigd ${o.bev[0]} (${c2(o.bev[1])}) · zelf hersteld ${o.zelf[0]} (${c2(o.zelf[1])}) · nee ${o.nee[0]} (${c2(o.nee[1])})`); }
+  if(K.length){ const open=K.filter(k=>!k.keuze); L.push(`    CONTROLE: open telt dubbel ${c2(open.reduce((a,k)=>a+k.echt/100,0))} · bevestigd en zelf hersteld tellen alleen B · samen ${K.length} = ${Object.values(per).reduce((a,o)=>a+o.open[0]+o.bev[0]+o.zelf[0]+o.nee[0],0)} → ${K.length===Object.values(per).reduce((a,o)=>a+o.open[0]+o.bev[0]+o.zelf[0]+o.nee[0],0)?'klopt':'VERSCHILT'}`); }
+  return L; }
+function vorautTelling(){ const P=SET.vorautPaar||{}, per={}, kp={};
+  for(const g of vorautPatroon()) kp[g.sleutel]=g.partij;
+  for(const [k,e] of Object.entries(P)){ if(!e || e.bron==='minder') continue; const p=e.partij||kp[k]; if(!p) continue;
+    const o=per[p]=per[p]||{ja:0, nee:0}; if(Array.isArray(e.weg) && e.weg.length) o.ja++; else o.nee++; }
+  return per; }
+function vorautAutoActief(p){ const o=vorautTelling()[p]; return !!(o && o.ja>=VORAUT_AUTO_JA && !o.nee); }
+function vorautAutoHerstel(){ let n=0; const T=vorautTelling();
+  for(const K of vorautKandidaten()){ if(K.keuze) continue; const o=T[K.partij]; if(!(o && o.ja>=VORAUT_AUTO_JA && !o.nee)) continue;
+    SET.vorautPaar=SET.vorautPaar||{};
+    SET.vorautPaar[K.sleutel]={weg:[String(K.voor.id), String(K.terug.id)], op:vandaagYMD(), bron:'minder', partij:K.partij, grond:`${o.ja}x ja, geen nee`};
+    (SET.vorautLog=SET.vorautLog||[]).push({op:vandaagYMD(), actie:'hersteld', sleutel:K.sleutel, partij:K.partij, datum:K.voor.date, a:-K.voor.amount, v:K.terug.amount, b:-K.bij.amount});
+    n++; }
+  if(n) save(); return n; }
+function vorautVragen(){ return vorautKandidaten().filter(K=>!K.keuze && !vorautAutoActief(K.partij)).map(K=>({soort:'voraut', qkey:'voraut|'+K.sleutel, t:K.voor, ids:[String(K.terug.id), String(K.bij.id)], K,
+  partij:benoemPartij(K.voor), bedrag:Math.abs(K.voor.amount), datum:K.voor.date})); }
+function vorautAntw(sleutel, ja){ const K=vorautKandidaten().find(x=>x.sleutel===sleutel); if(!K || K.keuze) return;   // opnieuw gelezen (v319)
+  const herstel=kennisSnap(), naam=benoemPartij(K.voor);
+  SET.vorautPaar=SET.vorautPaar||{};
+  SET.vorautPaar[sleutel]={weg:(+ja?[String(K.voor.id), String(K.terug.id)]:[]), op:vandaagYMD(), bron:'jij', partij:K.partij};
+  save(); try{ buildAccMeta(); }catch(_){} const n=vorautAutoHerstel();
+  keuzeKlaar(`${naam}: ${+ja?'voorautorisatie, telt niet mee':'drie echte boekingen'}${n||vorautAutoActief(K.partij)?` · Minder herstelt dit voortaan zelf bij ${naam}`:''}`, herstel); }
+/* terugdraaien: een antwoord van jou gaat weg (de vraag staat weer open); een herstel door Minder wordt een Nee van jou */
+function vorautTerugKern(sleutel){ const e=(SET.vorautPaar||{})[sleutel]; if(!e) return false;
+  if(e.bron==='minder'){ SET.vorautPaar[sleutel]={weg:[], op:vandaagYMD(), bron:'jij', partij:e.partij||'', terugVan:'minder'};
+    (SET.vorautLog=SET.vorautLog||[]).push({op:vandaagYMD(), actie:'teruggedraaid', sleutel, partij:e.partij||''}); }
+  else delete SET.vorautPaar[sleutel];
+  return true; }
 /* DE POORT-LEZER leest de VLAG en niet de vorm: de vorm is een kandidaat en de vlag is jouw keuze.
    Zonder vlag telt alles gewoon mee, en dat is de kant die TE VEEL telt in plaats van te weinig (v168):
    zichtbaar, en niet stil verdwenen. */
@@ -26250,6 +26315,7 @@ function gegevensVragen(){ const out=[];
   for(const v of loanVragen()) out.push(Object.assign({soort:'lening', qkey:'lening|'+v.t.id, bedrag:Math.abs(v.t.amount), datum:v.t.date}, v));
   for(const v of loanRestVragen()) out.push(Object.assign({soort:'restant', qkey:'restant|'+v.l.id}, v));   // v423
   try{ out.push(...kwijtVragen()); }catch(_){}   // v456 punt 2: een betaling na een kwijtgescholden lening
+  try{ out.push(...vorautVragen()); }catch(_){}   // v457 punt 7: een voorautorisatie met vrijgave en betaling
   for(const v of postNaStopVragen()) out.push(Object.assign({soort:'poststop', qkey:'poststop|'+v.key, datum:v.dag}, v));   // v422
   for(const v of uitResVragen()) out.push(Object.assign({soort:'uitres', qkey:'uitres|'+v.key}, v));   // v429: tot v428 in Let op
   for(const v of vastAfgelopenVragen()) out.push(Object.assign({soort:'vastafgelopen', qkey:'vastafgelopen|'+v.key, datum:v.laatste}, v));   // v431
@@ -26262,11 +26328,11 @@ function gegevensVragen(){ const out=[];
      meer; een Tikkie krijgt de Tikkie-vraag en niet ook "wat was dit?"; en een bedrag dat dezelfde dag even groot terugkomt van
      dezelfde persoon (kennisTerugZelfdeDag()) vraagt niets, aan geen van beide kanten. */
   const gedekt=new Set(); for(const E of Object.values(SET.kennis||{})) if(E && E.tx) for(const id of (Array.isArray(E.tx)?E.tx:Object.keys(E.tx))) gedekt.add(id);
-  const voor=q=>q.soort==='tikkie'?0:1, gezien=new Set(), o=[];
+  const voor=q=>q.soort==='voraut'?-1:q.soort==='tikkie'?0:1, gezien=new Set(), o=[];   // v457: de voorautorisatie eerst, hij claimt drie boekingen
   for(const q of out.slice().sort((a,b)=>voor(a)-voor(b))){ const t=q.t; if(t && t.id){
       if(gezien.has(t.id) || kennisTerugZelfdeDag(t)) continue;
       if(gedekt.has(t.id) && !['lening','restant','poststop'].includes(q.soort) && !(q.soort==='benoem' && q.laag==='a')) continue;
-      gezien.add(t.id); }
+      gezien.add(t.id); for(const i of (q.ids||[])) gezien.add(i); }
     o.push(q); }
   return out.filter(q=>o.includes(q)); }
 /* v427: dezelfde persoon, dezelfde dag, hetzelfde bedrag de andere kant op: dat is heen en terug, geen vraag waard. */
@@ -26319,7 +26385,7 @@ function benoemSuggesties(t){ const s=`${t.name||''} ${t.desc||''}`, o=[];
   for(const [re,L] of BENOEM_PARTIJ_CAT) if(re.test(s)) for(const l of L) if(!o.includes(l)) o.push(l);
   if(!o.length){ const c=catOf(t); if(CATS[c] && CATS[c].type==='expense' && !BENOEM_CAT_GEEN.has(c) && !geenNorm(c)) o.push(CATS[c].name); }
   return benoemSoort(t)==='overig'?o:[]; }
-const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'voorstel, door jou bevestigd', jij:'door jou'};   // v425: 'voorstel, door jou bevestigd'
+const BENOEM_BRON={omschrijving:'uit de omschrijving', bevestigd:'voorstel, door jou bevestigd', jij:'door jou', minder:'door Minder hersteld'};   // v457: minder   // v425: 'voorstel, door jou bevestigd'
 function benoemPartij(t){ return titleCase(cleanMerch(t&&t.name)||(t&&t.name)||'onbekend'); }
 function benoemSoort(t){ const s=`${t.name||''} ${t.desc||''}`; return BENOEM_SOORTEN.gemeente.re.test(s)?'gemeente':BENOEM_SOORTEN.overheid.re.test(s)?'overheid':'overig'; }
 function benoemKandidaat(t){
@@ -26428,7 +26494,7 @@ function benoemVraagRij(q){ const t=q.t, id=esc(t.id), K=(window._benoemKeuze||{
 const KENNIS_BRON=BENOEM_BRON;   // v425: een woordenlijst voor de bron, ook voor v424
 const KENNIS_MIN=100, KENNIS_VAST_MIN=10, KENNIS_TIKKIE_MIN=10, KENNIS_CONTANT_DAGEN=3, KENNIS_VERVANGER_MAANDEN=2;
 const KENNIS_MAX_OPEN=3, KENNIS_LATER_DAGEN=7, KENNIS_LATER_MAX=2, KENNIS_VAST_NIEUW_DAGEN=120, KENNIS_VAST_START_DAGEN=60;
-const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['opname','Contant'],['oorzaak','Oorzaken (Grip)']];
+const KENNIS_GROEPEN=[['inkomen','Inkomen en eigen bedrijf'],['woning','Woning'],['leningen','Leningen'],['vast','Vaste lasten'],['tikkie','Tikkie-personen'],['eenmalig','Eenmalige uitgaven'],['opname','Contant'],['voraut','Voorautorisaties'],['oorzaak','Oorzaken (Grip)']];
 const KENNIS_UIT=[['lening','Lening, verwacht terug'],['uitgave','Uitgave'],['gift','Gift']];
 const KENNIS_IN=[['terug','Terugbetaling'],['teruggave','Teruggave'],['gift','Gift'],['verkoop','Verkoop'],['extra','Extra inkomen'],['bedrijf','Van mijn eigen bedrijf']];
 const KENNIS_IN_SUB={terug:'van een lening of Tikkie', teruggave:'belasting, verzekering, winkel', extra:'bonus, vakantiegeld'};
@@ -26859,6 +26925,11 @@ function kennisLijst(){ const o=[];
   for(const [k,v] of Object.entries(SET.fixOvrM||{})){ if(v!=='fixed' || kennisGet('vast|'+k)) continue;   /* met een antwoord (wat het is) staat hij daar */ o.push({id:'f:'+k, groep:'vast', partij:kennisNaamVan(k), wat:'Vast per maand', bron:'jij', op:'', soort:'vastm', key:k}); }
   for(const [id,v] of Object.entries(SET.eenmaligOk||{})){ const t=TX.find(x=>x.id===id); if(!t) continue;
     o.push({id:'e:'+id, groep:'eenmalig', partij:benoemPartij(t), wat:`Klopt, eenmalig (${euro0(-t.amount)} op ${dagKort(t.date)})`, bron:'jij', op:typeof v==='string'?v:'', soort:'eenmaligok', key:id}); }
+  /* v457: elke vastgelegde voorautorisatie, ook wat Minder zelf herstelde; Vergeten draait hem per geval terug */
+  for(const [k,e] of Object.entries(SET.vorautPaar||{})){ if(!e) continue; const t=TX.find(x=>String(x.id)===k); if(!t) continue;
+    const weg=Array.isArray(e.weg) && e.weg.length, v=weg?TX.find(x=>String(x.id)===String(e.weg[1])):null;
+    o.push({id:'v:'+k, groep:'voraut', partij:benoemPartij(t), wat:weg?`Voorautorisatie ${euro(-t.amount)}${v?` en vrijgave ${euro(-v.amount)}`:''} op ${dagKort(t.date)} tellen niet mee`:`Drie echte boekingen (${euro(-t.amount)} op ${dagKort(t.date)})${e.terugVan==='minder'?', teruggedraaid':''}`,
+      bron:e.bron==='minder'?'minder':'jij', op:e.op||'', soort:'voraut', key:k}); }
   return o; }
 /* de kennis bij een boeking (de boekingssheet): de antwoorden die die boeking of zijn partij raken */
 function kennisVoorTx(t){ if(!t) return []; const o=[], p=benoemPartij(t).toLowerCase(), rk=recurKey(t);
@@ -26881,6 +26952,7 @@ function kennisVergeetKern(id){ const [s, ...r]=id.split(':'), k=r.join(':');
     for(const [tid,lid] of Object.entries(F.loanTerug||{})){ const l=loans().find(x=>x.id===lid); if(l){ const b=(l.terugBedrag||{})[tid]||0; l.open=Math.round(((+l.open||0)+b)*100)/100; l.terugTx=(l.terugTx||[]).filter(x=>x!==tid); if(l.terugBedrag) delete l.terugBedrag[tid]; } delete OVR[tid]; }
     delete SET.kennis[k]; if(SET.kennisLater) delete SET.kennisLater[k]; return; }
   if(s==='f'){ if(SET.fixOvrM) delete SET.fixOvrM[k]; return; }
+  if(s==='v'){ vorautTerugKern(k); return; }   // v457
   if(s==='e'){ if(SET.eenmaligOk) delete SET.eenmaligOk[k]; return; } }
 /* de boekingen die een kennisregel raakt, voor het gevolg per maand */
 function kennisTxVan(id){ const [s, ...r]=id.split(':'), k=r.join(':');
@@ -26893,6 +26965,7 @@ function kennisTxVan(id){ const [s, ...r]=id.split(':'), k=r.join(':');
     if(E.soort==='benoem'){ const p=k.slice(7).split('|')[0]; ids=ids.concat(TX.filter(t=>benoemPartij(t).toLowerCase()===p).map(t=>t.id)); }
     return [...new Set(ids)]; }
   if(s==='f') return TX.filter(t=>recurKey(t)===k).map(t=>t.id);
+  if(s==='v'){ const e=(SET.vorautPaar||{})[k]||{}; return [k, ...((e.weg)||[])]; }   // v457
   if(s==='e') return [k]; return []; }
 /* het gevolg van Vergeten, in het geheugen doorgerekend en teruggezet zonder save(): per maand de uitgaven en het inkomen */
 function kennisVergeetGevolg(id){ const ids=new Set(kennisTxVan(id)); const mnd=[...new Set(TX.filter(t=>ids.has(t.id)).map(t=>t.date.slice(0,7)))].sort();
@@ -26919,6 +26992,7 @@ function kennisWijzig(id){ const [s, ...r]=id.split(':'), k=r.join(':');
     const q=gegevensVragen().find(v=>v.qkey===k || (k.startsWith('benoem|') && v.soort==='benoem' && 'benoem|'+v.key===k));
     if(q) openGegevensVragen(q.qkey); else openKennis(); return; }
   if(s==='f'){ openPostStatus(k); return; }
+  if(s==='v'){ openVoraut(); return; }   // v457
   if(s==='e'){ openSheet(k); } }
 function openKennisVergeet(id){ const x=kennisLijst().find(e=>e.id===id); if(!x){ openKennis(); return; }
   let G=[]; try{ G=kennisVergeetGevolg(id); }catch(_){}
@@ -26988,6 +27062,10 @@ function kennisVraagRij(q){ const kk=s=>esc(String(s)).replace(/'/g,"\\'"), id=q
     else if(K && K.keuze==='deel'){ const C=kennisCats();
       body=`<div class="small" data-kennisstap style="margin-top:6px">Jouw deel van gedeelde kosten \u00b7 welke categorie?</div><div class="chips" style="margin-top:6px">${C.map(k=>chip(`kennisTikkieZet('${id}','deel','${k}')`, CATS[k].name, `data-kenniscat="${k}"`)).join('')}</div>`; }
     else body=`<div class="chips" style="margin-top:6px">${chip(`kennisTikkieKies('${id}','deel')`,'Jouw deel van gedeelde kosten','data-kennisoptie="deel"')}${chip(`kennisTikkieKies('${id}','lening')`,'Lening','data-kennisoptie="lening"')}</div>${anders(`(v=>kennisTikkieZet('${id}','anders',null,v))`)}`; }
+  if(q.soort==='voraut'){ const K=q.K, cn=(CATS[catOf(K.bij)]||{}).name||'deze categorie', nu=-K.voor.amount-K.terug.amount-K.bij.amount;   // v457 punt 7
+    kop=`Zijn ${euro(-K.voor.amount)} en ${euro(-K.terug.amount)} de voorautorisatie van je betaling van ${euro(-K.bij.amount)} bij ${esc(q.partij)}?`;
+    sub=`${esc(dagKort(K.voor.date))} \u00b7 ${esc(acctNiceName(K.voor.acc))} \u00b7 ${esc(cn)} telt deze drie nu als ${euro(nu)}; bij Ja tellen de eerste twee niet mee en blijft ${euro(-K.bij.amount)} (ze blijven in je transacties)`;
+    body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`vorautAntw('${id}',1)`,'Ja, die twee tellen niet mee','data-vorautoptie="ja"')}${knop(`vorautAntw('${id}',0)`,'Nee','data-vorautoptie="nee"')}</div>`; }
   if(q.soort==='kwijt'){ kop=`${euro(q.bedrag)} van ${esc(q.partij)} · ${esc(dagKort(q.datum))} · Is dit de terugbetaling van de lening die je kwijtschold?`;   // v456 punt 2
     sub=`je leende ${esc(q.l.naam||'?')} ${loanC2(loanStand(q.l).bedrag)} op ${esc(dagKort(q.l.datum))} ${String(q.l.datum||'').slice(0,4)}, en ${loanC2(+q.l.nietTerug||0)} komt niet meer terug (een uitgave in ${esc(maandNaamKort(String(q.l.datum||'').slice(0,7)))}); bij Ja telt deze betaling als ontvangst in ${esc(maandNaamKort(q.datum.slice(0,7)))}, onder Uitgeleend, en ${esc(maandNaamKort(String(q.l.datum||'').slice(0,7)))} blijft zoals hij is`;
     body=`<div class="row" style="gap:8px;margin-top:6px">${knop(`kwijtZet('${id}','ja')`,'Ja','data-kwijtoptie="ja"')}${knop(`kwijtZet('${id}','nee')`,'Nee, iets anders','data-kwijtoptie="nee"')}</div>`; }
@@ -27014,7 +27092,7 @@ function openGegevensVragen(focus){
   if(!Q.length){ if(focus && focus!=='alle'){ window._gegevensFocus=''; return openGegevensVragen(); } closeSheet(); return; }
   const wacht=focus?0:alleQ.length-Q.length;
   const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
-    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname','buiten','kwijt'].includes(q.soort)) return kennisVraagRij(q);   // v425, v456 kwijt
+    if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname','buiten','kwijt','voraut'].includes(q.soort)) return kennisVraagRij(q);   // v425, v456 kwijt, v457 voraut
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='saldag'){ const dq=esc(q.datum);   // v435
       return `<div data-gegevensvraag="saldag" data-saldag="${dq}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Salaris kwam op ${esc(dagKort(q.datum))} in plaats van ${esc(dagKort(q.verwacht))}. Klopt de regel nog?</div>
@@ -27238,7 +27316,7 @@ function openVoraut(){
     const weg=Array.isArray(x.keuze.weg) && x.keuze.weg.length;
     return `<div class="card" style="margin-bottom:10px">
       <div class="small muted">${esc(dubbelParenDag(x.voor.date))} \u00b7 ${esc(acctNiceName(x.voor.acc))}</div>
-      <div class="small" style="margin-top:6px">${weg?`De reservering van ${euro(x.voor.amount)} en de vrijgave tellen${op?' sinds '+esc(op):''} niet meer mee. ${euro(x.bij.amount)} blijft staan.`:`Drie echte boekingen${op?', vastgelegd op '+esc(op):''}. Ze tellen alle drie mee.`}</div>
+      <div class="small" style="margin-top:6px"${x.keuze.bron==='minder'?' data-vorautminder':''}>${x.keuze.bron==='minder'?`Door Minder hersteld (${esc(x.keuze.grond||'3x ja')} bij deze partij). `:''}${weg?`De reservering van ${euro(x.voor.amount)} en de vrijgave tellen${op?' sinds '+esc(op):''} niet meer mee. ${euro(x.bij.amount)} blijft staan.`:`Drie echte boekingen${op?', vastgelegd op '+esc(op):''}. Ze tellen alle drie mee.`}</div>
       <button class="btn sec" style="margin-top:8px" onclick="vorautTerug('${esc(String(x.sleutel).replace(/'/g,"\\'"))}')">Terugdraaien</button>
     </div>`;
   };
@@ -27248,7 +27326,8 @@ function openVoraut(){
       <div class="muted small">Jij beslist per geval. Er wordt niets weggegooid.</div></div>
     <div class="small muted" style="margin:0 2px 12px;line-height:1.5">Bij tanken aan de pomp houdt een bank eerst een vast bedrag vast, geeft daarna het verschil vrij, en boekt wat je echt tankte apart. Staan die drie er alle drie als boeking, dan telt die tankbeurt twee keer. Kijk in je bank-app welke van de drie daar staan. Ziet het er alleen zo uit maar zijn het drie echte betalingen, dan hoort er niets weg, en daarom kiest de app hier niets.</div>
     ${open.length?open.map(vorautKaart).join(''):'<div class="small muted" style="margin:0 2px 12px">Er staat geen geval meer open.</div>'}
-    ${klaar.length?`<div class="small muted" style="margin:14px 2px 8px;font-weight:600">Al beslist</div>${klaar.map(klaarKaart).join('')}`:''}`;
+    ${klaar.length?`<div class="small muted" style="margin:14px 2px 8px;font-weight:600">Al beslist</div>${klaar.map(klaarKaart).join('')}`:''}
+    ${(SET.vorautLog||[]).length?`<div class="small muted" style="margin:14px 2px 6px;font-weight:600">Log</div>${(SET.vorautLog||[]).slice(-10).reverse().map(g=>`<div class="small" data-vorautlog style="padding:3px 2px;color:var(--mut2)">${esc(dagKort(g.op))} \u00b7 ${esc(titleCase(cleanMerch(g.partij)||g.partij||'?'))} \u00b7 ${g.actie==='hersteld'?`door Minder hersteld: ${euro(g.a)} en ${euro(-g.v)} tellen niet mee, ${euro(g.b)} blijft (${esc(dagKort(g.datum))})`:'teruggedraaid, telt als nee'}</div>`).join('')}`:''}`;
   showSheetBg();
 }
 /* DE SCHRIJVER. De reservering EN de vrijgave vallen samen weg, en dat is een handeling en geen twee:
@@ -27262,13 +27341,12 @@ function vorautZet(sleutel, echt){
   let K=null; try{ K=vorautKandidaten().find(x=>x.sleutel===sleutel); }catch(_){ return; }
   if(!K || K.keuze) return;
   SET.vorautPaar=SET.vorautPaar||{};
-  SET.vorautPaar[sleutel]={weg: (+echt? [String(K.voor.id), String(K.terug.id)] : []), op:vandaagYMD()};
-  save(); buildAccMeta(); render(); openVoraut();
+  SET.vorautPaar[sleutel]={weg: (+echt? [String(K.voor.id), String(K.terug.id)] : []), op:vandaagYMD(), bron:'jij', partij:K.partij};   // v457: bron en partij voor het zelf herstellen
+  save(); buildAccMeta(); try{ vorautAutoHerstel(); }catch(_){} render(); openVoraut();
   toast(`${ICON('check')} ${+echt?'Vastgelegd als reservering':'Vastgelegd als drie boekingen'}`);
 }
 function vorautTerug(sleutel){
-  const e=(SET.vorautPaar||{})[sleutel]; if(!e) return;
-  delete SET.vorautPaar[sleutel];
+  if(!vorautTerugKern(sleutel)) return;   // v457: een herstel door Minder wordt een Nee van jou
   save(); buildAccMeta(); render(); openVoraut();
   toast('Teruggedraaid');
 }
@@ -31832,6 +31910,8 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
   /* v456 punt 1: het potje Contant dat deze maand ontstaat telt deze maand niet mee (niet in het budget, niet in de forecast) */
   { const H=V&&!V.onbekend?V.contantLater:null;
     L.push(W.later?`  CONTANT LATER (v456): ${W.later.naam} ${euro0(W.later.bud)} · ${W.later.label} · deze maand niet in het budget en niet in de forecast${H?` (al uit in de categorie: ${euro0(H.weg)}, telt niet mee)`:''}`:'  CONTANT LATER (v456): geen (geen potje Contant dat deze maand ontstaat)'); }
+  /* v457 punt 7: de voorautorisaties per maand, open / bevestigd / zelf hersteld */
+  try{ L.push(...vorautControleRegels()); }catch(e){ L.push('  VOORAUTORISATIE (v457): FOUT '+e.message); }
   for(const x of W.rijen) L.push(`    ${dag(x.op)} · ${x.keuze} · ${x.naam} ${x.d>0?'+':''}${euro0(x.d)}`);
   const BV=budgetVanaf(nextYM(m)), nxM=ymFull(nextYM(m)).split(' ')[0];
   const herB=W.later?W.later.bud:0;
@@ -32589,6 +32669,7 @@ const DIAG_BLOKKEN=[
   {titel:'Laten staan per rekening: wat er per betaalrekening nodig is tot je volgende salaris, en opzij', lees:diagRekVerdeling},
   {titel:'gedeelde transactie-ids na categorize()', lees:diagGedeeldeIds},
   {titel:'heen en terug op dezelfde rekening met je eigen naam, per maand', lees:diagEigenParen},
+  {titel:'voorautorisatie, vrijgave en betaling op dezelfde rekening (A − V = B), per maand en per partij', lees:diagVorautPatroon},
 ];
 /* ===== GEDEELDE IDS NA categorize() (v451, alleen lezen) =====
    Elke import-route slaat een bestaande id over, dus via een import kan een id niet twee keer in TX komen. Wel bij het
@@ -32630,6 +32711,48 @@ function diagEigenParen(){
   const kant={intern:'intern', echt:'echte uitgave', lening:'lening'};
   for(const P of paren.slice(-10)){ const n=t=>titleCase(cleanMerch(t.name)||t.name||'?');
     L.push(`    ${P.a.date} ${r4(P.a.acc)} ${c2(P.v)} · soort ${P.soort} · af ${n(P.a)} [${(CATS[catOf(P.a)]||{}).name||catOf(P.a)}, ${kant[P.ka]}] · bij ${n(P.b)} [${(CATS[catOf(P.b)]||{}).name||catOf(P.b)}, ${kant[P.kb]}] · eigen naam in ${eigenNaamIn(P.a)&&eigenNaamIn(P.b)?'beide':eigenNaamIn(P.a)?'de afschrijving':'de bijschrijving'}`); }
+  return L; }
+/* ===== v457 punt 7: DE VOORAUTORISATIE GEMETEN (alleen lezen) =====
+   Over de hele historie: elk geval van het patroon van `vorautPatroon()` (dezelfde rekening, dezelfde partij, binnen VORAUT_DAGEN
+   dagen, A − V = B tot op de cent), per maand het aantal en het bedrag dat NU dubbel telt (B, zolang A en V meetellen), per partij,
+   en per bank of de drie regels als pending of als geboekt binnenkwamen. Ook de variant A = V (telt al nul) en, ter vergelijking,
+   wat de afleiding van v293 (14 dagen, alleen uitgaven) erover zei, en hoeveel gevallen er bij komen zonder de partij-eis. */
+function diagVorautPatroon(){
+  const c2=x=>(Math.round((+x||0)*100)/100).toFixed(2), r4=a=>'··'+String(a||'-').slice(-4), P=SET.vorautPaar||{};
+  const G=vorautPatroon(), D=G.filter(g=>g.soort==='deels'), Vol=G.filter(g=>g.soort==='volledig');
+  const kand=new Set(vorautKandidaten().map(k=>k.sleutel));
+  const stand=g=>{ const e=P[g.sleutel]; if(!kand.has(g.sleutel)) return 'geen vraag (geen uitgave of interne boeking)'; if(!e) return 'open';
+    if(e.bron==='minder') return 'zelf hersteld'; return Array.isArray(e.weg)&&e.weg.length?'bevestigd':'nee, drie echte boekingen'; };
+  const telt=g=>{ const s=stand(g); return s==='open' || s.startsWith('nee') || s.startsWith('geen'); };
+  const L=['VOORAUTORISATIE (v457) · alleen lezen · over de hele historie',
+    `  patroon: dezelfde rekening, dezelfde partij (recurKey), binnen ${VORAUT_DAGEN} dagen: afschrijving A, bijschrijving V, A − V = B, B een andere afschrijving bij die partij, tot op de cent`,
+    `  gevallen: ${D.length} met A − V = B · ${Vol.length} met A = V (vrijgave volledig, telt al nul)`];
+  if(!G.length){ L.push('  geen'); return L; }
+  const per={}; for(const g of D){ const o=per[g.ym]=per[g.ym]||{n:0, dubbel:0, opgelost:0}; o.n++; if(telt(g)) o.dubbel+=g.dubbel/100; else o.opgelost+=g.dubbel/100; }
+  L.push('  PER MAAND (A − V = B): aantal · telt nu dubbel · al opgelost');
+  for(const ym of Object.keys(per).sort()) L.push(`    ${ym}  ${per[ym].n} · ${c2(per[ym].dubbel)} · ${c2(per[ym].opgelost)}`);
+  L.push(`    samen: ${D.length} · ${c2(Object.values(per).reduce((a,o)=>a+o.dubbel,0))} · ${c2(Object.values(per).reduce((a,o)=>a+o.opgelost,0))}`);
+  const pp={}; for(const g of D){ const n=titleCase(cleanMerch(g.A.name)||g.A.name||g.partij||'?'), o=pp[n]=pp[n]||{n:0, dubbel:0, ja:0, nee:0, auto:0};
+    o.n++; if(telt(g)) o.dubbel+=g.dubbel/100; const s=stand(g); if(s==='bevestigd') o.ja++; else if(s.startsWith('nee')) o.nee++; else if(s==='zelf hersteld') o.auto++; }
+  L.push('  PER PARTIJ: aantal · telt nu dubbel · ja · nee · zelf hersteld');
+  for(const [n,o] of Object.entries(pp).sort((a,b)=>b[1].n-a[1].n)) L.push(`    ${n}: ${o.n} · ${c2(o.dubbel)} · ${o.ja} · ${o.nee} · ${o.auto}${o.ja>=VORAUT_AUTO_JA&&!o.nee?' · Minder herstelt hier zelf':''}`);
+  /* pending of geboekt, per bank: t.pending (overleeft de boot) en de bron */
+  const pb={}; for(const g of G) for(const t of [g.A, g.V, g.B].filter(Boolean)){ const b=(ACCMETA[t.acc]||{}).bank||'onbekend', o=pb[b]=pb[b]||{n:0, pend:0, src:new Set(), val:0};
+    o.n++; if(t.pending) o.pend++; o.src.add(t.src||'mt940'); if(t.valutaDatum) o.val++; }
+  L.push('  PENDING OF GEBOEKT (de regels van deze gevallen, per bank): regels · pending · geboekt · bron · met valutadatum');
+  for(const [b,o] of Object.entries(pb)) L.push(`    ${b}: ${o.n} · ${o.pend} · ${o.n-o.pend} · ${[...o.src].join('+')} · ${o.val}${o.pend?'':' · alle regels kwamen GEBOEKT binnen'}`);
+  /* v293 ter vergelijking: die zocht over 14 dagen alleen onder uitgaven, en op elke rekening */
+  let oud=new Set(); try{ const isU=t=>{ const c=CATS[catOf(t)]; return !!(c && c.type==='expense'); };
+    for(const r of vorautDrietallen(vorautBron().filter(isU))) if(String(r.vorm).charAt(0)==='3') oud.add(String(r.t.id)); }catch(_){}
+  L.push(`  de afleiding van v293 (14 dagen, alleen uitgaven) had hiervan ${D.filter(g=>oud.has(g.sleutel)).length} van ${D.length} als kandidaat`);
+  let zonder=[]; try{ zonder=vorautPatroonKern(vorautBron(), false).filter(g=>g.soort==='deels'); }catch(_){}
+  const metIds=new Set(D.map(g=>g.sleutel));
+  L.push(`  zonder de partij-eis (alleen dezelfde rekening): ${zonder.length} gevallen, waarvan ${zonder.filter(g=>!metIds.has(g.sleutel)).length} niet in de lijst hierboven (een andere partij-sleutel aan een van de kanten)`);
+  L.push(`  PER GEVAL (de laatste ${Math.min(G.length, DIAG_PAAR_MAX)}):`);
+  const cat=t=>(CATS[catOf(t)]||{}).name||catOf(t);
+  for(const g of G.slice(0, DIAG_PAAR_MAX)) L.push(`    ${g.A.date} ${r4(g.acc)} ${titleCase(cleanMerch(g.A.name)||g.A.name||'?')} · A ${c2(-g.A.amount)} [${cat(g.A)}${g.A.pending?', pending':''}] · V ${c2(g.V.amount)} op ${g.V.date} [${cat(g.V)}${g.V.pending?', pending':''}]`
+    +(g.B?` · B ${c2(-g.B.amount)} op ${g.B.date} [${cat(g.B)}${g.B.pending?', pending':''}] · ${stand(g)} · v293: ${oud.has(g.sleutel)?'kandidaat':'GEEN kandidaat'}`:' · A = V, telt al nul'));
+  if(G.length>DIAG_PAAR_MAX) L.push(`    ... en ${G.length-DIAG_PAAR_MAX} meer`);
   return L; }
 function diagGedeeldeIds(){
   const per=new Map(); for(const t of TX){ const k=String(t.id); if(!per.has(k)) per.set(k,[]); per.get(k).push(t); }
@@ -33178,6 +33301,7 @@ async function psd2Refresh(silent){
      v296: het OPHALEN staat nu in de lus hierboven; dit blijft de plek waar de snapshot landt, NA
      commitTx(), want die volgorde is wat blok 13 meet. */
   applyPending(pend);
+  try{ vorautAutoHerstel(); }catch(_){}   // v457: een nieuw geval bij een partij die Minder zelf herstelt
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
   if(!silent) psd2SyncToast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
@@ -33364,6 +33488,7 @@ async function psd2IngestSession(s){
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){}   // v456 punt 4
   const added=commitTx(allTx, balances);
   applyPending(pend);
+  try{ vorautAutoHerstel(); }catch(_){}   // v457: een nieuw geval bij een partij die Minder zelf herstelt
   curMonth=null; render();
   psd2SyncToast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
 }
@@ -34260,7 +34385,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(maandBudgetDeInleg()) save(); }catch(_){} try{ if(viaRegelMigreer()) save(); }catch(_){} try{ if(maandBudget437()) save(); }catch(_){} try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); try{ if(maandBudgetDeInleg()) save(); }catch(_){} try{ if(viaRegelMigreer()) save(); }catch(_){} try{ if(maandBudget437()) save(); }catch(_){} try{ if(!(SET.maandBudget||{})[thisYM()] && maandBudgetLogs(thisYM()).length && maandBudgetZorg(thisYM())) save(); }catch(_){} if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{eigenAutoMeldingCheck();}catch(_){} try{ if(salRegelZaai()) save(); }catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} try{vorautAutoHerstel();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
