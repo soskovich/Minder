@@ -113,7 +113,7 @@ test.describe('B3 · aansluiting per rekening', () => {
     await page.evaluate(() => diagOpen());
     const t = await page.locator('[data-aansl]').allInnerTexts();
     expect(t.length).toBe(2);
-    for (const r of t) expect(r).toContain('aug–okt: niet te meten, geen saldo · vanaf de volgende sync start');
+    for (const r of t) { expect(r).toContain('aug–okt: niet te meten, geen saldo · '); expect(r).toContain(' · vanaf de volgende sync start'); }   // v461: met de reden ertussen
   });
 });
 

@@ -337,7 +337,8 @@ test.describe('h · de bron kan niet uit elkaar lopen', () => {
       const volgende = HEADERS.find((x) => x.i > h.i);
       return CODE.slice(h.i, volgende ? volgende.i : CODE.length);
     };
-    for (const naam of ['totals', 'monthAgg', 'maandLiqBasis']) {   // v378: het lichaam van monthLiquidity() heet maandLiqBasis()
+    for (const naam of ['totals', 'monthAgg', 'maandLiqBasisKern']) {   // v461: het lichaam van maandLiqBasis() heet maandLiqBasisKern()
+      // v378: het lichaam van monthLiquidity() heet maandLiqBasis()
       expect(body(naam), `${naam}() hoort maandInkomen() te lezen`).toMatch(/maandInkomen\s*\(/);
     }
   });

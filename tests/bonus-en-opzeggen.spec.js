@@ -237,6 +237,6 @@ test.describe('B · opgezegd per 8 november', () => {
     /* scoreNotifs leest alleen de sleutels; de grens komt uit opzegGrens(). */
     const sn = src.slice(src.indexOf('function scoreNotifs('));
     expect(sn.slice(0, sn.indexOf('\nfunction ')).match(/SET\.fixDueExcl[^;]*/g)).toEqual(["SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k) && uitResKeuze(k)!=='reservering')"]);   // v413: na "uit reservering" geen melding
-    for (const f of ['function maandLiqBasis(', 'function liquidityDaily(', 'function accountShortfalls(', 'function potLagerGevolg(']) expect(sectieVan(src, f)).toContain('verwachtInMaand(');
+    for (const f of ['function maandLiqBasisKern(', 'function liquidityDaily(', 'function accountShortfalls(', 'function potLagerGevolg(']) expect(sectieVan(src, f)).toContain('verwachtInMaand(');
   });
 });
