@@ -153,7 +153,9 @@ test.describe('4 · wanneer het zelf herstellen draait', () => {
     const r = await page.evaluate((k) => ({ e: ((SET.vorautPaar || {})[k] || {}).bron || null, log: (SET.vorautLog || []).filter((g) => g.sleutel === k).map((g) => g.actie) }), k);
     expect(r).toEqual({ e: 'minder', log: ['hersteld'] });
   });
-  test('g. TOT DEEL B: het draait nu ook bij het opstarten (gemeld; in deel B leest het opstarten de opgeslagen uitkomst)', async ({ page }) => {
+  /* v460 (deel B, B1): het opstarten leest de OPGESLAGEN uitkomst; alleen het eerste opstarten van een nieuwe versie draait de controles
+     (en daarmee het zelf herstellen) een keer. Tot v460 draaide het herstel bij elk opstarten (gemeld in v458). */
+  test('g. deel B: gewoon opstarten herstelt niets; het eerste opstarten van een nieuwe versie wel, een keer', async ({ page }) => {
     await boot(page);
     /* drie keer Ja opgeslagen ZONDER dat het herstel draaide, het vierde geval open; dan opnieuw opstarten */
     const k = await page.evaluate(() => { const id = (d, a) => String(TX.find((t) => t.date === d && t.amount === a).id);
@@ -164,7 +166,16 @@ test.describe('4 · wanneer het zelf herstellen draait', () => {
     expect(await page.evaluate((k) => (SET.vorautPaar[k] || {}).bron || null, k)).toBeNull();
     await page.reload();
     await page.waitForFunction(() => typeof vorautPatroon === 'function');
-    expect(await page.evaluate((k) => ((SET.vorautPaar || {})[k] || {}).bron || null, k)).toBe('minder');
+    /* dezelfde versie: de opgeslagen uitkomst, geen run */
+    expect(await page.evaluate((k) => ((SET.vorautPaar || {})[k] || {}).bron || null, k)).toBeNull();
+    const run1 = await page.evaluate(() => SET.controles.run.tijd);
+    /* een nieuwe versie: een run bij het opstarten, en het herstel gebeurt */
+    await page.evaluate(() => { SET.controles.versie = 'een-oudere-versie'; save(); });
+    await page.reload();
+    await page.waitForFunction(() => typeof vorautPatroon === 'function');
+    const r = await page.evaluate((k) => ({ bron: ((SET.vorautPaar || {})[k] || {}).bron || null, run: SET.controles.run.bron, versie: SET.controles.versie === appVersie() }), k);
+    expect(r).toEqual({ bron: 'minder', run: 'versie', versie: true });
+    expect(await page.evaluate(() => SET.controles.run.tijd)).toBeGreaterThanOrEqual(run1);
   });
 });
 
