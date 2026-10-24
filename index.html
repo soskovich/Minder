@@ -978,7 +978,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} if(a||b||c||d||e) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} if(a||b||c||d||e) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -3505,7 +3505,7 @@ function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]|
    onderaan Totaal, dezelfde totalBalance().sum als "Totaal saldo" op Home. Een tik op een rekening opent die
    rekening (acctRenameOpen()); "naam aanpassen" per rij is weg. Een rekening met een oud saldo zegt dat bij zichzelf. */
 function openBalances(){
-  const tb=totalBalance(); const contant=tb.contant;
+  const tb=totalBalance(); const contant=tb.contant, CR=contantRegelData();   // v464: contant als eigen regel, het totaal is de bank
   const rows=OWN.filter(rekActief).map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null).sort((x,y)=>y.b-x.b);
   const bank=rows.reduce((s,r)=>s+r.b,0);
   let ach={}; try{ for(const x of saldoAchter()) ach[x.acc]=x; }catch(_){}
@@ -3520,17 +3520,18 @@ function openBalances(){
   if(contant!=null){
     const oud=contantOuderdom();
     const wanneer=oud==null?'':(oud===0?'geteld vandaag':(oud===1?'geteld gisteren':`geteld ${oud} dagen geleden`));
-    cRij=kop('Contant',contant,'data-saldokop="kas"')+`<div class="tx" data-saldorij="${Math.round(contant*100)}" data-contantrij style="cursor:pointer" onclick="closeSheet();contantTellen()"><div class="ava" style="background:var(--card2)">${ICON('coins')}</div>
-      <div class="info"><div class="nm">Contant</div><div class="cat">${wanneer?wanneer+' \u00b7 ':''}<span style="color:var(--teal);font-weight:600">bijwerken \u203a</span></div></div>
-      <div class="amt ${contant<0?'neg':'pos'}">${euro(contant)}</div></div>`;
+    const cb=CR?CR.bedrag:contant;
+    cRij=kop('Contant'+(CR&&CR.schatting?' \u00b7 schatting':''),cb,'data-saldokop="kas"')+`<div class="tx" data-contantsaldo="${Math.round(cb*100)}" data-contantrij="${CR&&CR.schatting?'schatting':'geteld'}" style="cursor:pointer" onclick="closeSheet();contantTellen()"><div class="ava" style="background:var(--card2)">${ICON('coins')}</div>
+      <div class="info"><div class="nm">Contant</div><div class="cat">${esc(CR?contantRegelTekst(CR).replace(/^contant [^\u00b7]*\u00b7 /,''):wanneer)} \u00b7 <span style="color:var(--teal);font-weight:600">bijwerken \u203a</span></div></div>
+      <div class="amt ${cb<0?'neg':'pos'}">${CR&&CR.schatting?'\u00b1 ':''}${euro(cb)}</div></div>`;
   }
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('coins')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Saldo nu</div>
-      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0" data-saldonukop="${Math.round(tb.sum*100)}">${euro(tb.sum)}</div>
-      <div class="muted small">${contant!=null?`${euro(bank)} bank + ${euro(contant)} contant`:`${rows.length} rekening${rows.length===1?'':'en'}`}${tb.missing>0?` \u00b7 ${tb.missing} zonder saldo`:''}</div></div>
+      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0" data-saldonukop="${Math.round(bank*100)}">${euro(bank)}</div>
+      <div class="muted small">${rows.length} rekening${rows.length===1?'':'en'}${tb.missing>0?` \u00b7 ${tb.missing} zonder saldo`:''}${CR?`<br><span data-saldonucontant>${esc(contantRegelTekst(CR))}</span>`:''}</div></div>
     ${rows.length?kop(`Bank \u00b7 ${rows.length} rekening${rows.length===1?'':'en'}`,bank,'data-saldokop="bank"')+rows.map(rij).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
+    <div class="row" data-saldototaal="${Math.round(bank*100)}" style="font-weight:800;padding:12px 2px 0;border-top:1px solid var(--line);margin-top:8px"><span style="flex:1">Totaal saldo (bank)</span><span>${euro(bank)}</span></div>
     ${cRij}
-    <div class="row" data-saldototaal="${Math.round(tb.sum*100)}" style="font-weight:800;padding:12px 2px 0;border-top:1px solid var(--line);margin-top:8px"><span style="flex:1">Totaal</span><span>${euro(tb.sum)}</span></div>
     ${tb.missing>0?`<div class="small muted" style="margin-top:10px">${tb.missing} rekening(en) zonder bekend saldo tellen niet mee.</div>`:''}`;
   showSheetBg();
 }
@@ -4869,7 +4870,7 @@ function renderDash(){
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
   const hero = balKnown
     ? `<div class="homehero" style="cursor:default">
-    ${saldoBlok(S2.saldo)}
+    ${saldoBlok(S2.saldo-(totalBalance().contant||0))}
     ${homeRekKaart()}
     ${cijferRegel()}
     ${''/* v439: vrij te besteden, de potje-stap bij een krappe maand en Verwacht eind staan niet meer op Home (gevraagd door de gebruiker) */}
@@ -4935,19 +4936,35 @@ function saldoBijgewerkt(){
   const oudste=r.map(x=>x.saldoDatum).filter(Boolean).sort()[0]||null;
   return {datum:oudste, zinnen:saldoAchterZinnen()};
 }
+/* v464 (punt 1): CONTANT IS EEN EIGEN REGEL, NIET IN HET TOTAAL. Het totaal op Home is alleen de bank (de rekeningen die meetellen in
+   totalBalance(), zonder de contante stand); contant staat eronder met zijn herkomst: na een telling van eerder dan vandaag een SCHATTING
+   (contantSchatting(): de telling min het tempo van het potje sinds die dag, plus wat je sindsdien pinde, de bron van het potje
+   Contant), en na een telling van vandaag (of zonder tempo en zonder beweging) het getelde bedrag. De sheet Saldo nu toont dezelfde
+   splitsing. Gemeld: "€2.452,71 bank + €720 contant" en die EUR 720 was de telling van 07-10, 17 dagen oud, zonder dat het er stond.
+   Alleen de weergave: totalBalance() en elke berekening die hem leest blijven ongewijzigd. */
+function contantRegelData(){ const T=contantTelling(); if(!T) return null;
+  let S=null; try{ S=contantSchatting(); }catch(_){}
+  const datum=S?S.datum:T.datum;
+  if(S && S.dagen>0 && (S.tempo>0 || Math.abs(S.flows)>=0.005)) return {bedrag:S.stand, schatting:true, datum, S};
+  let b=null; try{ b=S?S.stand:contantVerwacht(); }catch(_){}
+  return {bedrag:b==null?+T.stand:b, schatting:false, datum, S}; }
+function contantRegelTekst(C){ C=C||contantRegelData(); if(!C) return '';
+  return C.schatting?`contant ± ${euro0(C.bedrag)} · schatting, geteld ${dagKort(C.datum)}`:`contant ${euro0(C.bedrag)} · geteld ${dagKort(C.datum)}`; }
 function saldoBlok(saldo){
   const B=saldoBijgewerkt();
   let chip='';
-  if(B){
-    NOTES.saldoachter=`${B.zinnen.join(' ')}<div style="color:var(--mut);margin-top:4px">Het label verdwijnt zodra er een nieuwer saldo is.</div>`;
-    chip=` <span class="small" data-bijgewerkt="${esc(B.datum||'')}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">bijgewerkt ${esc(dagKort(B.datum))} ${noteIcon('saldoachter','Waarom staat hier bijgewerkt')}</span>`;
-  }
-  /* v462 (B5): de pill zegt hoeveel rekeningen actueel zijn; bij een oud saldo blijft het label van v378 met zijn uitleg */
-  if(!B){ const P=versheidPill(); if(P) chip=` <span class="small" data-versheid="${P.n}/${P.m}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">${esc(P.tekst)}</span>`; }
+  /* v464 (punt 3): DE PILL IS ALTIJD DE VERSHEID (B5). Tot v464 won het label "bijgewerkt <datum>" van v378 zodra een saldo oud was
+     (saldoAchter()), en een rekening die niet synchroniseerde zette precies dat aan: dan stond er "bijgewerkt 23 okt" in plaats van
+     "n van m rekeningen actueel". De uitleg van v378 staat nu achter de i van de pill. Zonder gekoppelde rekening blijft het label. */
+  const P=versheidPill();
+  if(B) NOTES.saldoachter=`${B.zinnen.join(' ')}<div style="color:var(--mut);margin-top:4px">Het label verdwijnt zodra er een nieuwer saldo is.</div>`;
+  if(P) chip=` <span class="small" data-versheid="${P.n}/${P.m}"${B?` data-bijgewerkt="${esc(B.datum||'')}"`:''} style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">${esc(P.tekst)}${B?' '+noteIcon('saldoachter','Waarom is niet alles actueel'):''}</span>`;
+  else if(B) chip=` <span class="small" data-bijgewerkt="${esc(B.datum||'')}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">bijgewerkt ${esc(dagKort(B.datum))} ${noteIcon('saldoachter','Waarom staat hier bijgewerkt')}</span>`;
   const neg=(+saldo||0)<0;
   return `<div data-saldoblok role="button" onclick="openBalances()" style="cursor:pointer">
     <div class="hh-lbl">Totaal saldo${chip}</div>
     <div class="row" style="align-items:center;gap:10px"><div class="hh-big${neg?'':' grad'}" data-totaalsaldo="${Math.round(+saldo||0)}" style="margin-bottom:6px${neg?';color:var(--red)':''}">${euro0(saldo)}</div><span style="color:var(--teal);font-size:var(--fs-xl);font-weight:700;margin-left:auto">\u203a</span></div>
+    ${(()=>{ const C=contantRegelData(); return C?`<div class="small" data-contantregel="${C.schatting?'schatting':'geteld'}" data-contantbedrag="${Math.round(C.bedrag)}" style="color:var(--mut);margin:-4px 0 6px">${esc(contantRegelTekst(C))}</div>`:''; })()}
   </div>`;
 }
 /* NOG TE ONTVANGEN (v365, sinds v378 een smalle regel in de hero, in de vorm van "Verwacht eind"). Dezelfde berekening
@@ -9631,7 +9648,21 @@ function maandVooruitKern(){
   try{ if(!cLater && contantPotje() && (+B0[CONTANT_CAT]||0)>0){ const CM=contantMaanden([valtOpYmPlus(m,-1), m]), C=CM[CM.length-1];
     const bC=(SP.potBasis||[]).find(b=>b.k===CONTANT_CAT), uC=bC?+bC.u||0:0;
     if(C && C.uitkomst!=null){ cRest=C.uitkomst-uC; Vc={uitkomst:C.uitkomst, uit:uC, bron:'contantMaanden'}; } } }catch(_){}
-  let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0 && !(c===CONTANT_CAT && (cRest!=null || cLater))) restTot+=Math.max(+restCat[c]||0,0); }
+  /* v464 (punt 6): WAT ER NOG VERWACHT WORDT HANGT NIET AAN EEN WIJZIGING VAN DEZE MAAND. Een potje rekent de rest van de maand met zijn
+     gemiddelde, een categorie zonder potje alleen als hij er vaker is (minstens ZONDER_MIN_MAANDEN van de afgeronde maanden, v402). Kreeg
+     een categorie deze maand een potje (gemeld: Infomedics, Zorg & apotheek +EUR 46 en Verzekeringen -EUR 46), dan wisselde hij van regel
+     en schoof de forecast van Zorg EUR 25 op zonder dat er iets anders werd uitgegeven; blok 20 noemde dat terecht "niet alleen door
+     potjes die met hun budget meetellen". Nu kiest de regel bij de potjes van het VASTGELEGDE budget van de 1e (maandBudgetVast): een potje
+     dat deze maand ontstond rekent zijn rest als een categorie zonder potje, een potje dat deze maand op nul ging als een potje. Vanaf de
+     1e van de volgende maand geldt de nieuwe stand. */
+  let MBV0=null; try{ MBV0=(T.potTotal>0)?maandBudgetVast(m):null; }catch(_){}
+  const vastP=MBV0&&MBV0.potjes?MBV0.potjes:null;
+  const nieuwPot=c=>!!vastP && (+B0[c]||0)>0 && !((+vastP[c]||0)>0), wegPot=c=>!!vastP && !((+B0[c]||0)>0) && (+vastP[c]||0)>0;
+  const nVaker=c=>(perMaand||[]).filter(o=>(+(o||{})[c]||0)>0).length>=ZONDER_MIN_MAANDEN;
+  const restVoor=c=>{ const r=Math.max(+restCat[c]||0,0); return nieuwPot(c) && !nVaker(c) ? 0 : r; };
+  let restTot=Z.verwacht; for(const c in restCat){ if((+B0[c]||0)>0 && !(c===CONTANT_CAT && (cRest!=null || cLater))) restTot+=restVoor(c); }
+  let wegRest=0; for(const c in restCat){ if(!wegPot(c) || !zonderPotjeCat(c) || buitenUitgave(c)) continue; const row=(Z.rijen||[]).find(x=>x.k===c); wegRest+=Math.max(+restCat[c]||0,0)-(row?row.verwacht:0); }
+  restTot+=wegRest;
   if(cRest!=null) restTot+=cRest;
   /* v403: spendNorm draagt de persoonlijke overboeking zonder potje al niet (buitenUitgave), dus er gaat niets meer af:
      Z.uitgesloten is wat blok 19 noemt. */
@@ -9648,7 +9679,7 @@ function maandVooruitKern(){
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Het variabele deel van elk potje
      uit maandSplitsing(); een potje dat helemaal vast is staat daar niet in. */
   const potjes=[]; let potKlein=0;   // v404: een potje zonder variabel deel met een uitgave onder de euro telt mee in variabel, zonder eigen regel
-  for(const b of SP.potBasis){ const k=b.k, u=b.u, vBud=b.vBud, fE=b.fE, r=(k===CONTANT_CAT && cRest!=null)?cRest:Math.max(+restCat[k]||0,0);
+  for(const b of SP.potBasis){ const k=b.k, u=b.u, vBud=b.vBud, fE=b.fE, r=(k===CONTANT_CAT && cRest!=null)?cRest:restVoor(k);
     const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
     if(!(vBud>0) && Math.round(u+r)===0){ potKlein+=u+r; continue; }
     potjes.push({k, naam:b.naam, bud:Math.round(vBud), potje:Math.round(b.bud), vastDeel:Math.round(fE), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
@@ -10864,7 +10895,7 @@ function gripMeters(){
   const b=MB.onbekend?dial('budget','Budget',MB,0,'?','nog niet','nog niet te rekenen')
     :dial('budget','Budget',MB,MB.pct,MB.pct+'%',euro0(Math.abs(MB.verschil)),MB.verschil>0?'boven budget':MB.verschil<0?'onder budget':'precies je budget');
   const d=MD.onbekend?dial('doelen','Doelen',MD,0,'?','nog geen doel',MD.geenMeting?'geen spaarrekening':'kies opzij in Kiezen')
-    :dial('doelen','Doelen',MD,MD.pct,MD.pct+'%',MD.pct+'%',`<span data-meterverwachtdoel>${euro0(MD.netto)} van ${euro0(MD.opzij)} opzij</span>`);
+    :dial('doelen','Doelen',MD,MD.pct,MD.pct+'%',MD.pct+'%',`<span data-meterverwachtdoel>${euro0(MD.netto)} opzij · volgens je verdeling ${euro0(MD.opzij)}</span>`);
   const inl=ML.inleg?(ML.inleg.stil?`${esc(ML.inleg.naam)} zelf stilgezet`:ML.inleg.bedrag>0?`${esc(ML.inleg.naam)} ${euro0(ML.inleg.bedrag)} ingelegd`:`${esc(ML.inleg.naam)} ${euro0(ML.inleg.per)}/mnd`):'';
   /* v390: ontbreekt er een voorwaarde, dan staat die in de meter (de eerste, in de vaste volgorde buffer, dekking, doel). */
   const lsub=ML.onbekend?'':(ML.mist&&ML.mist.length?`<span data-metermist>${esc(ML.mist[0])}${ML.mist.length>1?` +${ML.mist.length-1}`:''}</span>`
@@ -10891,7 +10922,7 @@ function gripNietGebruiktRegel(TR){
 function gripDoelenNuTekst(MD){ let O=null; try{ O=opzijPeriode(); }catch(_){}   // v440: opzij deze periode (opzijPeriode); "Doelen:" ervoor (v406), zodat de regel niet als budget leest
   if(!O || !O.meetbaar) return 'Doelen: opzij nog niet te meten (geen spaarrekening)';
   const n=O.netto==null?'onbekend':euro0(O.netto);
-  return `Doelen: opzij deze periode ${n}${O.doel!=null?` van doel ${euro0(O.doel)}`:' · nog geen doel'}`; }
+  return `Doelen: opzij deze periode ${n}${O.doel!=null?` · volgens je verdeling ${euro0(O.doel)}`:' · nog geen verdeling'}`; }   // v464 punt 4: dezelfde woorden als de opzij-rij (v462 H5)
 function openGripMeter(k){ window._gripMeter=k; renderGripMeter(); showSheetBg(); }
 function renderGripMeter(){
   const k=window._gripMeter;
@@ -25560,10 +25591,18 @@ const VERS_UREN=24;
 function syncGeluktZet(acc){ SET.syncGelukt=SET.syncGelukt||{}; SET.syncGelukt[acc]=Date.now(); }
 function syncGeluktVan(acc){ const g=(SET.syncGelukt||{})[acc]; if(g) return +g;
   const d=(SET.psd2Diag||{})[acc]; if(d && typeof d==='object' && d.balGeland===true && !d.txFout){ const v=(d._veldOp||{}).balGeland||d._op; if(v) return +v; }
+  /* v464 (punt 2): een geslaagde sync van voor v462 staat ook in de aansluiting (v460, alleen geslaagde syncs met een saldo) */
+  const A=((SET.controles||{}).aansluiting||{})[acc]; if(A && A.laatste && A.laatste.tijd) return +A.laatste.tijd;
+  return null; }
+/* v464 (punt 2): DE LAATSTE GESLAAGDE SYNC ALS TEKST, nooit "onbekend" zolang er iets bekend is: met tijd uit syncGeluktVan(), anders de
+   dag van het laatst opgehaalde saldo (ACCMETA[acc].date, de dag waarop de bank het saldo gaf), zonder tijd. */
+function syncGeluktTekst(acc){ const g=syncGeluktVan(acc); if(g!=null) return {ms:g, tekst:`${nlDagMaand(g)} ${nlTijd(g)}`};
+  const d=String(((typeof ACCMETA!=='undefined'&&ACCMETA[acc])||{}).date||''); if(/^\d{4}-\d{2}-\d{2}$/.test(d)) return {ms:new Date(d+'T12:00:00').getTime(), tekst:`${+d.slice(8,10)} ${MNAMES[+d.slice(5,7)-1]}`, dag:true};
   return null; }
 function rekVersheid(){ const ps=SET.psd2Accounts||{}, nu=Date.now(); let F=new Set(); try{ F=new Set(psd2Falend().map(f=>f.acc)); }catch(_){}
   return Object.keys(ps).filter(a=>rekActief(a)).map(a=>{ const g=syncGeluktVan(a), falend=F.has(a);
-    return {acc:a, bank:ps[a].bank||'', naam:aanslNaam(a), gelukt:g, falend, oud: g!=null ? (nu-g>VERS_UREN*36e5) : falend}; }); }
+    const T=syncGeluktTekst(a); let SS=null; try{ SS=psd2Sessies().per[a]; }catch(_){}
+    return {oudeSessie:!!(SS && !SS.huidig), acc:a, bank:ps[a].bank||'', naam:aanslNaam(a), gelukt:g, falend, oud: g!=null ? (nu-g>VERS_UREN*36e5) : falend, sindsMs:T?T.ms:null, sinds:T?T.tekst:null}; }); }
 function nlDagMaand(ms){ const P=nlDelen(ms); return `${+P.d} ${MNAMES[+P.m-1]}`; }
 /* de pill bij het totaalsaldo: hoeveel rekeningen actueel zijn, of de tijd van de oudste geslaagde sync als alles actueel is */
 function versheidPill(){ let V=[]; try{ V=rekVersheid(); }catch(_){ return null; } if(!V.length) return null;
@@ -25583,9 +25622,9 @@ function homeRekKaart(){ let V=[], G=[]; try{ V=rekVersheid().filter(v=>v.oud); 
   const gedekt=new Set(G.filter(g=>g.verlopen).flatMap(g=>g.accs));
   /* twee of meer van dezelfde bank: een regel per bank met de namen eronder (vijf falende N26-rekeningen waren vijf regels, 439px) */
   const perBank={}; for(const v of V){ if(gedekt.has(v.acc)) continue; (perBank[v.bank]=perBank[v.bank]||[]).push(v); }
-  const sinds=L=>{ const g=L.map(v=>v.gelukt).filter(x=>x!=null); return g.length===L.length?nlDagMaand(Math.min(...g)):'onbekend'; };
+  const sinds=L=>{ const g=L.filter(v=>v.sindsMs!=null).sort((a,b)=>a.sindsMs-b.sindsMs); return g.length?g[0].sinds:'onbekend'; };   // v464: de oudste bekende geslaagde sync, met tijd als die bekend is
   for(const [bank,L] of Object.entries(perBank)){
-    if(L.length===1){ const v=L[0]; rijen.push(`<div data-reknietactueel="${esc(v.acc)}" style="padding:2px 0"><b>${esc(v.naam)} niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${v.falend?'de laatste sync haalde geen saldo op':'langer dan 24 uur geen geslaagde sync'}</div></div>`); continue; }
+    if(L.length===1){ const v=L[0]; rijen.push(`<div data-reknietactueel="${esc(v.acc)}" style="padding:2px 0"><b>${esc(v.naam)} niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${v.oudeSessie?'zat niet in je nieuwste koppeling: hij roept nog een oudere sessie aan':v.falend?'de laatste sync haalde geen saldo op':'langer dan 24 uur geen geslaagde sync'}</div></div>`); continue; }
     rijen.push(`<div data-reknietactueel="${esc(L.map(v=>v.acc).join(','))}" style="padding:2px 0"><b>${esc(bankKort(bank)||bank||'Je bank')}: ${L.length} rekeningen niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${esc(L.map(v=>v.naam).join(' \u00b7 '))}</div></div>`); }
   if(!rijen.length) return '';
   return `<div class="card" data-homerekkaart style="margin:10px 0 0;padding:10px 12px;cursor:default">${rijen.join('')}${knop}</div>`; }
@@ -28915,6 +28954,16 @@ function diagRekeningen(){
      DEZE LIJST LEEST `psd2Falend()` en leidt hem niet zelf af (v104). Hij stond hier als een eigen
      filter zonder de vorm-toets die die functie wel heeft, dus op een half geschreven entry zeiden het
      blok en de app al iets anders over dezelfde rekening. */
+  /* v464 (punt 2): per rekening welke sessie hij aanroept, of dat de nieuwste van zijn bank is, en wat het herstel deed */
+  { const S=_dT(()=>psd2Sessies(),null), H=(SET.psd2SessieHerstel||{}), ps=_dT(()=>SET.psd2Accounts,{})||{}, kort=x=>x?String(x).slice(0,8)+'…':'niet bewaard';
+    L.push(''); L.push('SESSIE PER REKENING (v464): welke sessie een rekening aanroept (de uid hoort bij een sessie)');
+    if(S) for(const [a,P] of Object.entries(S.per)){ const e=ps[a]||{};
+      L.push(`  ${a}${e.label?' ('+e.label+')':''}: sessie ${kort(P.sessie)} · geldig tot ${P.exp?P.exp.slice(0,10):'?'} · uid ${kort(P.uid)} · ${P.huidig?'de nieuwste sessie van '+(e.bank||'de bank'):'OUDER dan de nieuwste sessie van '+(e.bank||'de bank')+' (tot '+(P.nieuwste.exp||'?').slice(0,10)+')'}`
+        +(e.herstel?` · HERSTELD op ${controleDagTijd(e.herstel.op)}: uid en sessie van ${e.herstel.van} (zelfde ${e.herstel.grond})`:'')
+        +(H[a]&&H[a].door?` · VERVANGEN: zijn sessie ging naar ${H[a].door} (zelfde ${H[a].grond})`:'')
+        +(!P.huidig && !e.herstel && /^\d{4,}$/.test(a)?' · geen entry met hetzelfde nummer of dezelfde hash in de nieuwste sessie: opnieuw koppelen, met deze rekening aangevinkt':''));
+      if(!P.huidig && /^\d{4,}$/.test(a) && !e.herstel){ const zelfdeNaam=Object.entries(ps).filter(([b,f])=>b!==a && f && psd2LabelKern(f.label)===psd2LabelKern(e.label)).map(([b])=>b);
+        if(zelfdeNaam.length) L.push(`    zelfde naam zonder nummer: ${zelfdeNaam.join(', ')} · een naam alleen is geen identiteit, er gaat niets over`); } } }
   const oud=(_dT(()=>psd2Falend(),[])||[]).map(f=>f.acc);
   L.push('');
   L.push('SALDI DIE NIET ZIJN BIJGEWERKT BIJ DE LAATSTE SYNC: '+(oud.length?oud.join(', '):'geen'));
@@ -32512,7 +32561,9 @@ function diagSalarisVerdeling(){
   /* v421: BUITEN VAST EN POTJES KAN NIET NEGATIEF ZIJN (besluit van de gebruiker op v419). Is het dat toch, dan staat er een
      ontvangst in die bij een andere groep hoort: de boeking staat hier, bij de controle, met de groep die ontbreekt. */
   const letOp=r=>{ if(r.buiten>=-0.005) return;
-    const ms=[...r.bTx.filter(x=>x.v<-0.005).map(x=>x.t), ...r.wissel.filter(w=>w.t.amount>0).map(w=>w.t)];
+    /* v464 (punt 5): een boeking staat EEN keer. Een ontvangst in buiten die ook van groep wisselt stond in beide lijsten (bTx en wissel),
+       dus dezelfde boeking twee keer onder LET OP (gemeld: Bolcom EUR 7,00 op 08-04, twee keer). Ontdubbeld op de id van de boeking. */
+    const ms=[]; { const zag=new Set(); for(const t of [...r.bTx.filter(x=>x.v<-0.005).map(x=>x.t), ...r.wissel.filter(w=>w.t.amount>0).map(w=>w.t)]){ const k=String(t.id||t.date+'|'+t.amount+'|'+t.name); if(zag.has(k)) continue; zag.add(k); ms.push(t); } }
     L.push(`      LET OP ${MN(r.ym)}${r===Rc?'*':''}: buiten vast en potjes is ${c2(r.buiten)}; een ontvangst staat in de verkeerde groep:`);
     for(const t of ms){ let g='een ontvangst van een ander: een terugbetaling (Uitgeleend), je holding ("Dit is mijn holding") of een eigen rekening';
       try{ if(loanMatch(t)) g='een terugbetaling van je lening (Uitgeleend)'; else if(stortKenmerk(t)||contantStorting(t)) g='een storting van contant geld (Contant)'; }catch(_){}
@@ -32933,9 +32984,21 @@ function controleRegelsVan(blok, L){ const U=[], gezien={};
       const m=r.match(/^  ([a-z]{3}): .*: (klopt|VERSCHILT (\S+))$/); if(!m) continue;
       const ym=controleMaandVan(m[1]); const id=`b${blok}:afgerond:${ym}`;
       if(m[2]==='klopt'){ U.push({id, blok, regel:i, soort:2, status:'klopt', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]} sluit`, maand:ym, tekst:r.trim()}); continue; }
-      const d=parseFloat(String(m[3]).replace(/[^\d.,-]/g,'').replace(',','.'))||0, nxt=String(L[i+1]||'');
+      /* v464 (punt 5): de regel "het verschil bij naam" staat niet altijd direct onder de maandregel: een LET OP (een ontvangst in de
+         verkeerde groep) staat ertussen. Tot v464 las de controle alleen de volgende regel, dus met een LET OP ertussen telde "sluit"
+         niet en bleef het hele verschil "wacht" (april: Round-ups EUR 27,39 sluit, Bolcom EUR 7,00 eronder). Nu het hele blok van de maand. */
+      const blokR=[]; for(let j=i+1;j<L.length && /^      /.test(String(L[j])); j++) blokR.push(String(L[j]));
+      const d=parseFloat(String(m[3]).replace(/[^\d.,-]/g,'').replace(',','.'))||0, nxt=blokR.find(x=>/het verschil bij naam/.test(x))||'';
       const sluit=/het verschil bij naam \(.*sluit\)/.test(nxt), rest=nxt.match(/rest zonder naam (-?[\d.]+)/);
-      const blokTekst=[r.trim()]; for(let j=i+1;j<L.length && /^      /.test(String(L[j])); j++) blokTekst.push(String(L[j]).trim());
+      const blokTekst=[r.trim()].concat(blokR.map(x=>x.trim()));
+      /* de LET OP-boekingen (een ontvangst in de verkeerde groep) zijn een eigen kleine vraag (soort 3), los van het verschil */
+      { let inLet=false; for(const x of blokR){ if(/^      LET OP /.test(x)){ inLet=true; continue; } if(!/^        /.test(x)){ inLet=false; continue; } if(!inLet) continue;
+          const mm=x.match(/^        (\d{2})-(\d{2}) (\S+) (.*?) \(/); if(!mm) continue; const dag=`${ym}-${mm[1]}`, bedr=Math.abs(parseFloat(mm[3])||0);   // c2(): toFixed(2), een punt als decimaal
+          let T=[]; try{ T=telbareTx().filter(t=>String(t.date).slice(0,10)===dag && Math.abs(Math.abs(+t.amount||0)-bedr)<0.005); }catch(_){}
+          const t=T.length===1?T[0]:null, gid=`b${blok}:groep:${ym}:${t?t.id:dag+'|'+bedr}`;
+          if(U.some(u=>u.id===gid)) continue;
+          U.push({id:gid, blok, regel:i, soort:3, status:'vraag', klein:true, onderwerp:'boekingen', maand:ym, bedrag:bedr, boeking:t?String(t.id):'',
+            titel:`${mm[4]} ${euroC(bedr)} (${mm[1]}-${mm[2]}) in welke groep?`, reden:'een ontvangst die in de verkeerde groep staat; alleen jij weet in welke hij hoort', tekst:x.trim()}); } }
       U.push({id, blok, regel:i, soort:2, status:sluit?'verklaard':'wacht', onderwerp:'budget', titel:`maandsom ${MNAMES[+ym.slice(5,7)-1]}: verschil ${sluit?'bij naam verklaard':'niet helemaal bij naam'}`, maand:ym,
         bedrag:Math.abs(rest?+rest[1]:d), reden:sluit?'het verschil staat bij naam (blok 20)':'', tekst:blokTekst.join('\n')});
       /* v461 (punt 2): is de rest zonder naam precies EEN boeking van die maand, dan is het een boeking in een andere groep, en alleen
@@ -33164,12 +33227,18 @@ function nlZomer(ms){ const d=new Date(ms), j=d.getUTCFullYear();
 function nlDelen(ms){ const d=new Date(+ms+(nlZomer(+ms)?2:1)*36e5), p=n=>String(n).padStart(2,'0');
   return {j:String(d.getUTCFullYear()), m:p(d.getUTCMonth()+1), d:p(d.getUTCDate()), h:p(d.getUTCHours()), mi:p(d.getUTCMinutes())}; }
 function nlTijd(ms){ const P=nlDelen(ms); return `${P.h}:${P.mi}`; }
-function controleDagTijd(ms){ if(ms==null || isNaN(+ms)) return '-'; const P=nlDelen(+ms); return `${P.d}-${P.m} ${P.h}:${P.mi}`; }
+/* v464 (punt 7): een opgeslagen tijd is een getal (ms, tijdzoneloos) en wordt hier in Nederlandse tijd getoond; een tijd die ooit als
+   tekst met een zone werd bewaard (ISO, "...Z") wordt eerst gelezen en dan ook in Nederlandse tijd getoond, nooit als UTC-tekst. */
+function tijdMs(v){ if(v==null || v==='') return null; if(typeof v==='number') return isNaN(v)?null:v; if(v instanceof Date) return v.getTime();
+  const s=String(v).trim(); if(/^\d+(\.\d+)?$/.test(s)) return +s; const t=Date.parse(s); return isNaN(t)?null:t; }
+function controleDagTijd(ms){ const v=tijdMs(ms); if(v==null) return '-'; const P=nlDelen(v); return `${P.d}-${P.m} ${P.h}:${P.mi}`; }
 function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}, nu=Date.now();
   const accs=[...new Set(Object.keys(SET.psd2Accounts||{}).concat(Object.keys(A)))];
   const MN=ym=>MNAMES[+ym.slice(5,7)-1];
   return accs.map(acc=>{ const R=A[acc], eYm=R&&R.eerste?ymdVan(new Date(R.eerste)).slice(0,7):thisYM(), van=prevYM(prevYM(eYm));
     const voor=`${MN(van)}–${MN(eYm)}: niet te meten, geen saldo`;
+    { let SS=null; try{ SS=psd2Sessies().per[acc]; }catch(_){}
+      if(SS && !SS.huidig && !psd2Vervangen(acc)) return {acc, status:'oudesessie', tekst:`gebruikt een oudere sessie (geldig tot ${(SS.exp||'?').slice(0,10)}) dan de nieuwste koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'de bank'} (tot ${(SS.nieuwste.exp||'?').slice(0,10)}) · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen fout').slice(0,60)} · laatste geslaagde sync ${(syncGeluktTekst(acc)||{}).tekst||'onbekend'} · opnieuw koppelen met deze rekening aangevinkt`}; }
     if(psd2Vervangen(acc)) return {acc, status:'vervangen', tekst:`vervangen door een nieuwere koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'dezelfde bank'} · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen saldo').slice(0,60)} · telt niet mee in de aansluiting`};
     /* v461: waarom een rekening nog niet vergelijkt, zodat het van het scherm af te lezen is */
     if(!R || (R.hist||[]).length<2 || R.laatste.opnieuw){ const d=(SET.psd2Diag||{})[acc]||{}, L=R&&R.laatste;
@@ -33193,7 +33262,8 @@ function controleDiagHtml(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run;
   const nNieuw=VN.filter(u=>u.nieuw).length, nBekend=(C.bekendToeval||[]).length;
   h+=kop('Wacht op de bouwer')+W.map(u=>{ const g=(u.raakt||[])[0], K=g?keuzeWacht(g, C):null, w=g?(C.getallen||{})[g]:null;
       const raakt=g&&w!=null&&u.bedrag?` · raakt ${CONTROLE_GETAL_NAAM[g]||g} · ${Math.round(Math.abs(u.bedrag)/Math.max(Math.abs(w),1)*100)}%, ${K&&K.wacht?'keuzes wachten':'geen keuze wacht'}`:'';
-      return rij('~', u.titel, `${u.tekst}${raakt}`, `data-controlewacht="${esc(u.id)}"`, kopie(u)); }).join('')
+      const sinds=u.sinds?` · wacht sinds ${controleDagTijd(u.sinds)} (de eerste run waarin hij wachtte, Nederlandse tijd)${u.tijd?` · laatste run ${controleDagTijd(u.tijd)}`:''}`:'';   // v464 punt 7
+      return rij('~', u.titel, `${u.tekst}${raakt}${sinds}`, `data-controlewacht="${esc(u.id)}" data-sinds="${esc(controleDagTijd(u.sinds))}"`, kopie(u)); }).join('')
     +rij('~', 'Mogelijke voorautorisatie, andere naam', `nieuw sinds de vorige run: ${nNieuw||'geen'} · bekend toeval: ${nBekend}${VN.length-nNieuw>0?` · wacht op je oordeel: ${VN.length-nNieuw}`:''}`, 'data-controlevorautnaam',
       VN.map(u=>{ const k=u.id.slice(11), kk=esc(k).replace(/'/g,"\\'"); return `<div data-vorautnaamgeval="${esc(k)}" style="margin-top:6px"><span class="small" style="display:block">${esc(u.tekst)}</span><span class="row" style="gap:8px;margin-top:4px"><button class="btn sec" style="flex:1" data-oordeeltoeval onclick="vorautNaamOordeel('${kk}','toeval')">Toeval</button><button class="btn sec" style="flex:1" data-oordeelecht onclick="vorautNaamOordeel('${kk}','echt')">Echt, vraag het me</button></span>${kopie(u)}</div>`; }).join(''));
   /* 3. gecorrigeerd */
@@ -33893,6 +33963,7 @@ async function psd2Refresh(silent){
   const meta=SET.psd2Accounts||{}; const keys=Object.keys(meta);
   if(!keys.length){ if(!silent) psd2Connect(); return; }
   if(!psd2Ready()){ if(!silent){ toast('Stel eerst de backend-URL en token in'); go('set'); } return; }
+  try{ psd2SessieHerstel(); }catch(_){}   // v464: een rekening op een oudere sessie krijgt de uid van zijn tweeling in de nieuwste sessie
   if(!silent) toast('Verversen…');
   const from=new Date(); from.setMonth(from.getMonth()-2); const fromStr=from.toISOString().slice(0,10);
   /* v198: de datumstempel bij het saldo was toISOString().slice(0,10), en dat is de UTC-dag: tussen
@@ -34110,8 +34181,11 @@ async function psd2IngestSession(s){
     // een rekening die we al kennen aan zijn hash houdt zijn bestaande id, ook als die nog uit de
     // uid-tijd komt; anders zou juist deze fix een derde exemplaar maken
     let bekend='';
-    if(hash) for(const k in meta){ if(meta[k] && meta[k].hash===hash){ bekend=k; break; } }
-    const accId = bekend || ibanNum(iban) || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
+    const nr=ibanNum(iban);
+    /* v464 (punt 2): een hash-treffer op een entry met een ANDER rekeningnummer is een andere rekening, en een rekening die al onder zijn
+       eigen nummer bestaat houdt die id: anders krijgt een oude entry de nieuwe sessie en blijft de rekening met het nummer op de oude. */
+    if(hash) for(const k in meta){ const f=meta[k]; if(f && f.hash===hash){ const fn=ibanNum(f.iban||''); if(nr && fn && fn!==nr) continue; bekend=k; break; } }
+    const accId = (nr && meta[nr] ? nr : '') || bekend || nr || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
     meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'', sessie:s.session_id||'' };
     let cont=null, guard=0, txN=0, txFout='';
@@ -34139,7 +34213,7 @@ async function psd2IngestSession(s){
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
-  SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){}   // v456 punt 4
+  SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){} try{ psd2SessieHerstel(); }catch(_){}   // v456 punt 4, v464
   const added=commitTx(allTx, balances);
   applyPending(pend);
   /* v460: na een nieuwe koppeling begint de aansluiting opnieuw (oude boekingen kunnen binnenkomen zonder het saldo te raken) */
@@ -34316,7 +34390,9 @@ function psd2DiagActief(){ const D=SET.psd2Diag||{}, ps=SET.psd2Accounts||{}, o=
    rekening onder een andere id gekoppeld is: dezelfde hash, of dezelfde naam zonder de laatste cijfers bij dezelfde bank, met een
    latere geldigheid en een geslaagde sync. Een rekening met een nummer die faalt is een rekening die opnieuw gekoppeld moet worden. */
 function psd2LabelKern(l){ return String(l||'').replace(/\s*··\s*\d{2,}\s*$/,'').trim().toLowerCase(); }
-function psd2Vervangen(a){ const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, e=ps[a], d=D[a]; if(!e || !d || typeof d!=='object' || d.balGeland!==false) return false;
+function psd2Vervangen(a){ const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, e=ps[a], d=D[a];
+  { const H=(SET.psd2SessieHerstel||{})[a]; if(e && H && H.door && ps[H.door] && !/^\d{4,}$/.test(String(a))) return true; }   // v464: zijn sessie ging naar de rekening met hetzelfde nummer
+  if(!e || !d || typeof d!=='object' || d.balGeland!==false) return false;
   if(e.iban && ibanNum(e.iban) && ibanNum(e.iban)===String(a)) return false;
   if(/^\d{4,}$/.test(String(a))) return false;
   if(!/expired|session|consent|verlop|toestemming|40[13]/i.test(String(d.balFout||d.txFout||''))) return false;
@@ -34342,6 +34418,34 @@ function psd2Falend(){
   }
   return uit;
 }
+/* ===== v464 (punt 2): WELKE SESSIE EEN REKENING GEBRUIKT, EN HET HERSTEL OP HARDE IDENTITEIT =====
+   Een rekening roept de bank aan met zijn eigen uid, en een uid hoort bij EEN sessie. Bij N26 laat een nieuwe sessie de vorige verlopen,
+   dus een rekening die bij de laatste koppeling niet zijn nieuwe uid kreeg, blijft de oude sessie aanroepen en krijgt EXPIRED_SESSION.
+   psd2Sessies() geeft per bank de nieuwste sessie (de hoogste geldigheid) en per rekening of hij die gebruikt. Er is geen code die een
+   sessie, een toestemming of een foutstatus van de ene entry naar de andere kopieert (nagegaan: alleen psd2IngestSession() schrijft een
+   entry, en psd2DiagZet() schrijft alleen onder zijn eigen id); de fout bij een rekening is dus zijn eigen aanroep met zijn eigen uid.
+   HET HERSTEL (psd2SessieHerstel()): staat een rekening met een eigen nummer op een oudere sessie, en is er in de nieuwste sessie van
+   dezelfde bank een entry met HETZELFDE rekeningnummer (uit de IBAN) of DEZELFDE hash, dan krijgt de rekening de uid, de sessie en de
+   geldigheid van die entry; die entry heet daarna vervangen (psd2Vervangen) en telt niet dubbel. EEN NAAM ALLEEN IS NOOIT GENOEG: een
+   oude Space met dezelfde naam is een andere entry, en er gaat dan niets over. Zonder zo'n entry valt er niets te herstellen en is
+   opnieuw koppelen (met die rekening aangevinkt) de enige weg. */
+function psd2Sessies(){ const ps=SET.psd2Accounts||{}, nieuw={};
+  for(const [a,e] of Object.entries(ps)){ if(!e) continue; const b=String(e.bank||'').toLowerCase(), x=String(e.exp||'');
+    if(!nieuw[b] || x>nieuw[b].exp) nieuw[b]={exp:x, sessie:e.sessie||'', bank:e.bank||''}; }
+  const per={}; for(const [a,e] of Object.entries(ps)){ if(!e) continue; const N=nieuw[String(e.bank||'').toLowerCase()]||{};
+    per[a]={sessie:e.sessie||'', exp:String(e.exp||''), uid:e.uid||'', huidig:String(e.exp||'')===N.exp && (!N.sessie || (e.sessie||'')===N.sessie), nieuwste:N}; }
+  return {nieuw, per}; }
+function psd2EigenNr(a, e){ return /^\d{4,}$/.test(String(a)) ? String(a) : ''; }
+function psd2SessieHerstel(){ const ps=SET.psd2Accounts||{}, S=psd2Sessies(); let w=false; SET.psd2SessieHerstel=SET.psd2SessieHerstel||{};
+  for(const [a,e] of Object.entries(ps)){ const P=S.per[a]; if(!e || !P || P.huidig) continue; const nr=psd2EigenNr(a, e); if(!nr) continue;
+    const N=P.nieuwste; let twin=null, grond='';
+    for(const [b,f] of Object.entries(ps)){ if(b===a || !f || String(f.bank||'').toLowerCase()!==String(e.bank||'').toLowerCase() || !S.per[b] || !S.per[b].huidig) continue;
+      if(ibanNum(f.iban||'')===nr){ twin=b; grond='rekeningnummer'; break; }
+      if(e.hash && f.hash && e.hash===f.hash){ twin=b; grond='hash'; break; } }
+    if(!twin) continue; const f=ps[twin];
+    SET.psd2SessieHerstel[twin]={door:a, op:Date.now(), grond, oudExp:P.exp, oudSessie:P.sessie};
+    ps[a]=Object.assign({}, e, {uid:f.uid, sessie:f.sessie||'', exp:f.exp||'', herstel:{van:twin, op:Date.now(), grond, oudExp:P.exp}}); w=true; }
+  return w; }
 /* HET PREDICAAT STAAT OP ÉÉN PLEK, en dat is geen muggenzifterij: drie plekken zeggen dit over dezelfde
    toestand, met een ander onderwerp ervoor. De rij in Instellingen telt ("5 rekeningen"), de melding en
    het bankscherm noemen de namen ("Main, Zakgeld en ..."), en dat is de structuur overnemen en ter plekke
