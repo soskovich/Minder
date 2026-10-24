@@ -1011,3 +1011,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Een regel onder het saldo, altijd, en een tik naar Je cijfers.** Een vraag gaat voor op "gecontroleerd" in dezelfde regel; de vraag zelf staat bovenaan Je cijfers met een tik naar Kloppen mijn gegevens?, zodat de regel altijd hetzelfde doet.
 - **Terugdraaien blijft bereikbaar.** Wat Minder zelf herstelde verhuist naar Je cijfers; daar staat ook "terugdraaien", want Vergeten in Wat Minder van jou weet was de route per geval (v457). Een verhuizing mag geen ingang wegnemen.
 - **B9 vervalt.** Een correctie maakt geen geld vrij: het geld is nooit uitgegeven, het getal klopt alleen weer. Er is dus geen keuze en geen melding na een correctie; de spec zoekt "meer ruimte dan je dacht" op elk scherm.
+
+## v463 · een lijst vragen met een drempel, twee nieuwe vragen, de terugblik en het koppelscherm
+- **De drempel zit in de lijst, niet in elke vraag.** `gegevensOpen()` is de ene plek die zegt wat in Zien en in de bel komt; een vraag onder de drempel verdwijnt niet maar staat in Diagnose onder kleine vragen. Zo blijft een vraag van EUR 7 bestaan zonder dat hij aandacht vraagt.
+- **Weet ik niet op een plek.** Elke vraag schrijft zijn antwoord via `kennisZet()`; daar wordt bij weet ik niet de controle verklaard. Per vraag een eigen regel zou bij de eerstvolgende vraag vergeten worden.
+- **Je eigen naam is bij vraag (a) geen bewijs.** `eigenBewijs()` telt je eigen naam als bewijs voor een eigen overboeking; bij deze vraag is de naam juist de aanleiding, dus de toets gebruikt alleen een eigen of gekoppelde IBAN, een bevestigde rekeningnaam, "From <A> to <B>" en een tegenkant binnen 3 dagen.
+- **Eigen rekening buiten Minder blijft intern.** Die keuze verandert geen getal; pas "Is dit sparen?" met Ja zet de boeking op Sparen & beleggen, met het effect bewaard zodat Vergeten hem terugzet.
+- **De terugblik constateert.** "Eenmalig komt elke maand voor" noemt de bedragen per maand en geen stap; een stap zou een advies zijn over iets wat jij eenmalig noemde.
+- **Een sabotage die groen bleef, was een aanroep die niets deed.** `resIntervalPick(12)` na `openReservering('')` zette wat er al stond; die aanroep is weg.
+

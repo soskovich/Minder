@@ -13850,6 +13850,7 @@ function gripTerugblikHtml(){
     ${Tp?`<div class="small" data-terugvergelijk style="margin-top:8px">${esc(Mn(Tp.ym))} ${gripScoreTekst(Tp)} · ${esc(ymFull(m))} ${esc(tus)}</div>`:''}
     ${(()=>{ const E=T.eenmalig; if(!E.length) return '';   /* v428: de afgesloten maand staat in zijn eigen kaart (gripTerugAfgesloten) */
       return `<div data-terugeenmalig style="margin-top:10px"><div class="small" style="font-weight:700">Eenmalig, telt niet als gedrag</div>${E.map(gripEenmaligRij).join('')}</div>`; })()}
+    ${eenmaligPatroonHtml()}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
     <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`
     +gripKlopteOorzaakHtml()+kasVraagHtml()+salMoment2Html()+watOverTerugHtml()+onregTerugHtml()+gripTerugAfgesloten()+verhoudingSalarisHtml()
@@ -25641,6 +25642,108 @@ function openJeCijfers(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run, A=
   $('#sheet').innerHTML=`<div class="grab"></div><div class="row" style="margin-bottom:4px"><span class="hlabel" style="margin:0;flex:1">Je cijfers</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;min-height:44px;display:inline-flex;align-items:center" onclick="closeSheet()">Klaar</span></div><div id="jeCijfers" data-jecijfers>${h}</div>`;
   showSheetBg(); }
 function cijferTerug(k){ if(!vorautTerugKern(k)) return; save(); buildAccMeta(); try{ controlesNaAntwoord(); }catch(_){} window._cijfersZonder=null; render(); openJeCijfers(); toast('Teruggedraaid'); }
+/* ===== v463 DEEL B FASE 3: SOORT 3, EEN LIJST, EN TWEE NIEUWE VRAGEN (gevraagd door de gebruiker) =====
+   Alle vragen staan in "Kloppen mijn gegevens?", hooguit drie tegelijk en een per boeking (gegevensVragen()). Onder de drempel
+   (vraagBovenDrempel(): EUR 25 in de laatste 120 dagen of elk bedrag in de lopende salarisperiode) staat een vraag niet in de lijst en
+   niet in de bel, maar in Diagnose onder kleine vragen. Bij elke knop staat wat hij doet; niets is voorgeselecteerd. Weet ik niet maakt
+   de controle verklaard; Later komt een keer terug na zeven dagen (KENNIS_LATER_DAGEN, KENNIS_LATER_MAX). */
+
+/* (a) EEN ONTVANGST VAN EEN REKENING OP JOUW NAAM DIE MINDER NIET KENT. Een bijschrijving die intern staat, je eigen naam draagt (en
+   verder geen bewijs: geen eigen IBAN, geen Space, geen bevestigde naam) en geen tegenkant heeft op een andere eigen rekening binnen
+   drie dagen. Blok 20 noemt zo'n boeking "zonder tegenkant in je gegevens" (gemeld: 02-07 +EUR 250 op ABN ··0806 van Vincent Ernst
+   Sumter). */
+function eigenRekKandidaat(t){ if(!t || t.pending || !t.acc || !(t.amount>0)) return false; const c=catOf(t);
+  if(!CATS[c] || CATS[c].type!=='internal' || c==='holding' || c===LOAN_CAT.uit || c===LOAN_CAT.in) return false;
+  if(kennisGet('eigenrek|'+t.id)) return false;
+  const R=kennisGet('regel|eigenrek|'+benoemPartij(t).toLowerCase()); if(R && R.keuze==='altijd') return false;   // Ja, altijd: deze partij is een eigen rekening
+  if(!eigenNaamIn(t)) return false;
+  /* je eigen naam is hier juist de aanleiding, dus die telt niet als bewijs (eigenContext() zet hem in de eigen namen); wel een eigen
+     of gekoppelde IBAN, een bevestigde rekeningnaam of de vorm "From <A> to <B>" */
+  try{ const C=eigenContext(); if((t.refNums||[]).some(n=>OWN.includes(n) || C.gekoppeld.has(n)) || eigenOverboeking(t) || eigenAutoTelt(t) || C.N26INT.test(t.name||'')) return false; }catch(_){}
+  try{ if(stortKenmerk(t) || contantStorting(t)) return false; }catch(_){}
+  const d0=new Date(t.date).getTime();
+  return !TX.some(u=>u!==t && !u.pending && u.acc!==t.acc && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date).getTime()-d0)<=3*864e5); }
+function eigenRekVragen(){ const o=[]; for(const t of telbareTx()){ if(!eigenRekKandidaat(t)) continue;
+    o.push({soort:'eigenrek', qkey:'eigenrek|'+t.id, t, partij:benoemPartij(t), bedrag:t.amount, datum:t.date}); }
+  return o; }
+/* na Eigen rekening: "Is dit sparen?" (SET.kennis eigenrek|<id>.sparen leeg tot je kiest) */
+function eigenRekSparenVragen(){ const o=[]; for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E || E.soort!=='eigenrek' || E.aard!=='eigen' || E.sparen!=null) continue;
+    const t=TX.find(x=>x.id===(E.tx||[])[0]); if(!t) continue; o.push({soort:'eigenreksparen', qkey:'eigenreksparen|'+t.id, t, partij:E.partij, bedrag:t.amount, datum:t.date}); }
+  return o; }
+/* (b) EENMALIG DAT TERUGKOMT. Een boeking die jij eenmalig noemde (ook "Klopt, eenmalig") terwijl dezelfde partij eerder voorkwam. */
+function eenmaligTerugVragen(){ const o=[], gezien=new Set();
+  for(const t of telbareTx()){ if(!(t.amount<0) || !eenmaligLabel(t) || kennisGet('eenmterug|'+t.id)) continue;
+    const k=recurKey(t), p=benoemPartij(t); if(gezien.has(k)) continue;
+    const eerder=TX.filter(u=>u!==t && !u.pending && u.amount<0 && u.date<t.date && recurKey(u)===k).sort((a,b)=>a.date.localeCompare(b.date));
+    if(!eerder.length) continue; gezien.add(k);
+    o.push({soort:'eenmterug', qkey:'eenmterug|'+t.id, t, partij:p, bedrag:-t.amount, datum:t.date, eerder:eerder.slice(-3).map(u=>u.date)}); }
+  return o; }
+/* de rij in de lijst, met bij elke knop wat hij doet */
+function fase3VraagRij(q){ const id=esc(q.t.id).replace(/'/g,"\\'"), wat=(l,s,a,attr)=>`<button class="btn sec" ${attr} style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="${a}"><b>${esc(l)}</b><span class="small muted" style="display:block;font-weight:400">${esc(s)}</span></button>`;
+  const kop=`${q.bedrag>0?'+':''}${euro0(Math.abs(q.bedrag))} · ${dagKort(q.datum)} · ${aanslNaam(q.t.acc)}`;
+  if(q.soort==='eigenrek') return `<div data-gegevensvraag="eigenrek" data-tx="${esc(q.t.id)}" style="padding:9px 0;border-top:1px solid var(--line)"><div class="small muted">${esc(kop)}</div><div style="font-weight:600">Kwam binnen van een rekening op jouw naam die Minder niet kent. Welke?</div>
+    ${wat('Eigen rekening buiten Minder','telt als intern, niet als inkomen · daarna: is dit sparen?',`eigenRekZet('${id}','eigen')`,'data-eigenrek="eigen"')}
+    ${wat('Van iemand anders','wordt een ontvangst · kies wat het was',`eigenRekZet('${id}','ander')`,'data-eigenrek="ander"')}
+    ${wat('Weet ik niet','blijft staan, de controle wordt verklaard',`eigenRekZet('${id}','weetniet')`,'data-eigenrek="weetniet"')}</div>`;
+  if(q.soort==='eigenreksparen') return `<div data-gegevensvraag="eigenreksparen" data-tx="${esc(q.t.id)}" style="padding:9px 0;border-top:1px solid var(--line)"><div class="small muted">${esc(kop)} · eigen rekening buiten Minder</div><div style="font-weight:600">Is dit sparen?</div>
+    ${wat('Ja, telt als opzij','de boeking staat op Sparen & beleggen',`eigenRekSparen('${id}',true)`,'data-eigenreksparen="ja"')}
+    ${wat('Nee, alleen intern','blijft een overboeking tussen je eigen rekeningen',`eigenRekSparen('${id}',false)`,'data-eigenreksparen="nee"')}</div>`;
+  if(q.soort==='eenmterug') return `<div data-gegevensvraag="eenmterug" data-tx="${esc(q.t.id)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Je markeerde ${euro0(q.bedrag)} bij ${esc(q.partij)} als eenmalig</div><div class="small muted">Je betaalde hier eerder: ${esc(q.eerder.map(dagKort).join(' en '))}.</div><div style="font-weight:600;margin-top:4px">Komt dit terug? Dan wordt het een reservering.</div>
+    ${wat('Ja, maak een reservering','bedrag per jaar invullen · daarna betaal je het uit de reservering',`eenmTerugZet('${id}','terug')`,'data-eenmterug="terug"')}
+    ${wat('Nee, echt eenmalig','blijft buiten je potjes',`eenmTerugZet('${id}','eenmalig')`,'data-eenmterug="eenmalig"')}</div>`;
+  return ''; }
+/* na een antwoord: het effect, en daarna de regelvraag "Geldt dit voor alle <partij>?" (Ja, altijd / Alleen deze), niets voorgeselecteerd */
+function vraagEffectSheet(effect, regel){ const R=regel||null;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="vraagEffect" data-vraageffect><div style="font-weight:800;font-size:var(--fs-lg)">Vastgelegd</div>
+    <div class="small" data-effecttekst style="margin:6px 0 10px;line-height:1.45">${esc(effect)}</div>
+    ${R?`<div style="font-weight:600">Geldt dit voor alle ${esc(R.partij)}?</div><div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" style="flex:1;min-height:44px" data-regelvraag="altijd" onclick="vraagRegelZet('${esc(R.sleutel).replace(/'/g,"\\'")}','altijd')">Ja, altijd</button><button class="btn sec" style="flex:1;min-height:44px" data-regelvraag="deze" onclick="vraagRegelZet('${esc(R.sleutel).replace(/'/g,"\\'")}','deze')">Alleen deze</button></div>`:''}
+    <div class="small" style="margin-top:12px;color:var(--teal);font-weight:700;cursor:pointer;min-height:44px;display:flex;align-items:center" onclick="${gegevensOpen().length?'openGegevensVragen()':'closeSheet()'}">${gegevensOpen().length?'Volgende vraag ›':'Klaar'}</div></div>`;
+  showSheetBg(); }
+/* de effectzin: wat het antwoord deed, en of de maand van de boeking nu sluit (de maandsom van blok 20) */
+function vraagEffectTekst(basis, ym){ let s=basis; try{ const C=runControles('antwoord'); const M=(C.uitkomst||[]).filter(u=>u.blok===20 && /^maandsom/.test(String(u.titel)) && u.maand===ym);
+    if(M.length){ const open=M.filter(u=>u.status==='wacht' || u.status==='vraag').length; s+=` · ${MFULL[+ym.slice(5,7)-1].toLowerCase()} ${open?'sluit nog niet':'sluit weer'}`; } }catch(_){}
+  return s; }
+function eigenRekZet(id, wat){ const t=TX.find(x=>x.id===id); if(!t) return; const p=benoemPartij(t);
+  kennisZet('eigenrek|'+id, {soort:'eigenrek', partij:p, aard:wat, wat:wat==='eigen'?'Eigen rekening buiten Minder':wat==='ander'?'Van iemand anders':'weet ik niet', tx:[id], bedrag:t.amount});
+  if(wat==='eigen'){ SET.eigenRekBuiten=SET.eigenRekBuiten||{}; SET.eigenRekBuiten[p.toLowerCase()]={naam:p, op:vandaagYMD()}; }
+  /* Weet ik niet: kennisZet() maakt de controle verklaard (een plek voor elke soort vraag) */
+  save(); try{ render(); }catch(_){}
+  if(wat==='ander'){ openGegevensVragen('in|'+p.toLowerCase()); if(!document.querySelector('#gegevensSheet')) vraagEffectSheet('Vastgelegd als een ontvangst van iemand anders. Bij Wat Minder van jou weet kies je wat het was.'); return; }
+  const ef=wat==='eigen'?`${euro0(t.amount)} van ${p} telt als intern, niet als inkomen`:'De boeking blijft staan; de controle is verklaard';
+  vraagEffectSheet(vraagEffectTekst(ef, t.date.slice(0,7)), wat==='eigen'?{partij:p, sleutel:'regel|eigenrek|'+p.toLowerCase()}:null); }
+function eigenRekSparen(id, ja){ const E=kennisGet('eigenrek|'+id), t=TX.find(x=>x.id===id); if(!E || !t) return;
+  E.sparen=!!ja; if(ja){ E.effect=Object.assign({}, E.effect||{}, {ovr:{[id]:OVR[id]||null}}); OVR[id]='sparen'; }
+  save(); buildAccMeta(); try{ render(); }catch(_){}
+  vraagEffectSheet(vraagEffectTekst(ja?`${euro0(t.amount)} staat op Sparen & beleggen`:'Blijft een overboeking tussen je eigen rekeningen', t.date.slice(0,7)), null); }
+function eenmTerugZet(id, wat){ const t=TX.find(x=>x.id===id); if(!t) return; const p=benoemPartij(t);
+  kennisZet('eenmterug|'+id, {soort:'eenmterug', partij:p, aard:wat, wat:wat==='terug'?'Komt terug: een reservering':'Echt eenmalig', tx:[id], bedrag:-t.amount});
+  save(); try{ render(); }catch(_){}
+  if(wat==='terug'){ openReservering(''); const set=(i,v)=>{ const el=document.getElementById(i); if(el) el.value=v; };
+    set('rNaam', String(t.name||p).trim()); set('rMaand', valtOpYmPlus(t.date.slice(0,7),12)); return; }   // per jaar: een nieuwe reservering staat al op 12 maanden (openReservering)
+  vraagEffectSheet(`${euro0(-t.amount)} bij ${p} blijft eenmalig, buiten je potjes`, null); }
+/* de regel bij een partij: Ja, altijd geldt voor elke volgende boeking van die partij; Alleen deze legt vast dat het niet zo is */
+function vraagRegelZet(sleutel, keuze){ const E=kennisGet(sleutel)||{}; kennisZet(sleutel, Object.assign({}, E, {soort:'regel', partij:E.partij||sleutel.split('|').slice(-1)[0], keuze, wat:keuze==='altijd'?'Geldt voor alle boekingen van deze partij':'Alleen deze boeking'}));
+  save(); try{ render(); }catch(_){} if(gegevensOpen().length) openGegevensVragen(); else closeSheet(); toast(`${ICON('check')} ${keuze==='altijd'?'Geldt voortaan voor alle':'Alleen deze'}`); }
+/* de kleine vragen (onder de drempel) voor Diagnose */
+function kleineVragen(){ let Q=[]; try{ Q=gegevensVragen().filter(q=>!vraagBovenDrempel(q)); }catch(_){} return Q; }
+/* Terugblik: eenmalig komt elke maand voor (drie afgeronde maanden op rij boven EUR 0, of de laatste boven 10% van de potjes); een
+   constatering, geen advies. */
+function eenmaligPatroonHtml(){ const m=thisYM(), M=[valtOpYmPlus(m,-3), valtOpYmPlus(m,-2), valtOpYmPlus(m,-1)];
+  let B=[]; try{ B=M.map(ym=>buitenMaand(ym).eenmalig.bedrag); }catch(_){ return ''; }
+  let pot=0; try{ pot=maandPotjesSom(maandPotjes(M[2])||{}); }catch(_){}
+  const rij=B.every(b=>b>0), tien=pot>0 && B[2]>pot*0.1; if(!rij && !tien) return '';
+  const r=M.map((ym,i)=>`${MNAMES[+ym.slice(5,7)-1]} ${euro0(B[i])}`).join(' · ');
+  return `<div class="small" data-eenmaligpatroon="${rij?'rij':'tien'}" style="margin-top:10px;line-height:1.45"><b>Eenmalig komt elke maand voor</b><span style="display:block;color:var(--mut2)">${esc(r)}${tien?` · in ${MFULL[+M[2].slice(5,7)-1].toLowerCase()} meer dan 10% van je potjes (${euro0(pot)})`:''}</span></div>`; }
+/* B10: de laatste stap van het koppelen */
+function koppelUitlegSheet(){ $('#sheet').innerHTML=`<div class="grab"></div><div id="koppelUitleg" data-koppeluitleg><div style="font-weight:800;font-size:var(--fs-lg)">Minder controleert zichzelf</div>
+    <ul class="small" style="margin:10px 0 14px;padding-left:18px;line-height:1.55">
+      <li>Na elke sync rekent Minder zijn getallen op twee manieren na.</li>
+      <li>Is een rekenfout zeker, dan herstelt Minder hem en zie je dat in ‘Je cijfers’.</li>
+      <li>Is het niet zeker, dan blijft het getal staan en zoekt de bouwer het uit. Keuzes die eraan hangen, wachten.</li>
+      <li>Weet alleen jij het antwoord, dan vraagt Minder het, alleen als het ertoe doet.</li>
+      <li>Je bankgegevens past Minder nooit aan.</li></ul>
+    <button class="btn" data-begrepen style="min-height:44px" onclick="closeSheet()">Begrepen</button></div>`; showSheetBg(); }
+
 /* DE VERSIE komt uit de naam van de actieve cache (minder-vN, gezet in sw.js). Zonder cache (een eerste bezoek,
    of een browser zonder service worker) staat er geen versie: een tweede versiestring in index.html zou naast
    CACHE gaan lopen. */
@@ -26445,7 +26548,7 @@ function gegevensVragen(){ const out=[];
   for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
   try{ out.push(...salAfwijkVragen()); }catch(_){}   // v435: salaris op een andere dag dan de regel
   /* v425: wat Minder alleen van jou kan weten */
-  const bron=[buitenVragen, kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen];
+  const bron=[buitenVragen, kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen, eigenRekVragen, eigenRekSparenVragen, eenmaligTerugVragen];   // v463: twee nieuwe vragen
   for(const f of bron){ try{ out.push(...f()); }catch(_){} }
   /* v427: EEN BOEKING IS HOOGUIT EEN VRAAG. Een boeking waar je al iets over zei (een antwoord met die boeking erin) vraagt niets
      meer; een Tikkie krijgt de Tikkie-vraag en niet ook "wat was dit?"; en een bedrag dat dezelfde dag even groot terugkomt van
@@ -26454,7 +26557,7 @@ function gegevensVragen(){ const out=[];
   const voor=q=>q.soort==='voraut'?-1:q.soort==='tikkie'?0:1, gezien=new Set(), o=[];   // v457: de voorautorisatie eerst, hij claimt drie boekingen
   for(const q of out.slice().sort((a,b)=>voor(a)-voor(b))){ const t=q.t; if(t && t.id){
       if(gezien.has(t.id) || kennisTerugZelfdeDag(t)) continue;
-      if(gedekt.has(t.id) && !['lening','restant','poststop'].includes(q.soort) && !(q.soort==='benoem' && q.laag==='a')) continue;
+      if(gedekt.has(t.id) && !['lening','restant','poststop','eigenreksparen','eenmterug'].includes(q.soort) && !(q.soort==='benoem' && q.laag==='a')) continue;
       gezien.add(t.id); for(const i of (q.ids||[])) gezien.add(i); }
     o.push(q); }
   return out.filter(q=>o.includes(q)); }
@@ -26647,7 +26750,11 @@ function contantNaarDelen(ym){ const E=contantNaarKennis(); if(!E) return null; 
   return {kas, rijen:CONTANTNAAR_CATS.filter(k=>(+E.verdeling[k]||0)>0).map(k=>{ const pct=+E.verdeling[k]||0, eigen=Math.max(+cs[k]||0,0), deel=kas*pct/100;
     return {k, naam:(CATS[k]||{}).name||k, pct, eigen, deel, incl:eigen+deel}; })}; }
 function kasNaSalZet(){ if(kasNaSalKennis()) return; const herstel=kennisSnap(); kennisZet(KASNASAL_KEY, {soort:'kasnasal', partij:'Contant', wat:KASNASAL_WAT, tx:[]}); save(); keuzeKlaar('Contant: je pint na je salaris', herstel); }
-function kennisZet(k, E){ _eenm=null; SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E); return SET.kennis[k]; }
+function kennisZet(k, E){ _eenm=null; SET.kennis=SET.kennis||{}; SET.kennis[k]=Object.assign({bron:'jij', op:vandaagYMD()}, E);
+  /* v463 (B4): "Weet ik niet" maakt de controle achter de vraag verklaard, voor elke soort vraag (een plek, geen tweede per vraag) */
+  if(E && (E.keuze==='weetniet' || E.aard==='weetniet')){ const C=SET.controles=SET.controles||{}; C.verklaard=C.verklaard||{};
+    for(const id of (E.tx||[])){ const t=TX.find(x=>x.id===id); if(t) C.verklaard['vraag:'+E.soort+'|'+id]={reden:'weet ik niet', bedrag:t.amount, maand:t.date.slice(0,7)}; } }
+  return SET.kennis[k]; }
 function kennisTekst(E){ return E? `${E.wat||'nog niet benoemd'} \u00b7 ${KENNIS_BRON[E.bron]||E.bron||'door jou'}` : ''; }
 /* De bron als link naar "Wat Minder van jou weet": een tik op een bron-regel opent het scherm. */
 function kennisBronLink(txt){ return `<span data-kennisbron role="button" style="cursor:pointer;text-decoration:underline dotted" onclick="event.stopPropagation();openKennis()">${esc(txt)}</span>`; }
@@ -27029,13 +27136,13 @@ function kennisLater(qkey){ SET.kennisLater=SET.kennisLater||{}; const L=SET.ken
   SET.kennisLater[qkey]={n:(+L.n||0)+1, tot:ymdVan(d), op:vandaagYMD()}; save();
   try{ render(); }catch(_){} if(gegevensOpen().length) openGegevensVragen(); else closeSheet(); }
 /* de vragen die nu in Zien staan: niet op later, op bedrag, hooguit KENNIS_MAX_OPEN */
-function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.qkey).wacht).sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)); }
+function gegevensOpen(){ return gegevensVragen().filter(q=>!kennisLaterStand(q.qkey).wacht && vraagBovenDrempel(q)).sort((a,b)=>(+b.bedrag||0)-(+a.bedrag||0)); }
 
 /* ---- DE ENE LEZER: alles wat Minder van jou weet, met bron en datum ---- */
 function kennisLijst(){ const o=[];
   holdingKeys(); try{ kennisSync(); }catch(_){}
   const groep={benoem:E=>E.aard==='terug'?'vast':'eenmalig', eenmalig:()=>'eenmalig', buiten:()=>'eenmalig', uit:E=>E.keuze==='lening'?'leningen':'eenmalig', in:()=>'inkomen', vastink:()=>'inkomen', vast:()=>'vast', vervanger:()=>'vast', woning:()=>'woning', tikkie:()=>'tikkie', opname:()=>'opname',
-    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak', salaris:()=>'inkomen', saldag:()=>'inkomen', kasnasal:()=>'opname', contantnaar:()=>'opname', kwijt:()=>'leningen'};
+    holding:()=>'inkomen', lening:()=>'leningen', post:()=>'vast', oorzaak:()=>'oorzaak', salaris:()=>'inkomen', saldag:()=>'inkomen', kasnasal:()=>'opname', contantnaar:()=>'opname', kwijt:()=>'leningen', eigenrek:()=>'inkomen', eenmterug:()=>'eenmalig', regel:()=>'eenmalig'};
   for(const [k,E] of Object.entries(SET.kennis||{})){ if(!E) continue;
     const g=(groep[E.soort]||(()=>'eenmalig'))(E);
     if(E.soort==='lening'){ const l=loans().find(x=>x.id===E.loanId); if(!l) continue;
@@ -27215,6 +27322,7 @@ function openGegevensVragen(focus){
   if(!Q.length){ if(focus && focus!=='alle'){ window._gegevensFocus=''; return openGegevensVragen(); } closeSheet(); return; }
   const wacht=focus?0:alleQ.length-Q.length;
   const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
+    if(['eigenrek','eigenreksparen','eenmterug'].includes(q.soort)) return fase3VraagRij(q);   // v463
     if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname','buiten','kwijt','voraut'].includes(q.soort)) return kennisVraagRij(q);   // v425, v456 kwijt, v457 voraut
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
     if(q.soort==='saldag'){ const dq=esc(q.datum);   // v435
@@ -33092,8 +33200,9 @@ function controleDiagHtml(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run;
   const G=U.filter(u=>u.soort===1 && u.status==='gecorrigeerd');
   h+=kop('Gecorrigeerd')+(G.length?G.map(u=>{ const K=CONTROLE_CORRECTIES[u.id]; return rij('↺', u.titel, u.tekst, `data-controlegecorrigeerd="${esc(u.id)}"`, (K?`<span class="small muted" style="display:block;margin-top:3px;line-height:1.4">wijst aan: ${esc(K.wijst)} · juist: ${esc(K.bron)} · ${esc(K.alleenBerekening)} · zichtbaar: ${esc(K.zichtbaar)}</span>`:'')+kopie(u)); }).join(''):'<div class="small muted">niets</div>');
   /* 4. kleine vragen (soort 3 onder de drempel; de drempel van B4 komt in fase 3) */
-  const KV=U.filter(u=>u.soort===3 && u.klein);
-  h+=kop(`Kleine vragen · ${KV.length}`)+(KV.length?KV.map(u=>rij('?', u.titel, u.tekst)).join(''):'<div class="small muted" data-kleinevragen>geen</div>');
+  const KV=U.filter(u=>u.soort===3 && u.klein), KQ=kleineVragen();   // v463: ook de vragen onder de drempel van B4
+  const KQr=KQ.map(q=>{ const t=vraagTx(q)||{}; return rij('?', `${q.partij||(q.t&&benoemPartij(q.t))||q.naam||q.soort} · ${euro0(Math.abs(+q.bedrag||+t.amount||0))}${t.date?' · '+dagKort(t.date):''}`, 'onder de drempel: niet in Zien en niet in de bel', `data-kleinevraag="${esc(q.qkey)}"`); });
+  h+=kop(`Kleine vragen · ${KV.length+KQ.length}`)+(KV.length||KQ.length?KV.map(u=>rij('?', u.titel, u.tekst)).join('')+KQr.join(''):'<div class="small muted" data-kleinevragen>geen</div>');
   /* 5. klopt, per onderwerp met aantal */
   const per={}; for(const u of U) if(u.status==='klopt' || (u.status==='verklaard' && !u.archief)) per[u.onderwerp||'overig']=(per[u.onderwerp||'overig']||0)+1;
   const ond=Object.keys(per).sort((a,b)=>(CONTROLE_ONDERWERP_VOLG.indexOf(a)+99)%99-(CONTROLE_ONDERWERP_VOLG.indexOf(b)+99)%99);
@@ -34038,6 +34147,7 @@ async function psd2IngestSession(s){
   curMonth=null; render();
   psd2SyncToast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
   await naVerf(); try{ if(controlesFaseB('sync')) render(); }catch(_){}
+  try{ koppelUitlegSheet(); }catch(_){}   // v463 B10: de laatste stap van het koppelen
 }
 // Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
 
