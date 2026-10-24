@@ -3247,7 +3247,7 @@ function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=
    uit het voorstel. */
 const REK_GESLOTEN_DAGEN=90;
 function rekGesloten(acc){ return !!(SET.rekGesloten||{})[acc]; }
-function rekActief(acc){ return !rekGesloten(acc); }
+function rekActief(acc){ if(rekGesloten(acc)) return false; try{ if(psd2Vervangen(acc)) return false; }catch(_){} return true; }
 function rekGeslotenLijst(){ return OWN.filter(rekGesloten); }
 function rekGeslotenKandidaten(){
   const grens=ymdVan(new Date(Date.now()-REK_GESLOTEN_DAGEN*86400000)), open=SET.rekOpen||{};
@@ -3259,7 +3259,9 @@ function rekGeslotenKandidaten(){
    rekeningen waarvan de app het saldo niet weet, en een ongetelde zak is iets anders dan een
    rekening zonder saldo. Niet geteld betekent hier: geen term, en dan staat alles precies zoals
    het vóór v258 stond. Zo is het verschil dat de telling maakt ook meteen wat de telling waard is. */
-function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ if(rekGesloten(acc)) continue; const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
+/* v462 (H4): EEN VERVANGEN KOPPELING TELT NIET IN JE TOTAAL. Zijn saldo is van de laatste sync die nog lukte en staat naast dat van
+   dezelfde rekening onder zijn nieuwe id, dus hij telde dubbel of stilstaand mee. rekActief() is de ene toets. */
+function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ if(!rekActief(acc)) continue; const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
   const c=contantVerwacht(); if(c!=null) sum+=c;
   return {sum,missing,known,contant:(c==null?null:c)}; }
 /* v198: een saldo en een transactiereeks komen niet altijd uit hetzelfde moment. Bij een
@@ -4868,7 +4870,8 @@ function renderDash(){
   const hero = balKnown
     ? `<div class="homehero" style="cursor:default">
     ${saldoBlok(S2.saldo)}
-    ${bankVervalHero()}
+    ${homeRekKaart()}
+    ${cijferRegel()}
     ${''/* v439: vrij te besteden, de potje-stap bij een krappe maand en Verwacht eind staan niet meer op Home (gevraagd door de gebruiker) */}
   </div>`
     : `<div class="homehero" style="cursor:default">
@@ -4939,6 +4942,8 @@ function saldoBlok(saldo){
     NOTES.saldoachter=`${B.zinnen.join(' ')}<div style="color:var(--mut);margin-top:4px">Het label verdwijnt zodra er een nieuwer saldo is.</div>`;
     chip=` <span class="small" data-bijgewerkt="${esc(B.datum||'')}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">bijgewerkt ${esc(dagKort(B.datum))} ${noteIcon('saldoachter','Waarom staat hier bijgewerkt')}</span>`;
   }
+  /* v462 (B5): de pill zegt hoeveel rekeningen actueel zijn; bij een oud saldo blijft het label van v378 met zijn uitleg */
+  if(!B){ const P=versheidPill(); if(P) chip=` <span class="small" data-versheid="${P.n}/${P.m}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">${esc(P.tekst)}</span>`; }
   const neg=(+saldo||0)<0;
   return `<div data-saldoblok role="button" onclick="openBalances()" style="cursor:pointer">
     <div class="hh-lbl">Totaal saldo${chip}</div>
@@ -5365,6 +5370,14 @@ function scoreNotifs(opts){
   /* v460 (B3): een keuze die wachtte op een nagerekend getal staat weer open: een melding in de bel, groep Grip */
   try{ const KT=(SET.controles||{}).keuzeTerug; if(KT && Date.now()-KT.op<7*864e5) push({key:'grip-keuzeterug-'+KT.getal, h:'direct', score:66, t:'info', ic:ICON('check'),
     l1:'Een keuze staat weer open', l2:`'${CONTROLE_GETAL_NAAM[KT.getal]||KT.getal}' is nagerekend · Kiezen`, act:"go('maand');gripKiesTab('kiezen')"}); }catch(_){}
+  /* v462 (B6): DE GROEP CIJFERS IN DE BEL. Alleen wat iets van je vraagt: een vraag boven de drempel, een rekening die niet actueel
+     is, een getal dat na een update bewoog. Nooit een melding voor soort 1 (Minder herstelde) of soort 2 (de bouwer zoekt het uit). */
+  try{ const Q=cijferVragen(); if(Q.length) push({key:'cijfers-vraag', h:'direct', score:64, t:'info', ic:ICON('check'), cijfers:true,
+    l1:`${Q.length} ${Q.length===1?'vraag':'vragen'} over je cijfers`, l2:'Kloppen mijn gegevens?', act:"openGegevensVragen('alle')"}); }catch(_){}
+  try{ for(const v of rekVersheid().filter(v=>v.oud)) push({key:'cijfers-rek-'+v.acc, h:'direct', score:65, t:'warn', ic:ICON('check'), cijfers:true,
+    l1:`${v.naam} niet bijgewerkt sinds ${v.gelukt!=null?nlDagMaand(v.gelukt):'onbekend'}`, l2:'Opnieuw koppelen', act:'psd2Connect()'}); }catch(_){}
+  try{ const BW=(SET.controles||{}).bewogen; if(BW && Date.now()-BW.op<7*864e5) for(const x of (BW.lijst||[])) push({key:'cijfers-bewogen-'+x.getal, h:'direct', score:63, t:'info', ic:ICON('check'), cijfers:true,
+    l1:`${CONTROLE_GETAL_NAAM[x.getal]||(/^pot:/.test(x.getal)?'verwacht in '+((CATS[x.getal.slice(4)]||{}).name||x.getal.slice(4)):x.getal)} veranderde na de update`, l2:`${euro0(x.voor)} → ${euro0(x.na)} · Je cijfers`, act:'openJeCijfers()'}); }catch(_){}
   if(isNow){ try{ const {out:eb}=effectiveBudgets(m); const spend=catSpendMap(m); const B=SET.budgets||{}; const overs=[];
     const keys=new Set([...Object.keys(eb||{}), ...Object.keys(B).filter(k=>+B[k]>0)]);
     for(const k of keys){ if(!CATS[k]||CATS[k].type!=='expense') continue; const act=spend[k]||0; const potje=+B[k]||0;
@@ -5690,13 +5703,14 @@ function pushTopNotif(force){
   }catch(_){}
 }
 function openNotifs(){
-  const ns=notifList(); window._setSheet=null;
+  const ns=notifList().map((n,i)=>[n,i]).sort((a,b)=>(a[0].cijfers?1:0)-(b[0].cijfers?1:0) || a[1]-b[1]).map(x=>x[0]); window._setSheet=null;   // v462: Cijfers als laatste groep
   const nNew=(function(){ try{ return notifUnseen(); }catch(_){ return 0; } })();   // dit is exact wat de badge telde
   const perm=(typeof Notification!=='undefined')?Notification.permission:'denied';
   const enableRow = perm==='default' ? `<div class="small" style="margin:0 0 12px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="enableNotifs()">Meldingen op dit toestel aanzetten ›</span></div>` : '';
   const CRITN=new Set(['lowbal','accshort']);
-  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g);
-    return `<div class="coach ${n.t}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
+  let _cijKop=false;   // v462 (B6): de meldingen over je cijfers staan onder een eigen kop
+  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g); const kopC=(n.cijfers && !_cijKop)?(_cijKop=true, `<div class="hlabel" data-notifgroep="cijfers" style="margin:10px 0 6px">Cijfers</div>`):'';
+    return kopC+`<div class="coach ${n.t}" data-notif="${esc(n.key)}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
       + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px;flex-wrap:wrap">${g==='loandue'?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRepaidFromNotif('${n.key.replace(/^loandue-/,'')}')">Terugbetaald</span>`:''}<span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
   }).join('')
     /* v162: de lijst is vaker leeg, en dat is goed. Eén rustige regel, geen uitleg en geen
@@ -12914,7 +12928,7 @@ function gripZienTabel(){
     ${rij('vast','vast',vastB,vastV,SALBALK_KLEUR.vast)}
     ${rij('potjes','potjes',potB,potV,SALBALK_KLEUR.potjes)}
     <div data-zienrij="budget" data-budget="${totB}" data-verwacht="${totV}" data-verschil="${totD}" style="${col};padding:6px 0 4px;border-top:2px solid var(--line);font-weight:800"><span>budget</span>${num(euro0(totB))}${num(euro0(totV))}${num(`${euro0(Math.abs(totD))} ${totD>0?'boven':'onder'}`,`;color:${kl(totD)}`)}</div>
-    <div data-zienopzij data-doel="${O&&O.doel!=null?O.doel:''}" data-gedaan="${O&&O.netto!=null?O.netto:''}" style="${col};padding:6px 0 2px;border-top:1px solid var(--line);font-size:var(--fs-sm)"><span>${dot(SALBALK_KLEUR.opzij)}opzij</span><span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">doel ${O&&O.doel!=null?euro0(O.doel):'nog geen'}</span>${gedaan}<span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">${O&&O.netto!=null&&O.netto<0?'uit spaargeld':'gedaan'}</span></div>
+    <div data-zienopzij data-doel="${O&&O.doel!=null?O.doel:''}" data-gedaan="${O&&O.netto!=null?O.netto:''}" style="${col};padding:6px 0 2px;border-top:1px solid var(--line);font-size:var(--fs-sm)"><span>${dot(SALBALK_KLEUR.opzij)}opzij</span><span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)" data-zienopzijlabel>${O&&O.doel!=null?'volgens je verdeling '+euro0(O.doel):'nog geen verdeling'}</span>${gedaan}<span style="text-align:right;color:var(--mut2);font-size:var(--fs-xs)">${O&&O.netto!=null&&O.netto<0?'uit spaargeld':'gedaan'}</span></div>
     <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="small" data-zienbrug role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripNaarBrug()">waar zit het ›</span></div>${buitenRegel([m], true)}${budgetWijzRegel()}</div>`;
 }
 /* Openstaand: wat je uitleende en nog open staat (loanStand(), de bron van de leningsheet en blok 20). */
@@ -25500,6 +25514,7 @@ function bankBijYMD(d){
 function bankVerval(){
   const ps=SET.psd2Accounts||{}, per={}, vd=vandaagYMD();
   for(const [acc,v] of Object.entries(ps)){
+    if(!rekActief(acc)) continue;   // v462: een vervangen of gesloten koppeling zegt niets over de toestemming die er nu staat
     const b=v.bank||'Je bank', g=per[b]||(per[b]={bank:b, accs:[], exp:null, bij:null});
     g.accs.push(acc);
     if(v.exp){ const e=ymdVan(new Date(v.exp)); if(!g.exp || e<g.exp) g.exp=e; }
@@ -25535,6 +25550,97 @@ function bankVervalHero(){
   let V=[]; try{ V=bankVerval().filter(g=>g.verlopen||g.binnenkort); }catch(_){ return ''; }
   return V.map(g=>`<div data-bankverval="${g.verlopen?'verlopen':'binnenkort'}" style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer" onclick="psd2Connect()">${esc(bankVervalZin(g))} <span style="color:var(--teal);font-weight:600;white-space:nowrap">· ${g.verlopen?'opnieuw koppelen':'vernieuwen'} ›</span></div>`).join('');
 }
+/* ===== v462 DEEL B FASE 2 (gevraagd door de gebruiker) =====
+   B5 VERSHEID: per rekening de laatste GESLAAGDE sync, apart opgeslagen (SET.syncGelukt[acc], ms), zodat een mislukte poging hem
+   niet overschrijft. Geslaagd is: het saldo kwam binnen en de transacties ook (geen fout). Een vervangen koppeling telt niet
+   (rekActief()). Zonder vastlegging leest hij het stempel van een geslaagde saldo-aanroep in SET.psd2Diag (v298), en anders is hij
+   onbekend: een onbekende rekening is alleen niet actueel als zijn laatste sync mislukte (psd2Falend()). */
+const VERS_UREN=24;
+function syncGeluktZet(acc){ SET.syncGelukt=SET.syncGelukt||{}; SET.syncGelukt[acc]=Date.now(); }
+function syncGeluktVan(acc){ const g=(SET.syncGelukt||{})[acc]; if(g) return +g;
+  const d=(SET.psd2Diag||{})[acc]; if(d && typeof d==='object' && d.balGeland===true && !d.txFout){ const v=(d._veldOp||{}).balGeland||d._op; if(v) return +v; }
+  return null; }
+function rekVersheid(){ const ps=SET.psd2Accounts||{}, nu=Date.now(); let F=new Set(); try{ F=new Set(psd2Falend().map(f=>f.acc)); }catch(_){}
+  return Object.keys(ps).filter(a=>rekActief(a)).map(a=>{ const g=syncGeluktVan(a), falend=F.has(a);
+    return {acc:a, bank:ps[a].bank||'', naam:aanslNaam(a), gelukt:g, falend, oud: g!=null ? (nu-g>VERS_UREN*36e5) : falend}; }); }
+function nlDagMaand(ms){ const P=nlDelen(ms); return `${+P.d} ${MNAMES[+P.m-1]}`; }
+/* de pill bij het totaalsaldo: hoeveel rekeningen actueel zijn, of de tijd van de oudste geslaagde sync als alles actueel is */
+function versheidPill(){ let V=[]; try{ V=rekVersheid(); }catch(_){ return null; } if(!V.length) return null;
+  const m=V.length, n=V.filter(v=>!v.oud).length; let G=[]; try{ G=bankVerval().filter(g=>g.binnenkort||g.verlopen); }catch(_){}
+  if(n<m) return {tekst:`${n} van ${m} rekening${m===1?'':'en'} actueel`, n, m};
+  if(G.length) return {tekst:`${m} rekening${m===1?'':'en'} · toestemming ${bankKort(G[0].bank)} ${G[0].verlopen?'verlopen':'verloopt'}`, n, m};
+  const t=V.map(v=>v.gelukt).filter(x=>x!=null);
+  return {tekst:`${m} rekening${m===1?'':'en'}${t.length===m?' · '+nlTijd(Math.min(...t)):''}`, n, m}; }
+/* de kaart op Home boven de regel over je cijfers: een rekening die langer dan 24 uur niet bijgewerkt is, of een toestemming die
+   binnen 14 dagen verloopt (of verlopen is). De knop is de bestaande koppelflow. */
+function homeRekKaart(){ let V=[], G=[]; try{ V=rekVersheid().filter(v=>v.oud); }catch(_){} try{ G=bankVerval().filter(g=>g.verlopen||g.binnenkort); }catch(_){}
+  if(!V.length && !G.length) return '';
+  const knop=`<button class="btn sec" data-opnieuwkoppelen style="width:auto;min-height:44px;padding:8px 14px;margin-top:8px" onclick="event.stopPropagation();psd2Connect()">Opnieuw koppelen</button>`;
+  const rijen=[];
+  for(const g of G){ const n=g.accs.length, datum=g.exp?`${+g.exp.slice(8,10)} ${MFULL[+g.exp.slice(5,7)-1].toLowerCase()}`:'onbekend';
+    rijen.push(`<div data-bankverval="${g.verlopen?'verlopen':'binnenkort'}" data-reknietactueel="toestemming" style="padding:2px 0"><b>${esc(bankKort(g.bank))}: toestemming ${g.verlopen?'verlopen op':'verloopt op'} ${esc(datum)}</b><div class="small muted">${g.verlopen?`${esc(bankVervalZin(g))} \u00b7 de sync van ${n} rekening${n===1?'':'en'} staat stil`:`daarna stopt de sync van ${n} rekening${n===1?'':'en'}`}</div></div>`); }
+  const gedekt=new Set(G.filter(g=>g.verlopen).flatMap(g=>g.accs));
+  /* twee of meer van dezelfde bank: een regel per bank met de namen eronder (vijf falende N26-rekeningen waren vijf regels, 439px) */
+  const perBank={}; for(const v of V){ if(gedekt.has(v.acc)) continue; (perBank[v.bank]=perBank[v.bank]||[]).push(v); }
+  const sinds=L=>{ const g=L.map(v=>v.gelukt).filter(x=>x!=null); return g.length===L.length?nlDagMaand(Math.min(...g)):'onbekend'; };
+  for(const [bank,L] of Object.entries(perBank)){
+    if(L.length===1){ const v=L[0]; rijen.push(`<div data-reknietactueel="${esc(v.acc)}" style="padding:2px 0"><b>${esc(v.naam)} niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${v.falend?'de laatste sync haalde geen saldo op':'langer dan 24 uur geen geslaagde sync'}</div></div>`); continue; }
+    rijen.push(`<div data-reknietactueel="${esc(L.map(v=>v.acc).join(','))}" style="padding:2px 0"><b>${esc(bankKort(bank)||bank||'Je bank')}: ${L.length} rekeningen niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${esc(L.map(v=>v.naam).join(' \u00b7 '))}</div></div>`); }
+  if(!rijen.length) return '';
+  return `<div class="card" data-homerekkaart style="margin:10px 0 0;padding:10px 12px;cursor:default">${rijen.join('')}${knop}</div>`; }
+/* B6: de drempel voor een vraag (soort 3): vanaf EUR 25 in de laatste 120 dagen, of elk bedrag in de lopende salarisperiode.
+   Een vraag zonder boeking (een lening, een wissel) heeft geen datum en staat altijd boven de drempel. */
+const VRAAG_MIN=25;
+function vraagTx(q){ return q && q.t && q.t.date ? q.t : (q && q.datum ? {date:String(q.datum), amount:-(+q.bedrag||0)} : null); }
+function vraagBovenDrempel(q){ const t=vraagTx(q); if(!t) return true; const b=Math.abs(+q.bedrag||+t.amount||0);
+  try{ if(buitenLopend(t)) return true; }catch(_){}
+  return b>=VRAAG_MIN && _dagenTot(String(t.date), vandaagYMD())<=BENOEM_DAGEN; }
+function cijferVragen(){ let Q=[]; try{ Q=gegevensOpen(); }catch(_){} return Q.filter(vraagBovenDrempel); }
+/* de regel onder het saldo op Home, altijd: gecontroleerd met de tijd van de laatste run, of een vraag. Een tik opent Je cijfers. */
+function cijferRegel(){ const C=controlesLees(), R=C.run, Q=cijferVragen();
+  const tijd=R&&R.tijd?nlTijd(R.tijd):'';
+  const tekst=Q.length?`${Q.length} ${Q.length===1?'vraag':'vragen'} over je cijfers${tijd?' · gecontroleerd '+tijd:''}`
+    :R?`✓ Cijfers gecontroleerd · ${tijd}`:'Cijfers worden gecontroleerd na de volgende sync';
+  return `<div class="row" data-cijferregel="${Q.length?'vraag':R?'gecontroleerd':'nog'}" role="button" onclick="event.stopPropagation();openJeCijfers()" style="gap:6px;min-height:44px;align-items:center;cursor:pointer;font-size:var(--fs-sm);color:${Q.length?'var(--txt)':'var(--mut)'}"><span style="flex:1;min-width:0">${esc(tekst)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`; }
+/* de zelf herstelde voorautorisaties (soort 1, bron minder): ze staan in Je cijfers en niet meer in Wat Minder van jou weet */
+function cijferCorrecties(){ const o=[]; for(const [k,e] of Object.entries(SET.vorautPaar||{})){ if(!e || e.bron!=='minder' || !Array.isArray(e.weg) || !e.weg.length) continue;
+    const A=TX.find(x=>String(x.id)===k); if(!A) continue; const Vr=TX.find(x=>String(x.id)===String(e.weg[1])); let K=null; try{ K=vorautKandidaten().find(x=>x.sleutel===k); }catch(_){}
+    const B=K?K.bij:null;
+    o.push({k, A, V:Vr, B, partij:titleCase(cleanMerch(A.name)||A.name||e.partij||'?'), cat:catOf(A), ym:String(A.date).slice(0,7)}); }
+  return o.sort((a,b)=>String(b.A.date).localeCompare(String(a.A.date))); }
+/* "Toon zonder correctie": wat de categorie in die maand zou zijn zonder dit ene herstel. In het geheugen, zoals
+   correctieZonderVoraut(): de vlag even weg, meten, terugzetten. Er wordt niets opgeslagen. */
+function cijferZonderCorrectie(k){ const P=SET.vorautPaar||{}, e=P[k]; if(!e) return null; const A=TX.find(x=>String(x.id)===k); if(!A) return null;
+  const ym=String(A.date).slice(0,7), cat=catOf(A);
+  const meet=()=>{ _dataGen++; return +((catSpendMap(ym)||{})[cat]||0); };
+  const met=meet(), kopie=Object.assign({}, P); delete SET.vorautPaar[k];
+  let zonder=null; try{ zonder=meet(); } finally { SET.vorautPaar=kopie; _dataGen++; }
+  return {ym, cat, met, zonder}; }
+function cijferToonZonder(k){ window._cijfersZonder=window._cijfersZonder===k?null:k; openJeCijfers(); }
+function saldoSoortTekst(s){ s=String(s||''); return /^(CLBD|ITBD)$/.test(s)?`geboekt saldo (${s})`:s==='XPCD'?'alleen verwacht saldo (XPCD)':s?`saldosoort ${s}`:'saldosoort onbekend'; }
+function openJeCijfers(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run, A=C.aansluiting||{}, nu=Date.now(), Q=cijferVragen(); let V=[]; try{ V=rekVersheid(); }catch(_){}
+  const kop=t=>`<div class="hlabel" style="margin:14px 0 4px">${t}</div>`;
+  const rij=(attr, titel, sub, rechts, klik)=>`<div class="row" ${attr} ${klik?`role="button" onclick="${klik}"`:''} style="gap:8px;min-height:44px;align-items:center;padding:6px 0;border-top:1px solid var(--line)${klik?';cursor:pointer':''}"><span style="flex:1;min-width:0"><span style="display:block;font-weight:600">${esc(titel)}</span>${sub?`<span class="small muted" style="display:block;line-height:1.4">${esc(sub)}</span>`:''}</span>${rechts?`<span style="color:var(--mut2);font-weight:700">${rechts}</span>`:''}</div>`;
+  const runR=R?`gecontroleerd ${nlDagMaand(R.tijd)} ${nlTijd(R.tijd)} · na ${R.bron==='sync'?'de sync':R.bron==='antwoord'?'een antwoord':R.bron==='versie'?'een nieuwe versie':R.bron}`:'nog niet gecontroleerd: dat gebeurt na de volgende sync';
+  let h=`<div class="small muted" data-cijfersrun>${esc(runR)}</div>`;
+  if(Q.length) h+=kop('Vraag')+rij('data-cijfersvraag', `${Q.length} ${Q.length===1?'vraag':'vragen'} in Kloppen mijn gegevens?`, 'alleen jij weet het antwoord', '›', "closeSheet();openGegevensVragen('alle')");
+  h+=kop('Rekeningen')+(V.length?V.map(v=>{ const Rr=A[v.acc]; let S=null; try{ S=aanslStatus(v.acc, Rr, nu); }catch(_){}
+      const st=!S||S.status==='start'?'aansluiting start bij de volgende sync':S.status==='klopt'?'sluit aan':S.status==='verklaard'?`verschil ${euroC(S.bedrag)}, toegestaan bij een verwacht saldo`:`verschil ${euroC(S.bedrag)}, de bouwer zoekt het uit`;
+      const bij=v.gelukt!=null?`bijgewerkt ${nlDagMaand(v.gelukt)} ${nlTijd(v.gelukt)}`:'bijgewerkt onbekend';
+      return rij(`data-cijfersrek="${esc(v.acc)}"`, v.naam, `${v.oud?'niet actueel · ':''}${bij} · ${saldoSoortTekst(Rr&&Rr.laatste&&Rr.laatste.soort)} · ${st}`, S&&S.status==='klopt'?'✓':S&&S.status==='wacht'?'~':'–'); }).join(''):'<div class="small muted">geen gekoppelde rekening</div>');
+  const K=cijferCorrecties();
+  if(K.length){ h+=kop('Gecorrigeerd door Minder')+K.map(c=>{ const kk=esc(c.k).replace(/'/g,"\\'"), Z=window._cijfersZonder===c.k?cijferZonderCorrectie(c.k):null;
+      const zin=`voorautorisatie ${euro(-c.A.amount)}${c.V?` en vrijgave ${euro(-c.V.amount)}`:''} tellen niet mee${c.B?`; je betaling van ${euro(-c.B.amount)} blijft`:''} · rekenfout van Minder · je saldo is niet veranderd`;
+      const zon=Z?`<div class="small" data-cijferszonderuitkomst style="margin-top:4px;line-height:1.4">zonder correctie: ${esc((CATS[Z.cat]||{}).name||Z.cat)} in ${esc(MFULL[+Z.ym.slice(5,7)-1].toLowerCase())} ${euro(Z.zonder)} (nu ${euro(Z.met)}) · springt terug zodra je de sheet sluit</div>`:'';
+      return `<div data-cijferscorrectie="${esc(c.k)}" style="padding:8px 0;border-top:1px solid var(--line)"><b>${esc(c.partij)} · ${esc(dagKort(c.A.date))}</b><div class="small muted" style="line-height:1.4">${esc(zin)}</div>${zon}
+        <div class="row" style="gap:12px;margin-top:6px"><button class="btn sec" data-zondercorrectie="${esc(c.k)}" style="width:auto;min-height:44px;padding:8px 12px" onclick="cijferToonZonder('${kk}')">${Z?'Toon met correctie':'Toon zonder correctie'}</button><span class="small" data-cijfersterug style="color:var(--mut2);cursor:pointer;min-height:44px;display:inline-flex;align-items:center" onclick="cijferTerug('${kk}')">terugdraaien</span></div></div>`; }).join(''); }
+  const ok=[...new Set(U.filter(u=>u.status==='klopt').map(u=>u.onderwerp||'overig'))].sort((a,b)=>(CONTROLE_ONDERWERP_VOLG.indexOf(a)+99)%99-(CONTROLE_ONDERWERP_VOLG.indexOf(b)+99)%99);
+  if(ok.length) h+=kop('Klopt')+`<div class="small" data-cijfersklopt style="line-height:1.5;padding:4px 0">${esc(ok.join(' · '))}</div>`;
+  const nW=U.filter(u=>u.soort===2 && u.status==='wacht').length;
+  if(nW) h+=`<div class="row" data-cijferswacht="${nW}" role="button" onclick="closeSheet();diagOpen()" style="gap:6px;min-height:44px;align-items:center;cursor:pointer;margin-top:10px;color:var(--mut2);font-size:var(--fs-sm)"><span style="flex:1">${nW} controle${nW===1?'':'s'} wacht${nW===1?'':'en'} op een nieuwe versie · Diagnose</span><span>›</span></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div class="row" style="margin-bottom:4px"><span class="hlabel" style="margin:0;flex:1">Je cijfers</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;min-height:44px;display:inline-flex;align-items:center" onclick="closeSheet()">Klaar</span></div><div id="jeCijfers" data-jecijfers>${h}</div>`;
+  showSheetBg(); }
+function cijferTerug(k){ if(!vorautTerugKern(k)) return; save(); buildAccMeta(); try{ controlesNaAntwoord(); }catch(_){} window._cijfersZonder=null; render(); openJeCijfers(); toast('Teruggedraaid'); }
 /* DE VERSIE komt uit de naam van de actieve cache (minder-vN, gezet in sw.js). Zonder cache (een eerste bezoek,
    of een browser zonder service worker) staat er geen versie: een tweede versiestring in index.html zou naast
    CACHE gaan lopen. */
@@ -27019,7 +27125,7 @@ function openKennisVergeet(id){ const x=kennisLijst().find(e=>e.id===id); if(!x)
     <div class="row" style="gap:8px"><button class="btn" data-kennisvergeetzet onclick="kennisVergeet('${esc(id).replace(/'/g,"\\'")}')">Vergeten</button><button class="btn sec" onclick="openKennis()">Terug</button></div></div>`;
   showSheetBg(); }
 /* HET SCHERM "WAT MINDER VAN JOU WEET": per soort, met bron, datum, Wijzigen en Vergeten; onderaan de vragen die wachten */
-function openKennis(){ const L=kennisLijst(), kk=s=>esc(s).replace(/'/g,"\\'");
+function openKennis(){ const L=kennisLijst().filter(x=>!(x.soort==='voraut' && x.bron==='minder')),   /* v462 (B6): wat Minder zelf herstelde staat in Je cijfers */ kk=s=>esc(s).replace(/'/g,"\\'");
   const rij=x=>`<div data-kennisrij="${esc(x.id)}" style="padding:8px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-weight:600">${esc(x.partij||'?')}</span><span class="small">${esc(x.wat)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(KENNIS_BRON[x.bron]||x.bron)}${x.op?' \u00b7 '+esc(dagKort(x.op))+' '+String(x.op).slice(0,4):''}</span></span>
     <span class="small" data-kenniswijzig style="color:var(--teal);font-weight:700;cursor:pointer" onclick="kennisWijzig('${kk(x.id)}')">Wijzigen</span><span class="small" data-kennisvergeet style="color:var(--mut2);cursor:pointer;margin-left:10px" onclick="openKennisVergeet('${kk(x.id)}')">Vergeten</span></div></div>`;
   /* v446: de keuze "Contant: ik pin na mijn salaris" staat in de groep Contant zolang hij niet gezet is; gezet is hij een gewone rij */
@@ -28752,7 +28858,7 @@ function diagRekeningen(){
   /* v453: de twee regels "laatste import per rekening" en "bewaarde foutstatus" zeiden "bestaat niet"; sinds v279/v298 bewaart
      SET.psd2Diag per rekening de laatste sync (_op) en per groep (transactie, saldo, pending) de velden met hun eigen stempel, ook
      de fout van de bank. Hier staat wat er werkelijk bewaard is, zonder iets te herberekenen. */
-  const PD=_dT(()=>SET.psd2Diag,{})||{}, tijd=v=>{ const d=new Date(+v); return isNaN(d)?'-':`${ymdVan(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+  const PD=_dT(()=>SET.psd2Diag,{})||{}, tijd=v=>{ if(v==null || isNaN(+v) || isNaN(new Date(+v))) return '-'; const P=nlDelen(+v); return `${P.j}-${P.m}-${P.d} ${P.h}:${P.mi}`; };   // v462 (H2): Nederlandse tijd
   const pdk=Object.keys(PD).filter(a=>PD[a] && typeof PD[a]==='object' && !Array.isArray(PD[a]));
   L.push('  bewaard per rekening (SET.psd2Diag, v279/v298): '+(pdk.length?pdk.length+' rekening(en)':'nog niets bewaard (er is sinds v279 niet gesynchroniseerd)'));
   const gk456=SET.psd2Accounts||{};
@@ -32887,6 +32993,9 @@ function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), 
     if(u.status==='verklaard' && u.maand && u.maand<thisYM()) u.archief=true;
     const p=vorigId.get(u.id); u.sinds=p && p.status===u.status ? (p.sinds||p.tijd||nu) : nu; u.tijd=nu; }
   /* keuze die terugkomt: wachtte een keuze aan een getal en nu niet meer, dan een melding in de bel (groep Grip) */
+  /* v462 (B6): een getal dat na een nieuwe versie bewoog (een euro of meer) krijgt een melding in de bel, groep Cijfers */
+  if(bron==='versie' && C.getallen && typeof C.getallen==='object'){ const L=[]; for(const g of Object.keys(getallen)){ const a=C.getallen[g], b=getallen[g]; if(a!=null && b!=null && Math.abs(b-a)>=1) L.push({getal:g, voor:a, na:b}); }
+    if(L.length) C.bewogen={op:nu, lijst:L}; }
   const oudWacht=new Set(C.wachtGetallen||[]); C.uitkomst=U; C.getallen=getallen;
   const nuWacht=Object.keys(getallen).filter(g=>keuzeWacht(g, C).wacht);
   for(const g of oudWacht) if(!nuWacht.includes(g)) C.keuzeTerug={getal:g, op:nu};
@@ -32936,9 +33045,18 @@ function vorautNaamOordeel(k, wat){ const C=SET.controles=SET.controles||{}; C.t
 function controleKopie(u){ return [`controle ${u.id} · soort ${u.soort} · ${u.status}${u.bedrag?` · bedrag ${(+u.bedrag).toFixed(2)}`:''}${(u.raakt||[]).length?` · raakt ${u.raakt.join(', ')}`:''}${u.sinds?` · sinds ${controleDagTijd(u.sinds)}`:''}`, String(u.tekst||'')].join('\n'); }
 /* v461 (punt 5): DE TIJD IN NEDERLANDSE TIJD (Europe/Amsterdam), ook als de browser een andere tijdzone meldt. Gemeld: "sinds 23-10
    19:01" was een sync om 21:01; de browser gaf UTC. Zonder Intl valt hij terug op de tijd van het toestel. */
-function controleDagTijd(ms){ try{ const P={}; for(const x of new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).formatToParts(new Date(ms))) P[x.type]=x.value;
-    if(P.day && P.hour) return `${P.day}-${P.month} ${P.hour}:${P.minute}`; }catch(_){}
-  const d=new Date(ms); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+/* v462 (H2): NEDERLANDSE TIJD ZONDER DE TIJDZONE VAN DE BROWSER. Gemeld na v461: nog steeds "sinds 23-10 19:01" voor een sync om 21:01.
+   De vorm van v461 leunde op Intl met timeZone Europe/Amsterdam en viel bij een fout terug op de klok van het toestel; een browser zonder
+   volledige tijdzonegegevens gooit daar een RangeError en dan stond er weer UTC. nlDelen() rekent de Nederlandse tijd zelf uit de
+   UTC-tijd: zomertijd van de laatste zondag van maart 01:00 UTC tot de laatste zondag van oktober 01:00 UTC (+2), anders +1. Alle tijden
+   worden als milliseconden opgeslagen (tijdzoneloos) en pas bij het tonen omgezet, dus een opgeslagen tijd wordt nooit in UTC getoond. */
+function nlZomer(ms){ const d=new Date(ms), j=d.getUTCFullYear();
+  const lz=m=>{ const t=new Date(Date.UTC(j, m+1, 0, 1)); t.setUTCDate(t.getUTCDate()-t.getUTCDay()); return t.getTime(); };
+  return ms>=lz(2) && ms<lz(9); }
+function nlDelen(ms){ const d=new Date(+ms+(nlZomer(+ms)?2:1)*36e5), p=n=>String(n).padStart(2,'0');
+  return {j:String(d.getUTCFullYear()), m:p(d.getUTCMonth()+1), d:p(d.getUTCDate()), h:p(d.getUTCHours()), mi:p(d.getUTCMinutes())}; }
+function nlTijd(ms){ const P=nlDelen(ms); return `${P.h}:${P.mi}`; }
+function controleDagTijd(ms){ if(ms==null || isNaN(+ms)) return '-'; const P=nlDelen(+ms); return `${P.d}-${P.m} ${P.h}:${P.mi}`; }
 function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}, nu=Date.now();
   const accs=[...new Set(Object.keys(SET.psd2Accounts||{}).concat(Object.keys(A)))];
   const MN=ym=>MNAMES[+ym.slice(5,7)-1];
@@ -33480,7 +33598,7 @@ try{ new MutationObserver(()=>sheetLangMeet()).observe(document.getElementById('
    doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
    dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de
    rest van de sessie weer openspringen nadat je hem had gesloten. */
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; window._werklijst=null; hideTip();
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._cijfersZonder=null; window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; window._werklijst=null; hideTip();
   try{ coAfbreken(); }catch(_){}   // v138: de sheet dicht midden in een gesprek = coEnd(), zonder iets vast te leggen
 }
 
@@ -33701,6 +33819,7 @@ async function psd2Refresh(silent){
       const prij=(dp.transactions||[]); pendN=prij.length;
       for(const raw of prij){ const t=mapPsd2Tx(raw, accId, true); if(t){ pend.push(t); pendMap++; } }
     }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); }
+    if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
     psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'',
       pendN, pendMap, pendFout, pendGeland:!pendFout});
@@ -33900,6 +34019,7 @@ async function psd2IngestSession(s){
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
     if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||''}; }
+    if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
     psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
     /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is. DEZE ROUTE LEGT DE
@@ -34078,10 +34198,21 @@ function psd2DiagActief(){ const D=SET.psd2Diag||{}, ps=SET.psd2Accounts||{}, o=
    sync geen saldo gaf met een fout over de sessie of de toestemming, en er een koppeling van dezelfde bank is met een latere geldigheid
    (exp) waarvan de laatste sync wel lukte. Hij telt dan niet als "haalt geen saldo op", de sync slaat hem over (geen aanroep met een
    verlopen sessie), en de aansluiting noemt hem vervangen. Er wordt niets weggehaald: dat blijft jouw keuze (Bank & rekeningen). */
+/* v462 (H1): EEN REKENING MET EEN EIGEN REKENINGNUMMER IS NOOIT VERVANGEN (gemeld: N26 ··7586 stond als vervangen terwijl blok 8 van
+   23-10 een geslaagde sync toonde). De vorm van v461 vroeg alleen "dezelfde bank, een latere geldigheid die wel lukte", en dat raakt elke
+   rekening van een eerdere sessie zodra er een tweede koppeling is: bij N26 laat een nieuwe sessie de vorige verlopen, dus de rekening
+   van die eerste sessie gaf EXPIRED_SESSION en werd vervangen genoemd. Daarna sloeg de sync hem over en kon hij nooit meer herstellen.
+   Vervangen is nu alleen een entry ZONDER eigen nummer (de id komt niet uit de IBAN: psd2_<uid> of psd2h_<hash>) waarvan DEZELFDE
+   rekening onder een andere id gekoppeld is: dezelfde hash, of dezelfde naam zonder de laatste cijfers bij dezelfde bank, met een
+   latere geldigheid en een geslaagde sync. Een rekening met een nummer die faalt is een rekening die opnieuw gekoppeld moet worden. */
+function psd2LabelKern(l){ return String(l||'').replace(/\s*··\s*\d{2,}\s*$/,'').trim().toLowerCase(); }
 function psd2Vervangen(a){ const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, e=ps[a], d=D[a]; if(!e || !d || typeof d!=='object' || d.balGeland!==false) return false;
+  if(e.iban && ibanNum(e.iban) && ibanNum(e.iban)===String(a)) return false;
+  if(/^\d{4,}$/.test(String(a))) return false;
   if(!/expired|session|consent|verlop|toestemming|40[13]/i.test(String(d.balFout||d.txFout||''))) return false;
-  const bank=String(e.bank||'').toLowerCase(), exp=String(e.exp||'');
-  return Object.keys(ps).some(b=>b!==a && String(ps[b].bank||'').toLowerCase()===bank && String(ps[b].exp||'')>exp && D[b] && D[b].balGeland===true); }
+  const bank=String(e.bank||'').toLowerCase(), exp=String(e.exp||''), kern=psd2LabelKern(e.label);
+  return Object.keys(ps).some(b=>{ const f=ps[b]; if(b===a || String(f.bank||'').toLowerCase()!==bank || !(String(f.exp||'')>exp) || !D[b] || D[b].balGeland!==true) return false;
+    return (e.hash && f.hash && e.hash===f.hash) || (kern && psd2LabelKern(f.label)===kern); }); }
 function psd2Falend(){
   const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, uit=[];
   for(const a of Object.keys(ps)){

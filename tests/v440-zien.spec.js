@@ -65,12 +65,12 @@ test('c. opzij: het doel uit Kiezen tegen wat er gedaan is (opzijPeriode), een b
   expect(r.doel).toBe(500);                 // uit SET.salVerdeling.opzij
   expect(r.O.doel).toBe(500);
   expect(r.gedaan).toBe(r.O.netto);         // gedaan leest opzijPeriode().netto (een bron)
-  expect(r.txt).toContain('doel €500');
+  expect(r.txt).toContain('volgens je verdeling €500');   // v462 (H5): geen 'doel'
 });
 
 test('d. zonder salarisverdeling: nog geen doel', async ({ page }) => {
   await boot(page, {});
   const r = await page.evaluate(() => { const e = document.querySelector('#gripZienStand [data-zienopzij]'); return { doel: e.dataset.doel, txt: e.innerText.replace(/\s+/g, ' ') }; });
   expect(r.doel).toBe('');
-  expect(r.txt).toContain('doel nog geen');
+  expect(r.txt).toContain('nog geen verdeling');   // v462 (H5)
 });

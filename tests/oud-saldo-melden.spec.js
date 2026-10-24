@@ -430,14 +430,15 @@ test.describe('5 · de regel staat in de hero, bij de getallen waarop je beslist
         go('dash'); renderDash();
         const hero = document.querySelector('.homehero'), blok = hero.querySelector('[data-saldoblok]');
         const lab = blok.querySelector('[data-bijgewerkt]');
-        return { lab: lab && lab.innerText, hero: hero.innerText, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card').length,
+        return { lab: lab && lab.innerText, hero: hero.innerText, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card:not([data-homerekkaart])').length, rekkaart: hero.querySelectorAll('[data-homerekkaart]').length,
           note: NOTES.saldoachter || '' };
       });
       expect(r.lab).toMatch(/^bijgewerkt \d+ \w+/);
       expect(r.hero).not.toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
       expect(r.note).toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
       expect(r.kaders).toBe(0);
-      expect(r.h).toBeLessThan(330);
+      expect(r.rekkaart).toBe(1);   // v462 (B5): de kaart "niet bijgewerkt" met Opnieuw koppelen is het enige kader
+      expect(r.h).toBeLessThan(330);   // v462: gemeten 307 (360px) en 287 (390px) met de kaart, gegroepeerd per bank
     });
   }
 

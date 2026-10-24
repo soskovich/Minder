@@ -260,8 +260,8 @@ test.describe('h · de vervalregel op Home', () => {
   test('vanaf 14 dagen ervoor: "verloopt over N dagen · vernieuwen"', async ({ page }) => {
     await boot(page, fixture({ expDagen: 14 }));
     const t = await page.evaluate(() => { go('dash'); renderDash(); const el = document.querySelector('[data-bankverval]'); return el ? el.innerText : ''; });
-    expect(t).toContain('ABN: toestemming verloopt over 14 dagen');
-    expect(t).toContain('vernieuwen ›');
+    expect(t).toContain('ABN: toestemming verloopt op');   // v462 (B5): de kaart op Home met de datum en Opnieuw koppelen
+    expect(t).toContain('daarna stopt de sync van');
   });
   test('op 15 dagen nog niet', async ({ page }) => {
     await boot(page, fixture({ expDagen: 15 }));
@@ -273,7 +273,7 @@ test.describe('h · de vervalregel op Home', () => {
     const r = await page.evaluate(() => { go('dash'); renderDash(); const el = document.querySelector('[data-bankverval]');
       return { t: el ? el.innerText : '', saldo: !!document.querySelector('[data-totaalsaldo]'), balk: (document.querySelector('#s-set') && (openSetSub(null), (document.querySelector('[data-setmelding="bank"]') || {}).innerText)) || '' }; });
     expect(r.t).toContain('Gegevens van ABN tot 9 okt');
-    expect(r.t).toContain('opnieuw koppelen ›');
+    expect(r.t).toContain('ABN: toestemming verlopen op');   // v462 (B5): de kaart; de knop staat eronder
     expect(r.saldo).toBe(true);
     expect(r.balk).toContain('Gegevens van ABN tot 9 okt');
   });
@@ -295,20 +295,20 @@ test.describe('h2 · de vervalregel draagt de datum, volledig', () => {
   test('saldodatum als dag: de volledige tekst met datum', async ({ page }) => {
     await boot(page, fixture({ expDagen: -2 }));
     const r = await lees(page);
-    expect(r.home).toBe(VOL);
+    expect(r.home).toContain('Gegevens van ABN tot 9 okt');   // v462 (B5): op Home in de kaart, de statusbalk houdt de volle tekst
     expect(r.balk).toBe(VOL);
   });
   test('saldodatum als tijdstempel of getal: dezelfde tekst', async ({ page }) => {
     const ts = new Date('2026-10-09T14:30:00').getTime();
     await boot(page, metMeta({ [MAIN]: { balance: 3800, date: '2026-10-09T14:30:00' }, [ABN]: { balance: 120, date: ts } }, true));
     const r = await lees(page);
-    expect(r.home).toBe(VOL);
+    expect(r.home).toContain('Gegevens van ABN tot 9 okt');
     expect(r.balk).toBe(VOL);
   });
   test('zonder saldodatum en zonder boeking staat er onbekend, nooit een lege plek', async ({ page }) => {
     await boot(page, metMeta({ [MAIN]: { balance: 3800, date: 'geen datum' }, [ABN]: { balance: 120 } }, true));
     const r = await lees(page);
-    expect(r.home).toBe('Gegevens van ABN tot onbekend · opnieuw koppelen ›');
+    expect(r.home).toContain('Gegevens van ABN tot onbekend');
     expect(r.home).not.toMatch(/tot\s+·/);
   });
 });

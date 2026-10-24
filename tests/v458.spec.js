@@ -72,13 +72,13 @@ test.describe('1 · zelf hersteld is zichtbaar', () => {
     await boot(page);
     await jaDrie(page);
     const k = await sleutelOp(page, '2026-10-21', -150);
-    const r = await page.evaluate((k) => { openKennis(); const sh = document.querySelector('#sheet');
-      return { e: SET.vorautPaar[k].bron, log: (SET.vorautLog || []).map((g) => g.actie + ':' + g.sleutel), groep: (kennisLijst().find((x) => x.id === 'v:' + k) || {}).groep, t: sh.textContent }; }, k);
+    const r = await page.evaluate((k) => { openJeCijfers(); const sh = document.querySelector('#sheet');   // v462 (B6): zelf hersteld staat in Je cijfers
+      return { e: SET.vorautPaar[k].bron, log: (SET.vorautLog || []).map((g) => g.actie + ':' + g.sleutel), groep: (kennisLijst().find((x) => x.id === 'v:' + k) || {}).groep, t: sh.textContent, rij: !!sh.querySelector('[data-cijferscorrectie="' + k + '"]') }; }, k);
     expect(r.e).toBe('minder');
     expect(r.log).toEqual(['hersteld:' + k]);
     expect(r.groep).toBe('voraut');
-    expect(r.t).toContain('Voorautorisaties');
-    expect(r.t).toContain('door Minder hersteld');
+    expect(r.t).toContain('Gecorrigeerd door Minder');
+    expect(r.rij).toBe(true);
   });
 });
 

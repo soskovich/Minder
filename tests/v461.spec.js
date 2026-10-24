@@ -183,7 +183,7 @@ test.describe('5 · aansluiting: N26 start met een verwacht saldo', () => {
     await boot(page);
     const r = await page.evaluate(async () => { const OUD = 'psd2_94a07621';
       SET.psd2Accounts[OUD] = { uid: 'oud-uid', iban: '', label: 'Reservering', bank: 'N26', exp: '2026-12-01' };
-      SET.psd2Accounts['DE89370400440532013000'].exp = '2027-04-21';
+      SET.psd2Accounts['DE89370400440532013000'].exp = '2027-04-21'; SET.psd2Accounts['DE89370400440532013000'].label = 'Reservering ··3000';   // v462 (H1): dezelfde rekening (dezelfde naam) onder een nieuwe id
       SET.psd2Diag = { [OUD]: { op: '2026-10-23', balGeland: false, balFout: 'EXPIRED_SESSION' }, DE89370400440532013000: { op: '2026-10-23', balGeland: true }, 521200806: { op: '2026-10-23', balGeland: true } }; save();
       const voor = psd2Falend().map((x) => x.acc); const aanroep = [];
       psd2Api = async (pad) => { aanroep.push(pad); if (/\/balances/.test(pad)) return { balances: [{ balance_type: 'XPCD', balance_amount: { amount: '1000' } }] }; return { transactions: [] }; };

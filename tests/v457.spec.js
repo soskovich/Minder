@@ -120,9 +120,9 @@ test.describe('3 · na 3x Ja herstelt Minder zelf', () => {
     expect(r.vraag).toBe(false);
     expect(r.kennis).toMatchObject({ groep: 'voraut', bron: 'minder' });
     /* in Wat Minder van jou weet, met de bron in woorden */
-    const t = await page.evaluate(() => { openKennis(); return document.querySelector('#sheet').textContent; });
-    expect(t).toContain('Voorautorisaties');
-    expect(t).toContain('door Minder hersteld');
+    const t = await page.evaluate(() => { openKennis(); const k = document.querySelector('#sheet').textContent; openJeCijfers(); return { k, c: document.querySelector('#sheet').textContent }; });
+    expect(t.k).not.toContain('door Minder hersteld');   // v462 (B6): wat Minder zelf herstelde staat in Je cijfers
+    expect(t.c).toContain('rekenfout van Minder · je saldo is niet veranderd');
   });
   test('g. terugdraaien van het herstel telt als Nee: daarna herstelt Minder bij Tango niets meer', async ({ page }) => {
     await boot(page, [['2026-10-22', -110, 'Tango Purmerend'], ['2026-10-22', 30, 'Tango Purmerend'], ['2026-10-22', -80, 'Tango Purmerend']]);
