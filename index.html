@@ -34423,7 +34423,7 @@ function psd2Falend(){
    dus een rekening die bij de laatste koppeling niet zijn nieuwe uid kreeg, blijft de oude sessie aanroepen en krijgt EXPIRED_SESSION.
    psd2Sessies() geeft per bank de nieuwste sessie (de hoogste geldigheid) en per rekening of hij die gebruikt. Er is geen code die een
    sessie, een toestemming of een foutstatus van de ene entry naar de andere kopieert (nagegaan: alleen psd2IngestSession() schrijft een
-   entry, en psd2DiagZet() schrijft alleen onder zijn eigen id); de fout bij een rekening is dus zijn eigen aanroep met zijn eigen uid.
+   entry, en de diag-schrijver schrijft alleen onder zijn eigen id); de fout bij een rekening is dus zijn eigen aanroep met zijn eigen uid.
    HET HERSTEL (psd2SessieHerstel()): staat een rekening met een eigen nummer op een oudere sessie, en is er in de nieuwste sessie van
    dezelfde bank een entry met HETZELFDE rekeningnummer (uit de IBAN) of DEZELFDE hash, dan krijgt de rekening de uid, de sessie en de
    geldigheid van die entry; die entry heet daarna vervangen (psd2Vervangen) en telt niet dubbel. EEN NAAM ALLEEN IS NOOIT GENOEG: een

@@ -433,7 +433,7 @@ test.describe('5 · de regel staat in de hero, bij de getallen waarop je beslist
         return { lab: lab && lab.innerText, hero: hero.innerText, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card:not([data-homerekkaart])').length, rekkaart: hero.querySelectorAll('[data-homerekkaart]').length,
           note: NOTES.saldoachter || '' };
       });
-      expect(r.lab).toMatch(/^bijgewerkt \d+ \w+/);
+      expect(r.lab).toMatch(/^\d+ van \d+ rekeningen actueel/);   // v464 (punt 3): de pill is de versheid; het label van v378 staat achter de i
       expect(r.hero).not.toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
       expect(r.note).toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
       expect(r.kaders).toBe(0);
@@ -494,7 +494,7 @@ test.describe('6 · herstel: een geslaagde sync haalt de rekening eruit', () => 
       expect(s.achter).toBe(over);
       if (over > 0) {
         expect(s.zin).toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
-        expect(s.hero).toMatch(/bijgewerkt \d+ \w+/);   // v378: een label; de zin staat achter de i
+        expect(s.hero).toMatch(/\d+ van \d+ rekeningen actueel/);   // v464: de pill; de zin staat achter de i
         expect(s.col).toBe('var(--amber)');
         // de naam van een herstelde rekening staat er niet meer in
         const naam = await page.evaluate((a) => acctNiceName(a), FALEND[i]);

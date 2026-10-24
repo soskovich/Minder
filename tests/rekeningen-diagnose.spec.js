@@ -220,7 +220,7 @@ test.describe('b - de hash is het beslissende veld en staat erbij', () => {
     expect(r.B).toBe('370400449876543210');            // geen hash: nieuwe id uit de IBAN
     expect(r.C).toBe('psd2h_ab12cd34ef56');            // nieuwe uid, hash bekend: id blijft (v151)
     expect(r.D).toBe('psd2_heel-and');                 // geen hash, geen IBAN: nieuwe id per sessie
-    expect(r.bron).toContain('bekend || ibanNum(iban)');
+    expect(r.bron).toContain('|| bekend || nr ||');   // v464: een bestaand rekeningnummer gaat voor, dan de hash, dan de IBAN
   });
 });
 

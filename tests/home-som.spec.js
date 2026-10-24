@@ -103,12 +103,13 @@ test.describe('e · Saldo nu', () => {
         totaal: +S.querySelector('[data-saldototaal]').dataset.saldototaal, contant: !!S.querySelector('[data-contantrij]'),
         tekst: S.innerText, tb: Math.round(totalBalance().sum * 100) }; });
     expect(r.contant).toBe(true);
-    expect(r.som).toBe(r.kop); expect(r.kop).toBe(r.totaal); expect(r.kop).toBe(r.tb);
+    /* v464 (punt 1): de kop en het totaal zijn de bank; contant is een eigen regel en telt niet in de kop (totalBalance telt hem nog wel) */
+    expect(r.som).toBe(r.kop); expect(r.kop).toBe(r.totaal); expect(r.kop).toBe(r.tb - 8000);
     expect(Math.round(r.kop / 100)).toBe(home_);
-    expect(r.tekst).toContain('€12.000,00 bank + €80,00 contant');
+    expect(r.tekst).toContain('contant €80 · geteld');
     expect(r.tekst).not.toContain('naam aanpassen');
     expect(r.tekst).toMatch(/saldo 3 okt · boekingen tot 6 okt/);
-    expect(r.tekst).toMatch(/geteld \d+ dagen geleden · bijwerken/);
+    expect(r.tekst).toMatch(/geteld \d+ \w+ · bijwerken/);
   });
   test('een rekening met EUR 0 is een rij, en een tik op een rij opent de rekening', async ({ page }) => {
     await home(page, { set: { manualBal: { [MAIN]: 3000, [SPAAR]: 0 } } });
@@ -126,7 +127,7 @@ test.describe('f · Verwacht eind van de maand', () => {
         saldo: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo,
         ins: (go('ins'), +document.querySelector('#s-ins [data-inssaldoeind]').dataset.inssaldoeind) }; });
     expect(r.V.eind).toBe(r.som); expect(r.proj).toBe(r.V.eind); expect(r.ins).toBe(r.V.eind);   // v439: het staat in de maandkaart op Inzichten
-    expect(r.V.start).toBe(r.saldo);
+    expect(r.V.start).toBe(r.saldo + 80);   // v464: Home toont de bank, de vooruitrekening telt contant nog mee
     expect(r.V.eind).toBe(14326);   // 12.080 + 5.216 - 817 - 2.153 op deze stand
     await page.click('#s-ins [data-inssaldoeind]');
     const s = await page.evaluate(() => { const S = document.getElementById('verwachtEindSheet');
@@ -134,7 +135,7 @@ test.describe('f · Verwacht eind van de maand', () => {
       return { t, eind: +S.querySelector('[data-veeind]').dataset.veeind, tekst: S.innerText }; });
     expect(s.t.map((x) => x.k)).toEqual(['start', 'inkomen', 'vast', 'potjes']);
     expect(s.t.reduce((a, x) => a + x.v, 0)).toBe(s.eind);
-    expect(s.t[0].v).toBe(r.saldo);
+    expect(s.t[0].v).toBe(r.saldo + 80);   // v464: totaal saldo nu in deze sheet is bank + contant, de rekensom is ongewijzigd
     expect(s.tekst).toContain('bijgewerkt 3 okt');
     expect(s.tekst).toContain('Sparen verlaagt dit getal niet');
     expect(s.tekst).toMatch(/waarvan op je spaarrekening ≈ €11\.431 \(€9\.000 nu \+ €2\.431 inleg deze maand\)/);   // v397: de EUR 231 uit vrij spaargeld gaat standaard terug

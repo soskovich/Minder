@@ -13,7 +13,7 @@ test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat er
     await page.evaluate(() => go('dash'));
     const r = await page.evaluate(() => ({ saldo: Math.round(safeToSpend().saldo), big: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo,
       vrij: document.querySelectorAll('#s-dash [data-vrij], #s-dash [data-vrijdag]').length, hero: document.querySelector('.homehero').innerText }));
-    expect(r.big).toBe(r.saldo);
+    expect(r.big).toBe(r.saldo - 80);   // v464: het hoofdgetal is de bank, contant (80) staat eronder
     expect(r.vrij).toBe(0);
     expect(r.hero).not.toMatch(/vrij te besteden/i);
   });
@@ -24,10 +24,10 @@ test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat er
     const totaal = +(await page.locator('[data-totaalsaldo]').getAttribute('data-totaalsaldo'));
     await page.click('[data-saldoblok]');
     const r = await page.evaluate(() => { const rij = [...document.querySelectorAll('#sheet [data-saldorij]')];
-      return { contant: +document.querySelector('#sheet [data-contantrij]').dataset.saldorij / 100,
+      return { contant: +document.querySelector('#sheet [data-contantrij]').dataset.contantsaldo / 100,
         bank: rij.filter((e) => !e.hasAttribute('data-contantrij')).reduce((a, e) => a + +e.dataset.saldorij, 0) / 100 }; });
     expect(r.contant).toBe(80);
-    expect(Math.round(r.bank + r.contant)).toBe(totaal);
+    expect(Math.round(r.bank)).toBe(totaal);   // v464: het totaal op Home is de bank
   });
   test('de opbouw eindigt exact op safeToSpend()', async ({ page }) => {
     await I.boot(page);

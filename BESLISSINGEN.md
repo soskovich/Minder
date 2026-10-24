@@ -1020,3 +1020,12 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **De terugblik constateert.** "Eenmalig komt elke maand voor" noemt de bedragen per maand en geen stap; een stap zou een advies zijn over iets wat jij eenmalig noemde.
 - **Een sabotage die groen bleef, was een aanroep die niets deed.** `resIntervalPick(12)` na `openReservering('')` zette wat er al stond; die aanroep is weg.
 
+## v464 · herstelronde na fase 3
+- **Contant uit het totaal, niet uit de berekening.** Het totaal op Home is wat de bank zegt; de contante stand is een telling of een schatting en staat er daarom met zijn herkomst onder. `totalBalance()` telt contant nog mee, want veilig te besteden en het netto vermogen hangen eraan; dat veranderen is een andere vraag.
+- **Een naam is geen identiteit.** Een oude Space met dezelfde naam is een andere entry. Het herstel van een sessie leest alleen het rekeningnummer uit de IBAN of de hash van de bank; zonder zo'n tweeling valt er niets te herstellen en moet je opnieuw koppelen.
+- **Gemeten, niet aangenomen: er werd niets gekopieerd.** De verdenking was dat v461 de sessie van psd2_94a07621 aan ··7586 gaf. Alleen `psd2IngestSession()` schrijft een entry en `psd2DiagZet()` alleen onder zijn eigen id; de fout van ··7586 is zijn eigen aanroep met een uid die bij een oudere sessie hoort. Een tweede koppeling bij N26 laat de vorige sessie verlopen.
+- **Een rekeningnummer wint bij een nieuwe koppeling.** Een hash kon een rekening met een nummer naar een oude entry sturen; nu houdt een rekening die al onder zijn nummer bestaat die id, en telt een hash-treffer met een ander nummer niet.
+- **De pill is de versheid.** Het label van v378 en de pill van v462 zeiden hetzelfde onderwerp; het label won bij elk oud saldo en dan stond de versheid er nooit. De uitleg van het label blijft, achter de i.
+- **De regel voor de rest van de maand hangt aan de 1e.** Een potje rekent zijn rest met het gemiddelde, een categorie zonder potje alleen als hij er vaker is. Welke regel geldt kiest nu het vastgelegde budget, zodat een budgetwijziging deze maand de verwachting niet verschuift; vanaf de volgende maand geldt de nieuwe stand.
+- **"Sinds" is de eerste run waarin een controle wachtte.** De tijd werd al als ms bewaard en in Nederlandse tijd getoond; 19:01 is het moment waarop de controle voor het eerst wachtte (de eerste run met v460), niet de sync van 21:01. Diagnose zegt dat er nu bij.
+

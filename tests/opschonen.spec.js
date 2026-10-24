@@ -25,12 +25,12 @@ test.describe('a · Home', () => {
     expect(await page.locator('#s-dash [data-saldosplit]').count()).toBe(0);
     await page.evaluate(() => openBalances());
     const r = await page.evaluate(() => { const c = document.querySelector('#sheet [data-contantrij]');
-      return { contant: +c.dataset.saldorij / 100, bron: contantVerwacht(), tb: totalBalance().contant,
+      return { contant: +c.dataset.contantsaldo / 100, bron: contantVerwacht(), tb: totalBalance().contant,
         som: [...document.querySelectorAll('#sheet [data-saldorij]')].reduce((a, e) => a + +e.dataset.saldorij, 0) / 100,
         saldo: Math.round(safeToSpend().saldo), tekst: document.getElementById('sheet').innerText }; });
     expect(r.contant).toBe(r.bron); expect(r.contant).toBe(r.tb); expect(r.contant).toBe(80);
-    expect(Math.round(r.som)).toBe(r.saldo);
-    expect(r.tekst).toContain('€12.000,00 bank + €80,00 contant');
+    expect(Math.round(r.som + r.contant)).toBe(r.saldo);   // v464: de rijen zijn de bank, contant staat eronder
+    expect(r.tekst).toContain('contant €80 · geteld');
   });
   test('zonder telling is er niets te splitsen en staat er geen blok contant', async ({ page }) => {
     await I.boot(page, { zonderContant: true }); await page.evaluate(() => openBalances());
