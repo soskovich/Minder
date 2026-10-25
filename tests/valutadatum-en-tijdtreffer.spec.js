@@ -256,6 +256,8 @@ test.describe('2 - de valutadatum wordt opgevangen en verder niets', () => {
       'function diagDubbel(){',
       'function diagVoorautorisatie(){',
       'function diagVorautPatroon(){',   // v457: het meetblok telt de regels met een valutadatum
+      'function bankIdBotsZet(',          // v468: per botsing de valutadatum van beide kanten (blok 8, alleen meten)
+      'function bankIdBotsRegels(',       // v468: blok 8 zegt op de valutadatum welke kant in je gegevens staat
     ].map((van) => sectieVan(src, van));
     const binnen = delen.reduce((a, d) => a + (d.match(/valutaDatum/g) || []).length, 0);
     expect(binnen, 'geen enkele andere functie leest het veld').toBe(totaal);

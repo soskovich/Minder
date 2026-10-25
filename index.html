@@ -34388,7 +34388,7 @@ function bankIdBotsRegels(acc){ const R=(SET.bankIdBots||{})[acc]; const L=[];
     const st=(TX||[]).find(t=>String(t.id)===String(c.id));
     let welke;
     if(!st) welke='geen van beide (de id staat niet in je gegevens)';
-    else if(c.a.valuta && c.b.valuta && c.a.valuta!==c.b.valuta && st.valutaDatum) welke=st.valutaDatum===c.a.valuta?'A (op de valutadatum)':st.valutaDatum===c.b.valuta?'B (op de valutadatum)':'niet vast te stellen';
+    else if(c.a.valuta && c.b.valuta && c.a.valuta!==c.b.valuta && st.valutaDatum){ const sv=st.valutaDatum; welke=sv===c.a.valuta?'A (op de valutadatum)':sv===c.b.valuta?'B (op de valutadatum)':'niet vast te stellen'; }
     else if(!c.alInTX) welke='A, de eerste in de volgorde van de bank (de id stond er nog niet)';
     else welke='een van de twee, niet vast te stellen: de id stond er al van een eerdere import en Minder bewaart geen bank-id';
     L.push('        in je gegevens: '+welke+'; de andere is bij de import weggelaten');

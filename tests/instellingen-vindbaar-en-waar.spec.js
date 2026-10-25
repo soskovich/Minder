@@ -96,7 +96,9 @@ test.describe('c · de bankstatus telt de vervaldatum mee', () => {
   });
 
   test('gekoppeld en verlopen: de kaart en de statusbalk zeggen het, niet "gekoppeld"', async ({ page }) => {
-    await boot(page, metBank({ exp: Date.now() - DAG }));
+    /* v468: TWEE dagen terug en niet een. Op de dag van de wintertijd (25 uur) valt nu min 24 uur in het laatste uur nog op dezelfde
+       kalenderdag, en dan zegt de app terecht "verloopt vandaag" (gemeten op 25-10 om 23:55, ook rood op v467). */
+    await boot(page, metBank({ exp: Date.now() - 2 * DAG }));
     const B = await page.evaluate(() => bankStand());
     expect(B).toMatchObject({ verlopen: true, sub: 'Verbinding verlopen', col: 'var(--amber)' });
     expect(await bankPaneel(page)).toContain('data-rood="1"');
