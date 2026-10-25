@@ -29023,6 +29023,10 @@ function diagRekeningen(){
   L.push('');
   L.push('  aantal afgeleide verbindingen:     '+gk.length);
   L.push('  laatste import (globaal):          '+_dV(()=>SET.psd2LastSync?controleDagTijd(SET.psd2LastSync)+' (Nederlandse tijd, v465)':'nooit'));
+  /* v466: de syncgrens per bank, zodat te zien is waarom de boot niet vernieuwde */
+  try{ const bk=[...new Set(Object.keys(SET.psd2Accounts||{}).map(syncBankVan))];
+    for(const b of bk){ const S=syncBankStand(b);
+      L.push(`  SYNCGRENS (v466) ${b}: laatste sync ${S.laatst?controleDagTijd(S.laatst):'nooit'} · automatisch ${syncAutoMag(b)?'mag nu':(syncWeigerdeVandaag(b)?'niet meer vandaag (de bank weigerde)':'weer na '+controleDagTijd(S.laatst+SYNC_AUTO_UREN*3600000))}${S.weigerDag?' · laatste weigering '+S.weigerDag:''}`); } }catch(_){}
   /* v453: de twee regels "laatste import per rekening" en "bewaarde foutstatus" zeiden "bestaat niet"; sinds v279/v298 bewaart
      SET.psd2Diag per rekening de laatste sync (_op) en per groep (transactie, saldo, pending) de velden met hun eigen stempel, ook
      de fout van de bank. Hier staat wat er werkelijk bewaard is, zonder iets te herberekenen. */
@@ -33043,6 +33047,25 @@ function controleMaandVan(ab){ const i=MNAMES.findIndex(x=>x===ab); let ym=thisY
 /* v465 (punt 4): een weigering van de bank om het aantal aanvragen (PSD2: hooguit vier zonder dat jij erbij bent per rekening per dag) */
 function bankWeigert(f){ return /RATE[_ ]?LIMIT|\b429\b|too many requests/i.test(String(f||'')); }
 function bankFoutTekst(f){ f=String(f||''); return bankWeigert(f)?`bank weigerde: te veel aanvragen vandaag (${f.slice(0,60)})`:f; }
+/* ===== DE SYNCGRENS PER BANK (v466, gevraagd door de gebruiker) =====
+   Hooguit EEN automatische sync per SYNC_AUTO_UREN (6) uur per bank, en na een weigering door de bank (`bankWeigert()`) de rest van
+   die Nederlandse kalenderdag geen automatische sync meer bij die bank. Zelf vernieuwen kan altijd; weigerde de bank eerder vandaag,
+   dan zegt de toast dat. `SET.syncBank[bank]={laatst, weigerDag}`: `laatst` is elke sync (ook een handmatige: dan is een automatische
+   binnen 6 uur ook niet nodig), zonder entry valt hij terug op `SET.psd2LastSync`, de globale stempel van voor v466. */
+const SYNC_AUTO_UREN=6;
+function syncBankVan(acc){ return ((SET.psd2Accounts||{})[acc]||{}).bank || 'onbekend'; }
+function syncBankStand(bank){ const e=(SET.syncBank||{})[bank]||{}; return {laatst:e.laatst||SET.psd2LastSync||0, weigerDag:e.weigerDag||''}; }
+function syncAutoMag(bank, nu){ nu=nu||Date.now(); const S=syncBankStand(bank);
+  if(S.weigerDag && S.weigerDag===vandaagYMD()) return false;
+  return (nu-S.laatst) > SYNC_AUTO_UREN*3600000; }
+function syncWeigerdeVandaag(bank){ const S=syncBankStand(bank); return !!S.weigerDag && S.weigerDag===vandaagYMD(); }
+/* na een sync: per bank `laatst`, en `weigerDag` als een aanroep van een rekening van die bank geweigerd werd (de foutvelden uit
+   `SET.psd2Diag`, de ene schrijver `psd2DiagZet()`); een geslaagde sync haalt een weigering van vandaag niet weg */
+function syncBankNa(accs){ SET.syncBank=SET.syncBank||{}; const nu=Date.now(), dag=vandaagYMD();
+  for(const acc of accs){ const b=syncBankVan(acc), e=SET.syncBank[b]=SET.syncBank[b]||{}; e.laatst=nu;
+    const D=(SET.psd2Diag||{})[acc]||{};
+    if(bankWeigert(D.txFout)||bankWeigert(D.balFout)||bankWeigert(D.pendFout)) e.weigerDag=dag; } }
+function syncWeigerMelding(banken){ return banken.length? `${banken.join(' en ')} weigerde${banken.length>1?'n':''} eerder vandaag te veel aanvragen; Minder vernieuwt toch omdat je erom vroeg.` : ''; }
 function aanslGeboekt(soort){ return /CLBD|ITBD/i.test(String(soort||'')); }
 /* v461 (punt 5): HET VENSTER. Een nieuwe koppeling haalt 24 maanden op, en die oude boekingen raken het saldo niet; tot v461 begon de
    aansluiting daarom opnieuw (een sync "start"), en dat zette N26 na de nieuwe koppeling op 23-10 weer op start. Nu draagt elke vastlegging
@@ -33989,9 +34012,12 @@ async function psd2Api(path, opts){
 function ibanNum(iban){ const s=(iban||'').replace(/\s/g,''); if(s.length<8) return ''; const d=(s.slice(4).match(/\d+/g)||[]).join(''); return d.replace(/^0+/,''); }
 // 1) bank kiezen → consent starten
 
-async function psd2Refresh(silent){
-  const meta=SET.psd2Accounts||{}; const keys=Object.keys(meta);
+async function psd2Refresh(silent, auto){
+  const meta=SET.psd2Accounts||{}; let keys=Object.keys(meta);
   if(!keys.length){ if(!silent) psd2Connect(); return; }
+  /* v466: automatisch (de boot) alleen de banken die mogen; handmatig altijd, met de melding als de bank eerder vandaag weigerde */
+  if(auto){ keys=keys.filter(k=>syncAutoMag(syncBankVan(k))); if(!keys.length) return; }
+  const weigerden=auto?[]:[...new Set(keys.map(syncBankVan))].filter(syncWeigerdeVandaag);
   if(!psd2Ready()){ if(!silent){ toast('Stel eerst de backend-URL en token in'); go('set'); } return; }
   try{ psd2SessieHerstel(); }catch(_){}   // v464: een rekening op een oudere sessie krijgt de uid van zijn tweeling in de nieuwste sessie
   if(!silent) toast('Verversen…');
@@ -34042,6 +34068,7 @@ async function psd2Refresh(silent){
   }
   /* DE UITLEZING MOET DE MISLUKKING OVERLEVEN, en dat is precies het geval dat je wil zien: zonder deze
      save() gaat wat er net is vastgelegd verloren op de enige route die hier vroeg terugkeert. */
+  try{ syncBankNa(keys.filter(k=>meta[k].uid && !psd2Vervangen(k))); }catch(_){}   // v466
   if(authFail && !anyOk){ save(); if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
   SET.psd2LastSync=Date.now(); save();
   const added=commitTx(allTx, balances);
@@ -34056,7 +34083,7 @@ async function psd2Refresh(silent){
   try{ aansluitingVastleggen(aanslSnap); }catch(_){} try{ controlesFaseA('sync'); }catch(_){}
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
-  if(!silent) psd2SyncToast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
+  if(!silent) psd2SyncToast((weigerden.length? syncWeigerMelding(weigerden)+'<br>' : '')+(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)'));
   /* v461 (route 2): de soort-2-controles na het tekenen; ze veranderen geen getal op het scherm */
   await naVerf(); try{ if(controlesFaseB('sync')) render(); }catch(_){}
 }
@@ -34264,6 +34291,7 @@ async function psd2IngestSession(s){
   /* v465 (punt 5): wat van deze bank gekoppeld was en niet in deze sessie zat, valt weg; dat staat na de terugkeer in de toast */
   let nietMee=[]; try{ const ids=[]; for(const k in meta) if((meta[k]||{}).sessie===(s.session_id||'') && s.session_id) ids.push(k); SET.psd2Accounts=meta; nietMee=s.session_id?koppelNietMee(aspspName, ids):[]; }catch(_){}
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){} try{ psd2SessieHerstel(); }catch(_){}   // v456 punt 4, v464
+  try{ syncBankNa(Object.keys(meta).filter(k=>(meta[k]||{}).sessie===(s.session_id||'') && s.session_id)); }catch(_){}   // v466: de koppeling telt als sync
   const added=commitTx(allTx, balances);
   applyPending(pend);
   /* v460: na een nieuwe koppeling begint de aansluiting opnieuw (oude boekingen kunnen binnenkomen zonder het saldo te raken) */
@@ -35224,7 +35252,7 @@ try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && documen
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
 try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localStorage.getItem('minder_view')!=='maand') afsluitPopupMisschien(); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
-try{ if(Object.keys(SET.psd2Accounts||{}).length && (Date.now()-(SET.psd2LastSync||0))>4*3600000) psd2Refresh(true); }catch(_){}
+try{ if(Object.keys(SET.psd2Accounts||{}).length && Object.keys(SET.psd2Accounts).some(k=>syncAutoMag(syncBankVan(k)))) psd2Refresh(true, true); }catch(_){}   // v466: de grens per bank (6 uur, en niet na een weigering vandaag)
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
 // snelkoppeling koopcheck (PWA-shortcut / bookmark ./index.html?action=buy): open direct de check; lege app opent gewoon normaal
 try{ if(TX.length && new URLSearchParams(location.search).get('action')==='buy'){ openBuy(); history.replaceState(null,'',location.pathname); } }catch(_){}
