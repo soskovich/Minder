@@ -33060,7 +33060,7 @@ function syncAutoMag(bank, nu){ nu=nu||Date.now(); const S=syncBankStand(bank);
   return (nu-S.laatst) > SYNC_AUTO_UREN*3600000; }
 function syncWeigerdeVandaag(bank){ const S=syncBankStand(bank); return !!S.weigerDag && S.weigerDag===vandaagYMD(); }
 /* na een sync: per bank `laatst`, en `weigerDag` als een aanroep van een rekening van die bank geweigerd werd (de foutvelden uit
-   `SET.psd2Diag`, de ene schrijver `psd2DiagZet()`); een geslaagde sync haalt een weigering van vandaag niet weg */
+   `SET.psd2Diag`, de ene schrijver van psd2Diag); een geslaagde sync haalt een weigering van vandaag niet weg */
 function syncBankNa(accs){ SET.syncBank=SET.syncBank||{}; const nu=Date.now(), dag=vandaagYMD();
   for(const acc of accs){ const b=syncBankVan(acc), e=SET.syncBank[b]=SET.syncBank[b]||{}; e.laatst=nu;
     const D=(SET.psd2Diag||{})[acc]||{};
