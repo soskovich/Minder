@@ -25633,11 +25633,18 @@ function homeRekKaart(){ let V=[], G=[]; try{ V=rekVersheid().filter(v=>v.oud); 
   /* twee of meer van dezelfde bank: een regel per bank met de namen eronder (vijf falende N26-rekeningen waren vijf regels, 439px) */
   const perBank={}; for(const v of V){ if(gedekt.has(v.acc)) continue; (perBank[v.bank]=perBank[v.bank]||[]).push(v); }
   const sinds=L=>{ const g=L.filter(v=>v.sindsMs!=null).sort((a,b)=>a.sindsMs-b.sindsMs); return g.length?g[0].sinds:'onbekend'; };   // v464: de oudste bekende geslaagde sync, met tijd als die bekend is
-  for(const [bank,L] of Object.entries(perBank)){
+  /* v467: gaf de bank een rekening bij de laatste koppeling niet mee (psd2NietMeegegeven), dan helpt opnieuw koppelen niet: bij N26
+     kies je zelf geen rekeningen. Die rekeningen krijgen een eigen regel die dat zegt, en de knop staat er alleen als een andere
+     regel hem nodig heeft. */
+  let knopNodig=G.length>0; const nm=new Set(V.filter(v=>v.oudeSessie && !gedekt.has(v.acc) && (()=>{ try{ return psd2NietMeegegeven(v.acc); }catch(_){ return false; } })()).map(v=>v.acc));
+  for(const [bank,L0] of Object.entries(perBank)){ const B=esc(bankKort(bank)||bank||'Je bank');
+    const NM=L0.filter(v=>nm.has(v.acc)), L=L0.filter(v=>!nm.has(v.acc));
+    if(NM.length) rijen.push(`<div data-reknietactueel="${esc(NM.map(v=>v.acc).join(','))}" data-reknietmee style="padding:2px 0"><b>${NM.length===1?esc(NM[0].naam):`${B}: ${NM.length} rekeningen`} niet bijgewerkt sinds ${esc(sinds(NM))}</b><div class="small muted">${NM.length===1?'':esc(NM.map(v=>v.naam).join(' \u00b7 '))+' \u00b7 '}${B} gaf ${NM.length===1?'deze rekening':'deze rekeningen'} niet mee bij de laatste koppeling</div></div>`);
+    if(!L.length) continue; knopNodig=true;
     if(L.length===1){ const v=L[0]; rijen.push(`<div data-reknietactueel="${esc(v.acc)}" style="padding:2px 0"><b>${esc(v.naam)} niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${v.oudeSessie?'zat niet in je nieuwste koppeling: hij roept nog een oudere sessie aan':v.falend?'de laatste sync haalde geen saldo op':'langer dan 24 uur geen geslaagde sync'}</div></div>`); continue; }
-    rijen.push(`<div data-reknietactueel="${esc(L.map(v=>v.acc).join(','))}" style="padding:2px 0"><b>${esc(bankKort(bank)||bank||'Je bank')}: ${L.length} rekeningen niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${esc(L.map(v=>v.naam).join(' \u00b7 '))}</div></div>`); }
+    rijen.push(`<div data-reknietactueel="${esc(L.map(v=>v.acc).join(','))}" style="padding:2px 0"><b>${B}: ${L.length} rekeningen niet bijgewerkt sinds ${esc(sinds(L))}</b><div class="small muted">${esc(L.map(v=>v.naam).join(' \u00b7 '))}</div></div>`); }
   if(!rijen.length) return '';
-  return `<div class="card" data-homerekkaart style="margin:10px 0 0;padding:10px 12px;cursor:default">${rijen.join('')}${knop}</div>`; }
+  return `<div class="card" data-homerekkaart style="margin:10px 0 0;padding:10px 12px;cursor:default">${rijen.join('')}${knopNodig?knop:''}</div>`; }
 /* B6: de drempel voor een vraag (soort 3): vanaf EUR 25 in de laatste 120 dagen, of elk bedrag in de lopende salarisperiode.
    Een vraag zonder boeking (een lening, een wissel) heeft geen datum en staat altijd boven de drempel. */
 const VRAAG_MIN=25;
@@ -28972,9 +28979,24 @@ function diagRekeningen(){
       L.push(`  ${a}${e.label?' ('+e.label+')':''}: sessie ${kort(P.sessie)} · geldig tot ${P.exp?P.exp.slice(0,10):'?'} · uid ${kort(P.uid)} · ${P.huidig?'de nieuwste sessie van '+(e.bank||'de bank'):'OUDER dan de nieuwste sessie van '+(e.bank||'de bank')+' (tot '+(P.nieuwste.exp||'?').slice(0,10)+')'}`
         +(e.herstel?` · HERSTELD op ${controleDagTijd(e.herstel.op)}: uid en sessie van ${e.herstel.van} (zelfde ${e.herstel.grond})`:'')
         +(H[a]&&H[a].door?` · VERVANGEN: zijn sessie ging naar ${H[a].door} (zelfde ${H[a].grond})`:'')
-        +(!P.huidig && !e.herstel && /^\d{4,}$/.test(a)?' · geen entry met hetzelfde nummer of dezelfde hash in de nieuwste sessie: opnieuw koppelen, met deze rekening aangevinkt':''));
+        +(!P.huidig && !e.herstel && /^\d{4,}$/.test(a)?' · geen entry met hetzelfde nummer of dezelfde hash in de nieuwste sessie'+(_dT(()=>psd2NietMeegegeven(a),false)?': de bank gaf hem niet mee (zie KOPPELINGEN PER BANK)':': opnieuw koppelen, met deze rekening aangevinkt'):''));
       if(!P.huidig && /^\d{4,}$/.test(a) && !e.herstel){ const zelfdeNaam=Object.entries(ps).filter(([b,f])=>b!==a && f && psd2LabelKern(f.label)===psd2LabelKern(e.label)).map(([b])=>b);
         if(zelfdeNaam.length) L.push(`    zelfde naam zonder nummer: ${zelfdeNaam.join(', ')} · een naam alleen is geen identiteit, er gaat niets over`); } } }
+  /* v467: per koppeling wat de bank in de sessie teruggaf, en per rekening op een oudere sessie of hij daarbij zat (psd2KoppelMee) */
+  { const ps=_dT(()=>SET.psd2Accounts,{})||{}, kort=x=>x?String(x).slice(0,8)+'…':'niet bewaard';
+    const banken=[]; for(const x of [...Object.values(ps).map(e=>e&&e.bank), ...(SET.psd2Koppelingen||[]).map(k=>k&&k.bank)]) if(x && !banken.some(b=>koppelBankGelijk(b,x))) banken.push(x);
+    L.push(''); L.push('KOPPELINGEN PER BANK (v467): welke rekeningen de bank in de sessie teruggaf (nummer, naam, soort), en wat de app ervan maakte');
+    for(const b of banken){ const K=_dT(()=>psd2KoppelingenVan(b),[])||[];
+      if(K.length) for(const k of K.slice(-3)){ L.push(`  ${b} · gekoppeld ${controleDagTijd(k.op)} · sessie ${kort(k.sessie)} · geldig tot ${String(k.exp||'?').slice(0,10)} · ${(k.rek||[]).length} rekening(en) teruggegeven`);
+        for(const r of (k.rek||[])) L.push(`    ${r.nr?'··'+r.nr:'geen rekeningnummer'} · ${r.naam||'(geen naam)'} · soort ${r.soort||'niet opgegeven'}${r.product?' · product '+r.product:''}${r.hash?' · hash '+String(r.hash).slice(0,8)+'…':''} → ${r.accId} (${r.grond})`); }
+      else { const S=_dT(()=>psd2Sessies(),null), inN=S?Object.entries(ps).filter(([a,e])=>e && koppelBankGelijk(e.bank,b) && S.per[a] && S.per[a].huidig && !e.herstel):[];
+        L.push(`  ${b}: geen koppeling vastgelegd (dat doet de app sinds v467); AFGELEID uit de rekeningen die de nieuwste sessie dragen (${inN.length}), soort niet bewaard:`);
+        for(const [a,e] of inN) L.push(`    ${e.iban?'··'+String(e.iban).slice(-4):'geen rekeningnummer'} · ${psd2LabelKern(e.label)||'(geen naam)'}${e.hash?' · hash '+String(e.hash).slice(0,8)+'…':''} → ${a}`); }
+      for(const a of Object.keys(ps)){ const e=ps[a]; if(!e || !koppelBankGelijk(e.bank,b) || !_dT(()=>rekActief(a),true)) continue; const M=_dT(()=>psd2KoppelMee(a),null); if(!M || (M.mee && M.zelfde)) continue;
+        const wie=`${a}${e.label?' ('+e.label+')':''}`, bron=M.bron==='vastgelegd'?'':' (afgeleid)';
+        if(M.mee) L.push(`  ${wie} ZAT ERBIJ${bron}, als ${M.rij.accId}${M.rij.grond?' ('+M.rij.grond+')':''}: die entry kreeg de nieuwe sessie en deze rekening niet; psd2SessieHerstel() zet hem over bij dezelfde nummer of hash`);
+        else if(M.naam.length) L.push(`  ${wie} zat er NIET bij onder zijn nummer of hash${bron}; wel kwam ${M.naam.map(x=>x.accId+' ('+(x.naam||'')+')').join(', ')} mee met dezelfde naam: zonder rekeningnummer en met een andere hash wordt dat een nieuwe rekening, en een naam alleen zet niets over (v464)`);
+        else L.push(`  ${wie} zat er NIET bij${bron}: niet onder zijn nummer, niet onder zijn hash en niet onder zijn naam, dus ${b} gaf hem niet mee; opnieuw koppelen helpt alleen als de bank hem dan wel teruggeeft`); } } }
   const oud=(_dT(()=>psd2Falend(),[])||[]).map(f=>f.acc);
   L.push('');
   L.push('SALDI DIE NIET ZIJN BIJGEWERKT BIJ DE LAATSTE SYNC: '+(oud.length?oud.join(', '):'geen'));
@@ -33288,7 +33310,7 @@ function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}
   return accs.map(acc=>{ const R=A[acc], eYm=R&&R.eerste?ymdVan(new Date(R.eerste)).slice(0,7):thisYM(), van=prevYM(prevYM(eYm));
     const voor=`${MN(van)}–${MN(eYm)}: niet te meten, geen saldo`;
     { let SS=null; try{ SS=psd2Sessies().per[acc]; }catch(_){}
-      if(SS && !SS.huidig && !psd2Vervangen(acc)) return {acc, status:'oudesessie', tekst:`gebruikt een oudere sessie (geldig tot ${(SS.exp||'?').slice(0,10)}) dan de nieuwste koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'de bank'} (tot ${(SS.nieuwste.exp||'?').slice(0,10)}) · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen fout').slice(0,60)} · laatste geslaagde sync ${(syncGeluktTekst(acc)||{}).tekst||'onbekend'} · opnieuw koppelen met deze rekening aangevinkt`}; }
+      if(SS && !SS.huidig && !psd2Vervangen(acc)) return {acc, status:'oudesessie', tekst:`gebruikt een oudere sessie (geldig tot ${(SS.exp||'?').slice(0,10)}) dan de nieuwste koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'de bank'} (tot ${(SS.nieuwste.exp||'?').slice(0,10)}) · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen fout').slice(0,60)} · laatste geslaagde sync ${(syncGeluktTekst(acc)||{}).tekst||'onbekend'} · ${(()=>{ try{ return psd2NietMeegegeven(acc); }catch(_){ return false; } })()?`${bankKort((SET.psd2Accounts[acc]||{}).bank)} gaf hem niet mee bij de laatste koppeling (blok 8, KOPPELINGEN)`:'opnieuw koppelen met deze rekening aangevinkt'}`}; }
     if(psd2Vervangen(acc)) return {acc, status:'vervangen', tekst:`vervangen door een nieuwere koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'dezelfde bank'} · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen saldo').slice(0,60)} · telt niet mee in de aansluiting`};
     /* v461: waarom een rekening nog niet vergelijkt, zodat het van het scherm af te lezen is */
     if(!R || (R.hist||[]).length<2 || R.laatste.opnieuw){ const d=(SET.psd2Diag||{})[acc]||{}, L=R&&R.laatste;
@@ -34135,8 +34157,8 @@ function koppelWegvallers(bank){ const ps=SET.psd2Accounts||{};
 function koppelWaarschuwTekst(r){ return `${r.naam} valt hierna weg, want een nieuwe koppeling laat de vorige verlopen`; }
 function koppelWaarschuwSheet(idx, b, W){
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Vink bij ${esc(b.name)} alle rekeningen aan</div>
-    <div class="small muted" style="margin-bottom:10px">Deze rekeningen zijn nu van ${esc(b.name)} gekoppeld. Vink je er een niet aan, dan:</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Opnieuw koppelen met ${esc(b.name)}</div>
+    <div class="small muted" style="margin-bottom:10px">Deze rekeningen zijn nu van ${esc(b.name)} gekoppeld. Laat je bank je kiezen, vink ze dan allemaal aan; kiest de bank zelf, dan zie je na de terugkeer welke er niet in zaten. Zit er een niet in de nieuwe koppeling, dan:</div>
     ${W.map(r=>`<div class="small" data-koppelwaarschuw="${esc(r.acc)}" style="padding:6px 0;border-top:1px solid var(--line)">${esc(koppelWaarschuwTekst(r))}</div>`).join('')}
     <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" style="flex:1" onclick="closeSheet()">Annuleren</button>
       <button class="btn" data-koppelverder style="flex:1" onclick="psd2StartAuth(${idx}, true)">Verder naar ${esc(b.name)}</button></div>`;
@@ -34243,6 +34265,7 @@ async function psd2IngestSession(s){
   const aspspName=(s.aspsp&&s.aspsp.name)||'Bank';
   const allTx=[]; const balances={}, aanslSnap={}; const pend=[];
   const from=new Date(); from.setMonth(from.getMonth()-24); const fromStr=from.toISOString().slice(0,10);
+  const koppelRek=[];   // v467: wat de bank in deze sessie teruggaf
   for(const a of accounts){
     const uid = a.uid || a;
     const iban = (a.account_id&&a.account_id.iban) || a.iban || '';
@@ -34262,6 +34285,8 @@ async function psd2IngestSession(s){
     if(hash) for(const k in meta){ const f=meta[k]; if(f && f.hash===hash){ const fn=ibanNum(f.iban||''); if(nr && fn && fn!==nr) continue; bekend=k; break; } }
     const accId = (nr && meta[nr] ? nr : '') || bekend || nr || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
+    koppelRek.push({nr:iban?iban.slice(-4):'', nrVol:nr, naam:a.name||'', soort:a.cash_account_type||a.account_type||'', product:a.product||'', hash, accId,   // v467
+      grond:(nr && meta[nr])?'bestaand rekeningnummer':bekend?'bestaande hash':nr?'nieuw rekeningnummer':hash?'nieuwe hash, geen rekeningnummer':'geen nummer en geen hash: de uid'});
     meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'', sessie:s.session_id||'' };
     let cont=null, guard=0, txN=0, txFout='';
     const bim=bankIdMeting();
@@ -34288,6 +34313,7 @@ async function psd2IngestSession(s){
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
+  try{ psd2KoppelingZet({op:Date.now(), bank:aspspName, sessie:s.session_id||'', exp:(s.access&&s.access.valid_until)||'', rek:koppelRek}); }catch(_){}
   /* v465 (punt 5): wat van deze bank gekoppeld was en niet in deze sessie zat, valt weg; dat staat na de terugkeer in de toast */
   let nietMee=[]; try{ const ids=[]; for(const k in meta) if((meta[k]||{}).sessie===(s.session_id||'') && s.session_id) ids.push(k); SET.psd2Accounts=meta; nietMee=s.session_id?koppelNietMee(aspspName, ids):[]; }catch(_){}
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){} try{ psd2SessieHerstel(); }catch(_){}   // v456 punt 4, v464
@@ -34524,6 +34550,32 @@ function psd2SessieHerstel(){ const ps=SET.psd2Accounts||{}, S=psd2Sessies(); le
     SET.psd2SessieHerstel[twin]={door:a, op:Date.now(), grond, oudExp:P.exp, oudSessie:P.sessie};
     ps[a]=Object.assign({}, e, {uid:f.uid, sessie:f.sessie||'', exp:f.exp||'', herstel:{van:twin, op:Date.now(), grond, oudExp:P.exp}}); w=true; }
   return w; }
+/* ===== v467: WAT DE BANK PER KOPPELING TERUGGAF =====
+   Bij N26 kies je bij het koppelen geen rekeningen: de bank geeft zelf een lijst terug. Tot v467 bewaarde de app alleen wat hij
+   eruit maakte (een entry per rekening in SET.psd2Accounts), niet de lijst zelf, dus achteraf was niet te zeggen of een rekening
+   op een oudere sessie ontbrak in de lijst of wel meekwam en een andere id kreeg. `psd2KoppelingZet()` legt per koppeling de
+   teruggegeven rekeningen vast (nummer, naam, soort, product, hash, de id die de app koos en waarom), hooguit PSD2_KOPPEL_MAX.
+   `psd2KoppelMee(acc)` is de ENE lezer (Home, blok 8, de aansluiting): zat deze rekening in de laatste koppeling van zijn bank?
+   Zonder vastlegging (een koppeling van voor v467) is het antwoord AFGELEID uit de entries die de nieuwste sessie dragen, met
+   dezelfde toets als psd2SessieHerstel() (nummer of hash), en een gelijke naam zonder nummer maakt het onzeker. */
+const PSD2_KOPPEL_MAX=12;
+function psd2KoppelingZet(rec){ SET.psd2Koppelingen=(SET.psd2Koppelingen||[]).concat([rec]).slice(-PSD2_KOPPEL_MAX); }
+function psd2KoppelingenVan(bank){ return (SET.psd2Koppelingen||[]).filter(k=>k && koppelBankGelijk(k.bank, bank)).sort((a,b)=>(a.op||0)-(b.op||0)); }
+function psd2KoppelMee(acc){ const ps=SET.psd2Accounts||{}, e=ps[acc]; if(!e) return null;
+  const nr=ibanNum(e.iban||'')||psd2EigenNr(acc,e), kern=psd2LabelKern(e.label), K=psd2KoppelingenVan(e.bank).slice(-1)[0];
+  if(K){ const R=K.rek||[];
+    const r=R.find(x=>x.accId===acc) || R.find(x=>(nr && (x.nrVol===nr || (x.nrVol && x.nrVol.endsWith(nr)))) || (e.hash && x.hash && x.hash===e.hash));
+    if(r) return {bron:'vastgelegd', K, mee:true, rij:r, zelfde:r.accId===acc, naam:[]};
+    return {bron:'vastgelegd', K, mee:false, naam:R.filter(x=>kern && psd2LabelKern(x.naam)===kern).map(x=>({accId:x.accId, naam:x.naam}))}; }
+  let S=null; try{ S=psd2Sessies(); }catch(_){} if(!S || !S.per[acc]) return null;
+  if(S.per[acc].huidig) return {bron:'afgeleid', mee:true, zelfde:true, naam:[]};
+  const inN=Object.entries(ps).filter(([b,f])=>b!==acc && f && koppelBankGelijk(f.bank, e.bank) && S.per[b] && S.per[b].huidig && !f.herstel);
+  if(!inN.length) return null;
+  const tw=inN.find(([b,f])=>(nr && ibanNum(f.iban||'')===nr) || (e.hash && f.hash && f.hash===e.hash));
+  if(tw) return {bron:'afgeleid', mee:true, zelfde:false, rij:{accId:tw[0], naam:tw[1].label}, naam:[]};
+  return {bron:'afgeleid', mee:false, naam:inN.filter(([b,f])=>kern && psd2LabelKern(f.label)===kern).map(([b,f])=>({accId:b, naam:f.label})), N:S.per[acc].nieuwste}; }
+/* de bank gaf hem zeker niet mee: niet onder zijn nummer, niet onder zijn hash, en geen rekening met dezelfde naam zonder nummer */
+function psd2NietMeegegeven(acc){ const M=psd2KoppelMee(acc); return !!(M && M.mee===false && !M.naam.length); }
 /* HET PREDICAAT STAAT OP ÉÉN PLEK, en dat is geen muggenzifterij: drie plekken zeggen dit over dezelfde
    toestand, met een ander onderwerp ervoor. De rij in Instellingen telt ("5 rekeningen"), de melding en
    het bankscherm noemen de namen ("Main, Zakgeld en ..."), en dat is de structuur overnemen en ter plekke

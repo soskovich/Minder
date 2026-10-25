@@ -142,7 +142,7 @@ test.describe('2 · een rekening op een oudere sessie', () => {
       const b = document.querySelector('[data-reknietactueel="7586"]').innerText.replace(/\s+/g, ' '); return { a, b }; });
     expect(r.a).toContain('niet bijgewerkt sinds 23 okt');
     expect(r.a).not.toContain('onbekend');
-    expect(r.a).toContain('zat niet in je nieuwste koppeling');
+    expect(r.a).toContain('N26 gaf deze rekening niet mee bij de laatste koppeling');   // v467: geen tweeling en geen gelijke naam in de nieuwste sessie
     expect(r.b).toContain('niet bijgewerkt sinds 23 okt 10:26');
   });
 });
