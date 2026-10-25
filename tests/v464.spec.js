@@ -6,7 +6,6 @@
    v462). */
 const { test, expect } = require('@playwright/test');
 const { pinDatum } = require('./vaste-dag');
-const { kaalUit } = require('./bron-kaal');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';
 function seed(o) {
@@ -168,9 +167,7 @@ test.describe('4 · Zien zegt "volgens je verdeling" bij de meter en de regel er
       const O = { meetbaar: true, netto: 2031, doel: 1766 }; const vor = opzijPeriode; opzijPeriode = () => O;
       try{ return { regel: gripDoelenNuTekst(MD) }; } finally{ opzijPeriode = vor; } });
     expect(r.regel).toBe('Doelen: opzij deze periode €2.031 · volgens je verdeling €1.766');
-    const src = await kaalUit(page, 'gripMeters');
-    expect(src).toContain('opzij · volgens je verdeling');
-    expect(src).not.toMatch(/\$\{euro0\(MD\.netto\)\} van \$\{euro0\(MD\.opzij\)\} opzij/);
+    /* de ringtekst op Zien is sinds v465 een gedragstest: tests/v465.spec.js 3a */
   });
 });
 
@@ -193,11 +190,7 @@ test.describe('5 · de maandsom van april', () => {
     expect(G[0].boeking).toMatch(/./);
     expect(G[0].titel).toBe('Bolcom €7 (08-04) in welke groep?');
   });
-  test('b. blok 20 noemt een boeking die in twee lijsten staat een keer onder LET OP', async ({ page }) => {
-    await boot(page);
-    const src = await kaalUit(page, 'diagSalarisVerdeling');
-    expect(src).toContain('if(zag.has(k)) continue;');
-  });
+  /* b (een boeking in twee lijsten een keer onder LET OP) is sinds v465 een gedragstest: tests/v465.spec.js 3b */
 });
 
 test.describe('6 · een potje dat deze maand ontstond verschuift de forecast niet', () => {

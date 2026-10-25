@@ -3261,8 +3261,18 @@ function rekGeslotenKandidaten(){
    het vóór v258 stond. Zo is het verschil dat de telling maakt ook meteen wat de telling waard is. */
 /* v462 (H4): EEN VERVANGEN KOPPELING TELT NIET IN JE TOTAAL. Zijn saldo is van de laatste sync die nog lukte en staat naast dat van
    dezelfde rekening onder zijn nieuwe id, dus hij telde dubbel of stilstaand mee. rekActief() is de ene toets. */
+/* v465 (punt 1): CONTANT UIT EEN BRON. Veilig te besteden en het netto vermogen tellen contant mee via totalBalance(), en sinds v465
+   met HETZELFDE bedrag als de contant-regel op Home (contantRegelData(): na een telling van eerder dan vandaag de schatting, de telling
+   min het tempo van het potje plus wat je sindsdien pinde of ontving). Tot v465 telde totalBalance() contantVerwacht(), de kale telling
+   plus opnames, en dan stond er op Home "contant ± EUR 400" terwijl veilig te besteden met EUR 720 rekende. contantVerwacht() blijft de
+   lezer van het telscherm: daar is de vraag wat je zou moeten hebben zonder schatting, en het verschil wordt een boeking (v258).
+   Gememoiseerd op _dataGen en de dag, want totalBalance() heeft veel lezers en de schatting loopt over de dagen. */
+let _contantNuMemo=null;
+function contantNu(){ const k=_dataGen+'|'+vandaagYMD(); if(_contantNuMemo && _contantNuMemo.k===k) return _contantNuMemo.v;
+  let v=null; try{ const C=contantRegelData(); v=C?Math.round((+C.bedrag||0)*100)/100:null; }catch(_){ v=contantVerwacht(); }
+  _contantNuMemo={k, v}; return v; }
 function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ if(!rekActief(acc)) continue; const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
-  const c=contantVerwacht(); if(c!=null) sum+=c;
+  const c=contantNu(); if(c!=null) sum+=c;
   return {sum,missing,known,contant:(c==null?null:c)}; }
 /* v198: een saldo en een transactiereeks komen niet altijd uit hetzelfde moment. Bij een
    PSD2-koppeling wel (saldo en boekingen komen uit dezelfde ophaling), bij een handmatig saldo of
@@ -4217,7 +4227,7 @@ function safeToSpend(){
   const saveRemaining=Math.max(saveTarget+tzS.extra-SS.gestort+SS.aanvullen,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), resBal:Math.round(resBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
-    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, tzExtra:Math.round(tzS.extra||0), gestort:SS.gestort, aanvullen:SS.aanvullen, vrijOpname:SS.vrijOpname, safe};
+    contant:tb.contant, incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, tzExtra:Math.round(tzS.extra||0), gestort:SS.gestort, aanvullen:SS.aanvullen, vrijOpname:SS.vrijOpname, safe};
 }
 /* v321: WELKE POSTEN EEN CLAIM OP JE SALDO ZIJN, OP EEN PLEK, MET TWEE LEZERS (v104). De
    opbouw-sheet droeg de naam en de route van elke post als losse string in zijn eigen rij, en de
@@ -28818,7 +28828,8 @@ function diagRekeningen(){
     if(dg){
       L.push('    laatste sync:       '+(dg.op||'?')
         +'   transactie-aanroep gaf '+(dg.txN==null?'?':dg.txN)+' regels terug in '+(dg.txPag==null?'?':dg.txPag)+' pagina(s)'
-        +(dg.txFout?('   FOUT: '+dg.txFout):''));
+        +(dg.txFout?('   FOUT: '+bankFoutTekst(dg.txFout)):''));
+      if(dg.pendFout && bankWeigert(dg.pendFout)) L.push('      pending-aanroep: '+bankFoutTekst(dg.pendFout));
       if(!dg.txFout && dg.txN===0 && lijst.length) L.push('      STILLE REKENING: nul regels terug terwijl er '+lijst.length+' boekingen op staan');
       L.push('    balances-aanroep:   '+(dg.balFout?('FOUT: '+dg.balFout)
         :(dg.balGeland?('gelukt, saldo '+Math.round(dg.balUit)+', landde in ACCMETA'):'GEEN SALDO, niets naar ACCMETA'))
@@ -29011,7 +29022,7 @@ function diagRekeningen(){
   }
   L.push('');
   L.push('  aantal afgeleide verbindingen:     '+gk.length);
-  L.push('  laatste import (globaal):          '+_dV(()=>SET.psd2LastSync?new Date(SET.psd2LastSync).toString():'nooit'));
+  L.push('  laatste import (globaal):          '+_dV(()=>SET.psd2LastSync?controleDagTijd(SET.psd2LastSync)+' (Nederlandse tijd, v465)':'nooit'));
   /* v453: de twee regels "laatste import per rekening" en "bewaarde foutstatus" zeiden "bestaat niet"; sinds v279/v298 bewaart
      SET.psd2Diag per rekening de laatste sync (_op) en per groep (transactie, saldo, pending) de velden met hun eigen stempel, ook
      de fout van de bank. Hier staat wat er werkelijk bewaard is, zonder iets te herberekenen. */
@@ -29022,7 +29033,7 @@ function diagRekeningen(){
   for(const a of pdk){ const E=PD[a], VO=E._veldOp||{};
     L.push(`    ${a}   laatste sync ${E._op?tijd(E._op):(E.op||'onbekend')}${gk456[a]?'':` · VERVANGEN${E.vervangen?' sinds '+E.vervangen:''} (niet meer gekoppeld; telt niet mee in de versheid, v456)`}`);
     for(const [g,velden] of Object.entries(PSD2DIAG_GROEPEN)){ const aanw=velden.filter(f=>f in E);
-      const fout=velden.filter(f=>/Fout$/.test(f) && E[f]).map(f=>`${f}=${String(E[f]).slice(0,80)}`);
+      const fout=velden.filter(f=>/Fout$/.test(f) && E[f]).map(f=>`${f}=${String(E[f]).slice(0,80)}${bankWeigert(E[f])?' · bank weigerde: te veel aanvragen vandaag':''}`);   // v465 punt 4
       L.push(`      ${g}: ${aanw.length?aanw.map(f=>{ const v=E[f]; const txt=v==null?'-':typeof v==='object'?'{..}':f==='txBankId'?String(v):String(v).slice(0,40); /* v456 punt 4: de bank-id-meting voluit */ return `${f}=${txt}${VO[f]?' ('+tijd(VO[f])+')':''}`; }).join(' · '):'niet bewaard'}${fout.length?' · FOUTSTATUS '+fout.join(' · '):(aanw.length?' · foutstatus: geen':'')}`); } }
   /* v456 punt 4: is entry_reference ergens gevuld? Per gekoppelde rekening uit txBankId (v451), voluit */
   { const er=[]; for(const a of Object.keys(gk456)){ const t=(PD[a]||{}).txBankId; const m=/entry_reference (\d+)\/(\d+)/.exec(String(t||'')); er.push({a, n:m?+m[1]:null, van:m?+m[2]:null}); }
@@ -32377,6 +32388,13 @@ function diagSalarisVerdeling(){
   L.push(`      waarvan contant (opname min storting, en de telling die alleen het verschil boekt, v420${contantPotje()?'; sinds v447 0, want contant is het potje Contant':''}): ${kol(r=>r.bDeel.kas)}`);
   L.push(`  CONTANT OPGENOMEN (v421): ${kol(r=>r.opnSom)}`);
   for(const r of R) if(r.opn.length) L.push(`      ${MN(r.ym)}${r===Rc?'*':''}: ${r.opn.slice().sort((a,b)=>a.date<b.date?-1:1).map(t=>`${t.date.slice(8,10)}-${t.date.slice(5,7)} ${c2(-t.amount)} ${titleCase(cleanMerch(t.name)||t.name||'?')}`).join(', ')}`);
+  /* v465 (punt 1): CONTANT UIT EEN BRON. Wat veilig te besteden (safeToSpend().contant), het netto vermogen (netWorth().liq min de
+     rekeningen, hier los opgeteld zodat de controle niet zichzelf meet) en de contant-regel op Home (contantRegelData()) aan contant
+     tellen, naast elkaar. Zonder telling staat contant nergens (v258). */
+  { let cs=null, cn=null, ch=null; try{ cs=safeToSpend().contant; }catch(_){} try{ let bank=0; for(const acc of OWN){ if(!rekActief(acc)) continue; const b=accBalance(acc); if(b!=null) bank+=b; } cn=Math.round((netWorth().liq-bank)*100)/100; }catch(_){}
+    try{ const C=contantRegelData(); ch=C?Math.round((+C.bedrag||0)*100)/100:null; }catch(_){}
+    const c2n=x=>x==null?'geen':c2(x), ok=cs==null&&ch==null ? Math.abs(cn||0)<0.005 : (cs!=null&&ch!=null&&Math.abs(cs-ch)<0.005&&Math.abs(cn-ch)<0.005);
+    L.push(`  CONTROLE contant (v465): in veilig te besteden ${c2n(cs)} = in netto vermogen ${c2n(cn)} = contant-regel op Home ${c2n(ch)} → ${ok?'klopt':'VERSCHIL'}`); }
   /* v447/v448: HET POTJE CONTANT. Per salarisperiode stand begin · opnames · ontvangen · telling · uitgegeven (contantPeriode(), de
      ene bron), met de controle formule = de loop over de gebeurtenissen, en per maand de controle dat het oude "buiten · waarvan
      contant" (de definitie van v446) gelijk is aan het nieuwe potje Contant (dezelfde boekingen, op een andere plek). De lopende
@@ -33022,6 +33040,9 @@ function controleMaandVan(ab){ const i=MNAMES.findIndex(x=>x===ab); let ym=thisY
    (CLBD, ITBD; ABN) moet sluiten; een verwacht saldo (XPCD; N26) bevat wat nog niet geboekt is, dus daar mag een verschil een sync
    blijven staan en pas na AANSL_TOLERANTIE_DAGEN (3) dagen is het soort 2. Na een nieuwe koppeling begint de aansluiting opnieuw: er
    kunnen oude boekingen binnenkomen die het saldo niet raken. */
+/* v465 (punt 4): een weigering van de bank om het aantal aanvragen (PSD2: hooguit vier zonder dat jij erbij bent per rekening per dag) */
+function bankWeigert(f){ return /RATE[_ ]?LIMIT|\b429\b|too many requests/i.test(String(f||'')); }
+function bankFoutTekst(f){ f=String(f||''); return bankWeigert(f)?`bank weigerde: te veel aanvragen vandaag (${f.slice(0,60)})`:f; }
 function aanslGeboekt(soort){ return /CLBD|ITBD/i.test(String(soort||'')); }
 /* v461 (punt 5): HET VENSTER. Een nieuwe koppeling haalt 24 maanden op, en die oude boekingen raken het saldo niet; tot v461 begon de
    aansluiting daarom opnieuw (een sync "start"), en dat zette N26 na de nieuwe koppeling op 23-10 weer op start. Nu draagt elke vastlegging
@@ -33033,6 +33054,11 @@ function aanslSomVanaf(acc, vanaf){ return TX.filter(t=>t.acc===acc && !t.pendin
 function aansluitingVastleggen(snap, opnieuw){ const C=SET.controles=SET.controles||{}, A=C.aansluiting=C.aansluiting||{}, nu=Date.now();
   const vanaf=ymdVan(new Date(nu-AANSL_VENSTER_DAGEN*864e5));
   for(const acc in (snap||{})){ const s=snap[acc]; if(!s || s.saldo==null || isNaN(+s.saldo)) continue;
+    /* v465 (punt 4): EEN SYNC ZONDER TRANSACTIES IS GEEN VERGELIJKINGSPUNT. Gemeld op 24-10 19:49: bij vier N26-rekeningen kwam het
+       saldo binnen en weigerde de bank de transacties (ASPSP_RATE_LIMIT_EXCEEDED). Dan zit wat er sinds de vorige sync gebeurde wel in het
+       saldo en niet in TX, en leest het verschil als een open aansluiting die er niet is. Zo'n sync wordt overgeslagen (R.overgeslagen,
+       voor Diagnose); het volgende saldo vergelijkt met het laatste punt waarbij saldo EN transacties lukten (R.laatste blijft staan). */
+    if(s.txFout){ const R0=A[acc]=A[acc]||{hist:[]}; R0.overgeslagen={tijd:nu, saldo:Math.round(s.saldo*100), fout:String(s.txFout).slice(0,90)}; continue; }
     const som=TX.filter(t=>t.acc===acc && !t.pending).reduce((a,t)=>a+Math.round((+t.amount||0)*100),0);
     const R=A[acc]=A[acc]||{hist:[]}; const v=R.laatste, cur={tijd:nu, saldo:Math.round(s.saldo*100), soort:String(s.soort||''), som, vanaf, somVanaf:aanslSomVanaf(acc, vanaf)};
     if(opnieuw) cur.koppeling=true;
@@ -33040,6 +33066,7 @@ function aansluitingVastleggen(snap, opnieuw){ const C=SET.controles=SET.control
       const open=(R.open?R.open.bedrag:0)+cur.verschil;
       R.open=Math.abs(open)<1?null:{bedrag:open, sinds:R.open?R.open.sinds:nu, syncs:(R.open?R.open.syncs:0)+1}; }
     else { R.open=null; if(opnieuw && v) cur.opnieuw=true; }
+    if(R.overgeslagen) R.overgeslagen.erna=nu;
     R.laatste=cur; if(!R.eerste) R.eerste=nu; R.hist=(R.hist||[]).concat([cur]).slice(-20); } }
 function aanslStatus(acc, R, nu){ if(!R || !R.laatste) return null; const L=R.laatste;
   if(R.hist.length<2 || L.verschil==null && !R.open) return {status:R.hist.length<2||L.opnieuw?'start':'klopt'};
@@ -33242,13 +33269,16 @@ function controleAanslRegels(C){ C=C||controlesLees(); const A=C.aansluiting||{}
     if(psd2Vervangen(acc)) return {acc, status:'vervangen', tekst:`vervangen door een nieuwere koppeling van ${(SET.psd2Accounts[acc]||{}).bank||'dezelfde bank'} · laatste sync: ${String(((SET.psd2Diag||{})[acc]||{}).balFout||'geen saldo').slice(0,60)} · telt niet mee in de aansluiting`};
     /* v461: waarom een rekening nog niet vergelijkt, zodat het van het scherm af te lezen is */
     if(!R || (R.hist||[]).length<2 || R.laatste.opnieuw){ const d=(SET.psd2Diag||{})[acc]||{}, L=R&&R.laatste;
-      const waarom=!R?(d.balGeland===false?`nog geen saldo vastgelegd: de laatste sync gaf geen saldo (${String(d.balFout||d.txFout||'onbekend').slice(0,60)})`:'nog geen saldo vastgelegd')
+      const waarom=(R&&!L&&R.overgeslagen)?`sync ${controleDagTijd(R.overgeslagen.tijd)} overgeslagen: ${bankFoutTekst(R.overgeslagen.fout)}; nog geen punt waarbij saldo en transacties allebei lukten`
+        :(!R||!L)?(d.balGeland===false?`nog geen saldo vastgelegd: de laatste sync gaf geen saldo (${String(d.balFout||d.txFout||'onbekend').slice(0,60)})`:'nog geen saldo vastgelegd')
         :L.opnieuw?`de laatste vastlegging (${controleDagTijd(L.tijd)}) was een nieuwe koppeling van voor v461; de aansluiting begon daar opnieuw`
         :`een saldo vastgelegd (${controleDagTijd(L.tijd)}${L.koppeling?', nieuwe koppeling':''}, saldosoort ${L.soort||'-'})`;
-      return {acc, status:'start', tekst:`${voor} · ${waarom} · vanaf de volgende sync start`}; }
+      const OG0=(L&&R.overgeslagen&&!R.overgeslagen.erna)?` · sync ${controleDagTijd(R.overgeslagen.tijd)} overgeslagen: ${bankFoutTekst(R.overgeslagen.fout)}`:'';
+      return {acc, status:'start', tekst:`${voor} · ${waarom}${OG0} · vanaf de volgende sync start`}; }
     const S=aanslStatus(acc, R, nu)||{status:'start'}, eerst=controleDagTijd(R.eerste);
     const t=S.status==='klopt'?`sinds ${eerst}: ${R.hist.length} syncs · sluit`:S.status==='verklaard'?`sinds ${eerst}: verschil ${euroC(S.bedrag)} · ${S.reden}`:`sinds ${eerst}: VERSCHIL ${euroC(S.bedrag)} sinds ${controleDagTijd(R.open.sinds)} (${R.open.syncs} sync(s), saldosoort ${R.laatste.soort||'-'})`;
-    return {acc, status:S.status, tekst:`${voor} · ${t}`}; }); }
+    const OG=R.overgeslagen&&!R.overgeslagen.erna?` · sync ${controleDagTijd(R.overgeslagen.tijd)} overgeslagen: ${bankFoutTekst(R.overgeslagen.fout)} (saldo zonder transacties telt niet als vergelijkingspunt; het volgende saldo vergelijkt met ${controleDagTijd(R.laatste.tijd)})`:'';
+    return {acc, status:S.status, tekst:`${voor} · ${t}${OG}`}; }); }
 function controleDiagHtml(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run;
   const kop=t=>`<div class="hlabel" style="margin:14px 0 4px">${t}</div>`;
   const rij=(ic, titel, sub, attr, extra)=>`<div class="row" ${attr||''} style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)"><b style="width:16px;text-align:center;color:var(--mut2)">${ic}</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:600">${esc(titel)}</span>${sub?`<span class="small muted" style="display:block;line-height:1.4">${esc(sub)}</span>`:''}${extra||''}</span></div>`;
@@ -33984,7 +34014,7 @@ async function psd2Refresh(silent){
     const bu={}; let bal=null, balFout='';
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
-    if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||''}; }   // v460: de aansluiting per rekening
+    if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||'', txFout}; }   // v460: de aansluiting per rekening
     /* ===== DE PENDING-AANROEP WORDT VASTGELEGD (v296) =====
        DE AANROEP STOND IN EEN TWEEDE LUS NA commitTx() en zijn fout werd stil geslikt, dus een lege
        pending-lijst en een mislukte aanroep zagen er vanaf het diagnosescherm identiek uit. Hij staat nu
@@ -34068,8 +34098,26 @@ async function psd2Connect(){
 }
 function psd2SetCountry(c){ SET.psd2Country=c; save(); psd2Connect(); }
 
-async function psd2StartAuth(idx){
+/* v465 (punt 5): EEN NIEUWE KOPPELING LAAT DE VORIGE VERLOPEN. Gemeld: na opnieuw koppelen van N26 dekte de nieuwste toestemming vier
+   rekeningen en hing ··7586 nog aan de oude (EXPIRED_SESSION). Welke rekeningen je aanvinkt kies je bij de bank, dus Minder weet dat
+   pas na de terugkeer; daarom staat VOOR het doorsturen per rekening die nu van deze bank gekoppeld is dat hij wegvalt als je hem niet
+   aanvinkt, en na de terugkeer welke er niet in zaten (koppelNietMee()). */
+function koppelBankGelijk(a, b){ const n=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,''); const x=n(bankKort(a)), y=n(bankKort(b)); return !!x && !!y && (x===y || x.startsWith(y) || y.startsWith(x)); }
+function koppelWegvallers(bank){ const ps=SET.psd2Accounts||{};
+  return Object.keys(ps).filter(a=>koppelBankGelijk(ps[a].bank, bank) && rekActief(a) && !psd2Vervangen(a)).map(a=>({acc:a, naam:ps[a].label||aanslNaam(a)})); }
+function koppelWaarschuwTekst(r){ return `${r.naam} valt hierna weg, want een nieuwe koppeling laat de vorige verlopen`; }
+function koppelWaarschuwSheet(idx, b, W){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Vink bij ${esc(b.name)} alle rekeningen aan</div>
+    <div class="small muted" style="margin-bottom:10px">Deze rekeningen zijn nu van ${esc(b.name)} gekoppeld. Vink je er een niet aan, dan:</div>
+    ${W.map(r=>`<div class="small" data-koppelwaarschuw="${esc(r.acc)}" style="padding:6px 0;border-top:1px solid var(--line)">${esc(koppelWaarschuwTekst(r))}</div>`).join('')}
+    <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" style="flex:1" onclick="closeSheet()">Annuleren</button>
+      <button class="btn" data-koppelverder style="flex:1" onclick="psd2StartAuth(${idx}, true)">Verder naar ${esc(b.name)}</button></div>`;
+  showSheetBg(); }
+function koppelNietMee(bank, accIds){ const ids=new Set(accIds||[]); return koppelWegvallers(bank).filter(r=>!ids.has(r.acc)); }
+async function psd2StartAuth(idx, bevestigd){
   const b=(window._psd2Banks||[])[idx]; if(!b) return;
+  if(!bevestigd){ const W=koppelWegvallers(b.name); if(W.length){ koppelWaarschuwSheet(idx, b, W); return; } }
   const aspsp={ name:b.name, country:b.country||'NL' };
   /* v377: DE POGING STAAT IN localStorage EN NIET ALLEEN IN sessionStorage. Die tweede is per tabblad, en
      de bank stuurt je terug naar een NIEUW tabblad of zelfs naar een andere browser (gemeld: gestart in de
@@ -34201,7 +34249,7 @@ async function psd2IngestSession(s){
     const bu={}; let bal=null, balFout='';
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
-    if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||''}; }
+    if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||'', txFout}; }
     if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
     psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
@@ -34213,13 +34261,15 @@ async function psd2IngestSession(s){
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
+  /* v465 (punt 5): wat van deze bank gekoppeld was en niet in deze sessie zat, valt weg; dat staat na de terugkeer in de toast */
+  let nietMee=[]; try{ const ids=[]; for(const k in meta) if((meta[k]||{}).sessie===(s.session_id||'') && s.session_id) ids.push(k); SET.psd2Accounts=meta; nietMee=s.session_id?koppelNietMee(aspspName, ids):[]; }catch(_){}
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now(); try{ psd2DiagOpruim(); }catch(_){} try{ psd2SessieHerstel(); }catch(_){}   // v456 punt 4, v464
   const added=commitTx(allTx, balances);
   applyPending(pend);
   /* v460: na een nieuwe koppeling begint de aansluiting opnieuw (oude boekingen kunnen binnenkomen zonder het saldo te raken) */
   try{ aansluitingVastleggen(aanslSnap, true); }catch(_){} try{ controlesFaseA('sync'); }catch(_){}
   curMonth=null; render();
-  psd2SyncToast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
+  psd2SyncToast((added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`)+(nietMee.length?` · ${nietMee.map(r=>r.naam).join(', ')} zat niet in deze koppeling en valt weg`:''));
   await naVerf(); try{ if(controlesFaseB('sync')) render(); }catch(_){}
   try{ koppelUitlegSheet(); }catch(_){}   // v463 B10: de laatste stap van het koppelen
 }

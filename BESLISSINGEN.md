@@ -1029,3 +1029,9 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **De regel voor de rest van de maand hangt aan de 1e.** Een potje rekent zijn rest met het gemiddelde, een categorie zonder potje alleen als hij er vaker is. Welke regel geldt kiest nu het vastgelegde budget, zodat een budgetwijziging deze maand de verwachting niet verschuift; vanaf de volgende maand geldt de nieuwe stand.
 - **"Sinds" is de eerste run waarin een controle wachtte.** De tijd werd al als ms bewaard en in Nederlandse tijd getoond; 19:01 is het moment waarop de controle voor het eerst wachtte (de eerste run met v460), niet de sync van 21:01. Diagnose zegt dat er nu bij.
 
+
+## v465 · contant uit een bron, een rate limit, de koppelwaarschuwing en wintertijd
+- **Contant heeft een bedrag.** Home toonde de schatting en veilig te besteden en het netto vermogen rekenden met de telling van 07-10. Nu lezen alle drie `contantRegelData()` via `totalBalance()`; het telscherm houdt `contantVerwacht()`, want daar is het verschil tussen verwacht en geteld de boeking die de telling maakt (v258), en een schatting daar zou uitgaven boeken die je niet deed.
+- **Een saldo zonder transacties is geen meetpunt.** Het saldo bevat dan wat er sinds de vorige sync gebeurde en TX niet, dus het verschil leest als een open aansluiting. Overslaan en vergelijken met het laatste volle punt geeft hetzelfde antwoord als de sync nooit had plaatsgevonden.
+- **De waarschuwing staat voor het doorsturen.** Welke rekeningen je aanvinkt kies je bij de bank, dus Minder weet het pas achteraf; vooraf kan het alleen zeggen wat er nu gekoppeld is en wat er gebeurt als je iets niet aanvinkt.
+- **Geen eigen syncgrens zonder meting.** Er is nog niet gemeten hoeveel syncs per dag N26 en ABN toelaten; de vraag ligt bij de gebruiker.
