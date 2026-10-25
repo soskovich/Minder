@@ -28794,8 +28794,11 @@ function diagRekeningen(){
     L.push('    bronnen:            '+([...new Set(lijst.map(t=>t.src||'mt940'))].join(' + ')||'-'));
     L.push('    in OWN:             '+(own.indexOf(a)>=0?'ja':'NEE (gekoppeld, geen boekingen)'));
     L.push('    saldo:              '+(bal==null?'ONBEKEND':Math.round(bal))+(meta.date?('   gestempeld '+meta.date):'   (geen saldodatum)'));
-    L.push('    in totalBalance():  '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, in de som')));
-    L.push('    in safeToSpend():   '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, via totalBalance()')));
+    /* v468 (punt 3): DEZELFDE TOETS ALS totalBalance(), en dat is rekActief(). Tot v468 zei deze regel bij een gesloten rekening
+       met saldo 0 "ja, in de som", terwijl totalBalance() hem overslaat (de vraag van de gebruiker: N26 Zakgeld). */
+    const nietActief=own.indexOf(a)>=0 && !_dT(()=>rekActief(a),true), waarom=_dT(()=>rekGesloten(a),false)?'gesloten':'vervangen door een nieuwere koppeling';
+    L.push('    in totalBalance():  '+(own.indexOf(a)<0?'nee, zit niet in OWN':nietActief?('nee, '+waarom+' (rekActief)'):(bal==null?'telt als missing, NIET in de som':'ja, in de som')));
+    L.push('    in safeToSpend():   '+(own.indexOf(a)<0?'nee, zit niet in OWN':nietActief?('nee, '+waarom+' (via totalBalance())'):(bal==null?'telt als missing, NIET in de som':'ja, via totalBalance()')));
     L.push('    in de lijst:        '+(zicht.indexOf(a)>=0?'ja':'NEE, gesloten (alleen historie)'));
     /* v281: WAT ER AAN DE BOEKINGEN VAN DEZE REKENING HANGT. Dat is de vraag vóór een herkoppeling of een
        samenvoeging: elke vlag hangt aan `t.id`, en die hasht over de REKENING, dus een rekening die een
@@ -28847,6 +28850,7 @@ function diagRekeningen(){
         const gebr=gk?(' · gebruikt '+gk+(gk==='CLBD'||gk==='ITBD'?' (geboekt)':' (NIET geboekt)')):'';
         L.push('    saldosoorten:       '+(ts.length?('bank biedt ['+ts.join(',')+']'+gebr+(geb.length?'':' · GEEN geboekt saldo aangeboden')):'niet vastgelegd (nog geen sync sinds v279)')); }
       L.push('    eigen id van de bank: '+(dg.txBankId?dg.txBankId:(dg.txN?'niet vastgelegd (nog geen sync sinds v451)':'geen regels om te tellen')));
+      try{ for(const r of bankIdBotsRegels(a)) L.push(r); }catch(_){}   // v468: per geval beide kanten
       if(!dg.balGeland && !dg.balFout) L.push('      reden: '+(dg.balReden||'onbekend')
         +(dg.balGekozen?('   gekozen entry: '+dg.balGekozen):'')+(dg.balRuw?('   ruw bedrag: "'+dg.balRuw+'"'):''));
       if(!dg.balGeland) L.push('      GEVOLG: het saldo hierboven is van '+(meta.date||'onbekend')+' en niet van de laatste sync');
@@ -29097,7 +29101,7 @@ function diagRekeningen(){
     const lj=_dT(()=>TX.filter(t=>t.acc===w),[])||[];
     const bal=_dT(()=>accBalance(w),null);
     L.push('  '+w+'   '+lj.length+' boeking'+(lj.length===1?'':'en')+'   saldo '+(bal==null?'onbekend':Math.round(bal))
-      +'   telt in totalBalance(): '+(bal==null?'nee, missing':'JA')
+      +'   telt in totalBalance(): '+(!_dT(()=>rekActief(w),true)?'nee, niet actief':bal==null?'nee, missing':'JA')
       +'   wees: '+(wzVan[w]?('JA, doel '+wzVan[w].doelen.join(' of ')):'nee, niet elke boeking staat elders'));
     L.push('    per boeking de tegenhangers elders, op datum + bedrag; de tijd uit de desc en de id staan erbij:');
     for(const t of lj){
@@ -34078,6 +34082,7 @@ async function psd2Refresh(silent, auto){
       for(const raw of prij){ const t=mapPsd2Tx(raw, accId, true); if(t){ pend.push(t); pendMap++; } }
     }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); }
     if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
+    try{ bankIdBotsZet(accId, bim, 'vernieuwen (2 maanden)'); }catch(_){}   // v468
     psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'',
       pendN, pendMap, pendFout, pendGeland:!pendFout});
@@ -34303,6 +34308,7 @@ async function psd2IngestSession(s){
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
     if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||'', txFout}; }
     if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
+    try{ bankIdBotsZet(accId, bim, 'koppeling (24 maanden)'); }catch(_){}   // v468
     psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
     /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is. DEZE ROUTE LEGT DE
@@ -34338,7 +34344,59 @@ function bankIdMeting(){ return {n:0, tidN:0, tid:new Set(), erefN:0, eref:new S
 function bankIdTel(M, raw, t){ if(!M || !raw) return; M.n++;
   const tid=raw.transaction_id||raw.transactionId, er=raw.entry_reference||raw.entryReference;
   if(tid){ M.tidN++; M.tid.add(String(tid)); } if(er){ M.erefN++; M.eref.add(String(er)); }
-  const b=tid||er; if(t && b){ const k=String(t.id); if(!M.per.has(k)) M.per.set(k,new Set()); M.per.get(k).add(String(b)); } }
+  const b=tid||er; if(t && b){ const k=String(t.id); if(!M.per.has(k)) M.per.set(k,new Set());
+    const S=M.per.get(k);
+    /* v468: PER GEVAL BEIDE KANTEN, alleen meten. De eerste regel met deze id wordt onthouden; komt er een met een ANDERE
+       bank-id, dan gaan beide kanten in M.bots met hun ruwe velden, zodat blok 8 kan zeggen wat er verschilt. */
+    if(!M.eerste) M.eerste=new Map(); if(!M.bots) M.bots=[];
+    if(!S.size) M.eerste.set(k, {b:String(b), raw, t});
+    else if(!S.has(String(b))){ const A=M.eerste.get(k);
+      if(!M.txIds){ M.txIds=new Set(); try{ for(const x of TX) M.txIds.add(String(x.id)); }catch(_){} }
+      M.bots.push({id:k, a:A, b:{b:String(b), raw, t}, alInTX:M.txIds.has(k)}); }
+    S.add(String(b)); } }
+/* v468: ruwe velden plat (a.b.c = waarde), zonder de bank-id zelf, zodat twee kanten veld voor veld te vergelijken zijn */
+function bankIdPlat(o, pre, out){ out=out||{}; pre=pre||'';
+  if(o==null || typeof o!=='object'){ out[pre||'.']=String(o).slice(0,80); return out; }
+  if(Array.isArray(o)){ out[pre]=o.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' | ').slice(0,120); return out; }
+  for(const k of Object.keys(o)) bankIdPlat(o[k], pre?pre+'.'+k:k, out); return out; }
+const BANKID_BOTS_MAX=40;
+/* v468: de gevallen per rekening, CUMULATIEF over syncs (een sleutel per id en paar bank-ids), want een vernieuwing haalt 2 maanden
+   op en een koppeling 24: anders overschrijft de volgende vernieuwing wat de koppeling over de oudere maanden zag. Hooguit
+   BANKID_BOTS_MAX per rekening, de nieuwste blijven. Alleen meten: er verandert geen id en geen boeking. */
+function bankIdBotsZet(acc, M, route){ if(!M || !M.n) return;   // een sync met regels is een meting, ook bij nul gevallen
+  const T=SET.bankIdBots=SET.bankIdBots||{}, R=T[acc]=T[acc]||{}, nu=Date.now();
+  for(const c of (M.bots||[])){ const A=c.a, B=c.b, key=c.id+'|'+[A.b,B.b].sort().join('|');
+    const pa=bankIdPlat(A.raw), pb=bankIdPlat(B.raw), uit=k=>/^(entry_reference|entryReference|transaction_id|transactionId)$/.test(k);
+    const verschil=[...new Set([...Object.keys(pa),...Object.keys(pb)])].filter(k=>!uit(k) && pa[k]!==pb[k]).map(k=>({veld:k, a:pa[k]==null?'-':pa[k], b:pb[k]==null?'-':pb[k]}));
+    const zij=X=>({bankId:X.b, desc:String(X.t.desc||'').slice(0,120), valuta:X.t.valutaDatum||''});
+    const oud=R[key];
+    R[key]={id:c.id, datum:A.t.date, bedrag:A.t.amount, a:zij(A), b:zij(B), verschil:verschil.slice(0,12), alInTX:oud?oud.alInTX:c.alInTX,
+      route, eerst:oud?oud.eerst:nu, laatst:nu, keren:(oud?oud.keren:0)+1}; }
+  const ks=Object.keys(R).sort((x,y)=>(R[y].laatst||0)-(R[x].laatst||0)); for(const k of ks.slice(BANKID_BOTS_MAX)) delete R[k]; }
+/* v468 (punt 1, alleen meten): de regels voor blok 8. Per geval rekening, datum, bedrag, beide omschrijvingen en bank-ids,
+   wat er verder verschilt, en welke kant in je gegevens staat. Minder bewaart geen bank-id, dus "welke staat erin" is alleen
+   vast te stellen als de id nog niet in je gegevens stond (dan houdt commitTx() de eerste in de volgorde van de bank) of
+   aan de valutadatum. Het oordeel is een AANWIJZING: verschilt alleen de bank-id, dan is het niet van een dubbele
+   aanlevering te onderscheiden; verschilt er een ander veld, dan wijst dat op twee betalingen. */
+function bankIdBotsRegels(acc){ const R=(SET.bankIdBots||{})[acc]; const L=[];
+  const ks=R?Object.keys(R):[];
+  L.push('    BOTSINGEN OP DE MINDER-ID (v468, alleen meten): '+(R?(ks.length+' geval'+(ks.length===1?'':'len')+' vastgelegd'):'niet vastgelegd (nog geen sync sinds v468)'));
+  for(const k of ks.sort((x,y)=>String(R[x].datum).localeCompare(String(R[y].datum)))){ const c=R[k];
+    L.push('      '+c.datum+'  '+euro(c.bedrag)+'  Minder-id '+c.id+'  ('+c.keren+'x gezien, laatst bij '+c.route+')');
+    L.push('        A: bank-id '+c.a.bankId+(c.a.valuta?'  valuta '+c.a.valuta:'')+'  "'+c.a.desc+'"');
+    L.push('        B: bank-id '+c.b.bankId+(c.b.valuta?'  valuta '+c.b.valuta:'')+'  "'+c.b.desc+'"');
+    const st=(TX||[]).find(t=>String(t.id)===String(c.id));
+    let welke;
+    if(!st) welke='geen van beide (de id staat niet in je gegevens)';
+    else if(c.a.valuta && c.b.valuta && c.a.valuta!==c.b.valuta && st.valutaDatum) welke=st.valutaDatum===c.a.valuta?'A (op de valutadatum)':st.valutaDatum===c.b.valuta?'B (op de valutadatum)':'niet vast te stellen';
+    else if(!c.alInTX) welke='A, de eerste in de volgorde van de bank (de id stond er nog niet)';
+    else welke='een van de twee, niet vast te stellen: de id stond er al van een eerdere import en Minder bewaart geen bank-id';
+    L.push('        in je gegevens: '+welke+'; de andere is bij de import weggelaten');
+    if(c.verschil.length){ L.push('        verder verschilt: '+c.verschil.map(v=>v.veld+' "'+v.a+'" / "'+v.b+'"').join(' · '));
+      L.push('        AANWIJZING: twee betalingen (ook een ander veld dan de bank-id verschilt)'); }
+    else L.push('        AANWIJZING: niet te onderscheiden, alleen de bank-id verschilt (twee gelijke betalingen, of een boeking die de bank twee keer aanleverde)');
+  }
+  return L; }
 function bankIdTekst(M){ if(!M || !M.n) return '';
   let botst=0; for(const v of M.per.values()) if(v.size>1) botst+=v.size-1;
   return `transaction_id ${M.tidN}/${M.n} (${M.tid.size} uniek) · entry_reference ${M.erefN}/${M.n} (${M.eref.size} uniek) · zelfde Minder-id met een andere bank-id: ${botst}`; }
@@ -35304,7 +35362,7 @@ try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && documen
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
 try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localStorage.getItem('minder_view')!=='maand') afsluitPopupMisschien(); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
-try{ if(Object.keys(SET.psd2Accounts||{}).length && Object.keys(SET.psd2Accounts).some(k=>syncAutoMag(syncBankVan(k)))) psd2Refresh(true, true); }catch(_){}   // v466: de grens per bank (6 uur, en niet na een weigering vandaag)
+try{ if(Object.keys(SET.psd2Accounts||{}).length) psd2Refresh(true, true); }catch(_){}   // v466: de grens per bank (6 uur, niet na een weigering vandaag) staat IN psd2Refresh(); v468: de voorcheck hier was dezelfde toets een keer te veel en is weg
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
 // snelkoppeling koopcheck (PWA-shortcut / bookmark ./index.html?action=buy): open direct de check; lege app opent gewoon normaal
 try{ if(TX.length && new URLSearchParams(location.search).get('action')==='buy'){ openBuy(); history.replaceState(null,'',location.pathname); } }catch(_){}
