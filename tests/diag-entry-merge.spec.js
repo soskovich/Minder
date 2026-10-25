@@ -110,7 +110,7 @@ test.describe('0 - de invoer, zonder welke geen enkele test hieronder iets toets
      per constructie niets en blijft elke sabotage hieronder groen. */
   test('de vernieuw-route legt de pending-aanroep vast en de koppel-route niet', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const ref = sectieVan(src, 'async function psd2Refresh(silent){');
+    const ref = sectieVan(src, 'async function psd2Refresh(silent, auto){');
     const ing = sectieVan(src, 'async function psd2IngestSession(s){');
     expect(ref).toContain('pendN');
     expect(ref).toContain('psd2DiagZet(');

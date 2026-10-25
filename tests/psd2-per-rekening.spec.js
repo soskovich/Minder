@@ -477,7 +477,7 @@ test.describe('5 - de bron', () => {
     expect((src.match(/psd2DiagZet\(/g) || []).length, 'de declaratie plus twee aanroepers').toBe(3);
     const stuk = (van, tot) => { const i = src.indexOf(van); const j = src.indexOf(tot, i);
       expect(i, van + ' niet gevonden').toBeGreaterThan(-1); return src.slice(i, j); };
-    expect(stuk('async function psd2Refresh(silent){', '\nfunction pickBalance(')).toContain('psd2DiagZet(');
+    expect(stuk('async function psd2Refresh(silent, auto){', '\nfunction pickBalance(')).toContain('psd2DiagZet(');
     expect(stuk('async function psd2IngestSession(', '\nfunction pickBalance(')).toContain('psd2DiagZet(');
   });
 
