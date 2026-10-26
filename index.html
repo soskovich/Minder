@@ -21633,9 +21633,11 @@ function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
    renderCatBreak() en renderTxList() tellen hun eigen lijst op en komen hier niet langs, dus hun
    totaal blijft per constructie gelijk aan de rijen eronder. Daarom kon deze functie de norm
    worden in plaats van dat er een tweede map naast kwam. */
-function catSpendMapRuw(m){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+function catSpendMapRuw(m){ return catSpendMap(m, true); }   // v473: zonder de reiskostenvergoeding
 /* v473: de reiskostenvergoeding uit je salarisstorting gaat af van haar potje (reisStand()), niet onder nul */
-function catSpendMap(m){ const by=catSpendMapRuw(m); try{ const R=reisStand(m, by); if(R.af>0){ by[R.pot]=Math.round((by[R.pot]-R.af)*100)/100; if(by[R.pot]<=0) delete by[R.pot]; } }catch(_){} return by; }
+function catSpendMap(m, ruw){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+  if(!ruw){ try{ const R=reisStand(m, Object.assign({}, by)); if(R.af>0){ by[R.pot]=Math.round((by[R.pot]-R.af)*100)/100; if(by[R.pot]<=0) delete by[R.pot]; } }catch(_){} }   // v473: de reiskostenvergoeding gaat af van haar potje (reisStand()), niet onder nul
+  return by; }
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
