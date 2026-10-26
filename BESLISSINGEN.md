@@ -1074,6 +1074,8 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 ## v472 · het saldo telt ook na een transactiefout, een regel voor het verschil
 - **Een transactiefout zegt niets over het saldo.** Het saldo komt uit een eigen aanroep; lukte die, dan is het de meting. Gemeten op 26-10 dekte het saldo (EUR 5.350,20) de toewijzingen (EUR 5.350), en de terugval op de keuze liet Plan EUR 1.088 terug noemen die er al stond. Wat een transactiefout wel raakt is de aansluiting per rekening (v465), en die blijft.
 - **Terugvallen alleen op een saldo dat er niet is of niet lukte.** `psd2Falend()` is de afleiding daarvan; geen tweede toets in Plan (v104).
+- **Opzij herleidbaar met een gemeten beginsaldo.** Een beginsaldo afleiden uit het saldo nu min de boekingen sluit per constructie altijd aan en kan dus geen gat laten zien. Daarom een saldo per dag uit een sync waarin saldo en transacties lukten (de poort van de aansluiting, v465), en zonder zo'n saldo geen beginsaldo en geen aansluitregel (v59/v73/v173).
+- **Onvolledig zeggen in plaats van stil te laag.** Ontbraken de transacties van een spaarrekening, dan is de som te laag en zegt de tegel dat.
 - **Een regel, met twee delen.** "Verschil met je spaarrekening" en "Terug te zetten" zeiden hetzelfde geld op twee plekken. Een regel met nog terug (planTerug(), de bron) en niet toegewezen, en de sheet erachter; verplaatsen, niet kopieren. Onder EUR 0,50 is het afronding en geen regel.
 
 ## v471 · telling per dag, pending overslaan, PSU-headers

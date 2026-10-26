@@ -16204,7 +16204,8 @@ function planTekort(P, aftrek){
   const terugval=(reden, extra)=>Object.assign({saldo:false, reden, nog:keuze, zg:planZonderAfKeuze(P), keuze, T:null}, extra||{});
   let S=null; try{ S=spaarSaldo(); }catch(_){} if(!S || S.missing) return terugval('saldo van je spaarrekening onbekend');
   let geenSaldo=[]; try{ const F=new Set(psd2Falend().map(f=>f.acc)); geenSaldo=n26SavingsAccounts().filter(acc=>F.has(acc)); }catch(_){}
-  if(geenSaldo.length) return terugval('saldo van je spaarrekening niet opgehaald bij de laatste sync', {geenSaldo});
+  if(geenSaldo.length){ const nm=geenSaldo.map(acc=>{ try{ return accLabel(acc)||acc; }catch(_){ return acc; } }).join(', ');
+    return terugval(`saldo van ${nm} niet opgehaald bij de laatste sync`, {geenSaldo}); }
   const r2=v=>Math.round(v*100)/100;
   const saldo=r2((S.exact!=null?+S.exact:+S.cur||0)-(+aftrek||0));
   const items=P.filter(p=>(p.type==='goal'||p.type==='noodfonds') && !p.nfOnbekend);
@@ -16690,9 +16691,62 @@ function opzijPeriode(){
   const meetbaar=n26SavingsAccounts().length>0;
   let netto=null, tx=[];
   if(P && meetbaar){ netto=savedNetRange(P.cur.start, P.cur.eind); tx=savedTxRange(P.cur.start, P.cur.eind); }
+  /* v472: dezelfde boekingen in centen, voor de herleiding (de tegel toont het afgeronde netto, de sheet telt de rijen tot op de cent) */
+  const nettoExact=netto==null?null:Math.round(tx.reduce((a,t)=>a+Math.round((+t.amount||0)*100),0))/100;
   let doel=null; const SV=SET.salVerdeling; if(SV && SV.rek && SV.opzij!=null) doel=Math.round(+SV.opzij||0);
-  return {ok:!!P, start:P?P.cur.start:null, eind:P?P.cur.eind:null, ym:P?P.cur.ym:null, meetbaar, netto, tx, doel,
+  return {ok:!!P, start:P?P.cur.start:null, eind:P?P.cur.eind:null, ym:P?P.cur.ym:null, meetbaar, netto, nettoExact, tx, doel,
     pct:(doel>0 && netto!=null)?Math.max(Math.round(netto/doel*100),0):null}; }
+/* v472 (punt 3, gevraagd door de gebruiker): "OPZIJ DEZE PERIODE" HERLEIDBAAR. Gemeld op 26-10: de tegel sprong van EUR 2.031 naar
+   EUR 3.650 tussen twee syncs terwijl het saldo EUR 650 steeg, en dat was in de app niet na te gaan. Per spaarrekening: het beginsaldo
+   (een gemeten saldo van de laatste dag voor het begin van de periode, saldoPunten, plus de boekingen tussen die dag en het begin), de
+   boekingen van de periode (opzijPeriode().tx, dezelfde bron als de tegel: geen tweede telling), en het saldo nu (accBalance, de laatste
+   sync). Begin + som is het saldo nu; anders is er een gat (`verschil`). Zonder gemeten saldo voor het begin is er geen beginsaldo en
+   geen aansluiting, en wordt er niets geschat. Een sync waarin de transacties van een spaarrekening ontbraken (txFout) maakt de som
+   onvolledig (`onvolledig`, met wanneer). */
+function opzijHerleiding(O){
+  O=O||opzijPeriode(); if(!O || !O.ok || !O.meetbaar || O.netto==null) return null;
+  const c=v=>Math.round((+v||0)*100), PU=SET.saldoPunten||{}, D=SET.psd2Diag||{};
+  const rek=n26SavingsAccounts().map(acc=>{
+    const naam=(function(){ try{ return accLabel(acc)||acc; }catch(_){ return acc; } })();
+    const rijen=O.tx.filter(t=>t.acc===acc).slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    const somC=rijen.reduce((a,t)=>a+c(t.amount),0);
+    const punt=(PU[acc]||[]).filter(x=>x && x.d<O.start).slice(-1)[0]||null;
+    let tussenC=0, tussenN=0; if(punt) for(const t of telbareTx()){ const d=String(t.date).slice(0,10); if(t.acc===acc && d>punt.d && d<O.start){ tussenC+=c(t.amount); tussenN++; } }
+    const beginC=punt?punt.saldo+tussenC:null;
+    let nu=null; try{ const b=accBalance(acc); nu=b==null||isNaN(+b)?null:c(b); }catch(_){}
+    let datumNu=''; try{ datumNu=accBalanceDatum(acc)||''; }catch(_){}
+    const d=D[acc]||{}; const onv=d.txFout?{fout:String(d.txFout), sinds:(d._veldOp||{}).txFout||d._op||null, gelukt:(function(){ try{ return syncGeluktVan(acc); }catch(_){ return null; } })()}:null;
+    const verschilC=(beginC!=null && nu!=null)?nu-(beginC+somC):null;
+    return {acc, naam, rijen, som:somC/100, punt, tussen:tussenC/100, tussenN, begin:beginC==null?null:beginC/100, nu:nu==null?null:nu/100, datumNu, onvolledig:onv,
+      verschil:verschilC==null?null:verschilC/100}; });
+  const somC=rek.reduce((a,r)=>a+c(r.som),0), alleBegin=rek.every(r=>r.begin!=null), alleNu=rek.every(r=>r.nu!=null);
+  return {start:O.start, eind:O.eind, rek, som:somC/100, netto:O.netto, nettoExact:O.nettoExact,
+    begin:alleBegin?rek.reduce((a,r)=>a+c(r.begin),0)/100:null, nu:alleNu?rek.reduce((a,r)=>a+c(r.nu),0)/100:null,
+    gaten:rek.filter(r=>r.verschil!=null && Math.abs(r.verschil)>=0.005), onvolledig:rek.filter(r=>r.onvolledig)}; }
+function openOpzijHerleiding(){
+  let H=null; try{ H=opzijHerleiding(); }catch(_){} if(!H){ closeSheet(); return; }
+  const dag=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||'')); return m?`${+m[3]} ${MNAMES[+m[2]-1]}`:''; };
+  const rij=(attr,l,b,stijl)=>`<div class="row small" ${attr} style="gap:8px;padding:5px 0;border-top:1px solid var(--line);${stijl||''}"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${b==null?'onbekend':euroC(b)}</b></div>`;
+  let h='';
+  for(const r of H.rek){
+    h+=`<div data-opzijrek="${esc(r.acc)}" style="margin-top:10px"><div class="small" style="font-weight:700">${esc(r.naam)}</div>`;
+    h+=r.begin!=null
+      ? rij(`data-opzijbegin="${r.begin}"`, `beginsaldo · saldo op ${dag(r.punt.d)} ${euroC(r.punt.saldo/100)}${r.tussenN?` + ${r.tussenN} boeking(en) tot ${dag(H.start)}`:''}`, r.begin)
+      : `<div class="small muted" data-opzijbegin="" style="padding:5px 0;border-top:1px solid var(--line)">beginsaldo niet te bepalen: er is geen saldo vastgelegd van voor ${dag(H.start)}</div>`;
+    h+=r.rijen.map(t=>`<div class="row small" data-opzijrij data-bedrag="${Math.round((+t.amount||0)*100)/100}" style="gap:8px;padding:4px 0 4px 10px;color:var(--mut)"><span style="white-space:nowrap">${dag(t.date)}</span><span style="flex:1;min-width:0">${esc(txNaam(t))}</span><span style="white-space:nowrap">${euroC(+t.amount||0)}</span></div>`).join('');
+    if(!r.rijen.length) h+=`<div class="small muted" style="padding:4px 0 4px 10px">geen boekingen in deze periode</div>`;
+    h+=rij(`data-opzijreksom="${r.som}"`, 'som in de periode', r.som);
+    h+=rij(`data-opzijnu="${r.nu==null?'':r.nu}"`, `saldo nu${r.datumNu?` · saldo ${dag(r.datumNu)}`:''}`, r.nu);
+    if(r.verschil!=null && Math.abs(r.verschil)>=0.005) h+=`<div class="small" data-opzijgat="${r.verschil}" style="padding:5px 0;color:var(--amber)">sluit niet aan: ${euroC(Math.abs(r.verschil))} verschil bij ${esc(r.naam)} (begin + som is ${euroC(r.begin+r.som)}, saldo nu ${euroC(r.nu)})</div>`;
+    if(r.onvolledig) h+=`<div class="small" data-opzijonvolledig style="padding:5px 0">onvolledig: de transacties van ${esc(r.naam)} ontbraken bij de sync van ${controleDagTijd(r.onvolledig.sinds)}${r.onvolledig.gelukt?`; laatst volledig ${controleDagTijd(r.onvolledig.gelukt)}`:''}</div>`;
+    h+='</div>'; }
+  if(H.rek.length>1){ h+=`<div class="small" style="font-weight:700;margin-top:12px">Samen</div>`;
+    h+=rij('data-opzijbegintot', 'beginsaldo', H.begin); h+=rij('data-opzijsomtot', 'som in de periode', H.som); h+=rij('data-opzijnutot', 'saldo nu', H.nu); }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="opzijSheet" data-som="${H.som}" data-tegel="${H.netto}" data-gaten="${H.gaten.length}" data-onvolledig="${H.onvolledig.length}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Opzij sinds ${dag(H.start)}</div>
+    <div class="small muted" style="margin:3px 0 4px;line-height:1.5">Wat er van ${dag(H.start)} tot nu naar je spaarrekening ging en eraf kwam. De som is het bedrag op de tegel: <b data-opzijsom="${H.som}">${euroC(H.som)}</b>.</div>
+    ${h}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg(); }
 /* v442 sectie 2: TERUG TE ZETTEN — een grootboek over de salarisperiodes heen (vervangt de meting over EEN periode van v440).
    Elke AFGESLOTEN periode (eind vóór de lopende periode, salPeriodeVan) met netto opzij < 0 (meer van je spaarrekening af dan
    erop, savedNetRange) opent een tekort; het open bedrag telt op over de periodes. Het gaat omlaag door (b): netto opzij BOVEN
@@ -16760,10 +16814,12 @@ function planKpi(P,cap,TL,SE){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       ${(()=>{ const O=opzijPeriode();   /* v440: opzij is wat er netto naar je spaarrekening ging deze periode (opzijPeriode), tegen het doel uit Kiezen; niet meer "deze maand opzij" uit de inleg */
         const val=O.netto==null?'onbekend':euro0(O.netto);
+        let H=null; try{ H=opzijHerleiding(O); }catch(_){} const onv=!!(H && H.onvolledig.length);   // v472: transacties van een spaarrekening ontbraken
         const sub=O.netto==null?`<span data-kpibron style="display:block">geen spaarrekening herkend</span>`
           :(O.doel==null?`<span data-kpibron style="display:block">nog geen doel · kies in Kiezen</span>`
             :`<span data-kpibron style="display:block">volgens je verdeling ${euro0(O.doel)}</span>`);   // v469 punt 3: dezelfde woorden als Zien (v464), geen percentage tegen een getal dat geen doel is
-        return tegel('Opzij deze periode', val, sub, `data-kpiopzij="${O.netto==null?'':O.netto}" data-kpiopzijdoel="${O.doel==null?'':O.doel}" data-kpiopzijperiode`); })()}
+        const sub2=onv?`<span data-kpionvolledig style="display:block;font-weight:700">onvolledig</span>`:'';
+        return tegel('Opzij deze periode', val, sub2+sub, `data-kpiopzij="${O.netto==null?'':O.netto}" data-kpiopzijexact="${O.nettoExact==null?'':O.nettoExact}" data-kpiopzijdoel="${O.doel==null?'':O.doel}" data-kpiopzijperiode${H?' role="button" onclick="openOpzijHerleiding()"':''}`); })()}
       ${tegel('Alles vol', vol, chip(sub2,p1?'openPlanTijdlijn()':'', `data-kpischema="${p1?'laat':'ok'}"`), `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
     </div></div>`;
 }
@@ -32416,7 +32472,11 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
     L.push('  OPZIJ (v440 punt 8) — netto naar je spaarrekening deze salarisperiode:');
     if(!O || !O.ok) L.push('    geen salarisperiode herkend (geen regel of geen salarisbetaling)');
     else if(!O.meetbaar || O.netto==null) L.push(`    gedaan: onbekend (geen spaarrekening herkend) · periode ${O.start}..${O.eind}`);
-    else L.push(`    gedaan ${euro0(O.netto)} (${O.start}..${O.eind}) tegen doel ${O.doel==null?'nog geen doel (geen salarisverdeling gekozen)':euro0(O.doel)+(O.pct!=null?' · '+O.pct+'%':'')}`); }
+    else L.push(`    gedaan ${euro0(O.netto)} (${O.start}..${O.eind}) tegen doel ${O.doel==null?'nog geen doel (geen salarisverdeling gekozen)':euro0(O.doel)+(O.pct!=null?' · '+O.pct+'%':'')}`);
+    /* v472 (punt 3): OPZIJ HERLEIDING, dezelfde bron als de tegel (opzijHerleiding) */
+    let H=null; try{ H=opzijHerleiding(O); }catch(_){}
+    if(H){ L.push(`  OPZIJ HERLEIDING (v472) — beginsaldo + som = saldo nu, per spaarrekening (som ${euroC(H.som)}, tegel ${euro0(H.netto)}):`);
+      for(const r of H.rek) L.push(`    ${r.naam} ··${String(r.acc).slice(-4)}: begin ${r.begin==null?'niet te bepalen (geen saldo vastgelegd van voor '+H.start+')':euroC(r.begin)+' (saldo '+r.punt.d+' '+euroC(r.punt.saldo/100)+' + '+r.tussenN+' boeking(en) '+euroC(r.tussen)+')'} · som ${euroC(r.som)} (${r.rijen.length} rijen) · saldo nu ${r.nu==null?'onbekend':euroC(r.nu)} · verschil ${r.verschil==null?'-':euroC(r.verschil)+(Math.abs(r.verschil)<0.005?' → sluit':' → SLUIT NIET')}${r.onvolledig?' · ONVOLLEDIG: transacties ontbraken ('+r.onvolledig.fout.slice(0,40)+')':''}`); } }
   /* v442 sectie 2e: INHALEN — een grootboek over de salarisperiodes (vervangt de twee definities A/B van v440). Per afgesloten
      periode met een tekort: netto, tekort (eruit), afgelost (met een overschot boven het doel of een terugzetten-bestemming) en
      wat open blijft; daaronder het totaal open. "Toegewezen zonder geld" (spaarOver().zonder) staat erbij ter vergelijking, want
@@ -33333,7 +33393,14 @@ function aansluitingVastleggen(snap, opnieuw){ const C=SET.controles=SET.control
       R.open=Math.abs(open)<1?null:{bedrag:open, sinds:R.open?R.open.sinds:nu, syncs:(R.open?R.open.syncs:0)+1}; }
     else { R.open=null; if(opnieuw && v) cur.opnieuw=true; }
     if(R.overgeslagen) R.overgeslagen.erna=nu;
-    R.laatste=cur; if(!R.eerste) R.eerste=nu; R.hist=(R.hist||[]).concat([cur]).slice(-20); } }
+    R.laatste=cur; if(!R.eerste) R.eerste=nu; R.hist=(R.hist||[]).concat([cur]).slice(-20);
+    try{ saldoPuntZet(acc, cur.saldo, nu); }catch(_){} } }
+/* v472 (punt 3): EEN SALDO PER DAG, voor de herleiding van "Opzij deze periode". Per rekening het saldo van de LAATSTE sync van een dag
+   waarin saldo EN transacties lukten (dezelfde poort als de aansluiting hierboven), hooguit SALDO_PUNT_DAGEN dagen. Het beginsaldo van een
+   salarisperiode is daarmee een gemeten saldo plus de boekingen tussen die dag en het begin, nooit een schatting. */
+const SALDO_PUNT_DAGEN=70;
+function saldoPuntZet(acc, saldoCent, tijd){ const S=SET.saldoPunten=SET.saldoPunten||{}; const d=ymdVan(new Date(tijd)), grens=ymdVan(new Date(tijd-SALDO_PUNT_DAGEN*864e5));
+  S[acc]=(S[acc]||[]).filter(x=>x && x.d!==d && x.d>=grens).concat([{d, tijd, saldo:Math.round(+saldoCent||0)}]).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0); }
 function aanslStatus(acc, R, nu){ if(!R || !R.laatste) return null; const L=R.laatste;
   if(R.hist.length<2 || L.verschil==null && !R.open) return {status:R.hist.length<2||L.opnieuw?'start':'klopt'};
   if(!R.open) return {status:'klopt'};

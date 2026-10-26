@@ -141,8 +141,17 @@ genoemde versietag.)*
   `data-spaarplanvrij`) is de ene regel, uit `spaarPlanDelen()`: nog terug is `planTerug().totaal` (`spaarPlanAansl().nogTerug`, de ene bron),
   niet toegewezen het saldo boven de toewijzingen. Samen onder EUR 0,50 geen regel; alleen vrij geld dat `spaarVrijLine()` al noemt ook niet.
   De sheet `openSpaarPlanAansl()` toont saldo, toegewezen, gespaard per doel en "Het verschil": nog terug (met per doel `data-terugdoel`) en
-  niet toegewezen (`data-spaardeel`). Spec `v472.spec.js` (5 tests, 5 van 5 sabotages rood); `v469` b/c/2a, `v470` 1a/1c/2a/2b/2c,
-  `v440` 3, `v442-inhalen` e en `toegewezen-zonder-geld` gemigreerd.
+  niet toegewezen (`data-spaardeel`). De reden in `planTekort()` noemt de rekening zonder saldo (`accLabel`). (3) "OPZIJ DEZE PERIODE"
+  HERLEIDBAAR (gemeld: de tegel sprong van EUR 2.031 naar EUR 3.650 terwijl het saldo EUR 650 steeg). `opzijHerleiding()` leest dezelfde
+  boekingen als de tegel (`opzijPeriode().tx`, met `nettoExact` in centen): per spaarrekening het beginsaldo, de rijen, de som en het saldo
+  nu (`accBalance`). HET BEGINSALDO IS GEMETEN EN NOOIT GESCHAT: `SET.saldoPunten[acc]` (`saldoPuntZet()`, in `aansluitingVastleggen()`,
+  alleen een sync waarin saldo EN transacties lukten, de laatste van elke dag, `SALDO_PUNT_DAGEN` 70) geeft het saldo van de laatste dag
+  voor het begin, plus de boekingen tussen die dag en het begin. Zonder punt: "beginsaldo niet te bepalen" en geen aansluitregel.
+  Begin + som is het saldo nu; anders "sluit niet aan: EUR X verschil bij <rekening>" (`data-opzijgat`). Een txFout op een spaarrekening:
+  de tegel zegt "onvolledig" (`data-kpionvolledig`) en de sheet welke rekening, bij welke sync en wanneer laatst volledig. Tik op de tegel
+  opent `openOpzijHerleiding()` (`#opzijSheet`, "Opzij sinds <dag>", rijen `data-opzijrij`). Blok 20: "OPZIJ HERLEIDING (v472)" per
+  rekening begin, som (rijen), saldo nu en verschil. Spec `v472.spec.js` (10 tests; 11 sabotages in de app en 1 op de fixture, alle rood);
+  `v469` b/c/2a, `v470` 1a/1c/2a/2b/2c, `v440` 3, `v442-inhalen` e en `toegewezen-zonder-geld` gemigreerd.
 - **v471: EEN TELLING PER DAG PER BANK, PENDING EERST METEN EN DAN OVERSLAAN, DE KOPPELING ZONDER PENDING-AANROEP, EN DE PSU-HEADERS UIT /aspsps**
   (`v471`, gevraagd door de gebruiker als antwoord op het rapport over de syncgrens). (1) `SET.syncTel[dag][bank]` (`syncTelSync()`,
   `syncTelAanroep()`, de laatste `SYNC_TEL_DAGEN` (14) dagen, `syncTelOpruim()`): syncs per route (automatisch, handmatig, koppeling; een sync
