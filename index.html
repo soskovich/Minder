@@ -16241,6 +16241,76 @@ const PLAN_BIJNA_VOL=0.95;
 /* v381: een bron met geld dat zonder geld en zonder keuze is toegewezen heeft een voorlopige vol-datum. */
 function planVoorlopig(x){ return !!x && x.zg>0; }
 function planBijnaVol(x){ return !!x && x.doel>0 && x.S<x.doel && x.S>=PLAN_BIJNA_VOL*x.doel && x.nogLater>0; }
+/* v469 (punt 1, gevraagd door de gebruiker): JE SPAARREKENING TEGEN PLAN, EEN BRON met drie lezers (de regel op Plan, de sheet erachter
+   en de controle van soort 2). "Gespaard voor je doelen" is per doel het GELD (planStandEind(): de toewijzing min wat nog terug moet
+   volgens een terugzetkeuze (planTerugNog()) en min wat zonder geld is toegewezen (planZonderAf())). Het verschil met het saldo van
+   je spaarrekening(en) (spaarSaldo(), exact) is daarmee per constructie: niet toegewezen (saldo boven de toewijzingen) - tekort
+   (toewijzingen boven het saldo) + nog terug + zonder geld. Wat daar niet in valt (de klem op nul per doel) heet `rest` en sluit niet.
+   DE METING DIE ERTOE DOET is `al`: geld dat je terugzetkeuze nog verwacht terwijl het al op je spaarrekening staat. Normaal is dat
+   nul: wat je deze maand terugstortte haalt terugzetDekt() er al af. Is het meer, dan zeggen de keuze en het saldo iets anders.
+   EEN SYNC ZONDER TRANSACTIES IS GEEN VERGELIJKINGSPUNT (zoals de aansluiting, v465): dan staat een storting van vandaag wel in het
+   saldo en niet in je boekingen, dus `al` is dan niet te beoordelen (`zonderTx`, de rekeningen bij naam). */
+function spaarPlanAansl(P, SE){
+  let S=null; try{ S=spaarSaldo(); }catch(_){} if(!S || S.missing) return null;
+  P=P||allocatePlan(); SE=SE||planStandEind(P);
+  const nog=planTerugNog(), zgAf=planZonderAf(P), doelen=[]; let geld=0, toe=0, terug=0, zonder=0;
+  for(const p of P){ if(p.type==='aflossen' || p.nfOnbekend) continue;
+    const x=SE.per[p.id]||{}, t=Math.max(Math.round(+p.gespaard||0),0), n=Math.max(nog[p.id]||0,0), z=Math.max(zgAf[p.id]||0,0), g=+x.geld||0;
+    doelen.push({id:p.id, naam:p.naam, type:p.type, toegewezen:t, n, zg:z, geld:g, sinds:p.type==='goal'?(p.startDatum||''):''});
+    geld+=g; toe+=t; terug+=n; zonder+=z; }
+  const r2=v=>Math.round(v*100)/100;
+  const saldo=r2(S.exact!=null?+S.exact:+S.cur||0); geld=r2(geld);
+  const X=r2(saldo-geld), vrij=r2(Math.max(saldo-toe,0)), tekort=r2(Math.max(toe-saldo,0));
+  const rest=r2(X-(vrij-tekort+terug+zonder));
+  let dekt=0; try{ dekt=terugzetDekt(); }catch(_){}
+  const al=r2(Math.min(Math.max(dekt+zonder-tekort,0), terug));
+  const rek=n26SavingsAccounts().map(acc=>({acc, naam:(function(){ try{ return accLabel(acc)||acc; }catch(_){ return acc; } })(), saldo:accBalance(acc), datum:(function(){ try{ return accBalanceDatum(acc)||''; }catch(_){ return ''; } })(),
+    txFout:String(((SET.psd2Diag||{})[acc]||{}).txFout||'')}));
+  const zonderTx=rek.filter(r=>r.txFout);
+  const extra=Math.round((+SET.extraSavings||0)*100)/100;
+  const sluit=Math.abs(rest)<1, status=zonderTx.length?'verklaard':(!sluit||al>=1)?'wacht':'klopt';
+  return {saldo, geld, X, vrij, tekort, terug, zonder, rest, al, dekt, doelen, rek, zonderTx, extra, sluit, status,
+    puurVrij:terug<0.005 && zonder<0.005 && tekort<0.005 && Math.abs(rest)<0.005};
+}
+/* De regel op Plan (onder de kop): alleen als het verschil niet nul is, en niet als het alleen vrij spaargeld is dat spaarVrijLine()
+   al noemt (verplaatsen is nooit kopiëren). Een tik opent de opbouw. */
+function spaarPlanRegel(P, SE){
+  let A=null; try{ A=spaarPlanAansl(P, SE); }catch(_){} if(!A || Math.abs(A.X)<0.005) return '';
+  let vrijRegel=0; try{ vrijRegel=spaarVrij().vrij; }catch(_){} if(A.puurVrij && vrijRegel>0) return '';
+  const lbl=A.puurVrij?`niet toegewezen ${euroC(A.X)}`:`verschil met je spaarrekening ${euroC(A.X)}`;
+  return `<div class="row small" id="spaarPlanRegel" data-spaarplan="${A.X}" data-spaarplanstatus="${A.status}" role="button" style="gap:8px;margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openSpaarPlanAansl()"><span style="flex:1;min-width:0">${lbl}</span><span style="color:var(--mut)">›</span></div>`;
+}
+function openSpaarPlanAansl(){
+  let A=null; try{ A=spaarPlanAansl(); }catch(_){} if(!A){ closeSheet(); return; }
+  const rij=(attr,l,b,stijl)=>`<div class="row small" ${attr} data-bedrag="${b}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line);${stijl||''}"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${euroC(b)}</b></div>`;
+  const dag=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||'')); return m?`${+m[3]} ${MNAMES[+m[2]-1]}`:''; };
+  let h='';
+  h+=A.rek.map(r=>rij(`data-spaarrek="${esc(r.acc)}"`, `${esc(r.naam)}${r.datum?` <span class="muted">· saldo ${dag(r.datum)}</span>`:''}${r.txFout?` <span class="muted" data-geentx>· transacties ontbraken bij de laatste sync</span>`:''}`, +r.saldo||0)).join('');
+  if(A.extra) h+=rij('data-spaarextra','Spaargeld elders (niet gekoppeld)',A.extra);
+  h+=rij('data-spaarsaldo','<b>Op je spaarrekening</b>',A.saldo,'font-weight:700');
+  h+=`<div class="small" style="font-weight:700;margin:10px 0 2px">Gespaard voor je doelen ${euroC(A.geld)}</div>`;
+  h+=A.doelen.map(d=>`<div class="small" data-spaardoel="${esc(d.id)}" data-geld="${d.geld}" style="padding:5px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px"><span style="flex:1;min-width:0">${esc(d.naam)}</span><b>${euroC(d.geld)}</b></div><div class="muted">toegewezen ${euroC(d.toegewezen)}${d.n>0?` · min ${euroC(d.n)} nog terug`:''}${d.zg>0?` · min ${euroC(d.zg)} zonder geld`:''}${d.sinds?` · doel sinds ${dag(d.sinds)}`:''}</div></div>`).join('');
+  h+=`<div class="small" style="font-weight:700;margin:10px 0 2px">Verschil ${euroC(A.X)}</div>`;
+  if(A.vrij>=0.005) h+=rij('data-spaardeel="vrij"','niet toegewezen aan een doel',A.vrij);
+  if(A.terug>=0.005) h+=rij('data-spaardeel="terug"','nog terug volgens je terugzetkeuze (telt pas als het er weer staat)',A.terug);
+  if(A.zonder>=0.005) h+=rij('data-spaardeel="zonder"','toegewezen zonder geld',A.zonder);
+  if(A.tekort>=0.005) h+=rij('data-spaardeel="tekort"','min: meer toegewezen dan er staat',-A.tekort);
+  if(Math.abs(A.rest)>=0.005) h+=rij('data-spaardeel="rest"','niet verklaard',A.rest,'color:var(--amber)');
+  const noot=A.zonderTx.length
+    ? `De transacties van ${esc(A.zonderTx.map(r=>r.naam).join(', '))} ontbraken bij de laatste sync. Een storting van vandaag staat dan wel in het saldo en niet in je boekingen, dus dit wordt nu niet vergeleken.`
+    : A.al>=1 ? `${euroC(A.al)} daarvan verwacht je terugzetkeuze nog terug, maar het staat al op je spaarrekening. Dat staat als controle in Diagnose.`
+    : !A.sluit ? `${euroC(A.rest)} is niet bij naam te verklaren. Dat staat als controle in Diagnose.` : '';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="spaarPlanSheet" data-x="${A.X}" data-status="${A.status}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Je spaarrekening tegen je doelen</div>
+    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">Wat er op je spaarrekening staat, wat daarvan voor je doelen is, en waaruit het verschil bestaat.</div>
+    ${h}${noot?`<div class="small" data-spaarnoot style="margin-top:8px;line-height:1.5">${noot}</div>`:''}
+    ${A.terug>=0.005?`<div class="small" style="margin-top:8px"><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openTerugOpbouw()">waar komt "terug" vandaan ›</span></div>`:''}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg(); }
+/* v469 (punt 2): EEN DOEL HEET PAS VOL ALS HET GELD OP JE SPAARREKENING HET DOELBEDRAG HAALT. allocatePlan() zet een toewijzing die het
+   doel haalt op 'bereikt' (de verdeling hoeft er niets meer heen te sturen), maar het geld kan lager zijn: een terugzetkeuze die nog
+   terug moet, of zonder geld toegewezen. Gemeld: Noodfonds "vol" bij EUR 2.912 van EUR 4.000. */
+function planVolEcht(p,x){ return !!p && p.status==='bereikt' && !!x && x.doel>0 && x.geld>=x.doel-0.005; }
+function planVolLater(x){ const ms=((x&&x.later)||[]).map(l=>+l.m).filter(m=>m>0); return ms.length?Math.max(...ms):null; }
 /* v371 (punt 2): WAAR HET TERUGZETBEDRAG VAN DEZE MAAND HEEN GAAT. Eerst terug naar de bron waar het uit kwam, tot aan
    het doelbedrag: ruimte is het doel min het geld dat er staat min de inleg van deze maand. Kan de bron het niet meer
    dragen, dan schuift de rest door naar de volgende bestemming in de volgorde met ruimte, en blijft er daarna nog iets
@@ -16535,7 +16605,8 @@ function renderPlan(bare){
   let vdMeld=''; try{ vdMeld=planVerdelingMeldingRegel(); }catch(_){}
   /* v440: planInlegRegel ("deze maand EUR X opzij", savedNet van de kalendermaand tegen de cap) is weg: opzij staat als "Opzij
      deze periode" in planKpi (opzijPeriode, per salarisperiode), de enige opzij-bron op Plan. */
-  const meld=(tzKaart||zgRegel||vdMeld)?`<div data-planmeldingen style="margin:0 2px 8px">${tzKaart}${zgRegel}${vdMeld}</div>`:'';
+  let spRegel=''; try{ spRegel=spaarPlanRegel(P, SE); }catch(_){}   // v469 punt 1
+  const meld=(tzKaart||zgRegel||vdMeld||spRegel)?`<div data-planmeldingen style="margin:0 2px 8px">${spRegel}${tzKaart}${zgRegel}${vdMeld}</div>`:'';
   const weergave=planWeergave();
   const knop=(k,t)=>`<span role="button" data-planweergave="${k}" data-aan="${weergave===k?1:0}" onclick="planWeergaveZet('${k}')" style="flex:1;text-align:center;padding:6px 4px;border-radius:9px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;${weergave===k?'background:var(--card);color:var(--txt);box-shadow:var(--shadow)':'color:var(--mut)'}">${t}</span>`;
   const schakel=P.length?`<div class="row" data-planschakel style="gap:0;padding:3px;border-radius:12px;background:var(--card2);margin:0 0 9px">${knop('lijst','Lijst')}${knop('tijdlijn','Tijdlijn')}</div>`:'';
@@ -16637,7 +16708,7 @@ function planKpi(P,cap,TL,SE){
         const val=O.netto==null?'onbekend':euro0(O.netto);
         const sub=O.netto==null?`<span data-kpibron style="display:block">geen spaarrekening herkend</span>`
           :(O.doel==null?`<span data-kpibron style="display:block">nog geen doel · kies in Kiezen</span>`
-            :`<span data-kpibron style="display:block">van ${euro0(O.doel)} doel${O.pct!=null?` · ${O.pct}%`:''}</span>`);
+            :`<span data-kpibron style="display:block">volgens je verdeling ${euro0(O.doel)}</span>`);   // v469 punt 3: dezelfde woorden als Zien (v464), geen percentage tegen een getal dat geen doel is
         return tegel('Opzij deze periode', val, sub, `data-kpiopzij="${O.netto==null?'':O.netto}" data-kpiopzijdoel="${O.doel==null?'':O.doel}" data-kpiopzijperiode`); })()}
       ${tegel('Alles vol', vol, chip(sub2,p1?'openPlanTijdlijn()':'', `data-kpischema="${p1?'laat':'ok'}"`), `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
     </div></div>`;
@@ -16647,7 +16718,9 @@ function planKpi(P,cap,TL,SE){
    de detailsheet. De status: vol, vol in <maand> (deze maand), bijna vol (C), nu actief, vanaf <maand>, gepauzeerd. */
 function planDoelStatus(p,t,x){
   if(p.nfOnbekend) return {k:'onbekend', tekst:'stand onbekend'};
-  if(p.status==='bereikt') return {k:'vol', tekst:'vol'};
+  if(p.status==='bereikt'){ if(!x || !(x.doel>0) || planVolEcht(p,x)) return {k:'vol', tekst:'vol'};   // v469: vol pas als het geld het doel haalt
+    if(x.S>=x.doel && !(x.nogLater>0)) return {k:'volin', tekst:`vol in ${MNAMES[new Date().getMonth()]}`};
+    return {k:'terug', tekst:`nog ${euro0(Math.max(x.doel-x.geld,0))} terug`}; }
   if(p.status==='gepauzeerd') return {k:'gepauzeerd', tekst:'gepauzeerd'};
   if(x && planBijnaVol(x)) return {k:'bijnavol', tekst:'bijna vol'};
   if(t && t.vol===1 && x && x.S>=x.doel) return {k:'volin', tekst:`vol in ${MNAMES[new Date().getMonth()]}`};
@@ -16668,7 +16741,8 @@ function planDoelRij(p,i,TL,SE,tints){
   const bijPct=doel>0?Math.max(Math.min(bij/doel*100,100-pct),0):0;
   const arc=`repeating-linear-gradient(135deg,${tint} 0 3px,color-mix(in srgb,${tint} 30%,transparent) 3px 6px)`;
   const balk=`<div class="bar-track plan-rijbalk" data-rijbalk style="height:7px;margin:6px 0 5px;position:relative">${p.nfOnbekend?'':`<div class="bar-fill" data-geldvat="${p.id}" data-pct="${pct.toFixed(2)}" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" data-groei data-bijvat="${p.id}" data-pct="${bijPct.toFixed(2)}" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}`}</div>`;
-  const vol=p.nfOnbekend?'stand onbekend':p.status==='bereikt'?'vol':(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
+  const VL=planVolLater(x);   // v469: een toewijzing op het doel met geld dat nog terug moet is vol na het laatste terugzetdeel
+  const vol=p.nfOnbekend?'stand onbekend':p.status==='bereikt'?((planVolEcht(p,x)||!(x.doel>0))?'vol':(x.S>=x.doel&&VL==null?`vol ${etaDatum(1)}`:VL!=null?`vol ${etaDatum(VL)}`:'vol na terugzetten')):(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
   const streef=(p.type==='goal'&&p.streefdatum)?doelDatumLabel(p.streefdatum,true):'';
   /* v385: REGEL 3 IS VOOR ELK DOEL DAT DEZE MAAND GELD KRIJGT DEZELFDE: "+EUR X deze maand" met X = inleg + terug, de
      termen die "Deze maand opzij" in de kop optelt (planKpiData()), dus de rijen tellen per constructie op tot dat getal.
@@ -16679,6 +16753,7 @@ function planDoelRij(p,i,TL,SE,tints){
   const sub=dezeMaand>0?`+${euro0(dezeMaand)} deze maand${x.nogLater>0?` · ${euro0(x.nogLater)} later`:''}`
     :st.k==='gepauzeerd'?'krijgt nu niets'
     :st.k==='vol'?'geen inleg meer nodig'
+    :st.k==='terug'?`${euro0(Math.max(x.doel-x.geld,0))} moet nog terug op je spaarrekening`
     :st.k==='onbekend'?'wat er al staat is niet bekend'
     :streef?`streef ${streef} · ${t.warn?'niet haalbaar':'haalbaar'}`
     :planDatumMist(p)?'geen streefdatum'
@@ -33214,6 +33289,12 @@ function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), 
   for(const [acc,R] of Object.entries(C.aansluiting||{})){ if(psd2Vervangen(acc)) continue; const S=aanslStatus(acc, R, nu); if(!S || S.status==='start') continue;
     U.push({id:'aansl:'+acc, soort:2, status:S.status, onderwerp:'rekeningen', raakt:['saldo'], bedrag:S.bedrag||0, reden:S.reden||'', titel:`Aansluiting ${aanslNaam(acc)}`,
       tekst:S.status==='klopt'?'saldo nu − saldo vorige sync = geboekt sindsdien':`saldo en geboekt lopen ${euroC(S.bedrag)} uiteen sinds ${controleDagTijd(R.open.sinds)} (${R.open.syncs} sync(s), saldosoort ${R.laatste.soort||'-'})`}); }
+  /* v469 (punt 1): soort 2, je spaarrekening tegen Plan: saldo = gespaard voor je doelen + het verschil bij naam (spaarPlanAansl()).
+     Sluit het niet, of verwacht een terugzetkeuze geld dat al op je spaarrekening staat, dan wacht hij; na een sync zonder transacties
+     op een spaarrekening is er geen vergelijking (verklaard, met de rekeningen). */
+  try{ const A=spaarPlanAansl(); if(A) U.push({id:'spaarplan', soort:2, status:A.status, onderwerp:'rekeningen', raakt:[], bedrag:Math.abs(A.X),
+      reden:A.zonderTx.length?`geen vergelijking: de transacties van ${A.zonderTx.map(r=>r.naam).join(', ')} ontbraken bij de laatste sync`:'', titel:'Spaarrekening tegen Plan',
+      tekst:`saldo ${euroC(A.saldo)} = gespaard voor je doelen ${euroC(A.geld)} + niet toegewezen ${euroC(A.vrij)} + nog terug ${euroC(A.terug)} + zonder geld ${euroC(A.zonder)} - tekort ${euroC(A.tekort)}${Math.abs(A.rest)>=0.005?` + niet verklaard ${euroC(A.rest)}`:''}${A.al>=1?` · ${euroC(A.al)} verwacht de terugzetkeuze nog terwijl het er al staat`:''}`}); }catch(_){}
   /* blok 26: de gevallen zonder partij-eis. De eerste run legt de toevalsgevallen van nu vast als bekend toeval; een nieuw geval
      (nog niet bekend, nog geen oordeel) wacht op de bouwer (soort 2), ook als het op toeval lijkt. */
   try{ const G=vorautZonderGevallen(); const ks=G.map(g=>g.g.sleutel);
