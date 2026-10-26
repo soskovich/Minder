@@ -16222,7 +16222,7 @@ function planZonderAfKeuze(P){
    (`al`), en een storting lost "nog terug" en "terug te zetten" in een keer af.
    ALLEEN NA EEN SYNC WAARIN DE TRANSACTIES LUKTEN (de aansluiting, v465): staat er bij een spaarrekening een transactiefout
    (SET.psd2Diag[acc].txFout), of is het saldo onbekend, dan blijft het de terugzetkeuze (`saldo:false`, met de reden). */
-function planTekort(P){
+function planTekort(P, aftrek){
   P=P||allocatePlan();
   const keuze=planTerugKeuze();
   const terugval=(reden, extra)=>Object.assign({saldo:false, reden, nog:keuze, zg:planZonderAfKeuze(P), keuze, T:null}, extra||{});
@@ -16230,7 +16230,7 @@ function planTekort(P){
   let zonderTx=[]; try{ zonderTx=n26SavingsAccounts().filter(acc=>((SET.psd2Diag||{})[acc]||{}).txFout); }catch(_){}
   if(zonderTx.length) return terugval('transacties ontbraken bij de laatste sync', {zonderTx});
   const r2=v=>Math.round(v*100)/100;
-  const saldo=r2(S.exact!=null?+S.exact:+S.cur||0);
+  const saldo=r2((S.exact!=null?+S.exact:+S.cur||0)-(+aftrek||0));
   const items=P.filter(p=>(p.type==='goal'||p.type==='noodfonds') && !p.nfOnbekend);
   const toeVan={}; let toe=0; for(const p of items){ const t=Math.max(Math.round(+p.gespaard||0),0); toeVan[p.id]=t; toe+=t; }
   const T=r2(Math.max(toe-saldo,0));
@@ -16273,17 +16273,23 @@ function planStandEind(P){
   let TND={per:{}, door:{}, onverdeeld:0, bron:{}}; try{ TND=terugzetNaarDoel(P, TK); }catch(_){}
   const nog=TK.nog, zgAf=TK.zg;
   let TP=null; try{ TP=terugzetProjectieCap(P, TK, TND.bron); }catch(_){}
+  /* v470: WAT ER DEZE MAAND AL TERUGGESTORT IS, telt in "deze maand opzij" (de rij en de kop) en niet nog eens in de stand: het
+     staat al in het geld. Gemeten tegen het saldo zonder de stortingen van deze maand (planTekort met aftrek); zo lost een storting
+     "nog terug" af en blijft hij toch het terugzetten van deze maand (nog te sparen plus al gestort is Plan "deze maand opzij", v386). */
+  let TNDb={per:{}}; try{ let erin=0; try{ erin=+spaarStortStand(thisYM()).erin||0; }catch(_){}
+    if(TK.saldo && erin>0){ const TKb=planTekort(P, erin); if(TKb.saldo) TNDb=terugzetNaarDoel(P, TKb); } }catch(_){}
   const per={}; let nogTeGaan=0, doelSom=0, geldSom=0;
   for(const p of P){
     const doel=Math.max(Math.round(+p.doel||0),0), uit=p.nfOnbekend||p.type==='aflossen';
     const n=Math.max(nog[p.id]||0,0), zg=Math.max(zgAf[p.id]||0,0);
     const geld=uit?0:Math.max(Math.round((Math.round(+p.gespaard||0)-n-zg)*100)/100,0);
     const tb=Math.max(Math.round((TND.per[p.id]||0)*100)/100,0);   // v470: in centen, want wat er ontbreekt (planTekort()) is in centen
+    const tbGedaan=uit?0:Math.max(Math.round(((TNDb.per[p.id]||0)-tb)*100)/100,0);
     const inleg=(p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(+p.alloc||0),0);
     const S=Math.round((geld+tb+inleg)*100)/100;
     const later=[]; let nogLater=0;
     if(TP&&TP.bij) Object.keys(TP.bij).map(Number).sort((a,b)=>a-b).forEach(m=>{ const b=Math.round(+TP.bij[m][p.id]||0); if(b>0){ later.push({m, bedrag:b}); nogLater+=b; } });
-    per[p.id]={geld, zg, tb, inleg, S, doel, nogLater, later, door:TND.door[p.id]||null,
+    per[p.id]={geld, zg, tb, tbGedaan, inleg, S, doel, nogLater, later, door:TND.door[p.id]||null,
       gesplitst:!uit && doel>0 && (n>0 || zg>0 || !!TND.door[p.id])};
     if(!uit && p.status!=='gepauzeerd'){ nogTeGaan+=Math.max(doel-S,0); doelSom+=doel; geldSom+=geld; }
   }
@@ -16738,7 +16744,7 @@ function planKpiData(P,cap,TL,SE){
   P=P||allocatePlan(); if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
   TL=TL||planTijdlijnData(P,cap); SE=SE||planStandEind(P);
   let geld=0, doel=0, inleg=0, terug=0;
-  for(const p of P){ const x=SE.per[p.id]; if(!x) continue; inleg+=x.inleg; terug+=x.tb;
+  for(const p of P){ const x=SE.per[p.id]; if(!x) continue; inleg+=x.inleg; terug+=x.tb+(x.tbGedaan||0);
     if(p.type==='aflossen'||p.nfOnbekend) continue; geld+=x.geld; doel+=x.doel; }
   geld=Math.round(geld*100)/100;
   /* v397: wat er uit vrij spaargeld terug gaat staat niet bij een doel maar telt wel in "deze maand opzij" (een bron met
@@ -16810,7 +16816,7 @@ function planDoelRij(p,i,TL,SE,tints){
      Daarachter alleen "· EUR Y later" als er na deze maand nog terugzetdelen komen. Dat wint van elke status (ook bijna
      vol, waar tot v384 "vol <maand> · EUR Y komt nog terug" stond; de vol-datum staat rechts al). De opbouw (terug plus
      inleg) staat in de detailsheet. De termijn van een schuld zit in de balk en niet in deze regel. */
-  const dezeMaand=Math.max(Math.round((+x.inleg||0)+(+x.tb||0)),0);
+  const dezeMaand=Math.max(Math.round((+x.inleg||0)+(+x.tb||0)+(+x.tbGedaan||0)),0);
   const sub=dezeMaand>0?`+${euro0(dezeMaand)} deze maand${x.nogLater>0?` · ${euro0(x.nogLater)} later`:''}`
     :st.k==='gepauzeerd'?'krijgt nu niets'
     :st.k==='vol'?'geen inleg meer nodig'

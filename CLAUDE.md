@@ -138,7 +138,9 @@ genoemde versietag.)*
   lezen hem; `terugzetNaarDoel()` laat deze maand alleen teruggaan wat er per doel ontbreekt (in centen) en `terugzetProjectieCap()` doet
   hetzelfde met de latere delen. ALLEEN NA EEN SYNC WAARIN DE TRANSACTIES LUKTEN: bij een transactiefout op een spaarrekening of een onbekend
   saldo blijft het de terugzetkeuze (`saldo:false`, met de reden). `spaarPlanAansl().al` is dan wat de keuze verwacht en al op je
-  spaarrekening staat (telt als gespaard, geen wachtende controle meer). (2) GEMETEN: "Terug te zetten" (het grootboek over de
+  spaarrekening staat (telt als gespaard, geen wachtende controle meer). WAT DEZE MAAND AL IS TERUGGESTORT (gemeten tegen het saldo zonder de
+  stortingen van deze maand, `planTekort(P, aftrek)`) telt als `tbGedaan` in "deze maand opzij" en in de rij, niet nog eens in de stand: zo blijft
+  nog te sparen plus al gestort gelijk aan Plan "deze maand opzij" (v386; gevonden door de volle suite). (2) GEMETEN: "Terug te zetten" (het grootboek over de
   salarisperiodes, `opzijInhalen()`, v442) en "nog terug" per doel (de terugzetkeuze) waren twee bronnen voor hetzelfde geld met twee bedragen.
   `planTerug(P)` is nu de bron (per doel toegewezen min gespaard, en de som): de regel op Plan (`spaarOverLine()`, `data-planinhalen`), de
   sheet (`openInhalen()`, `data-terugdoel`) en "Over deze periode" (`watOverPeriode().inhaal`) lezen hem, een storting lost beide af, en blok
