@@ -1091,3 +1091,7 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Automatisch alleen als het niet anders kan zijn.** Binnen de bovengrens en zonder verwachte eenmalige ontvangst in die maand is het meerdere reiskosten; anders is het een vraag zonder voorkeuze, en tot het antwoord eenmalig (de voorzichtige kant voor je vaste inkomen, `v168`). Bij een lagere storting vraagt de app of je vaste salaris nog klopt in plaats van het stil aan te passen.
 - **De verwachte bonus telt een keer.** Het eenmalige deel van de storting is de ontvangst van de eerste verwachte post van die maand; er komt geen tweede regel "telt mee zodra binnen".
 
+## v474 · herstel op v473
+- **De mediaan noemt zijn bedragen.** Een getal dat een mediaan is, toont de waarden waaruit het komt; anders is het niet na te rekenen en wordt het verward met een ander getal (het rapport van v473 noemde `baseIncome()`).
+- **Reiskosten zijn een term in de controle, geen inkomen.** De vergoeding staat op je betaalrekening; een controle die alleen inkomen telt, vindt dan elke maand een verschil.
+- **Een veld op Instellingen bouwt zijn eigen pagina niet opnieuw.** Valkuil: een onchange vuurt op het moment dat je het volgende element aantikt, en een herbouw vervangt dat element onder je vinger. Bouw alleen het blok dat verandert opnieuw.
