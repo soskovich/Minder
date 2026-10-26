@@ -1084,3 +1084,10 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Overslaan pas na tien keer niets, en een keer per week toch kijken.** Gemeten gaf de pending-aanroep bij alle rekeningen nul regels (v297); tien op rij per bank is genoeg om te stoppen en de wekelijkse controle vangt een bank die wel gaat leveren. Een mislukte aanroep is geen nul en telt niet mee (v59/v73/v173).
 - **De koppeling doet geen pending-aanroep.** De aanroep stond sinds v270 achter een comment en draaide nooit. Weghalen kost niets (de eerstvolgende vernieuwing haalt pending op) en spaart per rekening een aanvraag op het moment dat er 24 maanden worden opgehaald.
 - **De PSU-headers horen bij de backend.** Die staat niet in deze repo; de app legt alleen vast wat /aspsps per bank zegt, zodat het zonder netwerk in blok 8 staat (v244).
+
+## v473 · de salarisstorting gesplitst
+- **Het vaste salaris is een instelling, geen meting.** Een mediaan zou elke stijging pas na maanden zien en een bonus half meetellen; wat jij als vast salaris invult is de grens, en alles erboven is eenmalig tenzij het reiskosten is. Zonder instelling verandert er niets.
+- **Reiskosten verlagen het potje en zijn geen inkomen.** Een vergoeding is geld terug voor een uitgave; als inkomen tellen maakt je maand rijker en je Vervoer-potje armer dan ze zijn. Het potje gaat niet onder 0: een overschot staat als "vergoeding over" en telt nergens mee. Er wordt geen vergoeding vooruit gerekend: ze telt pas als ze binnen is.
+- **Automatisch alleen als het niet anders kan zijn.** Binnen de bovengrens en zonder verwachte eenmalige ontvangst in die maand is het meerdere reiskosten; anders is het een vraag zonder voorkeuze, en tot het antwoord eenmalig (de voorzichtige kant voor je vaste inkomen, `v168`). Bij een lagere storting vraagt de app of je vaste salaris nog klopt in plaats van het stil aan te passen.
+- **De verwachte bonus telt een keer.** Het eenmalige deel van de storting is de ontvangst van de eerste verwachte post van die maand; er komt geen tweede regel "telt mee zodra binnen".
+
