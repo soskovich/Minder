@@ -350,26 +350,19 @@ test.describe('e - het blok leest alleen', () => {
   });
 });
 
-test.describe('f - de pending-tak van psd2IngestSession is dood', () => {
-  /* GEVONDEN tijdens dit onderzoek, en het is de v215-meetles in app-code: een regel die door een
-     // -comment is opgeslokt. `const dp=await psd2Api(...)` staat achter "// v197: pending telt altijd
-     mee" op dezelfde regel, dus dp is nooit gedeclareerd, dp.transactions gooit, en de catch eromheen
-     slikt het. Bij een eerste koppeling komen er dus geen pending-boekingen binnen. psd2Refresh()
-     heeft dezelfde aanroep wel intact, dus de eerstvolgende verversing haalt ze alsnog.
-     DEZE TEST PINT BEWUST DE KAPOTTE STAND. v270 repareert hem niet (de opdracht was onderzoek plus
-     een diagnoseblok), en zonder test zou de vondst alleen in de changelog staan. Repareer je de
-     regel, dan valt deze test met opzet: werk hem dan bij in plaats van hem te omzeilen. */
-  test('de fetch staat in het comment, en in psd2Refresh() staat hij er wel', async () => {
+test.describe('f - de koppeling doet geen pending-aanroep (v471)', () => {
+  /* v270 vond hier een aanroep die door een // -comment was opgeslokt en pinde die kapotte stand met opzet. v471 heeft hem weggehaald en
+     niet gerepareerd: een koppeling doet bewust geen pending-aanroep, de eerstvolgende vernieuwing haalt pending op (en volgt de regel van
+     het overslaan). Deze test pint die nieuwe stand: geen PDNG in de koppel-route, wel in psd2Refresh(), en niet in een comment. */
+  test('geen PDNG in psd2IngestSession(), wel in psd2Refresh()', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const i = src.indexOf('function psd2IngestSession(');
+    const i = src.indexOf('async function psd2IngestSession(');
     const body = src.slice(i, src.indexOf('\nfunction mapPsd2Tx(', i));
-    const regel = (body.match(/\/\/ v197: pending telt altijd mee[^\n]*/) || [''])[0];
-    expect(regel).toContain('const dp=await psd2Api');   // de fetch staat achter //
-    expect(regel).toContain('transaction_status=PDNG');
+    expect(body).not.toContain('transaction_status=PDNG');
+    expect(body).not.toMatch(/\/\/[^\n]*const dp=await psd2Api/);
     const ri = src.indexOf('async function psd2Refresh(');
     const rbody = src.slice(ri, src.indexOf('\nfunction psd2GeenBackend(', ri));
     const rregel = (rbody.match(/[^\n]*transaction_status=PDNG[^\n]*/) || [''])[0];
-    expect(rregel).toContain('const dp=await psd2Api');
-    expect(rregel.split('//')[0]).toContain('const dp=await psd2Api');   // hier staat hij NIET in een comment
+    expect(rregel.split('//')[0]).toContain('const dp=await psd2Api');
   });
 });

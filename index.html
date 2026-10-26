@@ -29194,7 +29194,12 @@ function diagRekeningen(){
   /* v466: de syncgrens per bank, zodat te zien is waarom de boot niet vernieuwde */
   try{ const bk=[...new Set(Object.keys(SET.psd2Accounts||{}).map(syncBankVan))];
     for(const b of bk){ const S=syncBankStand(b);
-      L.push(`  SYNCGRENS (v466) ${b}: laatste sync ${S.laatst?controleDagTijd(S.laatst):'nooit'} · automatisch ${syncAutoMag(b)?'mag nu':(syncWeigerdeVandaag(b)?'niet meer vandaag (de bank weigerde)':'weer na '+controleDagTijd(S.laatst+SYNC_AUTO_UREN*3600000))}${S.weigerDag?' · laatste weigering '+S.weigerDag:''}`); } }catch(_){}
+      L.push(`  SYNCGRENS (v466) ${b}: laatste sync ${S.laatst?controleDagTijd(S.laatst):'nooit'} · automatisch ${syncAutoMag(b)?'mag nu':(syncWeigerdeVandaag(b)?'niet meer vandaag (de bank weigerde)':'weer na '+controleDagTijd(S.laatst+SYNC_AUTO_UREN*3600000))}${S.weigerDag?' · laatste weigering '+S.weigerDag:''}`); }
+    /* v471: per bank of pending wordt overgeslagen, de status per regel in de gewone aanroep, de PSU-headers, en de telling per dag */
+    for(const r of pendSkipRegels(bk)) L.push(r);
+    for(const r of txStatusRegels(bk)) L.push(r);
+    for(const r of aspspPsuRegels()) L.push(r);
+    for(const r of syncTelRegels()) L.push(r); }catch(_){}
   /* v453: de twee regels "laatste import per rekening" en "bewaarde foutstatus" zeiden "bestaat niet"; sinds v279/v298 bewaart
      SET.psd2Diag per rekening de laatste sync (_op) en per groep (transactie, saldo, pending) de velden met hun eigen stempel, ook
      de fout van de bank. Hier staat wat er werkelijk bewaard is, zonder iets te herberekenen. */
@@ -31407,8 +31412,8 @@ function diagPendBots(){
         +(d.pendFout?('   FOUT: '+d.pendFout):'')
         +merk);
     }
-    L.push('   "niet vastgelegd" is de koppel-route (psd2IngestSession): daar is de pending-tak stil kapot');
-    L.push('   sinds v270 en die staat als gemeten stand vast; repareren is een eigen ronde.');
+    L.push('   "niet vastgelegd" is de koppel-route (psd2IngestSession): die doet sinds v471 bewust geen pending-aanroep');
+    L.push('   (de dode aanroep van v270 is weggehaald). Een sync kan pending ook overslaan (v471): zie PENDING in blok 8.');
     const stil=Object.keys((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).filter(a=>gesynct.indexOf(a)<0);
     L.push('   gekoppelde rekeningen ZONDER sync sinds deze versie: '+(stil.length?stil.join(', '):'geen')
       +(stil.length?'   <-- daar is niets gemeten, dus een nul zegt over die rekeningen niets':''));
@@ -33247,6 +33252,76 @@ function syncBankNa(accs){ SET.syncBank=SET.syncBank||{}; const nu=Date.now(), d
     const D=(SET.psd2Diag||{})[acc]||{};
     if(bankWeigert(D.txFout)||bankWeigert(D.balFout)||bankWeigert(D.pendFout)) e.weigerDag=dag; } }
 function syncWeigerMelding(banken){ return banken.length? `${banken.join(' en ')} weigerde${banken.length>1?'n':''} eerder vandaag te veel aanvragen; Minder vernieuwt toch omdat je erom vroeg.` : ''; }
+/* ===== DE TELLING PER DAG (v471, gevraagd door de gebruiker als antwoord op het rapport over de syncgrens) =====
+   `SET.syncTel[dag][bank]`, de laatste SYNC_TEL_DAGEN (14) dagen: het aantal syncs per route (automatisch, handmatig, koppeling), per
+   soort het aantal aanroepen (transacties, ELKE pagina telt als aanroep; saldo; pending), per soort de weigeringen (`bankWeigert()`), en
+   de eerste weigering van de dag met tijd, soort, rekening en route. Een sync telt per BANK een keer; een aanroep telt per rekening.
+   Alleen meten: deze telling beslist niets. De syncgrens (v466) en het overslaan van pending lezen hun eigen stand. */
+const SYNC_TEL_DAGEN=14;
+const SYNC_TEL_SOORTEN=['tx','saldo','pending'], SYNC_TEL_ROUTES=['automatisch','handmatig','koppeling'];
+function syncTelLeeg(){ return {routes:{automatisch:0,handmatig:0,koppeling:0}, aanroepen:{tx:0,saldo:0,pending:0}, weigeringen:{tx:0,saldo:0,pending:0}, eerste:null}; }
+function syncTelDag(bank){ const T=SET.syncTel=SET.syncTel||{}, dag=vandaagYMD(), D=T[dag]=T[dag]||{};
+  return D[bank]=D[bank]||syncTelLeeg(); }
+function syncTelOpruim(){ const T=SET.syncTel||{}, d=new Date(); d.setDate(d.getDate()-(SYNC_TEL_DAGEN-1)); const grens=ymdVan(d);
+  for(const k of Object.keys(T)) if(k<grens) delete T[k]; }
+function syncTelSync(bank, route){ const E=syncTelDag(bank); E.routes[route]=(E.routes[route]||0)+1; syncTelOpruim(); }
+function syncTelAanroep(bank, soort, route, rek, fout){ const E=syncTelDag(bank); E.aanroepen[soort]=(E.aanroepen[soort]||0)+1;
+  if(fout && bankWeigert(fout)){ E.weigeringen[soort]=(E.weigeringen[soort]||0)+1;
+    if(!E.eerste) E.eerste={tijd:Date.now(), soort, rek, route}; } }
+function syncTelRegels(){ const T=SET.syncTel||{}, L=[], dagen=Object.keys(T).sort().reverse();
+  const nm={tx:'transacties',saldo:'saldo',pending:'pending'};
+  L.push('  TELLING PER DAG (v471, de laatste '+SYNC_TEL_DAGEN+' dagen, Nederlandse kalenderdag):');
+  if(!dagen.length){ L.push('    nog niets geteld (nog geen sync sinds v471)'); return L; }
+  for(const dag of dagen){ for(const b of Object.keys(T[dag]).sort()){ const E=T[dag][b];
+    L.push('    '+dag+'  '+b+':  syncs '+SYNC_TEL_ROUTES.map(r=>r+' '+(E.routes[r]||0)).join(' · '));
+    L.push('      aanroepen '+SYNC_TEL_SOORTEN.map(s=>nm[s]+' '+(E.aanroepen[s]||0)).join(' · ')+'  (transacties: elke pagina telt)');
+    L.push('      weigeringen '+SYNC_TEL_SOORTEN.map(s=>nm[s]+' '+(E.weigeringen[s]||0)).join(' · '));
+    if(E.eerste) L.push('      eerste weigering: '+controleDagTijd(E.eerste.tijd)+' · '+nm[E.eerste.soort]+' · rekening '+E.eerste.rek+' · route '+E.eerste.route); } }
+  return L; }
+/* ===== PENDING: EERST METEN, DAN OVERSLAAN (v471) =====
+   GEMETEN bij v297: de pending-aanroep gaf bij alle zes de rekeningen nul regels, en hij is een van de drie aanroepen per rekening per
+   sync (v289). Tot de meting van de status per regel in de gewone transactie-aanroep (`mapPsd2Tx()`, blok 8) iets anders zegt: per bank
+   slaat de sync de pending-aanroep over zodra de laatste PEND_SKIP_N (10) pending-aanroepen van die bank allemaal 0 regels gaven, met een
+   controle-aanroep per PEND_CONTROLE_DAGEN (7) dagen (dan roept die sync alle rekeningen van die bank aan). Een mislukte aanroep is geen
+   meting en telt niet in de reeks. De volgorde blijft transacties, saldo, pending als laatste. Wat geboekt wordt verandert niet:
+   `applyPending()` vervangt de pending-regels door de snapshot, en een bank die wordt overgeslagen gaf de laatste 10 keer niets. */
+const PEND_SKIP_N=10, PEND_CONTROLE_DAGEN=7;
+function pendSkipStand(bank){ const e=(SET.pendSkip||{})[bank]||{}; return {reeks:Array.isArray(e.reeks)?e.reeks:[], laatst:+e.laatst||0}; }
+function pendAllesNul(bank){ const S=pendSkipStand(bank); return S.reeks.length>=PEND_SKIP_N && S.reeks.slice(-PEND_SKIP_N).every(n=>n===0); }
+function pendOverslaan(bank, nu){ nu=nu||Date.now(); if(!pendAllesNul(bank)) return false;
+  return (nu-pendSkipStand(bank).laatst) < PEND_CONTROLE_DAGEN*864e5; }
+function pendVolgendeControle(bank){ return pendSkipStand(bank).laatst+PEND_CONTROLE_DAGEN*864e5; }
+function pendSkipZet(bank, n){ const P=SET.pendSkip=SET.pendSkip||{}, e=P[bank]=P[bank]||{reeks:[],laatst:0};
+  e.reeks=(Array.isArray(e.reeks)?e.reeks:[]).concat([+n||0]).slice(-PEND_SKIP_N); e.laatst=Date.now(); }
+function pendSkipRegels(banken){ const L=[];
+  for(const b of banken){ const S=pendSkipStand(b);
+    if(pendOverslaan(b)) L.push(`  PENDING (v471) ${b}: overgeslagen · de laatste ${PEND_SKIP_N} aanroepen gaven 0 regels · volgende controle ${controleDagTijd(pendVolgendeControle(b))}`);
+    else if(pendAllesNul(b)) L.push(`  PENDING (v471) ${b}: controle bij de volgende sync (de laatste ${PEND_SKIP_N} aanroepen gaven 0 regels, de vorige is van ${controleDagTijd(S.laatst)})`);
+    else L.push(`  PENDING (v471) ${b}: wordt aangeroepen · laatste ${S.reeks.length} aanroep${S.reeks.length===1?'':'en'}: ${S.reeks.length?S.reeks.join(', ')+' regels':'nog geen'} (overslaan pas na ${PEND_SKIP_N} op rij met 0 regels)`); }
+  return L; }
+/* ===== DE STATUS PER REGEL IN DE GEWONE TRANSACTIE-AANROEP (v471, alleen meten) =====
+   `mapPsd2Tx()` leest het statusveld van de regel (BOOK, PDNG, ...) en hangt het NIET-OPSOMBAAR aan de boeking, dus het gaat niet mee in
+   `save()` en verandert niets aan wat er geboekt wordt of aan `t.id`. De sync telt het per rekening (`txStatus` in SET.psd2Diag); blok 8 per
+   bank. Geeft de gewone aanroep zelf PDNG terug, dan is de aparte pending-aanroep een dubbele vraag. */
+function txStatusTel(M, t){ const s=(t && t.bankStatus) || 'zonder status'; M[s]=(M[s]||0)+1; }
+function txStatusRegels(banken){ const D=SET.psd2Diag||{}, ps=SET.psd2Accounts||{}, L=[];
+  for(const b of banken){ const som={}; let n=0;
+    for(const a in D){ if(syncBankVan(a)!==b) continue; const S=(D[a]||{}).txStatus; if(!S || typeof S!=='object') continue; n++;
+      for(const k in S) som[k]=(som[k]||0)+(+S[k]||0); }
+    const ks=Object.keys(som).sort();
+    L.push(`  STATUS PER REGEL (v471) ${b}: `+(n?ks.map(k=>k+' '+som[k]).join(' · ')+` (over ${n} rekening${n===1?'':'en'}, de laatste sync van elk)`:'nog niet gemeten (nog geen sync sinds v471)')); }
+  return L; }
+/* ===== PSU-HEADERS PER BANK (v471, punt 3) =====
+   Enable Banking geeft per bank in /aspsps `required_psu_headers`. De backend hoort Psu-Ip-Address en Psu-User-Agent mee te sturen; de app
+   legt bij het kiezen van een bank vast wat de lijst per bank zegt, zodat blok 8 het kan tonen zonder netwerk (v244). `null` is: de backend
+   gaf het veld niet door, en dat is iets anders dan een lege lijst. */
+function aspspPsuZet(banks, land){ const P=SET.aspspPsu=SET.aspspPsu||{}, op=Date.now();
+  for(const b of (banks||[])){ if(!b || !b.name) continue; const h=b.required_psu_headers;
+    P[b.name]={headers:Array.isArray(h)?h.map(String):null, land:b.country||land||'', op}; } }
+function aspspPsuRegels(){ const P=SET.aspspPsu||{}, L=[], ks=Object.keys(P).filter(k=>/n26|abn/i.test(k)).sort();
+  L.push('  PSU-HEADERS UIT /aspsps (v471): '+(ks.length?'':'nog niet vastgelegd (kies een bank in "Bank koppelen" om de lijst op te halen)'));
+  for(const k of ks){ const e=P[k]; L.push('    '+k+' ('+(e.land||'-')+'): '+(e.headers==null?'veld niet doorgegeven door je backend':(e.headers.length?e.headers.join(', '):'geen verplichte PSU-headers'))+' · opgehaald '+controleDagTijd(e.op)); }
+  return L; }
 function aanslGeboekt(soort){ return /CLBD|ITBD/i.test(String(soort||'')); }
 /* v461 (punt 5): HET VENSTER. Een nieuwe koppeling haalt 24 maanden op, en die oude boekingen raken het saldo niet; tot v461 begon de
    aansluiting daarom opnieuw (een sync "start"), en dat zette N26 na de nieuwe koppeling op 23-10 weer op start. Nu draagt elke vastlegging
@@ -34213,20 +34288,25 @@ async function psd2Refresh(silent, auto){
      middernacht en 02:00 zomertijd stempelt die gisteren, waardoor een vers opgehaald saldo als
      achterlopend zou lezen. De datums in TX zijn lokale kalenderdagen (v177), dus deze ook. */
   const allTx=[]; const pend=[]; const balances={}, aanslSnap={}; let authFail=false, anyOk=false;
+  /* v471: de route van deze sync, een telling per bank, en per bank of de pending-aanroep wordt overgeslagen (een keer per sync bepaald,
+     zodat een controle alle rekeningen van die bank aanroept) */
+  const route=auto?'automatisch':'handmatig', echt=keys.filter(k=>meta[k].uid && !psd2Vervangen(k)), banken=[...new Set(echt.map(syncBankVan))];
+  const pendSkip={}; for(const b of banken){ try{ syncTelSync(b, route); }catch(_){} pendSkip[b]=pendOverslaan(b); }
   for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue; if(psd2Vervangen(accId)) continue;   // v461: vervangen, geen aanroep met een verlopen sessie
+    const bank=syncBankVan(accId);
     let cont=null, guard=0, txN=0, txFout='';
-    const bim=bankIdMeting();
+    const bim=bankIdMeting(), txStatus={};
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
-      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); anyOk=true; }
-      catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; txFout=String((e&&e.message)||e).slice(0,90); break; }
+      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); anyOk=true; syncTelAanroep(bank,'tx',route,accId,''); }
+      catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; txFout=String((e&&e.message)||e).slice(0,90); syncTelAanroep(bank,'tx',route,accId,txFout); break; }
       const rij=(d.transactions||[]); txN+=rij.length;
-      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); if(t) allTx.push(t); }
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); txStatusTel(txStatus, t); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     const bu={}; let bal=null, balFout='';
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
-    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); syncTelAanroep(bank,'saldo',route,accId,''); }
+    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); syncTelAanroep(bank,'saldo',route,accId,balFout); }
     if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||'', txFout}; }   // v460: de aansluiting per rekening
     /* ===== DE PENDING-AANROEP WORDT VASTGELEGD (v296) =====
        DE AANROEP STOND IN EEN TWEEDE LUS NA commitTx() en zijn fout werd stil geslikt, dus een lege
@@ -34238,15 +34318,19 @@ async function psd2Refresh(silent, auto){
        het aantal aanroepen per rekening blijft drie (v289).
        DE FOUT WORDT GEMELD EN NIET AFGEHANDELD: de sync gaat gewoon door, precies zoals hij deed. */
     let pendN=0, pendMap=0, pendFout='';
+    const pendWeg=!!pendSkip[bank];   // v471: overgeslagen voor deze bank, geen aanroep en dus ook geen pending-velden
+    if(!pendWeg){
     try{ const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fromStr+'&transaction_status=PDNG');
       const prij=(dp.transactions||[]); pendN=prij.length;
       for(const raw of prij){ const t=mapPsd2Tx(raw, accId, true); if(t){ pend.push(t); pendMap++; } }
-    }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); }
+      syncTelAanroep(bank,'pending',route,accId,''); pendSkipZet(bank, pendN);
+    }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); syncTelAanroep(bank,'pending',route,accId,pendFout); }
+    }
     if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
     try{ bankIdBotsZet(accId, bim, 'vernieuwen (2 maanden)'); }catch(_){}   // v468
-    psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
-      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'',
-      pendN, pendMap, pendFout, pendGeland:!pendFout});
+    psd2DiagZet(accId, Object.assign({txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), txStatus, balUit:bal, balGeland:bal!=null, balFout,
+      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'', pendOvergeslagen:pendWeg},
+      pendWeg?{}:{pendN, pendMap, pendFout, pendGeland:!pendFout}));
     /* v296: DE MARKERING DAT DEZE REKENING IS GESYNCHRONISEERD. Zonder hem bestaat er voor deze rekening
        geen entry zolang er geen botsing was, en dan is "nul botsingen" niet te onderscheiden van "er is
        niet gesynchroniseerd" (v59/v73/v173, dezelfde discriminator als `gezien` bij v277). De teller
@@ -34297,7 +34381,7 @@ async function psd2Connect(){
   const country=SET.psd2Country||'NL';
   toast('Banken ophalen…');
   let banks=[];
-  try{ const d=await psd2Api('/aspsps?country='+country); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); }
+  try{ const d=await psd2Api('/aspsps?country='+country); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); try{ aspspPsuZet(banks, country); save(); }catch(_){} }
   catch(e){ toast('Fout: '+e.message); return; }
   const lands=[['NL','Nederland'],['DE','Duitsland · N26'],['BE','Belgi\u00eb'],['FR','Frankrijk']];
   const chips=lands.map(([c,n])=>`<span class="chip ${c===country?'on':''}" style="cursor:pointer" onclick="psd2SetCountry('${c}')">${n}</span>`).join('');
@@ -34432,6 +34516,7 @@ async function psd2IngestSession(s){
   const allTx=[]; const balances={}, aanslSnap={}; const pend=[];
   const from=new Date(); from.setMonth(from.getMonth()-24); const fromStr=from.toISOString().slice(0,10);
   const koppelRek=[];   // v467: wat de bank in deze sessie teruggaf
+  try{ syncTelSync(aspspName, 'koppeling'); }catch(_){}   // v471
   for(const a of accounts){
     const uid = a.uid || a;
     const iban = (a.account_id&&a.account_id.iban) || a.iban || '';
@@ -34455,30 +34540,29 @@ async function psd2IngestSession(s){
       grond:(nr && meta[nr])?'bestaand rekeningnummer':bekend?'bestaande hash':nr?'nieuw rekeningnummer':hash?'nieuwe hash, geen rekeningnummer':'geen nummer en geen hash: de uid'});
     meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'', sessie:s.session_id||'' };
     let cont=null, guard=0, txN=0, txFout='';
-    const bim=bankIdMeting();
+    const bim=bankIdMeting(), txStatus={};
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
-      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); }
-      catch(e){ txFout=String((e&&e.message)||e).slice(0,90); toast('Transacties ophalen mislukt: '+e.message); break; }
+      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); syncTelAanroep(aspspName,'tx','koppeling',accId,''); }
+      catch(e){ txFout=String((e&&e.message)||e).slice(0,90); syncTelAanroep(aspspName,'tx','koppeling',accId,txFout); toast('Transacties ophalen mislukt: '+e.message); break; }
       const rij=(d.transactions||[]); txN+=rij.length;
-      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); if(t) allTx.push(t); }
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); bankIdTel(bim, raw, t); txStatusTel(txStatus, t); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     const bu={}; let bal=null, balFout='';
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
-    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); syncTelAanroep(aspspName,'saldo','koppeling',accId,''); }
+    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); syncTelAanroep(aspspName,'saldo','koppeling',accId,balFout); }
     if(bal!=null){ balances[accId]={balance:bal,date:vandaagYMD()}; aanslSnap[accId]={saldo:bal, soort:bu.gekozen||'', txFout}; }
     if(bal!=null && !txFout) syncGeluktZet(accId);   // v462 (B5): de laatste GESLAAGDE sync, een mislukte overschrijft hem niet
     try{ bankIdBotsZet(accId, bim, 'koppeling (24 maanden)'); }catch(_){}   // v468
-    psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), balUit:bal, balGeland:bal!=null, balFout,
+    psd2DiagZet(accId, {txN, txPag:guard, txFout, txBankId:bankIdTekst(bim), txStatus, balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
-    /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is. DEZE ROUTE LEGT DE
-       PENDING-AANROEP NIET VAST, en dat is geen omissie maar de stand die v270 heeft gemeten en die
-       `rekeningen-diagnose.spec.js` met opzet vastpint: de tak hieronder is stil kapot, want de aanroep
-       staat achter een comment op dezelfde regel. Repareren is een eigen ronde; blok 13 zegt het erbij. */
+    /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is.
+       v471: DEZE ROUTE DOET GEEN PENDING-AANROEP, en dat is een keuze. Sinds v270 stond hier een aanroep achter een comment op
+       dezelfde regel (dus nooit uitgevoerd); hij is weggehaald en niet gerepareerd: een koppeling haalt al 24 maanden op, en de
+       pending-regels komen met de eerstvolgende vernieuwing (die volgt de regel van het overslaan, v471). Zo kost een koppeling
+       per rekening twee aanroepen en geen drie. `pend` blijft leeg, dus `applyPending()` laat geen pending staan. */
     pendBotsZet(accId,'syncs');
-    { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
-      for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
   try{ psd2KoppelingZet({op:Date.now(), bank:aspspName, sessie:s.session_id||'', exp:(s.access&&s.access.valid_until)||'', rek:koppelRek}); }catch(_){}
   /* v465 (punt 5): wat van deze bank gekoppeld was en niet in deze sessie zat, valt weg; dat staat na de terugkeer in de toast */
@@ -34593,6 +34677,10 @@ function mapPsd2Tx(raw, accId, pending){
   const vd=String(raw.value_date||'').slice(0,10);
   if(/^\d{4}-\d{2}-\d{2}$/.test(vd)) t.valutaDatum=vd;
   categorize(t);
+  /* v471 (alleen meten): de status van de regel (BOOK, PDNG, ...). NIET-OPSOMBAAR, dus hij gaat niet mee in save() en raakt niets van wat
+     er geboekt wordt; de sync telt hem per rekening (`txStatusTel()`). */
+  const bst=String(raw.status||raw.transaction_status||raw.booking_status||'').toUpperCase().trim().slice(0,12);
+  if(bst) Object.defineProperty(t,'bankStatus',{value:bst, enumerable:false, writable:true, configurable:true});
   if(pending){ t.pending=true; t.id+='_p'; }
   return t;
 }
