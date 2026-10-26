@@ -117,8 +117,8 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
     tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await open(page, p);
-    const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
-      return { inhalen: opzijInhalen().inhalen, bron: planTerug().totaal, attr: reg ? +reg.dataset.planinhalen : 0 }; });
+    const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarPlanRegel');   // v472: de ene regel bovenaan Plan
+      return { inhalen: opzijInhalen().inhalen, bron: planTerug().totaal, attr: reg ? +reg.dataset.spaarplannog : 0 }; });
     expect(r.inhalen).toBeGreaterThan(0);    // het grootboek draagt een bedrag
     expect(r.bron).not.toBe(r.inhalen);      // en planTerug() een ander: zonder dat verschil meet de test niets
     expect(r.attr).toBe(r.bron >= 0.5 ? r.bron : 0);   // de regel leest planTerug()

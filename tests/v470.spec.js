@@ -14,6 +14,10 @@ async function stand(page, o) {
   await page.evaluate(([sav, o]) => { SET.nfToegewezen = 4000; const kk = SET.goals.find((g) => g.id === 'kk'); kk.gespaard = 1350;
     SET.manualBal[sav] = o.saldo != null ? o.saldo : 5350.20;
     if (o.txFout) { SET.psd2Diag = SET.psd2Diag || {}; SET.psd2Diag[sav] = Object.assign({}, SET.psd2Diag[sav] || {}, { txFout: 'ASPSP_RATE_LIMIT_EXCEEDED' }); }
+    /* v472: het saldo van de spaarrekening mislukte bij de laatste sync (een gekoppelde rekening met balGeland false, psd2Falend()) */
+    if (o.saldoFout) { const nu = Date.now(), b = SET.manualBal[sav]; SET.psd2Accounts = Object.assign({}, SET.psd2Accounts || {}, { [sav]: { uid: 'u-sav', bank: 'N26', label: 'Spaarrekening', exp: '2027-01-01' } });
+      ACCMETA[sav] = Object.assign({}, ACCMETA[sav] || {}, { balance: b, date: '2026-10-20', bank: 'N26' });
+      SET.psd2Diag = SET.psd2Diag || {}; SET.psd2Diag[sav] = { balGeland: false, balFout: 'EXPIRED_SESSION', txFout: '', _op: nu, _veldOp: { balGeland: nu } }; }
     save(); renderVooruit(); }, [F.SAV, o]);
 }
 const rij = (page) => page.evaluate(() => { const r = document.querySelector('.plan-item[data-id="noodfonds"]');
@@ -32,7 +36,7 @@ test.describe('1 · nog terug volgt het saldo', () => {
     expect(r.X).toBe(0.2);
     expect(r.puur).toBe(true);
     expect(r.al).toBe(788);                            // wat de keuze verwacht en al op je spaarrekening staat
-    expect(r.regel).toContain('niet toegewezen €0,20');
+    expect(r.regel).toBe('');                          // v472: een verschil onder EUR 0,50 is geen regel
     const R = await rij(page);
     expect(R.st).toBe('vol');
     expect(R.vol).toBe('vol');
@@ -49,11 +53,11 @@ test.describe('1 · nog terug volgt het saldo', () => {
     const R = await rij(page);
     expect(R.st).not.toBe('vol');                      // het geld haalt het doel niet: vol in een latere stap, niet nu
   });
-  test('c. na een sync zonder transacties blijft het de terugzetkeuze', async ({ page }) => {
-    await stand(page, { txFout: true });
+  test('c. een saldo dat bij de laatste sync mislukte laat het de terugzetkeuze blijven (v472: geen transactiefout meer)', async ({ page }) => {
+    await stand(page, { saldoFout: true });
     const r = await page.evaluate(() => { const TK = planTekort(), A = spaarPlanAansl(); return { saldo: TK.saldo, reden: TK.reden, nf: A.doelen.find((d) => d.id === 'noodfonds'), status: A.status }; });
     expect(r.saldo).toBe(false);
-    expect(r.reden).toContain('transacties ontbraken');
+    expect(r.reden).toContain('niet opgehaald bij de laatste sync');
     expect(r.nf).toMatchObject({ n: 788, geld: 3212 });
     expect(r.status).toBe('verklaard');
     const R = await rij(page);
@@ -62,29 +66,29 @@ test.describe('1 · nog terug volgt het saldo', () => {
 });
 
 test.describe('2 · een bron voor terugzetten', () => {
-  test('a. Terug te zetten op Plan is de som van nog terug per doel, en een storting lost beide in een keer af', async ({ page }) => {
+  test('a. nog terug op Plan is de som van nog terug per doel, en een storting lost beide in een keer af', async ({ page }) => {
     await stand(page, { saldo: 5000.20 });
-    const voor = await page.evaluate(() => { const g = document.querySelector('#spaarOverRegel'); openInhalen(); const sh = document.querySelector('#inhalenSheet');
+    const voor = await page.evaluate(() => { const g = document.querySelector('#spaarPlanRegel'); openSpaarPlanAansl(); const sh = document.querySelector('#spaarPlanSheet');
       const rijen = [...sh.querySelectorAll('[data-terugdoel]')].reduce((a, e) => a + +e.dataset.terug, 0);
       const SE = planStandEind(); let som = 0; for (const p of allocatePlan()) { if (!(p.type === 'goal' || p.type === 'noodfonds')) continue; som += Math.max(Math.round(+p.gespaard || 0) - SE.per[p.id].geld, 0); }
       const diag = diagMaandBudget(maandVooruit(), true, null).join('\n');
-      return { regel: g ? +g.dataset.planinhalen : null, tekst: g ? g.innerText : '', rijen: Math.round(rijen * 100) / 100, som: Math.round(som * 100) / 100,
+      return { regel: g ? +g.dataset.spaarplannog : null, tekst: g ? g.innerText : '', rijen: Math.round(rijen * 100) / 100, som: Math.round(som * 100) / 100,
         controle: diag.split('\n').find((l) => /CONTROLE terug te zetten op Plan/.test(l)) || '' }; });
     expect(voor.regel).toBe(349.8);
-    expect(voor.tekst).toContain('Terug te zetten €349,80');
+    expect(voor.tekst).toContain('nog terug €349,80');
     expect(voor.rijen).toBe(349.8);
     expect(voor.som).toBe(349.8);
     expect(voor.controle).toMatch(/€349,80 tegen €349,80 → klopt/);
     const na = await page.evaluate((sav) => { SET.manualBal[sav] = 5350.20; save(); renderVooruit();
       const r = document.querySelector('.plan-item[data-id="noodfonds"]');
-      return { regel: !!document.querySelector('#spaarOverRegel'), st: r.dataset.status, controle: diagMaandBudget(maandVooruit(), true, null).join('\n').split('\n').find((l) => /CONTROLE terug te zetten op Plan/.test(l)) || '' }; }, F.SAV);
+      return { regel: !!document.querySelector('#spaarPlanRegel'), st: r.dataset.status, controle: diagMaandBudget(maandVooruit(), true, null).join('\n').split('\n').find((l) => /CONTROLE terug te zetten op Plan/.test(l)) || '' }; }, F.SAV);
     expect(na.regel).toBe(false);                      // de storting lost Terug te zetten af
     expect(na.st).toBe('vol');                         // en nog terug bij het noodfonds
     expect(na.controle).toMatch(/€0 tegen €0 → klopt/);
   });
   test('b. de terugzetkeuze alleen maakt geen Terug te zetten als het geld er al staat', async ({ page }) => {
     await stand(page);
-    const r = await page.evaluate(() => ({ keuze: planTekort().keuze.noodfonds, regel: !!document.querySelector('#spaarOverRegel') }));
+    const r = await page.evaluate(() => ({ keuze: planTekort().keuze.noodfonds, regel: !!document.querySelector('#spaarPlanRegel') }));
     expect(r.keuze).toBe(788);
     expect(r.regel).toBe(false);
   });
@@ -106,7 +110,7 @@ test.describe('2c · het grootboek over de periodes is geen bron meer', () => {
     await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, d);
     await page.goto('/index.html');
     await page.waitForFunction(() => typeof opzijInhalen === 'function' && typeof TX !== 'undefined' && TX.length > 0);
-    const r = await page.evaluate(() => { go('vooruit'); return { grootboek: opzijInhalen().inhalen, bron: planTerug().totaal, regel: !!document.querySelector('#spaarOverRegel') }; });
+    const r = await page.evaluate(() => { go('vooruit'); return { grootboek: opzijInhalen().inhalen, bron: planTerug().totaal, regel: +((document.querySelector('#spaarPlanRegel') || { dataset: {} }).dataset.spaarplannog || 0) > 0 }; });
     expect(r.grootboek).toBe(300);                     // het grootboek draagt een bedrag: zonder dat meet de test niets
     expect(r.bron).toBe(0);
     expect(r.regel).toBe(false);

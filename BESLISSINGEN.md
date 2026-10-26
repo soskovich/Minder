@@ -1071,6 +1071,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Geld dat al terug is gaat niet nog eens terug.** Wat een keuze deze maand of later terugzet telt alleen voor wat er per doel ontbreekt; anders schuift een teruggezet bedrag dat er al staat door naar het volgende doel.
 - **De meter zegt wat er opzij ging en wat je verdeling zegt, geen percentage.** Een percentage van een opzij-getal leest als een score en "van je doel" als een doel dat je niet haalt; dezelfde woorden als Zien en Plan (v464, v469).
 
+## v472 · het saldo telt ook na een transactiefout, een regel voor het verschil
+- **Een transactiefout zegt niets over het saldo.** Het saldo komt uit een eigen aanroep; lukte die, dan is het de meting. Gemeten op 26-10 dekte het saldo (EUR 5.350,20) de toewijzingen (EUR 5.350), en de terugval op de keuze liet Plan EUR 1.088 terug noemen die er al stond. Wat een transactiefout wel raakt is de aansluiting per rekening (v465), en die blijft.
+- **Terugvallen alleen op een saldo dat er niet is of niet lukte.** `psd2Falend()` is de afleiding daarvan; geen tweede toets in Plan (v104).
+- **Een regel, met twee delen.** "Verschil met je spaarrekening" en "Terug te zetten" zeiden hetzelfde geld op twee plekken. Een regel met nog terug (planTerug(), de bron) en niet toegewezen, en de sheet erachter; verplaatsen, niet kopieren. Onder EUR 0,50 is het afronding en geen regel.
+
 ## v471 · telling per dag, pending overslaan, PSU-headers
 - **Een sync telt per bank, een aanroep per rekening.** De vraag van de bank is hoeveel aanvragen er per dag binnenkomen; elke transactie-pagina is een aanvraag en telt dus mee.
 - **De status per regel is gelezen en niet bewaard.** Niet-opsombaar op de boeking: niets aan wat er geboekt wordt verandert, en een veld zonder lezer in de opslag is wat dit project elders opruimt. Pas als de meting zegt dat de gewone aanroep PDNG meelevert, is de aparte pending-aanroep weg te halen.

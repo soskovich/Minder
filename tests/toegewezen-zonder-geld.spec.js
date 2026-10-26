@@ -6,17 +6,17 @@ const { test, expect } = require('@playwright/test');
 const P = require('./opschonen-stand');
 
 const TOESTEL = { set: { manualBal: { [P.MAIN]: 3000, [P.SAV]: 3000.20 } } };
-const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.getElementById('spaarOverRegel');
+const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.getElementById('spaarPlanRegel');
   /* v440: de Plan-regel (#spaarOverRegel) is sinds v440 "Inhalen" (opzijInhalen), niet meer "toegewezen zonder geld". Dat laatste
      blijft als signaal op Grip: toewijzingBovenSaldo() is de bron, en die draagt nog steeds spaarOver().zonder. */
-  const O = spaarOver(); return { regel: r ? r.innerText.replace(/\s+/g, ' ').trim() : '', tb: toewijzingBovenSaldo(), zonder: O.zonder, dekt: O.dekt, over: O.over,
+  const O = spaarOver(); return { regel: r ? +r.dataset.spaarplannog : 0, tb: toewijzingBovenSaldo(), zonder: O.zonder, dekt: O.dekt, over: O.over,
     nf: SET.nfToegewezen, gat: (SET.terugzetGat || []).length,
     /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen)
        en als tegel "Deze maand opzij" in de kop van Plan ([data-kpiopzij]) */
     kop: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
     kopWeg: !document.getElementById('planKopBedrag'),
-    /* v470: de Plan-regel leest planTerug(): wat er toegewezen staat en niet op je spaarrekening, per doel opgeteld */
-    terug: planTerug().totaal, verwacht: (() => { const R = planTerug(); return R.totaal >= 0.5 ? 'Terug te zetten ' + euroC(R.totaal) + ' per doel ›' : ''; })() }; });
+    /* v472: de ene Plan-regel (#spaarPlanRegel) draagt nog terug uit planTerug(): wat er toegewezen staat en niet op je spaarrekening */
+    terug: planTerug().totaal, verwacht: (() => { const R = planTerug(); return R.totaal >= 0.5 ? R.totaal : 0; })() }; });
 const sheet = (page) => page.evaluate(() => { openSpaarOver(); return document.getElementById('spaarOverSheet').innerText.replace(/\s+/g, ' '); });
 
 test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {

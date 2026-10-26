@@ -66,8 +66,8 @@ test('d. de lopende periode telt niet mee in het grootboek (opzij deze periode s
 
 test('e. het grootboek is sinds v470 geen bron voor Plan: geen regel, wel de historie in blok 20', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
-    return { regel: !!reg, open: opzijInhalen().open, bron: planTerug().totaal, diag: diagMaandBudget(maandVooruit(), true, null).join('\n') }; });
+  const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarPlanRegel');   // v472: de ene regel, met nog terug
+    return { regel: !!reg && +reg.dataset.spaarplannog > 0, open: opzijInhalen().open, bron: planTerug().totaal, diag: diagMaandBudget(maandVooruit(), true, null).join('\n') }; });
   expect(r.open).toBe(300);
   expect(r.bron).toBe(0);
   expect(r.regel).toBe(false);

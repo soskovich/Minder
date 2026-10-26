@@ -13,6 +13,10 @@ async function melding(page, o) {
   await page.evaluate(([sav, o]) => { SET.nfToegewezen = 4000; const kk = SET.goals.find((g) => g.id === 'kk'); kk.gespaard = 1350;
     SET.manualBal[sav] = o.saldo != null ? o.saldo : 5350.20;
     if (o.txFout) { SET.psd2Diag = SET.psd2Diag || {}; SET.psd2Diag[sav] = Object.assign({}, SET.psd2Diag[sav] || {}, { txFout: 'ASPSP_RATE_LIMIT_EXCEEDED' }); }
+    /* v472: het saldo van de spaarrekening mislukte bij de laatste sync (een gekoppelde rekening met balGeland false, psd2Falend()) */
+    if (o.saldoFout) { const nu = Date.now(), b = SET.manualBal[sav]; SET.psd2Accounts = Object.assign({}, SET.psd2Accounts || {}, { [sav]: { uid: 'u-sav', bank: 'N26', label: 'Spaarrekening', exp: '2027-01-01' } });
+      ACCMETA[sav] = Object.assign({}, ACCMETA[sav] || {}, { balance: b, date: '2026-10-20', bank: 'N26' });
+      SET.psd2Diag = SET.psd2Diag || {}; SET.psd2Diag[sav] = { balGeland: false, balFout: 'EXPIRED_SESSION', txFout: '', _op: nu, _veldOp: { balGeland: nu } }; }
     save(); renderVooruit(); }, [F.SAV, o || {}]);
 }
 
@@ -33,32 +37,36 @@ test.describe('1 · spaarrekening tegen Plan', () => {
     expect(r.A.al).toBe(788);                                   // de keuze verwacht het nog, het saldo heeft het al
   });
   test('b. de regel op Plan en de sheet tellen op tot hetzelfde verschil', async ({ page }) => {
-    await melding(page);
+    await melding(page, { saldo: 5000.20 });   // v472: EUR 0,20 is geen regel meer; hier staat EUR 349,80 minder dan toegewezen
     const r = await page.evaluate(() => { const g = document.querySelector('#spaarPlanRegel'); if (!g) return null; const t = g.innerText; g.click();
       const sh = document.querySelector('#spaarPlanSheet'), num = (s) => +s.getAttribute('data-bedrag');
       const delen = [...sh.querySelectorAll('[data-spaardeel]')].reduce((a, e) => a + num(e), 0);
       const doelen = [...sh.querySelectorAll('[data-spaardoel]')].reduce((a, e) => a + +e.dataset.geld, 0);
       const rek = [...sh.querySelectorAll('[data-spaarrek],[data-spaarextra]')].reduce((a, e) => a + num(e), 0);
-      return { t, x: +sh.dataset.x, delen: Math.round(delen * 100) / 100, doelen, rek: Math.round(rek * 100) / 100, saldo: num(sh.querySelector('[data-spaarsaldo]')),
+      return { t, x: +sh.dataset.x, som: +sh.dataset.som, delen: Math.round(delen * 100) / 100, doelen, rek: Math.round(rek * 100) / 100, saldo: num(sh.querySelector('[data-spaarsaldo]')),
         kop: +document.querySelector('#planKpi').dataset.kpigeld, noot: (sh.querySelector('[data-spaarnoot]') || {}).innerText || '' }; });
     expect(r).not.toBeNull();
-    expect(r.t).toContain('niet toegewezen €0,20');             // v470: het saldo dekt de toewijzingen
-    expect(r.delen).toBe(r.x);
+    expect(r.t).toContain('nog terug €349,80');
+    expect(r.delen).toBe(r.som);                                // v472: de delen van het verschil (nog terug + niet toegewezen) zijn de regel
+    expect(r.som).toBe(349.8);
     expect(r.doelen).toBe(r.kop);
     expect(r.rek).toBe(r.saldo);
     expect(Math.round((r.saldo - r.doelen) * 100) / 100).toBe(r.x);
     expect(r.noot).toContain('staat al op je spaarrekening');
   });
-  test('c. de controle klopt als het saldo het dekt (v470); na een sync zonder transacties is er geen vergelijking; de gewone stand klopt', async ({ page }) => {
+  test('c. de controle klopt als het saldo het dekt (v470), ook na een sync zonder transacties (v472); een mislukt saldo geeft geen vergelijking', async ({ page }) => {
     await melding(page);
     const dekt = await page.evaluate(() => { runControles('test'); return SET.controles.uitkomst.find((u) => u.id === 'spaarplan'); });
     expect(dekt).toMatchObject({ soort: 2, status: 'klopt' });   // v470: wat de keuze verwacht en al op je spaarrekening staat, telt als gespaard
     await melding(page, { txFout: true });
+    const metTx = await page.evaluate(() => { runControles('test'); return SET.controles.uitkomst.find((u) => u.id === 'spaarplan'); });
+    expect(metTx.status).toBe('klopt');                         // v472: een transactiefout raakt deze vergelijking niet meer
+    await melding(page, { saldoFout: true });
     const zonder = await page.evaluate(() => { runControles('test'); const sh = (openSpaarPlanAansl(), document.querySelector('#spaarPlanSheet'));
-      return { u: SET.controles.uitkomst.find((u) => u.id === 'spaarplan'), geentx: !!sh.querySelector('[data-geentx]') }; });
+      return { u: SET.controles.uitkomst.find((u) => u.id === 'spaarplan'), geen: !!sh.querySelector('[data-geensaldo]') }; });
     expect(zonder.u.status).toBe('verklaard');
     expect(zonder.u.reden).toContain('geen vergelijking');
-    expect(zonder.geentx).toBe(true);
+    expect(zonder.geen).toBe(true);
     await F.boot(page, 'nu');
     const gewoon = await page.evaluate(() => { runControles('test'); return SET.controles.uitkomst.find((u) => u.id === 'spaarplan'); });
     expect(gewoon.status).toBe('klopt');
@@ -76,7 +84,7 @@ test.describe('1 · spaarrekening tegen Plan', () => {
 
 test.describe('2 · vol pas als het geld het doel haalt', () => {
   test('a. het noodfonds op zijn doel met geld dat nog terug moet heet niet vol', async ({ page }) => {
-    await melding(page, { txFout: true });   // v470: zonder transacties blijft het de terugzetkeuze (met het saldo dekt het, zie v470.spec.js)
+    await melding(page, { saldoFout: true });   // v472: alleen een mislukt saldo laat het de terugzetkeuze blijven (met het saldo dekt het)
     const r = await page.evaluate(() => { const rij = document.querySelector('.plan-item[data-id="noodfonds"]');
       return { st: rij.dataset.status, status: rij.querySelector('[data-planstatus]').innerText, vol: rij.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim(), geld: rij.querySelector('[data-rijgeld]').innerText,
         plan: allocatePlan().find((p) => p.id === 'noodfonds').status }; });
