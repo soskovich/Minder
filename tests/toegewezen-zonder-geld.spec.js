@@ -14,7 +14,9 @@ const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.
     /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen)
        en als tegel "Deze maand opzij" in de kop van Plan ([data-kpiopzij]) */
     kop: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
-    kopWeg: !document.getElementById('planKopBedrag') }; });
+    kopWeg: !document.getElementById('planKopBedrag'),
+    /* v470: de Plan-regel leest planTerug(): wat er toegewezen staat en niet op je spaarrekening, per doel opgeteld */
+    terug: planTerug().totaal, verwacht: (() => { const R = planTerug(); return R.totaal >= 0.5 ? 'Terug te zetten ' + euroC(R.totaal) + ' per doel ›' : ''; })() }; });
 const sheet = (page) => page.evaluate(() => { openSpaarOver(); return document.getElementById('spaarOverSheet').innerText.replace(/\s+/g, ' '); });
 
 test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
@@ -46,7 +48,7 @@ test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
   test('op de fixture zelf dekt de keuze precies het verschil, en dan is er geen regel', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => terugzetKies('alles'));
     const r = await stand(page);
-    expect(r.zonder).toBe(0); expect(r.regel).toBe('');
+    expect(r.zonder).toBe(0); expect(r.terug).toBe(231); expect(r.regel).toBe(r.verwacht);   // v470: EUR 231 staat nog niet op je spaarrekening
   });
   test('Grip leest hetzelfde getal: de buffer zegt welk deel je terugzet en welk deel zonder geld staat', async ({ page }) => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
@@ -104,13 +106,13 @@ test.describe('c · gelijktrekken laat de melding verdwijnen', () => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
     await page.evaluate(() => { openSpaarOver(); }); await page.click('[data-zgkeuze="v:noodfonds"]'); await page.click('[data-zgbevestig]');
     const r = await stand(page);
-    expect(r.nf).toBe(3231); expect(r.zonder).toBe(0); expect(r.regel).toBe('');
+    expect(r.nf).toBe(3231); expect(r.zonder).toBe(0); expect(r.terug).toBe(230.8); expect(r.regel).toBe(r.verwacht);   // v470: de keuze zet de EUR 230,80 nog terug
   });
   test('alles terugzetten: de inleg van deze maand draagt hem, de toewijzing blijft, en de regel is weg', async ({ page }) => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
     await page.evaluate(() => { openSpaarOver(); spaarOverKies('alles'); spaarOverZet(); });
     const r = await stand(page);
-    expect(r.nf).toBe(3638); expect(r.zonder).toBe(0); expect(r.regel).toBe('');
+    expect(r.nf).toBe(3638); expect(r.zonder).toBe(0); expect(r.terug).toBe(637.8); expect(r.regel).toBe(r.verwacht);   // v470: tot de storting staat het er
     expect(r.kop).toBe(2838);   // planToeMaand().teVerdelen (inleg + terug)
     expect(r.kopWeg).toBe(true);
     /* v440: de kop toont "Opzij deze periode" (opzijPeriode), niet meer "Deze maand opzij" met een terug-chip; het

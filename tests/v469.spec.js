@@ -24,8 +24,10 @@ test.describe('1 · spaarrekening tegen Plan', () => {
         kpi: K.geld, nf: A.doelen.find((d) => d.id === 'noodfonds') }; });
     expect(r.A.saldo).toBe(5350.2);
     expect(r.A.geld).toBe(r.kpi);                               // dezelfde som als "Gespaard voor je doelen"
-    expect(r.nf).toMatchObject({ toegewezen: 4000, n: 788, geld: 3212 });
-    expect(r.A.X).toBe(788.2);
+    /* v470: "nog terug" volgt het saldo; het saldo dekt de toewijzingen, dus het noodfonds heeft zijn EUR 4.000 en het verschil is
+       EUR 0,20 niet toegewezen. De som van de delen blijft het verschil. */
+    expect(r.nf).toMatchObject({ toegewezen: 4000, n: 0, geld: 4000 });
+    expect(r.A.X).toBe(0.2);
     expect(Math.round((r.A.vrij - r.A.tekort + r.A.terug + r.A.zonder + r.A.rest) * 100) / 100).toBe(r.A.X);
     expect(r.A.rest).toBe(0);
     expect(r.A.al).toBe(788);                                   // de keuze verwacht het nog, het saldo heeft het al
@@ -40,17 +42,17 @@ test.describe('1 · spaarrekening tegen Plan', () => {
       return { t, x: +sh.dataset.x, delen: Math.round(delen * 100) / 100, doelen, rek: Math.round(rek * 100) / 100, saldo: num(sh.querySelector('[data-spaarsaldo]')),
         kop: +document.querySelector('#planKpi').dataset.kpigeld, noot: (sh.querySelector('[data-spaarnoot]') || {}).innerText || '' }; });
     expect(r).not.toBeNull();
-    expect(r.t).toContain('verschil met je spaarrekening €788,20');
+    expect(r.t).toContain('niet toegewezen €0,20');             // v470: het saldo dekt de toewijzingen
     expect(r.delen).toBe(r.x);
     expect(r.doelen).toBe(r.kop);
     expect(r.rek).toBe(r.saldo);
     expect(Math.round((r.saldo - r.doelen) * 100) / 100).toBe(r.x);
     expect(r.noot).toContain('staat al op je spaarrekening');
   });
-  test('c. de controle wacht; na een sync zonder transacties is er geen vergelijking; de gewone stand klopt', async ({ page }) => {
+  test('c. de controle klopt als het saldo het dekt (v470); na een sync zonder transacties is er geen vergelijking; de gewone stand klopt', async ({ page }) => {
     await melding(page);
-    const wacht = await page.evaluate(() => { runControles('test'); return SET.controles.uitkomst.find((u) => u.id === 'spaarplan'); });
-    expect(wacht).toMatchObject({ soort: 2, status: 'wacht' });
+    const dekt = await page.evaluate(() => { runControles('test'); return SET.controles.uitkomst.find((u) => u.id === 'spaarplan'); });
+    expect(dekt).toMatchObject({ soort: 2, status: 'klopt' });   // v470: wat de keuze verwacht en al op je spaarrekening staat, telt als gespaard
     await melding(page, { txFout: true });
     const zonder = await page.evaluate(() => { runControles('test'); const sh = (openSpaarPlanAansl(), document.querySelector('#spaarPlanSheet'));
       return { u: SET.controles.uitkomst.find((u) => u.id === 'spaarplan'), geentx: !!sh.querySelector('[data-geentx]') }; });
@@ -74,7 +76,7 @@ test.describe('1 · spaarrekening tegen Plan', () => {
 
 test.describe('2 · vol pas als het geld het doel haalt', () => {
   test('a. het noodfonds op zijn doel met geld dat nog terug moet heet niet vol', async ({ page }) => {
-    await melding(page);
+    await melding(page, { txFout: true });   // v470: zonder transacties blijft het de terugzetkeuze (met het saldo dekt het, zie v470.spec.js)
     const r = await page.evaluate(() => { const rij = document.querySelector('.plan-item[data-id="noodfonds"]');
       return { st: rij.dataset.status, status: rij.querySelector('[data-planstatus]').innerText, vol: rij.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim(), geld: rij.querySelector('[data-rijgeld]').innerText,
         plan: allocatePlan().find((p) => p.id === 'noodfonds').status }; });

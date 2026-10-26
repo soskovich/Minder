@@ -42,6 +42,8 @@ test.describe('b · doorschuiven als de bron het niet meer kan dragen', () => {
   test('een bron boven zijn doel: alles schuift naar de volgende, en geen doel krijgt meer dan zijn doelbedrag', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
+      /* v470: wat er deze maand terug gaat volgt het saldo (planTekort()); het saldo mist precies de EUR 231 van de keuze */
+      const sav = n26SavingsAccounts()[0]; SET.manualBal[sav] = 4300 - 231 - (spaarSaldo().cur - accBalance(sav)); save();
       const Pl = [{ id: 'noodfonds', type: 'noodfonds', naam: 'Noodfonds', doel: 4000, gespaard: 4300, alloc: 0 },
         { id: 'iw', type: 'goal', naam: 'Inrichting', doel: 3000, gespaard: 0, alloc: 1838 }, { id: 'kk', type: 'goal', naam: 'Kosten Koper', doel: 15000, gespaard: 0, alloc: 0 }];
       return terugzetNaarDoel(Pl); });

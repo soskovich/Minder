@@ -64,15 +64,13 @@ test('d. de lopende periode telt niet mee in het grootboek (opzij deze periode s
   expect(r.ymsInLedger).toContain('2026-08');
 });
 
-test('e. Plan toont "Terug te zetten" met de per-periode-opbouw in de sheet', async ({ page }) => {
+test('e. het grootboek is sinds v470 geen bron voor Plan: geen regel, wel de historie in blok 20', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
-    openInhalen(); const sheet = document.getElementById('inhalenSheet');
-    const rij = sheet && sheet.querySelector('[data-inhaalperiode="2026-08"]');
-    return { regel: reg ? reg.innerText : '', open: sheet ? +sheet.dataset.inhaalopen : null,
-      augOpen: rij ? +rij.dataset.open : null, augTekort: rij ? +rij.dataset.tekort : null }; });
-  expect(r.regel).toContain('Terug te zetten');
+    return { regel: !!reg, open: opzijInhalen().open, bron: planTerug().totaal, diag: diagMaandBudget(maandVooruit(), true, null).join('\n') }; });
   expect(r.open).toBe(300);
-  expect(r.augTekort).toBe(500);
-  expect(r.augOpen).toBe(300);
+  expect(r.bron).toBe(0);
+  expect(r.regel).toBe(false);
+  expect(r.diag).toContain('sinds v470 historie, geen bron meer');
+  expect(r.diag).toMatch(/TOTAAL OPEN \(terug te zetten\): €300/);
 });

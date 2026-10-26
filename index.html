@@ -10905,7 +10905,7 @@ function gripMeters(){
   const b=MB.onbekend?dial('budget','Budget',MB,0,'?','nog niet','nog niet te rekenen')
     :dial('budget','Budget',MB,MB.pct,MB.pct+'%',euro0(Math.abs(MB.verschil)),MB.verschil>0?'boven budget':MB.verschil<0?'onder budget':'precies je budget');
   const d=MD.onbekend?dial('doelen','Doelen',MD,0,'?','nog geen doel',MD.geenMeting?'geen spaarrekening':'kies opzij in Kiezen')
-    :dial('doelen','Doelen',MD,MD.pct,MD.pct+'%',MD.pct+'%',`<span data-meterverwachtdoel>${euro0(MD.netto)} opzij · volgens je verdeling ${euro0(MD.opzij)}</span>`);
+    :dial('doelen','Doelen',MD,MD.pct,euroK(MD.netto),'deze periode',`<span data-meterverwachtdoel>${euro0(MD.netto)} opzij · volgens je verdeling ${euro0(MD.opzij)}</span>`);   // v470 punt 3: geen percentage, geen "van je doel"
   const inl=ML.inleg?(ML.inleg.stil?`${esc(ML.inleg.naam)} zelf stilgezet`:ML.inleg.bedrag>0?`${esc(ML.inleg.naam)} ${euro0(ML.inleg.bedrag)} ingelegd`:`${esc(ML.inleg.naam)} ${euro0(ML.inleg.per)}/mnd`):'';
   /* v390: ontbreekt er een voorwaarde, dan staat die in de meter (de eerste, in de vaste volgorde buffer, dekking, doel). */
   const lsub=ML.onbekend?'':(ML.mist&&ML.mist.length?`<span data-metermist>${esc(ML.mist[0])}${ML.mist.length>1?` +${ML.mist.length-1}`:''}</span>`
@@ -10950,10 +10950,10 @@ function renderGripMeter(){
   else if(k==='doelen'){ const M=gripMeterDoelen();   /* v440: opzij deze periode (opzijPeriode) tegen het doel uit Kiezen */
     kop='Doelen';
     if(M.onbekend) body=`<div class="small muted" style="line-height:1.5">${M.geenMeting?'Er is geen spaarrekening herkend, dus opzij is niet te meten.':'Je hebt nog geen opzij-doel gekozen. Kies je salarisverdeling in Kiezen, dan staat hier wat er van je opzij gaat tegen je doel.'}</div>`;
-    else { body=rij('Doel (uit Kiezen)', euro0(M.opzij), 'data-meteropzij', "closeSheet();go('maand')")
+    else { body=rij('Volgens je verdeling (uit Kiezen)', euro0(M.opzij), 'data-meteropzij', "closeSheet();go('maand')")
       + (M.tx||[]).map(t=>rij(`${t.amount<0?'Eruit':'Erin'} op ${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}`, (t.amount<0?'−':'+')+euro(Math.abs(t.amount)), 'data-meteruit')).join('')
       + rij('<b>Opzij deze periode</b> (netto naar je spaarrekening)', euro0(M.netto), 'data-meternetto');
-      schaal=`Opzij deze periode = wat er netto naar je spaarrekening ging van je salaris tot de dag vóór je volgende salaris (inleg min onttrekkingen). ${euro0(M.netto)} van je doel ${euro0(M.opzij)} is ${M.pct}%. Een overboeking tussen twee spaarrekeningen telt niet. Reserveringen en beleggen staan los (v441).`; } }
+      schaal=`Opzij deze periode = wat er netto naar je spaarrekening ging van je salaris tot de dag vóór je volgende salaris (inleg min onttrekkingen): ${euro0(M.netto)} opzij · volgens je verdeling ${euro0(M.opzij)}. Een overboeking tussen twee spaarrekeningen telt niet. Reserveringen en beleggen staan los (v441).`; } }
   else { const M=gripMeterBeleggen(); kop='Beleggen';
     const tik=v=>v.ontbreekt&&!(maandRegels().find(r=>r.key===v.key))?(v.key==='dekking'?'closeSheet();openReserveringen()':v.key==='buffer'?'closeSheet();openNoodfondsPanel()':"closeSheet();go('vooruit')"):`closeSheet();openMaandBeslis('${esc(v.key)}')`;
     /* Per voorwaarde de regel zoals hij op de tegel stond (waarde en maat, v340) en of hij voor beleggen gehaald is. */
@@ -12662,7 +12662,7 @@ const WATOVER_SOORTEN=[{k:'inhalen', naam:'Inhalen'}, {k:'sparen', naam:'Sparen 
 function watOverPeriode(){ const M=salMoment2(); if(!M) return {ok:false, over:0, rijen:[]};
   const rijen=M.R.map(x=>({acc:x.acc, naam:x.naam, eind:x.eind, buffer:x.buffer, over:x.eind==null?0:Math.max(Math.round(x.eind-x.buffer),0)}));
   const over=rijen.reduce((a,x)=>a+x.over,0);
-  let inhaal=0; try{ const I=opzijInhalen(); inhaal=(I&&I.ok)?I.inhalen:0; }catch(_){}
+  let inhaal=0; try{ inhaal=Math.round(planTerug().totaal); }catch(_){}   // v470: dezelfde bron als Terug te zetten op Plan
   return {ok:over>0, over, rijen, PV:M.PV, key:M.PV.ym, inhaal}; }
 function watOverState(W){ const op=SET.watOver&&SET.watOver[W.key]; if(op) return op;
   const w=window._watover; if(w && w.key===W.key) return w;
@@ -15072,11 +15072,13 @@ function planInlegLopend(cap, extra){
    keuze is toegewezen. Dat laatste komt niet terug, dus vanaf volgende maand vult je inleg het aan (zoals bij niet
    terugzetten), en tot dan is de bron niet vol. Een herintreding (spaarOver() leest allocatePlan()) slaat zg over. */
 function planTerugProj(P){
-  let tz=null; try{ tz=terugzetProjectie(); }catch(_){}
+  let TK=null; if(!planTerugProj._in){ planTerugProj._in=true; try{ TK=planTekort(P); }catch(_){ TK=null; } finally{ planTerugProj._in=false; } }
+  let TD0=null; try{ TD0=terugzetNaarDoel(P, TK||undefined); }catch(_){}
+  let tz=null; try{ tz=(TK&&TK.saldo)?terugzetProjectieCap(P, TK, (TD0&&TD0.bron)||{}):terugzetProjectie(); }catch(_){}
   const rest=Object.assign({}, (tz&&tz.rest)||{}), bij=Object.assign({}, (tz&&tz.bij)||{}), door={};
-  try{ const TD=terugzetNaarDoel(P); for(const id in TD.door){ const som=TD.door[id].reduce((x,d)=>x+d.bedrag,0); if(som>0){ bij[1]=Object.assign({}, bij[1]||{}); bij[1][id]=(bij[1][id]||0)+som; door[id]=1; } } }catch(_){}
+  try{ const TD=TD0||terugzetNaarDoel(P); for(const id in TD.door){ const som=TD.door[id].reduce((x,d)=>x+d.bedrag,0); if(som>0){ bij[1]=Object.assign({}, bij[1]||{}); bij[1][id]=(bij[1][id]||0)+som; door[id]=1; } } }catch(_){}
   let zg={};
-  if(!planTerugProj._in){ planTerugProj._in=true; try{ zg=planZonderAf(P)||{}; }catch(_){ zg={}; } finally{ planTerugProj._in=false; } }
+  if(TK) zg=TK.zg||{};
   return {rest, bij, door, zg};
 }
 function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe = een toewijzing die de aanroeper doorrekent (spaarVerdeelVoorstel())
@@ -15531,23 +15533,26 @@ function spaarOverNaam(x){ return x.type==='noodfonds'?'je noodfonds':esc(x.naam
    VERPLAATST EN NIET GEKOPIEERD: de zin over je plan en je saldo stond in deze kaart en staat nu in de sheet, en de
    tik "haal X weg bij Y" is een van de keuzes daar geworden, zonder voorkeuze. */
 function spaarOverLine(P){
-  /* v440 (item 3): INHALEN is de onttrekkingen van je spaarrekening deze salarisperiode die niet zijn teruggezet (opzijInhalen),
-     NIET "toegewezen zonder geld" (spaarOver().zonder). Die twee meten verschillende dingen (blok 20 zet ze naast elkaar); de
-     gebruiker koos opzijInhalen als bron. "Toegewezen zonder geld" blijft als signaal op Grip (de bufferregel leest
-     toewijzingBovenSaldo) en de keuze-sheet (openSpaarOver) blijft bereikbaar via Home. Telt niet mee in het opzij-doel. */
-  let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)) return '';
-  return `<div class="row small spaar-over" id="spaarOverRegel" data-planinhalen="${I.inhalen}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openInhalen()"><span style="flex:1;min-width:0;font-weight:600">Terug te zetten ${euroC(I.inhalen)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">met je bonus of wat over is ›</span></div>`;
+  /* v470 (punt 2): TERUG TE ZETTEN LEEST planTerug(), de bron van "nog terug" per doel: wat er aan je doelen is toegewezen en niet
+     op je spaarrekening staat. Tot v470 las deze regel het grootboek over de salarisperiodes (opzijInhalen(), v442), terwijl de rij
+     van een doel "nog EUR X terug" uit de terugzetkeuze las: twee bronnen voor hetzelfde geld, met twee bedragen (gemeld: EUR 1.350
+     tegen EUR 1.088). Een storting op je spaarrekening lost nu beide in een keer af. Het grootboek staat als historie in blok 20. */
+  let R=null; try{ R=planTerug(P); }catch(_){} if(!R || !(R.totaal>=0.5)) return '';
+  return `<div class="row small spaar-over" id="spaarOverRegel" data-planinhalen="${R.totaal}" data-terugbron="${R.TK.saldo?'saldo':'keuze'}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);border-left:3px solid var(--mut);cursor:pointer" onclick="openInhalen()"><span style="flex:1;min-width:0;font-weight:600">Terug te zetten ${euroC(R.totaal)}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">per doel ›</span></div>`;
 }
-/* v442 sectie 2: de sheet achter Terug te zetten: per AFGESLOTEN periode met een tekort wat eruit ging (tekort), wat al is
-   teruggezet en wat nog open staat. Informatief (geen handeling die geld beweegt): je zet het terug met je bonus of wat over is.
-   De som van "open" is het totaal. */
-function openInhalen(){ let I=null; try{ I=opzijInhalen(); }catch(_){} if(!I || !(I.inhalen>0)){ closeSheet(); return; }
-  const per=ym=>{ const mn=MNAMES[+String(ym).slice(5,7)-1]; return mn+' '+String(ym).slice(0,4); };
-  const rij=r=>`<div class="row small" data-inhaalperiode="${esc(r.ym)}" data-tekort="${r.tekort}" data-teruggezet="${r.teruggezet}" data-open="${r.open}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(per(r.ym))}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">eruit ${euroC(-r.tekort)}${r.teruggezet>0?` · teruggezet ${euroC(r.teruggezet)}`:''}</span></span><span style="white-space:nowrap;font-weight:700">${euroC(r.open)} open</span></div>`;
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="inhalenSheet" data-planinhalen="${I.inhalen}" data-inhaalopen="${I.open}">
-    <div style="font-weight:800;font-size:var(--fs-lg)">Terug te zetten ${euroC(I.inhalen)}</div>
-    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">In deze periodes haalde je samen ${euroC(I.onttrokkenTot)} netto van je spaarrekening${I.afgelost>0?` en zette je er ${euroC(I.afgelost)} van terug`:''}. Wat nog open staat (${euroC(I.open)}) zet je terug met je bonus of met wat er aan het eind van een periode over is (een "terugzetten"-bestemming), of je haalt het in door een latere periode meer dan je doel opzij te zetten. Dit telt niet mee in je opzij-doel.</div>
-    ${I.periodes.length?`<div class="small" style="font-weight:700;margin:6px 0 2px">Per periode</div>`+I.periodes.map(rij).join(''):'<div class="small muted">Geen periode met een tekort.</div>'}
+/* v470: de sheet achter Terug te zetten: per doel wat er toegewezen staat, wat daarvan op je spaarrekening staat en wat nog terug
+   moet. Dezelfde bron als de regel (planTerug()), dus de rijen tellen op tot het bedrag. Informatief: je zet het terug met een
+   storting op je spaarrekening, en dan lost het vanzelf op. */
+function openInhalen(){ let R=null; try{ R=planTerug(); }catch(_){} if(!R || !(R.totaal>=0.5)){ closeSheet(); return; }
+  let P=[]; try{ P=allocatePlan(); }catch(_){}
+  const rij=p=>{ const v=R.per[p.id]; if(!(v>0)) return ''; const t=Math.max(Math.round(+p.gespaard||0),0);
+    return `<div class="row small" data-terugdoel="${esc(p.id)}" data-terug="${v}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(p.type==='noodfonds'?'Noodfonds':p.naam)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">toegewezen ${euroC(t)} · op je spaarrekening ${euroC(Math.max(t-v,0))}</span></span><span style="white-space:nowrap;font-weight:700">${euroC(v)} nog terug</span></div>`; };
+  const uitleg=R.TK.saldo?`Aan je doelen is ${euroC(R.TK.toe)} toegewezen en er staat ${euroC(R.TK.saldoBedrag)} op je spaarrekening. Het verschil zet je terug met een storting; staat het geld er weer, dan is het weg.`
+    :`De transacties van je spaarrekening ontbraken bij de laatste sync, of het saldo is onbekend, dus dit volgt nu je terugzetkeuze. Na een sync waarin de transacties lukten volgt het je saldo.`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="inhalenSheet" data-planinhalen="${R.totaal}" data-inhaalopen="${R.totaal}" data-terugbron="${R.TK.saldo?'saldo':'keuze'}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Terug te zetten ${euroC(R.totaal)}</div>
+    <div class="small muted" style="margin:3px 0 8px;line-height:1.5">${uitleg}</div>
+    ${P.map(rij).join('')}
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg(); }
 /* v371: DE ONTTREKKINGEN PER MAAND, op een plek met twee lezers: blok 14 (sectie 1, de beweging op je spaarrekening)
    en de sheet achter de melding. De bron is savedTx() (v262), dus geen tweede telling (v104). */
@@ -16198,15 +16203,63 @@ function planTijdlijnData(P,cap){
 /* v371: WAT ER IN EEN BRON NOG NIET IN GELD STAAT, per bestemming. tzNog: wat er met een lopende keuze nog terug moet
    (deze maand en later). zgAf: wat er zonder keuze zonder geld staat, uit spaarOverRaakt() (dezelfde volgorde als de
    melding); de laatste die inlevert draagt de centen, zodat de rij hetzelfde bedrag noemt als de melding. */
-function planTerugNog(){
+function planTerugKeuze(){
   const tzNog={}; try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const D0=(T0.r.delen||[]).map(x=>+x||0), n=Math.round(D0.slice(T0.i).reduce((a,x)=>a+x,0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=n;
     br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(n*b.af/tot); if(v>0) tzNog[b.id]=(tzNog[b.id]||0)+v; rest-=v; }); } }catch(_){}
   return tzNog;
 }
-function planZonderAf(P){
+function planZonderAfKeuze(P){
   const zgAf={}; try{ const RK=spaarOverRaakt(P), V0=spaarOver(), cent=zonderHeel(V0)-(+V0.zonder||0);
     RK.forEach((x,k)=>{ zgAf[x.id]=(zgAf[x.id]||0)+Math.round(+x.af||0)-(k===RK.length-1?cent:0); }); }catch(_){}
   return zgAf;
+}
+/* v470 (punt 1 en 2, gevraagd door de gebruiker): "NOG TERUG" VOLGT HET SALDO, EN IS DE ENE BRON VOOR TERUG TE ZETTEN.
+   Per doel is gespaard = min(toegewezen, het deel van het saldo dat aan dat doel toekomt). Wat er toegewezen staat en niet op je
+   spaarrekening(en) staat is T = max(toegewezen - saldo, 0) (saldo exact, spaarSaldo()); alleen dat is per doel "nog terug" en
+   "zonder geld". T wordt toegedeeld zoals de bestaande regels het al deden: eerst bij de doelen waar een terugzetkeuze nog geld
+   verwacht (planTerugKeuze(), tot dat bedrag), daarna van onder naar boven door het plan (spaarOverItems(), de volgorde van de
+   melding en van spaarOverZet()). Wat een keuze nog verwacht terwijl het al op je spaarrekening staat, telt dus als gespaard
+   (`al`), en een storting lost "nog terug" en "terug te zetten" in een keer af.
+   ALLEEN NA EEN SYNC WAARIN DE TRANSACTIES LUKTEN (de aansluiting, v465): staat er bij een spaarrekening een transactiefout
+   (SET.psd2Diag[acc].txFout), of is het saldo onbekend, dan blijft het de terugzetkeuze (`saldo:false`, met de reden). */
+function planTekort(P){
+  P=P||allocatePlan();
+  const keuze=planTerugKeuze();
+  const terugval=(reden, extra)=>Object.assign({saldo:false, reden, nog:keuze, zg:planZonderAfKeuze(P), keuze, T:null}, extra||{});
+  let S=null; try{ S=spaarSaldo(); }catch(_){} if(!S || S.missing) return terugval('saldo van je spaarrekening onbekend');
+  let zonderTx=[]; try{ zonderTx=n26SavingsAccounts().filter(acc=>((SET.psd2Diag||{})[acc]||{}).txFout); }catch(_){}
+  if(zonderTx.length) return terugval('transacties ontbraken bij de laatste sync', {zonderTx});
+  const r2=v=>Math.round(v*100)/100;
+  const saldo=r2(S.exact!=null?+S.exact:+S.cur||0);
+  const items=P.filter(p=>(p.type==='goal'||p.type==='noodfonds') && !p.nfOnbekend);
+  const toeVan={}; let toe=0; for(const p of items){ const t=Math.max(Math.round(+p.gespaard||0),0); toeVan[p.id]=t; toe+=t; }
+  const T=r2(Math.max(toe-saldo,0));
+  const nog={}, zg={}, orde=spaarOverItems(P).filter(p=>toeVan[p.id]!=null); let rest=T;
+  for(const p of orde){ if(rest<0.005) break; const k=r2(Math.min(Math.max(keuze[p.id]||0,0), toeVan[p.id], rest)); if(k>0){ nog[p.id]=k; rest=r2(rest-k); } }
+  for(const p of orde){ if(rest<0.005) break; const ruimte=r2(toeVan[p.id]-(nog[p.id]||0)), z=r2(Math.min(ruimte, rest)); if(z>0){ zg[p.id]=z; rest=r2(rest-z); } }
+  return {saldo:true, reden:'', nog, zg, keuze, T, saldoBedrag:saldo, toe, rest};
+}
+function planTerugNog(P){ return planTekort(P).nog; }
+function planZonderAf(P){ return planTekort(P).zg; }
+/* v470 (punt 2): TERUG TE ZETTEN OP PLAN, een bron met de rijen: per doel wat er toegewezen staat en niet op je spaarrekening
+   (nog terug plus zonder geld), en de som. De regel op Plan, de sheet erachter, de keuze "Over deze periode" (watOver) en de
+   controle in blok 20 lezen dit. Het grootboek over de salarisperiodes (opzijInhalen(), v442) blijft als historie in blok 20. */
+function planTerug(P, TK){
+  P=P||allocatePlan(); TK=TK||planTekort(P);
+  const per={}; let totaal=0;
+  for(const p of P){ const v=Math.round(((TK.nog[p.id]||0)+(TK.zg[p.id]||0))*100)/100; if(v>0){ per[p.id]=v; totaal+=v; } }
+  return {per, totaal:Math.round(totaal*100)/100, TK};
+}
+/* v470: de delen van een terugzetkeuze na deze maand (terugzetProjectie()) tellen alleen nog voor wat er per doel echt ontbreekt
+   (planTekort()): deze maand eerst, daarna de latere maanden op volgorde. Wat al op je spaarrekening staat komt niet nog eens. */
+function terugzetProjectieCap(P, TK, deze){
+  const TP=terugzetProjectie(); if(!TP || !TK || !TK.saldo) return TP;
+  const rest={}, bij={}, ms=Object.keys(TP.bij||{}).map(Number).sort((a,b)=>a-b);
+  const ids=new Set([...Object.keys(TP.rest||{}), ...ms.flatMap(m=>Object.keys(TP.bij[m]||{}))]);
+  for(const id of ids){ let b=Math.max((TK.nog[id]||0)-((deze||{})[id]||0),0), som=0;
+    for(const m of ms){ const v=Math.min(Math.max(+((TP.bij[m]||{})[id])||0,0), b); if(v>0){ bij[m]=bij[m]||{}; bij[m][id]=Math.round(v); b-=v; som+=v; } }
+    if(som>0) rest[id]=Math.round(som); }
+  return Object.keys(rest).length?{rest, bij}:null;
 }
 /* v380 (D): DE VERWACHTE STAND EIND DEZE MAAND, EEN FUNCTIE. Per bestemming wat er op je spaarrekening staat (geld: de
    toewijzing min wat nog terug moet en min wat zonder geld is toegewezen), plus wat er deze maand terug gaat
@@ -16216,15 +16269,16 @@ function planZonderAf(P){
    (som van doel min S over wat loopt). Zonder geld zonder keuze telt niet mee in S: dat geld is er niet. */
 function planStandEind(P){
   P=P||allocatePlan();
-  let TND={per:{}, door:{}, onverdeeld:0}; try{ TND=terugzetNaarDoel(P); }catch(_){}
-  const nog=planTerugNog(), zgAf=planZonderAf(P);
-  let TP=null; try{ TP=terugzetProjectie(); }catch(_){}
+  const TK=planTekort(P);
+  let TND={per:{}, door:{}, onverdeeld:0, bron:{}}; try{ TND=terugzetNaarDoel(P, TK); }catch(_){}
+  const nog=TK.nog, zgAf=TK.zg;
+  let TP=null; try{ TP=terugzetProjectieCap(P, TK, TND.bron); }catch(_){}
   const per={}; let nogTeGaan=0, doelSom=0, geldSom=0;
   for(const p of P){
     const doel=Math.max(Math.round(+p.doel||0),0), uit=p.nfOnbekend||p.type==='aflossen';
     const n=Math.max(nog[p.id]||0,0), zg=Math.max(zgAf[p.id]||0,0);
     const geld=uit?0:Math.max(Math.round((Math.round(+p.gespaard||0)-n-zg)*100)/100,0);
-    const tb=Math.max(Math.round(TND.per[p.id]||0),0);
+    const tb=Math.max(Math.round((TND.per[p.id]||0)*100)/100,0);   // v470: in centen, want wat er ontbreekt (planTekort()) is in centen
     const inleg=(p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(+p.alloc||0),0);
     const S=Math.round((geld+tb+inleg)*100)/100;
     const later=[]; let nogLater=0;
@@ -16233,7 +16287,7 @@ function planStandEind(P){
       gesplitst:!uit && doel>0 && (n>0 || zg>0 || !!TND.door[p.id])};
     if(!uit && p.status!=='gepauzeerd'){ nogTeGaan+=Math.max(doel-S,0); doelSom+=doel; geldSom+=geld; }
   }
-  return {per, nogTeGaan:Math.round(nogTeGaan), doelSom, geldSom:Math.round(geldSom*100)/100, TND};
+  return {per, nogTeGaan:Math.round(nogTeGaan), doelSom, geldSom:Math.round(geldSom*100)/100, TND, TK};
 }
 /* v380: "bijna vol" (keuze C van de gebruiker): de verwachte stand eind deze maand is minstens 95 procent van het doel en
    nog niet het doel, en er komt na deze maand nog geld terug, dus de vol-datum ligt later. */
@@ -16253,23 +16307,26 @@ function planBijnaVol(x){ return !!x && x.doel>0 && x.S<x.doel && x.S>=PLAN_BIJN
 function spaarPlanAansl(P, SE){
   let S=null; try{ S=spaarSaldo(); }catch(_){} if(!S || S.missing) return null;
   P=P||allocatePlan(); SE=SE||planStandEind(P);
-  const nog=planTerugNog(), zgAf=planZonderAf(P), doelen=[]; let geld=0, toe=0, terug=0, zonder=0;
+  const TK=SE.TK||planTekort(P), nog=TK.nog, zgAf=TK.zg, doelen=[]; let geld=0, toe=0, terug=0, zonder=0, keuzeTerug=0;
   for(const p of P){ if(p.type==='aflossen' || p.nfOnbekend) continue;
     const x=SE.per[p.id]||{}, t=Math.max(Math.round(+p.gespaard||0),0), n=Math.max(nog[p.id]||0,0), z=Math.max(zgAf[p.id]||0,0), g=+x.geld||0;
-    doelen.push({id:p.id, naam:p.naam, type:p.type, toegewezen:t, n, zg:z, geld:g, sinds:p.type==='goal'?(p.startDatum||''):''});
-    geld+=g; toe+=t; terug+=n; zonder+=z; }
+    const kz=Math.max(TK.keuze[p.id]||0,0);
+    doelen.push({id:p.id, naam:p.naam, type:p.type, toegewezen:t, n, zg:z, geld:g, keuze:kz, sinds:p.type==='goal'?(p.startDatum||''):''});
+    geld+=g; toe+=t; terug+=n; zonder+=z; keuzeTerug+=kz; }
   const r2=v=>Math.round(v*100)/100;
   const saldo=r2(S.exact!=null?+S.exact:+S.cur||0); geld=r2(geld);
   const X=r2(saldo-geld), vrij=r2(Math.max(saldo-toe,0)), tekort=r2(Math.max(toe-saldo,0));
   const rest=r2(X-(vrij-tekort+terug+zonder));
   let dekt=0; try{ dekt=terugzetDekt(); }catch(_){}
-  const al=r2(Math.min(Math.max(dekt+zonder-tekort,0), terug));
+  /* v470: volgt "nog terug" het saldo (TK.saldo), dan is `al` wat de keuze nog verwacht en wat al op je spaarrekening staat: dat telt
+     als gespaard en is geen tegenspraak meer. Zonder transacties blijft het de meting van v469. */
+  const al=TK.saldo?r2(Math.max(keuzeTerug-terug,0)):r2(Math.min(Math.max(dekt+zonder-tekort,0), terug));
   const rek=n26SavingsAccounts().map(acc=>({acc, naam:(function(){ try{ return accLabel(acc)||acc; }catch(_){ return acc; } })(), saldo:accBalance(acc), datum:(function(){ try{ return accBalanceDatum(acc)||''; }catch(_){ return ''; } })(),
     txFout:String(((SET.psd2Diag||{})[acc]||{}).txFout||'')}));
   const zonderTx=rek.filter(r=>r.txFout);
   const extra=Math.round((+SET.extraSavings||0)*100)/100;
-  const sluit=Math.abs(rest)<1, status=zonderTx.length?'verklaard':(!sluit||al>=1)?'wacht':'klopt';
-  return {saldo, geld, X, vrij, tekort, terug, zonder, rest, al, dekt, doelen, rek, zonderTx, extra, sluit, status,
+  const sluit=Math.abs(rest)<1, status=zonderTx.length?'verklaard':(!sluit||(!TK.saldo&&al>=1))?'wacht':'klopt';
+  return {saldo, geld, X, vrij, tekort, terug, zonder, rest, al, dekt, doelen, rek, zonderTx, extra, sluit, status, bron:TK.saldo?'saldo':'keuze', keuzeTerug:r2(keuzeTerug),
     puurVrij:terug<0.005 && zonder<0.005 && tekort<0.005 && Math.abs(rest)<0.005};
 }
 /* De regel op Plan (onder de kop): alleen als het verschil niet nul is, en niet als het alleen vrij spaargeld is dat spaarVrijLine()
@@ -16292,12 +16349,13 @@ function openSpaarPlanAansl(){
   h+=A.doelen.map(d=>`<div class="small" data-spaardoel="${esc(d.id)}" data-geld="${d.geld}" style="padding:5px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px"><span style="flex:1;min-width:0">${esc(d.naam)}</span><b>${euroC(d.geld)}</b></div><div class="muted">toegewezen ${euroC(d.toegewezen)}${d.n>0?` · min ${euroC(d.n)} nog terug`:''}${d.zg>0?` · min ${euroC(d.zg)} zonder geld`:''}${d.sinds?` · doel sinds ${dag(d.sinds)}`:''}</div></div>`).join('');
   h+=`<div class="small" style="font-weight:700;margin:10px 0 2px">Verschil ${euroC(A.X)}</div>`;
   if(A.vrij>=0.005) h+=rij('data-spaardeel="vrij"','niet toegewezen aan een doel',A.vrij);
-  if(A.terug>=0.005) h+=rij('data-spaardeel="terug"','nog terug volgens je terugzetkeuze (telt pas als het er weer staat)',A.terug);
+  if(A.terug>=0.005) h+=rij('data-spaardeel="terug"',A.bron==='saldo'?'nog terug: toegewezen en niet op je spaarrekening':'nog terug volgens je terugzetkeuze (telt pas als het er weer staat)',A.terug);
   if(A.zonder>=0.005) h+=rij('data-spaardeel="zonder"','toegewezen zonder geld',A.zonder);
   if(A.tekort>=0.005) h+=rij('data-spaardeel="tekort"','min: meer toegewezen dan er staat',-A.tekort);
   if(Math.abs(A.rest)>=0.005) h+=rij('data-spaardeel="rest"','niet verklaard',A.rest,'color:var(--amber)');
   const noot=A.zonderTx.length
     ? `De transacties van ${esc(A.zonderTx.map(r=>r.naam).join(', '))} ontbraken bij de laatste sync. Een storting van vandaag staat dan wel in het saldo en niet in je boekingen, dus dit wordt nu niet vergeleken.`
+    : (A.al>=1 && A.bron==='saldo') ? `${euroC(A.al)} verwachtte je terugzetkeuze nog terug, maar het staat al op je spaarrekening. Dat telt daarom als gespaard.`
     : A.al>=1 ? `${euroC(A.al)} daarvan verwacht je terugzetkeuze nog terug, maar het staat al op je spaarrekening. Dat staat als controle in Diagnose.`
     : !A.sluit ? `${euroC(A.rest)} is niet bij naam te verklaren. Dat staat als controle in Diagnose.` : '';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="spaarPlanSheet" data-x="${A.X}" data-status="${A.status}">
@@ -16318,12 +16376,15 @@ function planVolLater(x){ const ms=((x&&x.later)||[]).map(l=>+l.m).filter(m=>m>0
    geld + 231 + 362 = 4.000), dus schuift er niets; doorschuiven gebeurt alleen als de toewijzing van de bron boven zijn
    doel uitkomt (een verlaagd doelbedrag). EEN BRON, DRIE LEZERS: de rijen op Plan, de regel "Toegewezen deze maand" en
    de projectie (planVooruit(), het doorgeschoven deel komt in maand 1 bij zijn ontvanger). */
-function terugzetNaarDoel(P){
+function terugzetNaarDoel(P, TK){
   P=P||allocatePlan(); const per={}, door={}, ruw={};
   try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const d=Math.round(tzDeelVan(T0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=d;
     br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(d*b.af/tot); if(v>0) ruw[b.id]=(ruw[b.id]||0)+v; rest-=v; }); } }catch(_){}
-  if(!Object.keys(ruw).length) return {per, door, onverdeeld:0};
-  const nog=planTerugNog(), zg=planZonderAf(P), ruimte={};
+  if(!Object.keys(ruw).length) return {per, door, onverdeeld:0, bron:{}};
+  TK=TK||planTekort(P); const nog=TK.nog, zg=TK.zg, ruimte={};
+  /* v470: volgt "nog terug" het saldo, dan gaat er deze maand alleen terug wat er per doel echt ontbreekt; de rest staat er al */
+  if(TK.saldo) for(const id in ruw){ ruw[id]=Math.round(Math.min(ruw[id], TK.nog[id]||0)*100)/100; if(!(ruw[id]>0)) delete ruw[id]; }
+  if(!Object.keys(ruw).length) return {per, door, onverdeeld:0, bron:{}};
   for(const p of P){ const g=Math.round(+p.gespaard||0), a=Math.max(Math.round(+p.alloc||0),0), dl=Math.round(+p.doel||0);
     ruimte[p.id]=(p.type==='aflossen'||p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(dl-Math.max(g-(nog[p.id]||0)-(zg[p.id]||0),0)-a),0); }
   let onverdeeld=0;
@@ -16335,7 +16396,7 @@ function terugzetNaarDoel(P){
     onverdeeld+=ex; });
   /* een bron zonder rij in P (een doel dat uit het plan ging) houdt zijn bedrag als niet verdeeld */
   for(const id in ruw) if(!P.some(p=>p.id===id)) onverdeeld+=ruw[id];
-  return {per, door, onverdeeld};
+  return {per, door, onverdeeld, bron:ruw};
 }
 function tlMaand(m){ const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+m, 1); return {k:MNAMES[d.getMonth()], j:d.getFullYear()}; }
 /* v380: de tijdlijn staat inline onder de schakelaar en in de sheet, met DEZELFDE inhoud (planTijdlijnHTML()) en
@@ -32364,7 +32425,7 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
      dat meet iets anders (een over-toewijzing, geen periode) en blijft het signaal op Grip (toewijzingBovenSaldo). */
   { let A=null; try{ A=Math.round(spaarOver().zonder); }catch(_){} let I=null; try{ I=opzijInhalen(); }catch(_){}
     const MNq=ym=>MNAMES[+String(ym).slice(5,7)-1]+' '+String(ym).slice(0,4);
-    L.push('  INHALEN / TERUG TE ZETTEN (v442 sectie 2) — het grootboek over de salarisperiodes:');
+    L.push('  INHALEN / TERUG TE ZETTEN (v442 sectie 2) — het grootboek over de salarisperiodes (sinds v470 historie, geen bron meer: Plan leest planTerug()):');
     if(!I || I.inhalen==null) L.push('    onbekend (geen spaarrekening of geen salarisperiode)');
     else { L.push(`    startpunt (v443): de periode vóór je eerste salarisstorting, ${I.startYm?MNq(I.startYm):'onbekend'}${I.grootboekStart?' (vanaf '+I.grootboekStart+')':''}; een periode daarvoor telt nooit mee`);
       if(!I.periodes.length) L.push('    geen afgesloten periode met een tekort (netto opzij < 0)');
@@ -32373,6 +32434,19 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
       L.push(`    TOTAAL OPEN (terug te zetten): ${euro0(I.open)} = onttrokken ${euro0(I.onttrokkenTot)} − afgelost ${euro0(I.afgelost)}`);
       L.push(`    CONTROLE open = onttrokken − afgelost: ${euro0(I.open)} tegen ${euro0(I.onttrokkenTot-I.afgelost)} → ${I.open===I.onttrokkenTot-I.afgelost?'klopt':'VERSCHILT'}`);
       L.push(`    ter vergelijking · "toegewezen zonder geld" (spaarOver().zonder, een ánder getal, signaal op Grip): ${A==null?'onbekend':euro0(A)}`); } }
+  /* v470 (punt 2): TERUG TE ZETTEN, EEN BRON. De regel op Plan leest planTerug(); per doel is "nog terug" de toewijzing min het geld
+     (planStandEind(), dezelfde stand als de rij en "Gespaard voor je doelen"). De controle legt die twee rekenwegen naast elkaar. */
+  { let R=null, SE=null, P0=null; try{ P0=allocatePlan(); R=planTerug(P0); SE=planStandEind(P0); }catch(_){}
+    L.push('  TERUG TE ZETTEN (v470) — een bron voor de regel op Plan en "nog terug" per doel:');
+    if(!R || !SE) L.push('    onbekend');
+    else { const TK=R.TK;
+      L.push(`    bron: ${TK.saldo?`je saldo (toegewezen ${euroC(TK.toe)} − saldo ${euroC(TK.saldoBedrag)} = ${euroC(TK.T)} niet op je spaarrekening)`:'je terugzetkeuze ('+TK.reden+')'}`);
+      let som=0;
+      for(const p of P0){ if(p.type==='aflossen' || p.nfOnbekend || !(p.type==='goal'||p.type==='noodfonds')) continue; const x=SE.per[p.id]; if(!x) continue;
+        const t=Math.max(Math.round(+p.gespaard||0),0), n=Math.round(Math.max(t-x.geld,0)*100)/100, kz=Math.max(TK.keuze[p.id]||0,0); som+=n;
+        if(t>0) L.push(`    ${p.type==='noodfonds'?'Noodfonds':p.naam}: toegewezen ${euroC(t)} · gespaard ${euroC(x.geld)} · nog terug ${euroC(n)}${kz>0?` (terugzetkeuze verwacht nog ${euroC(kz)})`:''}`); }
+      som=Math.round(som*100)/100;
+      L.push(`    CONTROLE terug te zetten op Plan = som van nog terug per doel: ${euroC(R.totaal)} tegen ${euroC(som)} → ${Math.abs(R.totaal-som)<0.01?'klopt':'VERSCHILT'}`); } }
   if(!vk || !V || V.onbekend){ L.push('  forecast onbekend (geen drie afgeronde maanden)'); return L; }
   /* v456 punt 1: het budget van deze maand is het vastgelegde budget van de 1e, ook met een potje Contant dat deze maand ontstaat */
   L.push(`  CONTROLE budget ${ymFull(m).split(' ')[0]} = budget op 01-${m.slice(5,7)}: ${euro0(Math.round(V.budget))} tegen ${euro0(Math.round(MB.totaal))} → ${Math.round(V.budget)===Math.round(MB.totaal)?'klopt':'VERSCHILT'}`);

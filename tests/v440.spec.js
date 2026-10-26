@@ -110,25 +110,18 @@ test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
 });
 
 test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
-  /* v442 sectie 2: de Plan-regel heet "Terug te zetten" en leest het grootboek over de periodes (opzijInhalen().inhalen = het
-     open bedrag). De onttrekking staat in een AFGESLOTEN periode (M1), want de lopende periode telt nog niet in het grootboek. */
-  test('Terug te zetten leest opzijInhalen() (het open bedrag over de periodes), een regel', async ({ page }) => {
+  /* v470 (punt 2): de Plan-regel "Terug te zetten" leest planTerug() (toegewezen en niet op je spaarrekening), niet meer het grootboek
+     over de periodes (opzijInhalen()). De fixture draagt een grootboek-bedrag dat anders is dan wat er niet op je spaarrekening staat. */
+  test('Terug te zetten leest planTerug() en niet het grootboek (v470)', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
-    // een onttrekking in de afgeronde periode M1 (na de salarisstorting op de 5e), groter dan wat er die periode op ging
     tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await open(page, p);
     const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarOverRegel');
-      return { inhalen: opzijInhalen().inhalen, tekst: reg ? reg.innerText.replace(/\s+/g, ' ') : '', attr: reg ? +reg.dataset.planinhalen : null,
-        n: document.querySelectorAll('#s-vooruit [data-planinhalen]').length, stijl: reg ? (reg.getAttribute('style') || '') : '',
-        hoogte: reg ? reg.getBoundingClientRect().height : 0 }; });
-    expect(r.inhalen).toBeGreaterThan(0);
-    expect(r.tekst).toContain('Terug te zetten');
-    expect(r.attr).toBe(r.inhalen);          // de regel leest opzijInhalen().inhalen (het open bedrag)
-    expect(r.n).toBe(1);                      // een regel, geen dubbele kaart
-    expect(r.stijl).toContain('var(--mut)'); // mut en niet amber: er is niets mis, je zet het terug
-    expect(r.stijl).not.toContain('amber');
-    expect(r.hoogte).toBeLessThan(45);       // de regel past op een regel
+      return { inhalen: opzijInhalen().inhalen, bron: planTerug().totaal, attr: reg ? +reg.dataset.planinhalen : 0 }; });
+    expect(r.inhalen).toBeGreaterThan(0);    // het grootboek draagt een bedrag
+    expect(r.bron).not.toBe(r.inhalen);      // en planTerug() een ander: zonder dat verschil meet de test niets
+    expect(r.attr).toBe(r.bron >= 0.5 ? r.bron : 0);   // de regel leest planTerug()
   });
   /* v442 sectie 2: opzijInhalen() is een grootboek over de afgesloten periodes: open = onttrokken − afgelost, per periode. Blok 20
      draagt één INHALEN / TERUG TE ZETTEN-regel met het totaal open (geen A/B meer). */
