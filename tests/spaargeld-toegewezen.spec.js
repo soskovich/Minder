@@ -115,7 +115,7 @@ test.describe('c · één oorzaak is weg, de andere niet', () => {
   test('spaarStil is niet teruggekomen, want vrij en over zijn één verschil', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => typeof window.spaarStil)).toBe('undefined');
-    for (const fn of ['spaarOver', 'spaarOverZet', 'spaarOverItems', 'spaarOverLine']) {   // v371: spaarOverAf() is de keuze in de sheet geworden
+    for (const fn of ['spaarOver', 'spaarOverZet', 'spaarOverItems', 'spaarPlanRegel']) {   // v371: spaarOverAf() is de keuze in de sheet geworden; v472: spaarOverLine() is opgegaan in spaarPlanRegel()
       expect(await page.evaluate((f) => typeof window[f], fn), fn).toBe('function');
     }
   });
