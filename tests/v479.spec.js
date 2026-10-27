@@ -2,8 +2,8 @@
    is weg): hij blijft tot alle rekeningen passen of de periode eindigt. De bel draagt EEN melding (groep "Geld op je
    rekeningen") voor alle krappe rekeningen samen; een pop-up verschijnt bij elke app-opening zolang de melding open is, tot
    je een rekening aantikt (dan opent tot v480 de bestaande uitleg, salHoeHtml). Sluiten markeert niets. Een nieuwe melding
-   (+EUR 100, salTekortBewaar) wist bekeken, dus de pop-up komt terug. PUNT 4: is "Niets meer uit je spaargeld" gezet
-   (SET.salGeenSpaar[acc]), dan stelt de pop-up geen spaargeld voor. Op v432-stand (16 okt 2026), met een Akkoord in september
+   (+EUR 100, salTekortBewaar) wist bekeken, dus de pop-up komt terug. PUNT 4: koos je "Niets meer uit je spaargeld"
+   (v482: de keuze 'grens' in Kiezen, gripKeuze pid 'spaargeld'), dan stelt de pop-up geen spaargeld voor. Op v432-stand (16 okt 2026), met een Akkoord in september
    zodat de controlemomenten gelden (salTekortActief). GECONSTRUEERD, niet gemeten. */
 const { test, expect } = require('@playwright/test');
 const S = require('./v432-stand');
@@ -77,13 +77,13 @@ test.describe('v479 · krappe rekeningen: melding + pop-up', () => {
     const rij = page.locator(`#salTekort [data-saltekortrij="${LEEF}"]`);
     await expect(rij).toContainText('spaargeld');
     const naam = await page.evaluate(acc => rekNaam(acc), MAIN);
-    /* met de keuze: geen spaargeld, wel de andere rekening */
-    await page.evaluate(acc => { SET.salGeenSpaar = { [acc]: true }; save(); closeSheet(); openKrapPopup(); }, LEEF);
+    /* v482 (punt 3): de keuze komt uit Kiezen (gripKeuze, pid 'spaargeld', optie 'grens'), niet meer uit SET.salGeenSpaar */
+    await page.evaluate(() => { gripMaandMap('gripKeuze', thisYM())['spaargeld'] = { optie: 'grens', titel: 'Niets meer uit je spaargeld', op: vandaagYMD() }; save(); closeSheet(); openKrapPopup(); });
     await expect(rij).not.toContainText('spaargeld');
     await expect(rij).toContainText(naam);
 
     /* scenario B: geen enkele andere rekening boven buffer → verlaag je uitgaven of pas je verdeling aan */
-    await boot(page, { set: Object.assign({ manualBal: { [MAIN]: 1, [LEEF]: 1 }, salGeenSpaar: { [LEEF]: true } }, AKK) });
+    await boot(page, { set: Object.assign({ manualBal: { [MAIN]: 1, [LEEF]: 1 }, gripKeuze: { '2026-10': { spaargeld: { optie: 'grens' } } } }, AKK) });
     await page.evaluate(() => { go('maand'); renderMaand(); try { closeSheet(); } catch (_) {} openKrapPopup(); });
     const rijB = page.locator(`#salTekort [data-saltekortrij="${LEEF}"]`);
     await expect(rijB).not.toContainText('spaargeld');
