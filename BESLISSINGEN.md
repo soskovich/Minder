@@ -1101,3 +1101,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **De overzetting trekt het vaste salaris eraf, nooit erbij.** Valkuil (de sabotage): SET.income ongewijzigd als overig vast overnemen telt je salaris twee keer (5216 + 5216 = 10432).
 - **Lager dan je vaste salaris is een vraag, geen correctie.** Welk van de twee klopt weet alleen jij; er wordt niets stil aangepast.
 - **Overig vast zonder vast salaris vraagt opnieuw zodra je een vast salaris invult.** Anders telt de som stil op tot het dubbele; de vraag staat onder Je salaris en niet erboven, want hij verschijnt terwijl je tikt.
+
+## v477 · het vaste salaris telt niet twee keer
+- **Niet hoger dan het hoogste van de twee.** Tot het antwoord is de som `vast + overig vast - min(overig, vast)`, dus bij alleen die ene regel precies `max(vast, overig)`. Te hoog is de gevaarlijke kant (v168): dat getal voedt `baseIncome()`, `totals().income` en veilig te besteden.
+- **De aftrek is precies de uitkomst van "Ja".** Zo verandert Ja geen enkel getal en bevestigt het alleen; "Nee, het komt erbij" is de enige knop die iets beweegt.
+- **Niets stil.** Het bedrag van de regel blijft staan en de opbouw zegt "- EUR X nog niet bevestigd", met een eigen regel eronder. Een bedrag dat stil wegvalt is erger dan een bedrag dat met zijn voorbehoud staat.
+- **De maat die de twee lezingen scheidt is een overig vast ONDER het vaste salaris.** Valkuil (meetles a en o): zonder dat geval geeft de kale aftrekking hetzelfde antwoord als de klem en is de sabotage groen.
+
+## v478 · het splitblok zonder zijn twee dubbelingen
+- **Een pin op een tekst vlak voor zijn afbreekpunt meet de browser, niet de app.** De vijf rode pixelasserties na de wissel naar Chromium 1243 kwamen van twee teksten met 1,1px en 0,0px marge op hun regel. Gevolg voor de toekomst: een `toBe` op een hoogte is een momentopname, en wie hem zet weet dat hij bij elke browserwissel opnieuw gemeten moet worden; een `scrollHeight <= clientHeight` is een eis en verschuift niet.
+- **Een ontwerpgrens verschuift niet, de layout gaat omlaag.** De 673px van de te-ruim-sheet is de maximale sheethoogte op 390x844; hem verhogen is de eis weghalen in plaats van hem halen.
+- **Een dubbeling binnen een sheet weghalen mag alleen als elk bedrag en elke zin elders in DIE sheet blijft staan.** Per dubbeling is dat benoemd en gemeten in drie standen; de spec pint elke overgebleven plek apart, zodat elke sabotage erop rood is. Valkuil: een assertie die de plekken met OR leest, blijft groen als er een wegvalt.
+- **Niets inkorten (v318).** De hoogte gaat omlaag doordat wat twee keer stond nu een keer staat. Verworpen met de meting erbij: de uitlegregel (60px, maar hij is de reden waarom het splitblok bestaat) en de drie maanden bewijs (28px, het bewijs van v398).
+- **De reden van een lange sheet hoort in de voet (v361), en dus nergens anders.** Het splitblok had hem een tweede keer; de voet leest dezelfde `teRuimDelen()`-aanroep, dus het was letterlijk dezelfde string.

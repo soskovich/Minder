@@ -11479,13 +11479,11 @@ function renderTeRuim(){
         const chip2=b=>`<span class="chip${S.bestem2===b.id?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-splitbestem="${esc(b.id)}" onclick="window._tr.bestem2='${esc(b.id)}';renderTeRuim()">${esc(b.soort==='nieuw'?`+ nieuw potje: ${b.naam}`:b.naam)}</span>`;
         const veld=(k,v)=>`<input data-splitbedrag="${k}" type="text" inputmode="decimal" value="${numUit(v)}" style="width:72px;padding:4px 6px" oninput="window._tr.split${k}=this.value.trim()===''?0:Math.round(numIn(this.value));teRuimHerteken('[data-splitbedrag=&quot;${k}&quot;]')">`;
         bestem+=`<div data-teruimsplit style="margin-top:8px;padding:7px 10px;border-radius:10px;border:1px solid var(--line)" onclick="event.stopPropagation()">
-          <div class="small" data-splitvoorstel style="font-weight:700">${euro0(d.boven)} naar ${esc(d.naam)} · ${euro0(N.vrij-d.boven)} naar ${T.d2?esc(T.d2.naam):'…'}</div>
           <div class="small muted" style="margin:2px 0 6px;line-height:1.4">${esc(d.naam)} eindigt naar verwachting ${euro0(d.boven)} boven; meer erbij maakt dat potje te ruim. Kies zelf waar de rest heen gaat.</div>
           <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><span class="small">€</span>${veld(1,T.e1)}<span class="small">naar ${esc(d.naam)}</span></div>
           <div class="row" style="gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px"><span class="small">€</span>${veld(2,T.e2)}<span class="small">naar</span></div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${D2.map(chip2).join('')}${ander2.length?`<span class="chip${anderGek2?' on':''}" style="padding:4px 9px;font-size:var(--fs-xs)" data-splitander onclick="window._tr.ander2=!window._tr.ander2;renderTeRuim()">${anderGek2?esc(T.d2.naam):'Ander potje'} ›</span>`:''}</div>
-          ${S.ander2?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ander2.map(chip2).join('')}</div>`:''}
-          ${T.reden?`<div class="small" data-splitreden style="color:var(--amber);margin-top:5px">${esc(T.reden)}</div>`:''}</div>`; }
+          ${S.ander2?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${ander2.map(chip2).join('')}</div>`:''}</div>`; }
       if(!T.reden){ const G=teRuimGevolg(V, x, N, T.delen), bo=v=>v>0?`${euro0(v)} boven`:v<0?`${euro0(-v)} onder`:'op budget', verlaag=!!T.verlaag;
       gevolg=`<div data-teruimgevolg="${esc(x.k)}" class="small" style="margin-top:8px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
         <div><b>Gevolg</b></div>
