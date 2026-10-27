@@ -8562,13 +8562,17 @@ de samenvatting weg. Wil je de uitvoer beperken, gebruik dan een reporter of sch
 bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
-**`@playwright/test` hoort bij de browser in `/opt/pw-browsers`** (`v445`, bijgewerkt bij `v477`): de VM draagt sinds `v477`
-Chromium-build **1243**, en daar hoort Playwright **1.63.0** bij (`browsers.json` van de voorgeinstalleerde playwright-core zegt
-revision 1243). De pin ging daarom van 1.56.1 naar 1.63.0: build 1194 staat er niet meer, en 1.56.1 zocht hem (`Executable doesn't
-exist at .../chromium_headless_shell-1194`). Dat is dezelfde regel en geen uitzondering erop: de versie volgt de browser, want
-een mismatch gaf bij `v439` de Chromium-deadlock (een hang in `page.evaluate`, 1,5 tot 3 procent op een zware test). Wie Playwright
-ophoogt, hoogt de browser mee op of laat het staan; hoogt de VM de browser op, dan volgt Playwright. `node_modules` was bij `v477`
-leeg (een `npm install` zet hem terug).
+**`@playwright/test` hoort bij de browser in `/opt/pw-browsers`** (`v445`, bijgewerkt bij `v477` en `v478`): de VM draagt sinds
+`v477` Chromium-build **1243** (Chrome 153.0.8010.12, was build 1194 / Chrome 141), en daar hoort Playwright **1.63.0** bij
+(`browsers.json` van de voorgeinstalleerde playwright-core zegt revision 1243). De pin ging daarom van **1.56.1 naar 1.63.0**:
+build 1194 staat er niet meer, en 1.56.1 zocht hem (`Executable doesn't exist at .../chromium_headless_shell-1194`). Dat is
+dezelfde regel en geen uitzondering erop: de versie volgt de browser, want een mismatch gaf bij `v439` de Chromium-deadlock (een
+hang in `page.evaluate`, 1,5 tot 3 procent op een zware test). Wie Playwright ophoogt, hoogt de browser mee op of laat het staan;
+hoogt de VM de browser op, dan volgt Playwright. `node_modules` was bij `v477` leeg (een `npm install` zet hem terug).
+WAT DIE ROL KOSTTE, GEMETEN bij `v478`: vijf pixelasserties in drie specs, allemaal dezelfde kant op (+16 tot +24px). Vier ervan
+zijn momentopnamen van een meting en zijn op de nieuwe meting gezet (`grip-vanaf-norm` p360/p390, `logboek-maandkop` p360/p390);
+de vijfde is een fit-eis en die blijft staan, met een lagere sheet als uitkomst. Zie de staande regel van `v478`: een pin op een
+tekst die op een haarbreedte van zijn afbreekpunt staat, meet de tekstmetriek van de browser en niet de layout van de app.
 
 **NA EEN AANPASSING VAN EEN TEST DRAAIT DE VOLLEDIGE SUITE OPNIEUW** (`v477`, gevraagd door de gebruiker): vier shards na elkaar,
 niet alleen de shard waarin de geraakte spec valt, en het rapport noemt de VIER getallen van die laatste run. Een spec die je

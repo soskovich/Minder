@@ -337,7 +337,12 @@ test('d1 kop, rij en trend lezen dezelfde bron', async ({page})=>{
 /* v331: het logboek staat op een eigen scherm, zonder vraagkaart (die staat op Grip) en met het antwoord
    in de regel in plaats van een gedempte kaart. GEMETEN: 435px op 360 en 419px op 390, voor en na het
    eerste antwoord even hoog, want het antwoord past in de handelingsregel die er al stond. */
-const PX={360:{een:435, twee:435}, 390:{een:419, twee:419}};
+/* v478: GEMETEN 453px op 360 en 435px op 390 (Chromium 1194 -> 1243). Was 435/419, de metingen op build 1194.
+   GEEN APP-WIJZIGING, dezelfde oorzaak als in grip-vanaf-norm: op 360 breekt `.vl-kopzin` ("3 van de 5 potjes met
+   een signaal eindigden erboven.") een regel verder (294,0px beschikbaar, 308,0px nodig, +18px) en op 390 `.vl-note`
+   ("Na 1 maand. Vanaf december staat hier ook wat bij jou werkt.", 304,0px beschikbaar, 309,7px nodig, +16px). Op
+   1194 pasten ze allebei. De marge was nul (toBe), dus de pin is de nieuwe meting. */
+const PX={360:{een:453, twee:453}, 390:{een:435, twee:435}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de hoogte van het logboek in stand 1 en 2`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});

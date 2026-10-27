@@ -702,8 +702,14 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
 /* v340: GEMETEN 514px op 360 (was 499): de rij van het record met de open vraag zegt nu "vraag staat
    bovenaan" in plaats van "vraag staat op Grip", en breekt op 360 een regel verder af. Op 390 past hij
    nog en blijft het 483. */
-const PX={360:{log:514, tel:75, metUit:49},   // v445: GEMETEN op 24 okt 2026 (vaste datum): "Vanaf december staat hier ook wat bij jou werkt." breekt op 360px over drie regels
-          390:{log:483, tel:75, metUit:49}};
+/* v478: GEMETEN 532px op 360 en 499px op 390 (Chromium 1194 -> 1243). Was 514/483; dat waren de metingen op
+   build 1194, die er niet meer is. GEEN APP-WIJZIGING: twee teksten in het logboek staan op een haarbreedte van
+   hun afbreekpunt en Chromium 1243 zet ze een regel verder. GEMETEN op deze stand: op 360 heeft `.vl-kopzin`
+   294,0px en vraagt 295,1px (1,1px te veel, +18px = een regel van 18,125px); op 390 heeft `.vl-note` 304,0px en
+   vraagt precies 304,0px (een gelijkspel, +16px = een regel van 15,95px). Op 1194 pasten ze allebei. De marge was
+   nul (toBe), dus de pin is de nieuwe meting; `tel` en `metUit` bewogen niet. */
+const PX={360:{log:532, tel:75, metUit:49},   // v445: op 1194 brak "Vanaf december staat hier ook wat bij jou werkt." op 360px over drie regels; op 1243 zijn dat twee regels en komt het verschil tussen 360 en 390 van `.vl-kopzin`
+          390:{log:499, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van het logboek en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
