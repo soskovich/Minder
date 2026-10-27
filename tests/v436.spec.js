@@ -192,7 +192,7 @@ test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
     await page.locator('#salVoorstelKaart').click();
     await expect(page.locator('[data-salvrek]').first()).toBeVisible();
   });
-  test('4b. na Akkoord een pop-up (niet op Zien) met alle rekeningen: "op EUR 0 rond <datum> · nodig EUR X" of "past", en waar het vandaan kan komen', async ({ page }) => {
+  test('4b. na Akkoord een pop-up (niet op Zien) met alle rekeningen: v481 "tekort EUR X · leeg vanaf <datum>" of "EUR X over", en waar het vandaan kan komen', async ({ page }) => {
     await boot(page, { set: { manualBal: { [LEEF]: 1, [MAIN]: 5000 } } });
     await page.evaluate(() => { const P = salPeriode(); SET.salVerdeling = { op: P.cur.start, ym: P.cur.start.slice(0, 7), salYM: P.cur.start.slice(0, 7), rek: { [Object.keys(SET.acctName).find(a => SET.acctName[a] === 'Salarisrekening')]: 1200, [Object.keys(SET.acctName).find(a => SET.acctName[a] === 'Leefgeld')]: 850 }, opzij: 3166, salaris: 5216, start: P.cur.start, eind: P.cur.eind }; save(); go('maand'); renderMaand(); });
     /* v479: niet meer op Zien, wel in de pop-up */
@@ -200,8 +200,8 @@ test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
     await page.evaluate(() => { try { closeSheet(); } catch (_) {} openKrapPopup(); });
     const C = page.locator('#salTekort'); await expect(C).toHaveCount(1);
     await expect(C).toContainText('Leefgeld wordt krap');
-    await expect(C.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText('nodig €');
-    await expect(C.locator(`[data-saltekortrij="${MAIN}"]`)).toContainText('past');
+    await expect(C.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText('tekort €');   // v481: tekort i.p.v. "nodig"
+    await expect(C.locator(`[data-saltekortrij="${MAIN}"]`)).toContainText('over');       // v481: een rekening die past toont wat overblijft
     await expect(C).toContainText('Minder verplaatst niets');
     await page.evaluate(() => closeSheet());
     await expect(page.locator('#salVoorstelKaart')).toHaveCount(0);

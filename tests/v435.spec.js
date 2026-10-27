@@ -190,8 +190,9 @@ test.describe('v435 · 4/5/6. de momenten', () => {
     const w = page.locator(`#salTekort[data-saltekort*="${LEEF}"]`);
     await expect(w).toHaveCount(1);
     const rij = w.locator(`[data-saltekortrij="${LEEF}"]`);
-    await expect(rij).toContainText(/Leefgeld · op €0 (rond \d+ okt|nu)/);
-    await expect(rij).toContainText(/nodig €\d+/);
+    /* v481: de regel toont het tekort (laagste punt) en de leeg-datum (eerste dag onder nul) apart */
+    await expect(rij).toContainText(/Leefgeld · tekort €\d+/);
+    await expect(rij).toContainText(/leeg vanaf \d+ okt/);
     await expect(rij).toContainText(/kan uit .*je spaargeld · Minder verplaatst niets/);
     await page.evaluate(() => closeSheet());
     /* de bewaar-regel, nu voor de bekeken-reset: hetzelfde tekort herschrijft niet, +EUR 100 wel, en dat wist bekeken */

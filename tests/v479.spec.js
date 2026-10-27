@@ -57,9 +57,9 @@ test.describe('v479 · krappe rekeningen: melding + pop-up', () => {
     /* app-opening 2: hij komt terug */
     await page.evaluate(() => salKrapPopupMisschien());
     expect(await popupOpen(page)).toBe(true);
-    /* een tik op een rekening opent de bestaande uitleg (salHoeHtml) en markeert bekeken */
+    /* v481: een tik op een rekening opent de sheet "tot je salaris" (gemigreerd van salHoeHtml) en markeert bekeken */
     await page.evaluate(acc => openKrapRek(acc), LEEF);
-    expect(await page.evaluate(acc => !!document.querySelector(`#sheet [data-salvhoe="${acc}"]`), LEEF)).toBe(true);
+    expect(await page.evaluate(acc => !!document.querySelector(`#sheet [data-totsalaris="${acc}"]`), LEEF)).toBe(true);
     await page.evaluate(() => closeSheet());
     /* app-opening 3: hij komt NIET meer terug */
     await page.evaluate(() => salKrapPopupMisschien());
