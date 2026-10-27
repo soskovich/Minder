@@ -130,6 +130,26 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v479: KRAPPE REKENINGEN ZIJN EEN MELDING EN EEN POP-UP, GEEN KAART OP ZIEN, EN DE SPAARGELDKEUZE TELT**
+  (`v479`, gevraagd door de gebruiker; alleen PUNT 1 en PUNT 4 van de ronde, PUNT 2/3 (de "Waarom krap"-sheet en het bevestigen
+  van vaste lasten) zijn naar v480, PUNT 5 (huur) en PUNT 6 (opzij) als rapport zonder code). (1) `salTekortHtml()` STAAT NIET MEER
+  OP ZIEN (`gripZienHtml` draagt hem niet meer) en is `salKrapKaart()` geworden, de inhoud van een pop-up. `salTekortStand()` is nu
+  de LIVE stand (`= salTekortData()`): de één-dag-regel (`r.op===vandaag`) is weg, dus de melding blijft tot alle rekeningen passen of
+  de periode eindigt (`salTekortData` is al zo begrensd). `salTekortBewaar()` is ongewijzigd en blijft de schrijver: een keer per
+  rekening per periode, opnieuw bij `SAL_TEKORT_OPNIEUW` (100) erbij, en zo'n herschrijving wist `bekeken`. DE BEL draagt EEN melding
+  voor alle krappe rekeningen samen (`scoreNotifs` push `key:'rekgeld'`, `h:'direct'`, vroeg in de lijst zodat hij in de top 5 valt,
+  groep "Geld op je rekeningen" in `openNotifs` via `_rekKop`); de tik opent dezelfde pop-up. DE POP-UP (`openKrapPopup()`,
+  `salKrapPopupMisschien()`) verschijnt bij elke app-opening (boot en `go('maand')`, na de afsluit-pop-up, nooit over een andere sheet
+  heen: `#sheetBg` niet 'show') zolang er een krappe rekening is die je nog niet aantikte (`salKrapOnbekeken()`). Sluiten (`data-krapsluit`,
+  `closeSheet()`) markeert niets, dus hij komt de volgende opening terug; een tik op een rekening (`openKrapRek()`) markeert alle krappe
+  rekeningen `bekeken=vandaag` (`salKrapBekeken()`, in `SET.salTekort[periode][acc].bekeken`) en opent TOT v480 de bestaande uitleg
+  (`salHoeHtml` via `openSalVerdeling('salverdeling')` met `window._salv.hoe[acc]=true`); een nieuwe melding (+EUR 100) wist `bekeken`,
+  dus hij komt terug. (4) PUNT 4: `SET.salGeenSpaar[acc]` ("Niets meer uit je spaargeld") staat als `geenSpaar` op elk item van
+  `salTekortData()`; de pop-up stelt dan geen spaargeld voor: met een andere rekening boven zijn buffer "kan uit <rekening>" zonder
+  "of je spaargeld", anders "verlaag je uitgaven of pas je verdeling aan ›" (`data-krapverdeling`, opent de verdeling). Minder
+  verplaatst niets en kiest niets voor. Spec `v479.spec.js` (4 tests a/b/c/h, 4 van 4 sabotages rood; de c-sabotage "tel Sluiten als
+  bekeken" bleef eerst groen omdat de test `closeSheet()` rechtstreeks riep in plaats van de knop te klikken, meetles c);
+  `v435.spec.js` 5 en `v436.spec.js` 4b gemigreerd (de kaart leest niet meer op Zien maar in de bel en de pop-up, scope `#gripInhoud`).
 - **v478: HET SPLITBLOK VAN DE TE-RUIM-SHEET DRAAGT ZIJN REDEN EN ZIJN VOORSTEL NIET MEER ZELF, EN EEN PIN OP EEN
   TEKST VLAK VOOR ZIJN AFBREEKPUNT MEET DE BROWSER** (`v478`, gevraagd door de gebruiker). (1) DE AANLEIDING IS DE
   HARNESS EN NIET DE APP: de VM wisselde bij `v477` van Chromium-build 1194 naar 1243, en vijf pixelasserties in drie

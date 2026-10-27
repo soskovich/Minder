@@ -173,22 +173,36 @@ test.describe('v435 · 4/5/6. de momenten', () => {
     await page.evaluate(() => { go('maand'); renderMaand(); });
     expect(await page.locator(`[data-m1rek="${LEEF}"] [data-m1gevolg]`).innerText()).toMatch(/laagste saldo wordt dan -€[\d.]+ op .* · boek €\d+ over/);
   });
-  test('5. tussendoor: een signaal als een rekening voor de volgende storting op nul komt, een keer per periode, opnieuw bij meer dan EUR 100 erbij', async ({ page }) => {
-    /* v436: alleen in een periode die begon met een Akkoord (hier de periode van september), en dan EEN kaart met per rekening
-       een regel. Zonder Akkoord geen waarschuwing (v436.spec.js 4a). */
+  test('5. tussendoor: een rekening die voor de volgende storting op nul komt is een melding + pop-up, niet op Zien; de bewaar-regel (+EUR 100) herschrijft de entry en wist bekeken', async ({ page }) => {
+    /* v436: alleen in een periode die begon met een Akkoord (hier de periode van september). v479: de kaart staat niet meer op
+       Zien maar in de bel (groep "Geld op je rekeningen") en in een pop-up; de één-dag-regel is weg (salTekortStand is live). */
     await boot(page, { set: { salVerdeling: SV({ salYM: '2026-09', start: '2026-09-24', ym: '2026-09' }) } });
     await page.evaluate(() => { go('maand'); renderMaand(); });
+    /* niet meer op Zien */
+    expect(await page.evaluate(() => document.querySelectorAll('#gripInhoud [data-saltekort]').length)).toBe(0);
+    /* wel een melding in de bel */
+    const bel = await page.evaluate(() => scoreNotifs().find(n => n.key === 'rekgeld') || null);
+    expect(bel).toBeTruthy();
+    expect(bel.l1).toMatch(/wordt krap|rekeningen worden krap/);
+    expect(bel.l2).toMatch(/Leefgeld nodig €\d+/);
+    /* en in de pop-up, met de bron per regel (zonder spaargeldkeuze: of je spaargeld) */
+    await page.evaluate(() => { try { closeSheet(); } catch (_) {} openKrapPopup(); });
     const w = page.locator(`#salTekort[data-saltekort*="${LEEF}"]`);
-    await expect(w.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText(/Leefgeld · op €0 (rond \d+ okt|nu)/);
-    await expect(w.locator(`[data-saltekortrij="${LEEF}"]`)).toContainText(/nodig €\d+/);
-    await expect(w).toContainText(/kan uit: .*spaargeld · Minder verplaatst niets/);
-    /* een dag later met hetzelfde tekort: geen signaal; met meer dan EUR 100 erbij: weer */
-    const t = await page.evaluate(acc => salTekortData().find(x => x.acc === acc).tekort, LEEF);
-    await page.evaluate(([acc, t]) => { SET.salTekort['2026-09-24'][acc] = { op: '2026-10-15', tekort: t - 50 }; save(); renderMaand(); }, [LEEF, t]);
-    await expect(w).toHaveCount(0);
-    await page.evaluate(([acc, t]) => { SET.salTekort['2026-09-24'][acc] = { op: '2026-10-15', tekort: t - 150 }; save(); renderMaand(); }, [LEEF, t]);
     await expect(w).toHaveCount(1);
-    expect(await page.evaluate(acc => SET.salTekort['2026-09-24'][acc].op, LEEF)).toBe('2026-10-16');
+    const rij = w.locator(`[data-saltekortrij="${LEEF}"]`);
+    await expect(rij).toContainText(/Leefgeld · op €0 (rond \d+ okt|nu)/);
+    await expect(rij).toContainText(/nodig €\d+/);
+    await expect(rij).toContainText(/kan uit .*je spaargeld · Minder verplaatst niets/);
+    await page.evaluate(() => closeSheet());
+    /* de bewaar-regel, nu voor de bekeken-reset: hetzelfde tekort herschrijft niet, +EUR 100 wel, en dat wist bekeken */
+    const t = await page.evaluate(acc => salTekortData().find(x => x.acc === acc).tekort, LEEF);
+    const today = await page.evaluate(() => vandaagYMD());
+    await page.evaluate(([acc, t]) => { SET.salTekort['2026-09-24'][acc] = { op: '2026-10-15', tekort: t - 50, bekeken: '2026-10-15' }; save(); salTekortBewaar(); }, [LEEF, t]);
+    expect(await page.evaluate(acc => SET.salTekort['2026-09-24'][acc].op, LEEF)).toBe('2026-10-15');
+    await page.evaluate(([acc, t]) => { SET.salTekort['2026-09-24'][acc] = { op: '2026-10-15', tekort: t - 150, bekeken: '2026-10-15' }; save(); salTekortBewaar(); }, [LEEF, t]);
+    const r2 = await page.evaluate(acc => SET.salTekort['2026-09-24'][acc], LEEF);
+    expect(r2.op).toBe(today);
+    expect(r2.bekeken).toBeUndefined();
   });
   test('6. moment 2: de laatste dag van de periode, per rekening het oordeel en een voorstel voor de volgende, geschaald; som + opzij = salaris', async ({ page }) => {
     await boot(page, { dag: '2026-11-22', set: { salVerdeling: SV(), manualBal: { [MAIN]: 900, [LEEF]: 40 } } });

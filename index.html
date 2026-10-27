@@ -5531,6 +5531,12 @@ function scoreNotifs(opts){
   const now=new Date(); const today=vandaagYMD();
   const isNow=m===(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
   const push=o=>{ if(o&&o.l1) out.push(o); };
+  /* v479: krappe rekeningen - de bel-groep "Geld op je rekeningen". Eén melding voor alle krappe rekeningen samen; de tik
+     opent dezelfde pop-up als bij een app-opening. Blijft tot alle rekeningen passen of de periode eindigt (salTekortStand). */
+  try{ const T=salTekortStand(); if(T.length){ const nabij=x=>x.datum && (new Date(x.datum+'T12:00')-new Date(today+'T12:00'))/864e5<=2;
+    const kop=T.length===1?`${T[0].naam} wordt krap`:`${T.length} rekeningen worden krap`;
+    const det=T.map(x=>`${x.naam} nodig ${euro0(x.tekort)} ${nabij(x)?'nu':'rond '+dagKort(x.datum)}`).join(' · ');
+    push({key:'rekgeld', h:'direct', score:88, t:'warn', ic:ICON('bank'), rekgeld:true, l1:kop, l2:det, act:'openKrapPopup()'}); } }catch(_){}
   /* v460 (B3): een keuze die wachtte op een nagerekend getal staat weer open: een melding in de bel, groep Grip */
   try{ const KT=(SET.controles||{}).keuzeTerug; if(KT && Date.now()-KT.op<7*864e5) push({key:'grip-keuzeterug-'+KT.getal, h:'direct', score:66, t:'info', ic:ICON('check'),
     l1:'Een keuze staat weer open', l2:`'${CONTROLE_GETAL_NAAM[KT.getal]||KT.getal}' is nagerekend · Kiezen`, act:"go('maand');gripKiesTab('kiezen')"}); }catch(_){}
@@ -5872,9 +5878,9 @@ function openNotifs(){
   const perm=(typeof Notification!=='undefined')?Notification.permission:'denied';
   const enableRow = perm==='default' ? `<div class="small" style="margin:0 0 12px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="enableNotifs()">Meldingen op dit toestel aanzetten ›</span></div>` : '';
   const CRITN=new Set(['lowbal','accshort']);
-  let _cijKop=false;   // v462 (B6): de meldingen over je cijfers staan onder een eigen kop
-  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g); const kopC=(n.cijfers && !_cijKop)?(_cijKop=true, `<div class="hlabel" data-notifgroep="cijfers" style="margin:10px 0 6px">Cijfers</div>`):'';
-    return kopC+`<div class="coach ${n.t}" data-notif="${esc(n.key)}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
+  let _cijKop=false, _rekKop=false;   // v462 (B6): cijfers onder een eigen kop; v479: krappe rekeningen ook
+  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g); const kopR=(n.rekgeld && !_rekKop)?(_rekKop=true, `<div class="hlabel" data-notifgroep="rekgeld" style="margin:10px 0 6px">Geld op je rekeningen</div>`):''; const kopC=(n.cijfers && !_cijKop)?(_cijKop=true, `<div class="hlabel" data-notifgroep="cijfers" style="margin:10px 0 6px">Cijfers</div>`):'';
+    return kopR+kopC+`<div class="coach ${n.t}" data-notif="${esc(n.key)}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
       + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px;flex-wrap:wrap">${g==='loandue'?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRepaidFromNotif('${n.key.replace(/^loandue-/,'')}')">Terugbetaald</span>`:''}<span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
   }).join('')
     /* v162: de lijst is vaker leeg, en dat is goed. Eén rustige regel, geen uitleg en geen
@@ -12711,26 +12717,46 @@ function salTekortData(){ const SP=salPeriode(); if(!SP || SP.stil || SP.laat) r
     const tekort=Math.ceil(-pr.laagst);
     /* waar het vandaan kan komen: een andere rekening met meer dan zijn eigen buffer over aan het eind van de periode, anders je spaargeld */
     let bron=null; for(const o of P.rek){ if(o.acc===r.acc) continue; const so=accBalance(o.acc); if(so==null) continue; const po=salProjectie(o, so, eind), buf=(SV.buffer&&SV.buffer[o.acc]!=null)?+SV.buffer[o.acc]:o.buffer, over=Math.min(po.laagst, po.eind)-buf; if(over>=tekort && (!bron || over>bron.over)) bron={acc:o.acc, naam:o.naam, over}; }
-    out.push({acc:r.acc, naam:r.naam, tekort, datum:pr.nul||pr.dag, laagst:pr.laagst, bron, start:SP.cur.start}); }
+    out.push({acc:r.acc, naam:r.naam, tekort, datum:pr.nul||pr.dag, laagst:pr.laagst, bron, geenSpaar:!!(SET.salGeenSpaar||{})[r.acc], start:SP.cur.start}); }
   return out; }
 /* de schrijver (bij het tekenen van Grip): een keer per rekening per periode, opnieuw bij meer dan EUR 100 erbij */
 function salTekortBewaar(){ const T=salTekortData(); if(!T.length) return false; const A=SET.salTekort=SET.salTekort||{}; let w=false;
   for(const x of T){ const P=A[x.start]=A[x.start]||{}, r=P[x.acc]; if(!r || x.tekort>r.tekort+SAL_TEKORT_OPNIEUW){ P[x.acc]={op:vandaagYMD(), tekort:x.tekort, datum:x.datum, eerder:r?r.tekort:null}; w=true; } }
   if(w) save(); return w; }
-/* wat Zien toont: alleen de waarschuwingen die vandaag zijn gegeven */
-function salTekortStand(){ const vandaag=vandaagYMD(), A=SET.salTekort||{}; return salTekortData().filter(x=>{ const r=(A[x.start]||{})[x.acc]; return r && r.op===vandaag; }); }
-/* v436: EEN KAART, alle rekeningen van je verdeling samen, met per rekening een regel: "<rekening> · op EUR 0 rond <datum> · nodig
-   EUR X" (binnen 2 dagen: "nu"), of "past". Daaronder waar het vandaan kan komen. Minder verplaatst niets. */
-function salTekortHtml(){ const T=salTekortStand(); if(!T.length) return '';
-  const SP=salPeriode(), P=rekVoorstel(), SV=SET.salVerdeling||{}, vandaag=vandaagYMD(), eind=SP?SP.cur.eind:null;
+/* v479: salTekortStand is de LIVE stand (geen één-dag-regel meer): hij blijft tot alle rekeningen passen of de periode
+   eindigt, en salTekortData is al zo begrensd. Zien toont hem niet meer; hij staat in de bel (groep "Geld op je
+   rekeningen") en in een pop-up die bij elke app-opening verschijnt zolang de melding open is, tot je een rekening aantikt. */
+function salTekortStand(){ return salTekortData(); }
+/* v479: DE KAART IS EEN POP-UP, geen kaart op Zien. Dezelfde regels (id salTekort, data-saltekort, data-saltekortrij):
+   per rekening "<rekening> · op EUR 0 rond <datum> · nodig EUR X" (binnen 2 dagen: "nu"), of "past". Per rekening staat
+   eronder waar het vandaan kan komen; Minder verplaatst niets. Een tik op een rekening opent tot v480 de bestaande
+   uitleg (salHoeHtml via openSalVerdeling). PUNT 4: is "Niets meer uit je spaargeld" gezet (SET.salGeenSpaar[acc]), dan
+   stelt de pop-up geen spaargeld voor - wel een andere rekening boven zijn buffer als die er is, anders verlaag je
+   uitgaven of pas je verdeling aan. */
+function salKrapKaart(){ const T=salTekortStand(); if(!T.length) return '';
+  const P=rekVoorstel(), SV=SET.salVerdeling||{}, vandaag=vandaagYMD();
   const rek=(P&&P.ok?P.rek:[]).filter(r=>!SV.rek || r.acc in SV.rek);
-  const rij=r=>{ const x=T.find(y=>y.acc===r.acc); if(!x) return `<div class="row" data-saltekortrij="${esc(r.acc)}" data-past style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1">${esc(r.naam)}</span><span class="small" style="color:var(--green);font-weight:700">past</span></div>`;
-    const nu=x.datum && (new Date(x.datum+'T12:00')-new Date(vandaag+'T12:00'))/864e5<=2;
-    return `<div class="row" data-saltekortrij="${esc(r.acc)}" data-nodig="${x.tekort}" style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0">${esc(r.naam)} · op €0 ${nu?'<b>nu</b>':`rond ${esc(dagKort(x.datum))}`}</span><span class="small" style="font-weight:700;white-space:nowrap">nodig ${euro0(x.tekort)}</span></div>`; };
-  const bronnen=[...new Set(T.map(x=>x.bron?`${x.bron.naam} (${euro0(Math.round(x.bron.over))} boven buffer)`:null).filter(Boolean))];
   const kop=T.length===1?`${T[0].naam} wordt krap`:`${T.length} rekeningen worden krap`;
+  const rij=r=>{ const x=T.find(y=>y.acc===r.acc);
+    if(!x) return `<div class="row" data-saltekortrij="${esc(r.acc)}" data-past style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1">${esc(r.naam)}</span><span class="small" style="color:var(--green);font-weight:700">past</span></div>`;
+    const nu=x.datum && (new Date(x.datum+'T12:00')-new Date(vandaag+'T12:00'))/864e5<=2;
+    const aq=esc(r.acc).replace(/'/g,"\\'");
+    const bronT = x.bron ? `kan uit ${esc(x.bron.naam)}${x.geenSpaar?'':' of je spaargeld'} · Minder verplaatst niets`
+      : (x.geenSpaar ? `verlaag je uitgaven of <span data-krapverdeling style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();closeSheet();openSalVerdeling('salverdeling')">pas je verdeling aan ›</span>`
+                     : `kan uit je spaargeld · Minder verplaatst niets`);
+    return `<div class="row" data-saltekortrij="${esc(r.acc)}" data-nodig="${x.tekort}" role="button" style="gap:8px;padding:5px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openKrapRek('${aq}')"><span class="small" style="flex:1;min-width:0">${esc(r.naam)} · op €0 ${nu?'<b>nu</b>':`rond ${esc(dagKort(x.datum))}`}<br><span class="muted" data-krapbron>${bronT}</span></span><span class="small" style="font-weight:700;white-space:nowrap">nodig ${euro0(x.tekort)} ›</span></div>`; };
   return `<div class="card" id="salTekort" data-saltekort="${T.map(x=>esc(x.acc)).join(',')}" style="padding:10px 14px"><div class="row" style="gap:8px;align-items:center">${maandDot('tekort')}<span style="font-weight:700;flex:1">${esc(kop)}</span></div>
-    ${rek.map(rij).join('')}${gripSub(`kan uit: ${bronnen.length?esc(bronnen.join(' of '))+' of ':''}spaargeld · Minder verplaatst niets`)}</div>`; }
+    ${rek.map(rij).join('')}</div>`; }
+function openKrapPopup(){ const html=salKrapKaart(); if(!html) return; window._setSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div>${html}<div class="small muted" style="margin:8px 0 10px">Tik een rekening voor de uitleg.</div><button class="btn sec" data-krapsluit onclick="closeSheet()">Sluiten</button>`; showSheetBg(); }
+/* een tik op een rekening markeert alle krappe rekeningen als bekeken (de pop-up komt dan niet meer vanzelf) en opent de
+   bestaande uitleg. Sluiten markeert niets, dus hij komt de volgende opening terug; een nieuwe melding (+EUR 100)
+   herschrijft de entry in salTekortBewaar en wist bekeken, dus hij komt dan opnieuw. */
+function salKrapBekeken(){ const T=salTekortStand(); if(!T.length) return; const A=SET.salTekort=SET.salTekort||{}, d=vandaagYMD(); let w=false;
+  for(const x of T){ const P=A[x.start]=A[x.start]||{}; const r=P[x.acc]=P[x.acc]||{op:d, tekort:x.tekort, datum:x.datum}; if(r.bekeken!==d){ r.bekeken=d; w=true; } } if(w) save(); }
+function salKrapOnbekeken(){ const A=SET.salTekort||{}; return salTekortStand().some(x=>!((A[x.start]||{})[x.acc]||{}).bekeken); }
+function openKrapRek(acc){ salKrapBekeken(); openSalVerdeling('salverdeling'); try{ window._salv.hoe[acc]=true; renderSalVerdeling(); }catch(_){} }
+function salKrapPopupMisschien(){ try{ if($('#sheetBg')&&$('#sheetBg').classList.contains('show')) return false; try{ salTekortBewaar(); }catch(_){} if(!salTekortStand().length || !salKrapOnbekeken()) return false; openKrapPopup(); return true; }catch(_){ return false; } }
 /* v436: ZONDER AKKOORD DE KAART "JE SALARISVERDELING": het voorstel voor de verwachte storting, per rekening en opzij, met een tik
    naar de sheet (dezelfde als in Kiezen). Hij staat er niet als de periode van dat voorstel al een geaccepteerde verdeling heeft. */
 function salVoorstelKaartHtml(){ let P=null; try{ P=rekVoorstel(); }catch(_){} if(!P || !P.ok) return '';
@@ -13217,7 +13243,7 @@ function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MA
 function gripSlimRegel(C){ const m=thisYM(), n=C.kies.length;
   return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover style="color:var(--mut)">nog ${maandDagenOver(m)} ${maandDagenOver(m)===1?'dag':'dagen'} in ${esc(ymFull(m).split(' ')[0])}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
 function gripZienHtml(C, V){
-  return gripSlimRegel(C)+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salTekortHtml()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
+  return gripSlimRegel(C)+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
 }
 /* ===== BEGRIJPEN ===== */
 /* De groepen van maandGroepen() (punt 7 van blok 20) in vier: vast, potjes, zonder potje, Plan-inleg. Potjes buiten de norm
@@ -34481,7 +34507,7 @@ function go(name){
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
     /* v176: het leesmoment gaat over de lopende maand. v233: Grip is altijd de lopende maand, dus
        de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
-    if(name==='maand'){ window._gripTab='zien'; window._gripBeg={v:'lijst'}; try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); }catch(_){} }
+    if(name==='maand'){ window._gripTab='zien'; window._gripBeg={v:'lijst'}; try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); else salKrapPopupMisschien(); }catch(_){} }
   }
   /* v331: het logboek leest de stand van het moment waarop je hem opent. */
   if(name==='logboek'){ try{ renderLogboek(); }catch(_){} }
@@ -35958,6 +35984,7 @@ load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBu
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
 try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localStorage.getItem('minder_view')!=='maand') afsluitPopupMisschien(); }catch(_){}
+try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localStorage.getItem('minder_view')!=='maand') salKrapPopupMisschien(); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
 try{ if(Object.keys(SET.psd2Accounts||{}).length) psd2Refresh(true, true); }catch(_){}   // v466: de grens per bank (6 uur, niet na een weigering vandaag) staat IN psd2Refresh(); v468: de voorcheck hier was dezelfde toets een keer te veel en is weg
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
