@@ -4184,6 +4184,11 @@ function salSplitsing(t){ const C=salSplitCfg(); if(!salSplitStorting(t,C)) retu
   if(meer<=max && !open) return uit({regel:'a', salaris:vast/100, reis:meer/100, auto:true});
   return uit({regel:'b', salaris:vast/100, eenmalig:meer/100, vraag:true, nietGesplitst:true, open, boven:meer>max}); }
 function reisDeel(t){ const S=salSplitsing(t); return S?S.reis:0; }
+/* v480 punt 1: HET SALARISDEEL VAN EEN STORTING, EEN FUNCTIE. storting − eenmalig − reiskosten (de v473-splitsing), zodat
+   rekVoorstel() en salarisData() hetzelfde salaris lezen en opzij EEN bedrag is. inkomenEenmalig() trekt alleen het eenmalige
+   deel af; zonder deze functie hield rekVoorstel() de reiskosten in het salaris en week zijn opzij (de meter, "Al gekozen") af
+   van het v473-salarisdeel. Zonder splitsing is het storting − onregelmatig, dus ongewijzigd voor een gewoon inkomen. */
+function salarisDeel(t){ if(!t || !(t.amount>0)) return 0; return Math.round((t.amount-inkomenEenmalig(t)-reisDeel(t))*100)/100; }
 /* de stortingen van je salaris in de laatste n dagen, nieuwste eerst (Home, blok 20, de instelling) */
 function salSplitStortingen(dagen){ const C=salSplitCfg(); if(!C) return []; const grens=ymdVan(new Date(Date.now()-(dagen||200)*864e5));
   return TX.filter(t=>String(t.date).slice(0,10)>=grens && salSplitStorting(t,C)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(salSplitsing); }
@@ -12401,7 +12406,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   const dagen=salDagenTussen(start, eind)+1;
   /* (1c) potjes en contant naar de lengte van de periode: per maand x (dagen in de periode / dagen in de kalendermaand van de start) */
   const dimStart=new Date(+start.slice(0,4), +start.slice(5,7), 0).getDate(), schaal=dagen/dimStart;
-  const salaris=Math.round((sl.amount-inkomenEenmalig(sl))*100)/100, salAcc=sl.acc;
+  const salaris=salarisDeel(sl), salAcc=sl.acc;   // v480 punt 1: het salarisdeel (storting − eenmalig − reiskosten), dezelfde bron als salarisData
   /* v441 (1b/1c/1e): EEN venster sinds de huidige rekening-indeling, gedeeld door het aandeel, contant en de buffer. af6 is
      daarmee gelijk aan af (blok 23 leest nog P.af6; sectie 6 werkt de tekst bij). */
   const cur=thisYM(), VEN=rekAandeelVenster(BR), af=VEN.af, af6=af;
@@ -13537,6 +13542,7 @@ function gripOordeelInline(p){ const o=gripOordeel(p.id), nvraag=window._gripNie
   const knop=(on,txt,fn)=>`<button class="btn sec" style="flex:1;padding:6px 8px${on?';outline:2px solid var(--teal)':''}" onclick="${fn}">${txt}</button>`;
   const redenen=GRIP_REDENEN.map(([k,l])=>`<span class="chip${o&&o.reden===k?' on':''}" data-patreden="${k}" style="cursor:pointer" onclick="gripOordeelZet('${esc(p.id)}',false,'${k}')">${l}</span>`).join(' ');
   return `<div data-kiesoordeel="${esc(p.id)}" style="margin:2px 0 6px 32px"><div class="small" style="font-weight:600">Klopt dit patroon?</div><div class="row" style="gap:8px;margin-top:4px">${knop(o&&o.klopt===true,'klopt',`gripOordeelZet('${esc(p.id)}',true)`)}${knop((o&&o.klopt===false)||nvraag,'niet ▾',`window._gripNiet='${esc(p.id)}';renderMaand()`)}</div>${(nvraag||(o&&o.klopt===false))?`<div data-patnietvraag style="margin-top:6px"><div class="small muted" style="margin-bottom:4px">Wat was het dan?</div>${redenen}</div>`:''}</div>`; }
+const SALV_AFWIJK=25;   // v480 punt 2: drempel waarboven "Al gekozen" meldt dat de live opzij op het salarisdeel van de afspraak afwijkt
 function gripKiezenNieuw(C){
   const m=thisYM(), n=C.kies.length;
   const nr=(i,teken,on)=>`<span style="width:22px;height:22px;border-radius:50%;background:${on?'var(--teal)':'var(--card2)'};color:${on?'var(--bg)':'var(--txt)'};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-xs);flex-shrink:0">${teken||i}</span>`;
@@ -13567,7 +13573,15 @@ function gripKiezenNieuw(C){
   const wacht=`<div class="card" id="gripWachtOorzaak"><div class="hlabel" style="margin:0 0 4px">Wacht op oorzaak</div>${WS.length?WS.map(w=>{ const X=w.X, st=X?(X.stand==='testweek'?`testweek · nog ${X.tw.nog} ${X.tw.nog===1?'dag':'dagen'}`:X.stand==='later'?`vraag in ${MNAMES[+nextYM(m).slice(5,7)-1]}`:X.stand==='vervallen'?`vraag in ${MNAMES[+nextYM(m).slice(5,7)-1]}`:X.stand==='voorstel'?'voorstel bevestigen':'1 vraag in Begrijpen'):'';
       return `<div class="row" data-wachtoorzaak="${esc(w.sym)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'?')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(w.kies.map(x=>x.naam).join(' · '))}</span>${gripSub(`${esc(w.naam)}${st?' · '+esc(st):''}`)}</span><span class="small" data-bepaaloorzaak role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(w.sym).replace(/'/g,"\\'")}')">bepaal oorzaak ›</span></div>`; }).join(''):'<div class="small muted" data-wachtleeg>Geen keuze wacht op een oorzaak.</div>'}</div>`;
   /* d. Al gekozen deze maand */
-  const gk=(C.gekozenO||[]).map(o=>{ const A=oorzaakAfspraakDezeMaand(o.id); return `<div class="row" data-kiesgekozen="${esc(o.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(o.naam)}</span>${gripSub(`● gekozen${A?' op '+esc(dagKort(A.op)):''} · ${esc(o.reden)}`)}</span></div>`; }).join('')+C.gekozen.map(g=>`<div class="row" data-kiesrij="${esc(g.p.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripKeuze('${esc(g.p.id)}')">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(g.p.naam)}</span>${gripSub(`● gekozen · ${esc(g.k.titel||'')}`)}</span>${gripPijl}</div>`).join('')
+  const gk=(C.gekozenO||[]).map(o=>{ const A=oorzaakAfspraakDezeMaand(o.id);
+    /* v480 punt 2: de salarisverdeling toont de BEVROREN afspraak uit salVerdelingZet (SET.salVerdeling: per rekening + opzij, met
+       datum), niet de live reden. Wijkt de live opzij op het salarisdeel (rekVoorstel().opzij) meer dan SALV_AFWIJK af van de
+       afspraak, dan staat eronder "Op je huidige salaris zou opzij EUR X zijn · verdeling aanpassen ›"; niets voorgekozen, niets stil. */
+    if(o.soort==='salverdeling'){ const SV=SET.salVerdeling||{}, perR=Object.entries(SV.rek||{}).map(([a,v])=>`${esc(rekNaam(a))} ${euro0(v)}`).join(', ');
+      let live=null; try{ const Pv=rekVoorstel(); if(Pv && Pv.ok) live=Math.round(Pv.opzij); }catch(_){}
+      const afw=(live!=null && SV.opzij!=null && Math.abs(live-SV.opzij)>SALV_AFWIJK);
+      return `<div class="row" data-kiesgekozen="${esc(o.id)}" data-salvgekozen data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(o.naam)}</span>${gripSub(`● gekozen${SV.op?' op '+esc(dagKort(SV.op)):''} · ${perR?perR+', ':''}opzij ${euro0(SV.opzij||0)}`)}${afw?`<div class="small" data-salvafwijk style="color:var(--mut2);margin-top:2px">Op je huidige salaris zou opzij ${euro0(live)} zijn · <span data-salvafwijklink role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="${o.act}">verdeling aanpassen ›</span></div>`:''}</span></div>`; }
+    return `<div class="row" data-kiesgekozen="${esc(o.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(o.naam)}</span>${gripSub(`● gekozen${A?' op '+esc(dagKort(A.op)):''} · ${esc(o.reden)}`)}</span></div>`; }).join('')+C.gekozen.map(g=>`<div class="row" data-kiesrij="${esc(g.p.id)}" data-kiesstand="gekozen" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripKeuze('${esc(g.p.id)}')">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(g.p.naam)}</span>${gripSub(`● gekozen · ${esc(g.k.titel||'')}`)}</span>${gripPijl}</div>`).join('')
     +C.uitg.map(x=>`<div class="row" data-uitgevoerd="${esc(x.k)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">${nr(0,'✓',true)}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)} · budget ${euro0(x.naar)}</span>${gripSub(`${euro0(x.van-x.naar)} ${x.bestem?`naar ${esc(x.bestem)}`:'minder in je maandbudget'}`)}</span></div>`).join('');
   let af=''; try{ af=gripAfsprakenHtml(); }catch(_){}
   const al=`<div class="card" id="gripAlGekozen"><div class="hlabel" style="margin:0 0 4px">Al gekozen deze maand</div>${gk||af?gk+af:'<div class="small muted">Nog niets gekozen.</div>'}
@@ -32576,7 +32590,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
   /* de bron van je laatste salarisbetaling (salarisBetalingLaatst) telt ook als hij nog maar in een maand voorkomt: een nieuwe
      werkgever is vanaf zijn eerste betaling je salaris, net als in de rest van de app */
   try{ const sl=salarisBetalingLaatst(valtOpYmPlus(cur,1)); if(sl && bronMnd[recurKey(sl)]) terugk.add(recurKey(sl)); }catch(_){}   // alleen een bron met inkomen in je gegevens
-  const bronSom=(k,ym)=>inkTx.filter(t=>recurKey(t)===k && t.date.slice(0,7)===ym).reduce((a,t)=>a+t.amount-inkomenEenmalig(t)-reisDeel(t),0);   // v438: eenmalig inkomen is geen salaris; v473: reiskosten ook niet
+  const bronSom=(k,ym)=>inkTx.filter(t=>recurKey(t)===k && t.date.slice(0,7)===ym).reduce((a,t)=>a+salarisDeel(t),0);   // v480: het salarisdeel, dezelfde bron als rekVoorstel (v438 eenmalig geen salaris, v473 reiskosten ook niet)
   const salBron={}; for(const ym of ms){ const ks=[...terugk].filter(k=>bronMnd[k].has(ym)).sort((a,b)=>bronSom(b,ym)-bronSom(a,ym)); salBron[ym]=ks[0]||null; }
   if(salBron[cur]==null) salBron[cur]=salBron[ms[ms.length-2]]||null;
   const salNaam=k=>{ const t=inkTx.find(u=>recurKey(u)===k); return t?titleCase(cleanMerch(t.name)||t.name||k):String(k); };
@@ -32629,7 +32643,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
       if(meta.type==='income'){ const v=Math.max(t.amount,0), een=inkomenEenmalig(t), rs=reisDeel(t), o=een+rs;   // v438: ook een bonus die nog op je antwoord wacht; v473: reiskosten zijn geen salaris
         /* v474: de reiskosten staan niet bij de overige inkomsten (ze zijn geen inkomen, maandInkomen() telt ze niet), alleen het eenmalige deel */
         reis+=rs;   // v474: de reiskostenvergoeding staat op je betaalrekening en is geen inkomen: een eigen term in de controle
-        if(isSal(t) && v-o>0.005){ salaris+=v-o; salTx.push(t); if(een>0) overTx.push({t, v:een, onr:true}); } else if(v-rs>0.005) overTx.push({t, v:v-rs, onr:een>0}); continue; }
+        if(isSal(t) && v-o>0.005){ salaris+=salarisDeel(t); salTx.push(t); if(een>0) overTx.push({t, v:een, onr:true}); } else if(v-rs>0.005) overTx.push({t, v:v-rs, onr:een>0}); continue; }   // v480: salarisData leest salarisDeel (de ene bron), net als rekVoorstel
       if(meta.type!=='expense') continue;
       const geld=-t.amount, vn=uitgaveNorm(t);
       if(geenNormTx(t) || !isUitgave(t, B)){ const g=!geenNormTx(t)?'persoonlijk':(t.src===c || isOpnameTx(t) || contantStorting(t))?'kas':'geennorm';
@@ -32766,6 +32780,10 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
     if(!O || !O.ok) L.push('    geen salarisperiode herkend (geen regel of geen salarisbetaling)');
     else if(!O.meetbaar || O.netto==null) L.push(`    gedaan: onbekend (geen spaarrekening herkend) · periode ${O.start}..${O.eind}`);
     else L.push(`    gedaan ${euro0(O.netto)} (${O.start}..${O.eind}) tegen doel ${O.doel==null?'nog geen doel (geen salarisverdeling gekozen)':euro0(O.doel)+(O.pct!=null?' · '+O.pct+'%':'')}`);
+    /* v480 punt 4: OPZIJ BRONNEN — de drie opzij-getallen naast elkaar: de BEVROREN afspraak (de meter op Zien), de LIVE herberekening
+       op het salarisdeel (wat "Al gekozen" tegen de afspraak legt) en de GEMETEN netto. Alleen lezen. */
+    { const SV=SET.salVerdeling||{}; let liveO=null; try{ const Pv=rekVoorstel(); if(Pv && Pv.ok) liveO=Math.round(Pv.opzij); }catch(_){}
+      L.push(`  OPZIJ BRONNEN (v480): afspraak ${SV.opzij!=null?euro0(SV.opzij)+(SV.op?' ('+SV.op+')':''):'geen'} · live op het salarisdeel ${liveO==null?'-':euro0(liveO)} · gemeten netto ${(O&&O.netto!=null)?euro0(O.netto):'onbekend'}`); }
     /* v472 (punt 3): OPZIJ HERLEIDING, dezelfde bron als de tegel (opzijHerleiding) */
     let H=null; try{ H=opzijHerleiding(O); }catch(_){}
     if(H){ L.push(`  OPZIJ HERLEIDING (v472) — beginsaldo + som = saldo nu, per spaarrekening (som ${euroC(H.som)}, tegel ${euro0(H.netto)}):`);
@@ -32844,7 +32862,7 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
     else L.push('  effect van de wijzigingen op de forecast: geen wijzigingen'); }
   /* v438: eenmalig inkomen (een bonus) telt niet als salaris (punt 1) */
   if(D && D.R){ const r=D.Rc, MN=ym=>MNAMES[+String(ym).slice(5,7)-1];
-    const fout=D.R.filter(r=>r.salTx.some(t=>inkomenEenmalig(t)>=t.amount-0.005) || Math.abs(r.salaris-r.salTx.reduce((a,t)=>a+t.amount-inkomenEenmalig(t)-reisDeel(t),0))>0.005);   // v474: ook zonder de reiskosten
+    const fout=D.R.filter(r=>r.salTx.some(t=>inkomenEenmalig(t)>=t.amount-0.005) || Math.abs(r.salaris-r.salTx.reduce((a,t)=>a+salarisDeel(t),0))>0.005);   // v474: ook zonder de reiskosten; v480: salarisDeel is de ene bron
     const een=D.R.map(r=>({ym:r.ym, v:r.overTx.filter(o=>o.onr).reduce((a,o)=>a+o.v,0)})).filter(x=>x.v>0.005);
     let bo=null; try{ bo=homeBonusVerwacht(); }catch(_){}
     L.push(`  CONTROLE eenmalig inkomen niet in salaris: ${een.length?een.map(x=>`${MN(x.ym)} ${euro0(Math.round(x.v))} in overige · eenmalig`).join(', '):'geen eenmalig inkomen binnen'}${bo?` · verwacht ${bo.naam} ${euro0(bo.bedrag)} (telt mee zodra binnen)`:''} → ${fout.length?'VERSCHILT ('+fout.map(r=>MN(r.ym)).join(', ')+')':'klopt'}`); }
