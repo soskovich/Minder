@@ -2,6 +2,7 @@
    De overzetting van SET.income gebeurt een keer bij het laden (SET.inkomen476). GECONSTRUEERD. */
 const { test, expect } = require('@playwright/test');
 const { pinDatum } = require('./vaste-dag');
+const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 async function boot(page, o) {
@@ -37,8 +38,8 @@ test.describe('de overzetting van SET.income', () => {
     await boot(page, { income: 4250 });
     expect(await stand(page)).toMatchObject({ som: 4250, overig: [4250], vast: 0 });
     await page.evaluate(() => { SET.salSplit = { vast: 4000, key: 'WERKGEVER', naam: 'Werkgever' }; save(); openSetSub('inkomen'); });
-    /* niets stil: de som telt nu op tot 8250 en dat staat er, met de vraag */
-    expect(await page.evaluate(() => inkomenHandmatig())).toBe(8250);
+    /* v477: tot het antwoord telt het vaste salaris niet twee keer; de volle som zou 8250 zijn */
+    expect(await page.evaluate(() => inkomenHandmatig())).toBe(4250);
     await expect(page.locator('[data-inkvraag="zondervast"]')).toContainText('Je overig vast van €4.250 kwam uit je oude inkomen per maand');
     await page.click('[data-inkantw="erin"]');
     expect(await stand(page)).toMatchObject({ som: 4250, overig: [250] });
@@ -89,5 +90,66 @@ test.describe('Instellingen › Inkomen', () => {
   test('h. met detectie aan blijft baseIncome() de meting en leest niemand de som', async ({ page }) => {
     await boot(page, { income: 9000, vast: 5216, auto: true });
     expect(await page.evaluate(() => ({ base: baseIncome(), som: inkomenHandmatig() }))).toEqual({ base: 5216, som: 9000 });
+  });
+});
+
+/* v477: overig vast uit de overzetting ZONDER vast salaris telt het vaste salaris niet twee keer zolang de vraag openstaat.
+   De som is dan vast + overig - min(overig, vast), dus nooit hoger dan het hoogste van de twee, en dat is precies de uitkomst
+   van "Ja, het zit erin": Ja verandert geen getal, "Nee, het komt erbij" zet de volle som aan. GECONSTRUEERD.
+   De fixture draagt BEIDE kanten (overig boven en onder het vaste salaris), want alleen met overig ONDER het vaste salaris
+   is "min(overig, vast)" te onderscheiden van "overig" (meetles a en o). */
+test.describe('v477: nog niet bevestigd', () => {
+  const zet = (page, vast) => page.evaluate((v) => { SET.salSplit = { vast: v, key: 'WERKGEVER', naam: 'Werkgever' }; save(); openSetSub('inkomen'); }, vast);
+  test('i. overig vast BOVEN het vaste salaris: de som is het overig vast, niet de dubbeltelling', async ({ page }) => {
+    await boot(page, { income: 4250 });
+    await zet(page, 4000);
+    const r = await stand(page);
+    expect(r).toMatchObject({ som: 4250, overig: [4250], vast: 4000, base: 4250, inc: 4250 });   // de volle som zou 8250 zijn
+    expect(await page.evaluate(() => inkOnbevestigd())).toMatchObject({ bedrag: 4250, vast: 4000, af: 4000 });
+    await expect(page.locator('[data-inkonbevestigd]')).toHaveAttribute('data-inkonbevestigd', '4000');
+    await expect(page.locator('[data-inkomenpermaand]')).toHaveText('€4.250');
+    await expect(page.locator('[data-inkomenopbouw]')).toContainText('- €4.000 nog niet bevestigd');
+  });
+  test('j. overig vast ONDER het vaste salaris: de som is het vaste salaris (niet hoger dan het hoogste van de twee)', async ({ page }) => {
+    await boot(page, { income: 3000 });
+    await zet(page, 4000);
+    expect(await stand(page)).toMatchObject({ som: 4000, overig: [3000], vast: 4000 });   // 3000 zou de kale aftrekking zijn, 7000 de dubbeltelling
+    expect(await page.evaluate(() => inkOnbevestigd().af)).toBe(3000);
+    await expect(page.locator('[data-inkonbevestigd]')).toContainText('nog niet bevestigd');
+  });
+  test('k. "Ja, het zit erin" verandert geen getal, "Nee, het komt erbij" zet de volle som aan', async ({ page }) => {
+    await boot(page, { income: 4250 });
+    await zet(page, 4000);
+    await expect(page.locator('[data-inkantw="erin"]')).toContainText('inkomen per maand blijft €4.250');
+    await expect(page.locator('[data-inkantw="erbij"]')).toContainText('inkomen per maand wordt €8.250');
+    await page.click('[data-inkantw="erbij"]');
+    expect(await stand(page)).toMatchObject({ som: 8250, overig: [4250], base: 8250, inc: 8250 });
+    expect(await page.evaluate(() => inkOnbevestigd())).toBeNull();
+    await expect(page.locator('[data-inkonbevestigd]')).toHaveCount(0);
+    await expect(page.locator('[data-inkomenopbouw]')).not.toContainText('nog niet bevestigd');
+  });
+  test('l. zonder vast salaris telt het hele overig vast mee en is er niets onbevestigd', async ({ page }) => {
+    await boot(page, { income: 4250 });
+    expect(await stand(page)).toMatchObject({ som: 4250, overig: [4250], vast: 0 });
+    expect(await page.evaluate(() => inkOnbevestigd())).toBeNull();
+  });
+  test('n. de vraag en de som lezen dezelfde bron: inkVraag476() drukt de voorwaarde niet opnieuw uit', async ({ page }) => {
+    await boot(page, { income: 4250 });
+    const v = await kaalUit(page, 'inkVraag476'), h = await kaalUit(page, 'inkomenHandmatig');
+    expect(v).toContain('inkOnbevestigd(');
+    expect(h).toContain('inkOnbevestigd(');
+    expect(v).not.toContain('zonderVastAntw');   // de stand staat op een plek, niet twee keer uitgedrukt
+    expect(v).not.toContain("x.bron==='overzetting'");
+  });
+  test('m. blok 20 noemt wat er niet meetelt en de CONTROLE sluit met de aftrek', async ({ page }) => {
+    await boot(page, { income: 4250 });
+    await zet(page, 4000);
+    const b = await blok20(page);
+    expect(b).toContain('nog niet bevestigd (v477): €4.000 telt niet mee zolang de vraag openstaat · overig vast €4.250 · vast salaris €4.000 · volle som zou €8.250 zijn');
+    expect(b).toContain('CONTROLE inkomen per maand = vast salaris + overig vast - nog niet bevestigd: €4.250 = €4.000 + €4.250 - €4.000 → klopt');
+    await page.click('[data-inkantw="erbij"]');
+    const b2 = await blok20(page);
+    expect(b2).not.toContain('nog niet bevestigd (v477)');
+    expect(b2).toContain('CONTROLE inkomen per maand = vast salaris + overig vast: €8.250 = €4.000 + €4.250 → klopt');
   });
 });

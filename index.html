@@ -4140,7 +4140,18 @@ function salSplitCfg(){ const c=SET.salSplit; return (c && +c.vast>0 && c.key)?c
 function inkVast(){ return +((typeof SET!=='undefined' && SET.salSplit)||{}).vast||0; }
 function overigVastLijst(){ return Array.isArray(SET.overigVast)?SET.overigVast.filter(x=>x && typeof x==='object'):[]; }
 function overigVastSom(){ return Math.round(overigVastLijst().reduce((a,x)=>a+Math.max(+x.bedrag||0,0),0)*100)/100; }
-function inkomenHandmatig(){ return Math.round((inkVast()+overigVastSom())*100)/100; }
+/* v477: zolang de vraag over een overig vast UIT DE OVERZETTING ZONDER VAST SALARIS openstaat, telt het vaste salaris niet twee keer.
+   inkOnbevestigd() is de ENE bron van die stand (de vraag leest hem ook): `af` is wat er niet meetelt, min(bedrag, vast salaris), dus de
+   som is vast + overig - af en daarmee nooit hoger dan het hoogste van de twee. Dat is precies de uitkomst van "Ja, het zit erin", dus
+   Ja verandert geen getal en "Nee, het komt erbij" zet de volle som aan. Te hoog is de gevaarlijke kant (v168): deze som voedt met
+   detectie uit baseIncome(), totals() en dus incDue en veilig te besteden. Er wordt niets stil aangepast: het bedrag van de regel blijft
+   staan, de stand zegt wat er niet meetelt en de vraag staat eronder. */
+function inkOnbevestigd(){ const R=(typeof SET!=='undefined'&&SET.inkomen476)||null; if(!R||R.zonderVastAntw) return null;
+  const vast=inkVast(); if(!(vast>0)) return null;
+  const ov=overigVastLijst().find(x=>x.bron==='overzetting' && x.zonderVast); if(!ov) return null;
+  const bedrag=Math.max(+ov.bedrag||0,0); if(!(bedrag>0)) return null;
+  return {bedrag, vast, af:Math.round(Math.min(bedrag,vast)*100)/100}; }
+function inkomenHandmatig(){ const O=inkOnbevestigd(); return Math.round((inkVast()+overigVastSom()-(O?O.af:0))*100)/100; }
 /* De overzetting (een keer, SET.inkomen476): overig vast = SET.income min vast salaris, alleen als dat boven nul is; zonder vast salaris
    is overig vast het hele SET.income. Ligt SET.income ONDER je vaste salaris, dan komt er geen overig vast en staat er een vraag in
    Instellingen (vraag: 'lager'); er wordt niets aangepast. Voor en na staan in het record, voor blok 20. */
@@ -4155,8 +4166,7 @@ function inkomenMigreer476(){ if(SET.inkomen476) return false;
 /* De vragen van de overzetting, in Instellingen › Inkomen. Een vraag verandert niets tot je antwoordt. */
 function inkVraag476(){ const R=SET.inkomen476; if(!R) return null; const vast=inkVast();
   if(R.vraag==='lager' && !R.antwoord) return {soort:'lager', income:R.voor.income, vast};
-  const ov=overigVastLijst().find(x=>x.bron==='overzetting' && x.zonderVast);
-  if(ov && vast>0 && !R.zonderVastAntw) return {soort:'zondervast', bedrag:+ov.bedrag||0, vast};
+  const O=inkOnbevestigd(); if(O) return {soort:'zondervast', bedrag:O.bedrag, vast:O.vast, af:O.af};
   return null; }
 function inkEuro(v){ return euroC(v); }
 function salSplitStorting(t, C){ C=C||salSplitCfg(); return !!(C && t && t.amount>0 && !t.pending && recurKey(t)===C.key && (CATS[catOf(t)]||{}).type==='income'); }
@@ -26515,7 +26525,12 @@ function salSplitInstelHTML(){ const C=SET.salSplit||{}, vast=+C.vast||0, hoog=s
 /* v476: Inkomen per maand in Instellingen › Inkomen, berekend en niet in te typen: vast salaris (bij Je salaris) plus overig vast.
    Een veld schrijft bij het verlaten (onchange) en bouwt de pagina niet opnieuw op (v474): alleen de som en de vraag worden bijgewerkt,
    toevoegen en weghalen bouwen alleen de lijst (#inkOverigLijst). */
-function inkSomTekst(){ return `= vast salaris ${inkEuro(inkVast())} + overig vast ${inkEuro(overigVastSom())}`; }
+function inkSomTekst(){ const O=inkOnbevestigd();
+  return `= vast salaris ${inkEuro(inkVast())} + overig vast ${inkEuro(overigVastSom())}${O?` - ${inkEuro(O.af)} nog niet bevestigd`:''}`; }
+/* De opbouw staat in een eigen blok, zodat de regel over wat nog niet meetelt met de som mee verschijnt en verdwijnt (inkSomHerteken). */
+function inkOpbouwHTML(){ const O=inkOnbevestigd();
+  return `<div id="inkOpbouw"><div class="small muted" data-inkomenopbouw>${inkSomTekst()} · vast salaris stel je in bij Je salaris</div>${
+    O?`<div class="small muted" data-inkonbevestigd="${O.af}" style="margin-top:3px">${inkEuro(O.af)} van je overig vast is nog niet bevestigd en telt nog niet mee.</div>`:''}</div>`; }
 function inkOverigRij(x){ const id=esc(x.id).replace(/'/g,"\\'");
   return `<div class="row" data-overigvast="${esc(x.id)}" style="gap:6px;align-items:center;margin-top:6px">
     <input data-overignaam type="text" value="${esc(x.naam||'')}" placeholder="omschrijving" onchange="overigVastZet('${id}','naam',this.value)" style="flex:1;min-width:0">
@@ -26524,7 +26539,7 @@ function inkOverigRij(x){ const id=esc(x.id).replace(/'/g,"\\'");
 function inkHandmatigHTML(){
   return `<div id="inkHandmatig" style="margin-top:8px"><label class="fld">Inkomen per maand</label>
     <div style="font-size:var(--fs-lg);font-weight:700" data-inkomenpermaand="${inkomenHandmatig()}">${inkEuro(inkomenHandmatig())}</div>
-    <div class="small muted" data-inkomenopbouw>${inkSomTekst()} · vast salaris stel je in bij Je salaris</div>
+    ${inkOpbouwHTML()}
     <label class="fld" style="margin-top:10px">Overig vast <span class="small muted">· ander vast inkomen per maand</span></label>
     <div id="inkOverigLijst">${overigVastLijst().map(inkOverigRij).join('')||'<div class="small muted" data-overigleeg>Geen overig vast inkomen.</div>'}</div>
     <button class="btn sec" data-overigtoevoegen style="margin-top:8px" onclick="overigVastNieuw()">${ICON('plus')} Overig vast toevoegen</button></div>`; }
@@ -26540,9 +26555,9 @@ function inkVraagHTML(plek){ plek=plek||'boven'; const id=plek==='boven'?'inkVra
     <div class="small" data-inkvraagtekst style="line-height:1.5">${tekst}</div>
     <div class="row" style="gap:8px;margin-top:8px">${Q.soort==='lager'
       ? knop('klopt','Ja, klopt','je vaste salaris blijft '+inkEuro(Q.vast))+knop('aanpassen','Aanpassen','naar het veld Vast salaris')
-      : knop('erin','Ja, het zit erin','overig vast wordt '+inkEuro(Math.max(Q.bedrag-Q.vast,0)))+knop('erbij','Nee, het komt erbij','overig vast blijft '+inkEuro(Q.bedrag))}</div></div>`; }
+      : knop('erin','Ja, het zit erin','inkomen per maand blijft '+inkEuro(inkomenHandmatig()))+knop('erbij','Nee, het komt erbij','inkomen per maand wordt '+inkEuro(Math.round((inkVast()+overigVastSom())*100)/100))}</div></div>`; }
 function inkSomHerteken(){ const w=document.querySelector('[data-inkomenpermaand]'); if(w){ w.textContent=inkEuro(inkomenHandmatig()); w.setAttribute('data-inkomenpermaand', inkomenHandmatig()); }
-  const o=document.querySelector('[data-inkomenopbouw]'); if(o) o.innerHTML=inkSomTekst()+' · vast salaris stel je in bij Je salaris';
+  const o=document.getElementById('inkOpbouw'); if(o) o.outerHTML=inkOpbouwHTML();
   for(const pl of ['boven','onder']){ const q=document.getElementById(pl==='boven'?'inkVraag476':'inkVraag476z'); if(q) q.outerHTML=inkVraagHTML(pl); } }
 function inkInstelRender(lijst){ window._setBehoud=window._setSub==='inkomen'; try{ render(); }catch(_){} window._setBehoud=false;
   if(window._setSub!=='inkomen'){ try{ renderSet(); }catch(_){} return; }
@@ -32752,7 +32767,9 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
     const nu={income:+SET.income||0, vast:inkVast(), overig:overigVastSom(), som:inkomenHandmatig()};
     L.push(r('nu', nu));
     for(const x of overigVastLijst()) L.push(`      overig vast: ${x.naam||'(zonder naam)'} ${euroC(+x.bedrag||0)}${x.bron==='overzetting'?' · uit de overzetting':''}`);
-    L.push(`  CONTROLE inkomen per maand = vast salaris + overig vast: ${euroC(nu.som)} = ${euroC(nu.vast)} + ${euroC(nu.overig)} → ${Math.abs(nu.som-nu.vast-nu.overig)<0.005?'klopt':'VERSCHILT'}`); }
+    const O=inkOnbevestigd();
+    if(O) L.push(`    nog niet bevestigd (v477): ${euroC(O.af)} telt niet mee zolang de vraag openstaat · overig vast ${euroC(O.bedrag)} · vast salaris ${euroC(O.vast)} · volle som zou ${euroC(Math.round((nu.vast+nu.overig)*100)/100)} zijn`);
+    L.push(`  CONTROLE inkomen per maand = vast salaris + overig vast${O?' - nog niet bevestigd':''}: ${euroC(nu.som)} = ${euroC(nu.vast)} + ${euroC(nu.overig)}${O?' - '+euroC(O.af):''} → ${Math.abs(nu.som-nu.vast-nu.overig+(O?O.af:0))<0.005?'klopt':'VERSCHILT'}`); }
   /* v442 sectie 2e: INHALEN — een grootboek over de salarisperiodes (vervangt de twee definities A/B van v440). Per afgesloten
      periode met een tekort: netto, tekort (eruit), afgelost (met een overschot boven het doel of een terugzetten-bestemming) en
      wat open blijft; daaronder het totaal open. "Toegewezen zonder geld" (spaarOver().zonder) staat erbij ter vergelijking, want
