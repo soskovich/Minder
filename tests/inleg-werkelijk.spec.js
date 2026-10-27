@@ -283,7 +283,7 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
      hij is geschreven. Allebei met hun eigen invoer. */
   test('de percent-tak en de auto-tak noemen hun eigen invoer', async ({ page }) => {
     await boot(page, { okt: 900, saldo: 11700, set: { savingMode: 'percent', savingPercent: 25 } });
-    expect(await blok(page)).toMatch(/percent -> SET\.savingPercent: 25%\s+van SET\.income: 4200/);
+    expect(await blok(page)).toMatch(/percent -> SET\.savingPercent: 25%\s+van inkomenHandmatig\(\): 4200/);
     await boot(page, { okt: 900, saldo: 11700, set: { savingMode: 'auto', autoIncome: true } });
     const t = await blok(page);
     expect(t).toMatch(/SET\.savingMode: auto/);
