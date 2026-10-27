@@ -61,7 +61,7 @@ test.describe('b · onbekend blijft onbekend', () => {
   test('zonder budget is er geen afstand', async ({ page }) => {
     await open(page, seed());
     const r = await page.evaluate(() => {
-      SET.budgets = {}; SET.budgetsNext = {}; SET.income = 0; SET.autoIncome = false;
+      SET.budgets = {}; SET.budgetsNext = {}; SET.income = 0; SET.overigVast = []; SET.autoIncome = false;   // v476: inkomen per maand is vast salaris + overig vast
       save();
       const m = months()[months().length - 1];
       const K = insKpis(m);

@@ -978,7 +978,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} if(a||b||c||d||e) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} let f=false; try{ f=inkomenMigreer476(); }catch(_){} if(a||b||c||d||e||f) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -2165,7 +2165,7 @@ function plannedBudgets(){ const B=Object.assign({}, SET.budgets||{}); const N=S
 function plannedTotalBudget(){ const B=plannedBudgets(); return Object.keys(B).reduce((s,k)=>s+(+B[k]||0),0); }
 // 70%-budget (o.b.v. inkomen) + geschatte vaste lasten (mediaan over je maanden) → basis voor 'nog vrij voor potjes'
 function potRoomBase(){
-  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const inc = SET.autoIncome ? baseIncome() : inkomenHandmatig();
   const budget = monthBudget(inc);
   const ms=months(); const med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   let fixed=0;
@@ -2225,7 +2225,7 @@ function suggestBudgets(){
   const msLopend=_af.length===0;
   const ms=msLopend?months():_af;
   const med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
-  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const inc = SET.autoIncome ? baseIncome() : inkomenHandmatig();
   const room = monthBudget(inc);
   const histF={}, histV={};
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig'||geenNorm(k)) continue;   // v234: geen voorstel voor onvoorzien
@@ -2558,7 +2558,7 @@ function totals(m){
   if(SET.autoIncome){
     if(income>0){ inc=income; basis='gedetecteerd'; }
     else { inc=baseIncome(); basis = inc>0?'basisnorm':'onbekend'; }
-  } else { inc=SET.income||0; basis='handmatig'; }
+  } else { inc=inkomenHandmatig(); basis='handmatig'; }
   /* v321: DE LOPENDE MAAND MAG DE NORM NIET OMLAAG HALEN, want een halve maand is geen maand
      (v194). De tak hierboven zet `gedetecteerd` zodra er EEN euro inkomen binnen is, ook op de 2e
      van de maand, en dan is het maandinkomen van de app wat er tot nu toe langskwam. GEMETEN op een
@@ -2626,7 +2626,7 @@ function inkomenVenster(){
    plaats van de som ernaast opnieuw uit te drukken. De acht gewone lezers zien geen verschil. */
 function baseIncome(metDetail){
   const uit=(waarde,tak,venster,perMaand,gekozen)=>metDetail?{waarde,tak,venster,perMaand,gekozen}:waarde;
-  if(!SET.autoIncome) return uit(+SET.income||0,'SET.income, een instelling (autoIncome staat uit)',[],[],null);
+  if(!SET.autoIncome) return uit(inkomenHandmatig(),'inkomenHandmatig(): vast salaris + overig vast, een instelling (autoIncome staat uit, v476)',[],[],null);
   const recent=inkomenVenster();
   /* v259 liet deze lus met opzet staan naast maandInkomen(): hij is gemeten robuust en bleef op
      verzoek ongemoeid. Hij is hier alleen gesplitst zodat de maand bij zijn bedrag blijft; de
@@ -4133,6 +4133,32 @@ function salarisBetalingLaatst(ym){
    ("nog niet gesplitst"); (c) lager dan het vaste salaris: geen eenmalig en geen reiskosten, wel een vraag of je vaste salaris nog klopt.
    Zonder reiskosten-instelling (e) is het meerdere eenmalig, zonder vraag. Je antwoord staat in SET.salSplitAntw[t.id]. */
 function salSplitCfg(){ const c=SET.salSplit; return (c && +c.vast>0 && c.key)?c:null; }
+/* v476: INKOMEN PER MAAND IS EEN BEREKENDE WAARDE, vast salaris (SET.salSplit.vast, een bron) plus overig vast (SET.overigVast,
+   een korte lijst andere vaste inkomsten: alimentatie, toeslag, een tweede baan). Met detectie aan rekent baseIncome() zoals altijd
+   en leest niemand deze som; met detectie uit lezen baseIncome(), totals() en elke lezer van het oude SET.income deze som. SET.income
+   blijft bewaard (de stand van voor v476) en wordt nergens meer gelezen, behalve door de overzetting en blok 20. */
+function inkVast(){ return +((typeof SET!=='undefined' && SET.salSplit)||{}).vast||0; }
+function overigVastLijst(){ return Array.isArray(SET.overigVast)?SET.overigVast.filter(x=>x && typeof x==='object'):[]; }
+function overigVastSom(){ return Math.round(overigVastLijst().reduce((a,x)=>a+Math.max(+x.bedrag||0,0),0)*100)/100; }
+function inkomenHandmatig(){ return Math.round((inkVast()+overigVastSom())*100)/100; }
+/* De overzetting (een keer, SET.inkomen476): overig vast = SET.income min vast salaris, alleen als dat boven nul is; zonder vast salaris
+   is overig vast het hele SET.income. Ligt SET.income ONDER je vaste salaris, dan komt er geen overig vast en staat er een vraag in
+   Instellingen (vraag: 'lager'); er wordt niets aangepast. Voor en na staan in het record, voor blok 20. */
+function inkomenMigreer476(){ if(SET.inkomen476) return false;
+  const inc=Math.round((+SET.income||0)*100)/100, vast=inkVast(), voor={income:inc, vast, overig:overigVastSom()}; voor.som=Math.round((vast+voor.overig)*100)/100;
+  let overig=0, vraag=null, zonderVast=false;
+  if(!Array.isArray(SET.overigVast)) SET.overigVast=[];
+  if(inc>0){ if(vast<=0){ overig=inc; zonderVast=true; } else if(inc>vast) overig=Math.round((inc-vast)*100)/100; else if(inc<vast) vraag='lager'; }
+  if(overig>0) SET.overigVast.push({id:'ov476', naam:'overig vast', bedrag:overig, bron:'overzetting', zonderVast});
+  SET.inkomen476={op:vandaagYMD(), voor, na:{income:inc, vast, overig:overigVastSom(), som:inkomenHandmatig()}, vraag, zonderVast};
+  return true; }
+/* De vragen van de overzetting, in Instellingen › Inkomen. Een vraag verandert niets tot je antwoordt. */
+function inkVraag476(){ const R=SET.inkomen476; if(!R) return null; const vast=inkVast();
+  if(R.vraag==='lager' && !R.antwoord) return {soort:'lager', income:R.voor.income, vast};
+  const ov=overigVastLijst().find(x=>x.bron==='overzetting' && x.zonderVast);
+  if(ov && vast>0 && !R.zonderVastAntw) return {soort:'zondervast', bedrag:+ov.bedrag||0, vast};
+  return null; }
+function inkEuro(v){ return euroC(v); }
 function salSplitStorting(t, C){ C=C||salSplitCfg(); return !!(C && t && t.amount>0 && !t.pending && recurKey(t)===C.key && (CATS[catOf(t)]||{}).type==='income'); }
 function salSplitReisAan(C){ return !!(C && C.reisAan && +C.reisMax>0 && C.reisPot && CATS[C.reisPot]); }
 function salSplitBonusOpen(ym){ try{ return irrGeldig().some(v=>v && v.id && v.ym===ym); }catch(_){ return false; } }
@@ -4854,7 +4880,7 @@ function openPotjesVerdeling(m, deel){
 // ===== SPAREN & BUFFER (30%-spaardeel → buffer van Nx maanduitgave) =====
 // beoogde maandelijkse spaarinleg, instelbaar: automatisch (inkomen − bestedingsruimte), vast bedrag, of %
 function monthlySavingTarget(){
-  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const inc = SET.autoIncome ? baseIncome() : inkomenHandmatig();
   const mode = SET.savingMode||'auto';
   if(mode==='amount') return +SET.savingAmount||0;
   if(mode==='percent') return inc*(+SET.savingPercent||0)/100;
@@ -4878,7 +4904,7 @@ function spaarSaldo(){
   return {cur:0, missing:true, bron:'geen'};
 }
 function savingsModel(){
-  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const inc = SET.autoIncome ? baseIncome() : inkomenHandmatig();
   const room = monthBudget(inc);
   const monthlySaving = monthlySavingTarget();
   const ms=months(); const med=a=>{const s=a.filter(v=>v>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
@@ -20978,7 +21004,7 @@ function potVerhoogGevolg(P){
   const nu=P.vanaf===thisYM();
   const a=nu?potSimuleer(Object.assign({},SET.budgets||{}), meet):potSimuleer(B0, meet);
   let b; try{ b=potSimuleer(B1, meet); }finally{ if(tijdelijk) delete CATS[kk]; }
-  let inc=0; try{ inc=Math.round(SET.autoIncome?baseIncome():(+SET.income||0)); }catch(_){}
+  let inc=0; try{ inc=Math.round(SET.autoIncome?baseIncome():inkomenHandmatig()); }catch(_){}
   return {nu, safe0:a.s, safe1:nu?b.s:a.s, cap0:a.cap, cap1:b.cap, inc};
 }
 function openPotForm(k, voorstel, herkomst){
@@ -25824,7 +25850,7 @@ function setPotjes(){ const K=wekKandidaten(), B=SET.budgets||{};
 function openSetSub(id){ window._setSub=id||null; go('set'); renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
 function setTerug(){ window._setSub=null; renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
 function setSubInkomenStand(){
-  const inc=SET.autoIncome?baseIncome():(+SET.income||0);
+  const inc=SET.autoIncome?baseIncome():inkomenHandmatig();
   const n=irrGeldig().filter(v=>v.ym>=thisYM()).length;
   return (inkomenBekend()?`${euro0(inc)} per maand`:'je inkomen is nog onbekend')+(n?` · ${n===1?'1 bonus':n+' posten'} gepland`:'');
 }
@@ -26454,12 +26480,13 @@ function deleteIrregular(id){
 }
 function setIncome(){
   const dq=totals(curMonth||(months()[months().length-1]||''));
-  let h=`
+  let h=`${inkVraagHTML()}
     <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
-      :`<label class="fld">Inkomen per maand (€)</label><input type="text" inputmode="decimal" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=numIn(this.value)||0;save();setVeldRender();">`}
+      :inkHandmatigHTML()}
     ${salSplitInstelHTML()}
+    ${inkVraagHTML('onder')}
     <label class="fld" style="margin-top:14px">Onregelmatig inkomen <span class="small muted">· vakantiegeld, dertiende maand, bonus</span></label>
     <div class="small muted" style="margin-bottom:2px">Deze bedragen tellen in hun eigen maand mee in je prognose, boven op je maandinkomen.</div>
     ${irrRijen()}
@@ -26485,6 +26512,56 @@ function salSplitInstelHTML(){ const C=SET.salSplit||{}, vast=+C.vast||0, hoog=s
       <label class="fld" style="margin-top:8px">Potje</label><select data-salsplitpot onchange="salSplitZet('reisPot',this.value)" style="width:100%"><option value="" ${C.reisPot?'':'selected'}>kies een potje</option>${pots.map(([k,c])=>`<option value="${k}" ${C.reisPot===k?'selected':''}>${esc(c.name)}</option>`).join('')}</select>`:''}</div>`; }
 /* v474: een veld op een pagina van Instellingen dat bij elke toets schrijft rekent de rest mee, maar laat zijn eigen pagina staan;
    anders vervangt de herbouw het veld waarin je typt (gemeten: "Inkomen per maand" verloor na de eerste toets zijn focus). */
+/* v476: Inkomen per maand in Instellingen › Inkomen, berekend en niet in te typen: vast salaris (bij Je salaris) plus overig vast.
+   Een veld schrijft bij het verlaten (onchange) en bouwt de pagina niet opnieuw op (v474): alleen de som en de vraag worden bijgewerkt,
+   toevoegen en weghalen bouwen alleen de lijst (#inkOverigLijst). */
+function inkSomTekst(){ return `= vast salaris ${inkEuro(inkVast())} + overig vast ${inkEuro(overigVastSom())}`; }
+function inkOverigRij(x){ const id=esc(x.id).replace(/'/g,"\\'");
+  return `<div class="row" data-overigvast="${esc(x.id)}" style="gap:6px;align-items:center;margin-top:6px">
+    <input data-overignaam type="text" value="${esc(x.naam||'')}" placeholder="omschrijving" onchange="overigVastZet('${id}','naam',this.value)" style="flex:1;min-width:0">
+    <input data-overigbedrag type="text" inputmode="decimal" value="${+x.bedrag>0?numUit(+x.bedrag):''}" placeholder="€ per maand" onchange="overigVastZet('${id}','bedrag',this.value)" style="width:110px">
+    <span class="small" role="button" data-overigweg style="color:var(--mut);cursor:pointer;padding:6px" onclick="overigVastWeg('${id}')">weg</span></div>`; }
+function inkHandmatigHTML(){
+  return `<div id="inkHandmatig" style="margin-top:8px"><label class="fld">Inkomen per maand</label>
+    <div style="font-size:var(--fs-lg);font-weight:700" data-inkomenpermaand="${inkomenHandmatig()}">${inkEuro(inkomenHandmatig())}</div>
+    <div class="small muted" data-inkomenopbouw>${inkSomTekst()} · vast salaris stel je in bij Je salaris</div>
+    <label class="fld" style="margin-top:10px">Overig vast <span class="small muted">· ander vast inkomen per maand</span></label>
+    <div id="inkOverigLijst">${overigVastLijst().map(inkOverigRij).join('')||'<div class="small muted" data-overigleeg>Geen overig vast inkomen.</div>'}</div>
+    <button class="btn sec" data-overigtoevoegen style="margin-top:8px" onclick="overigVastNieuw()">${ICON('plus')} Overig vast toevoegen</button></div>`; }
+/* De vraag over je vaste salaris staat bovenaan; de vraag over overig vast staat ONDER Je salaris, want hij verschijnt op het moment dat
+   je je vaste salaris invult, en boven de schakelaar zou hij die onder je vinger verschuiven (gemeten: de tik ging verloren, v474). */
+function inkVraagHTML(plek){ plek=plek||'boven'; const id=plek==='boven'?'inkVraag476':'inkVraag476z'; let Q=inkVraag476();
+  if(Q && (Q.soort==='lager')!==(plek==='boven')) Q=null; if(!Q) return `<div id="${id}"></div>`;
+  const tekst=Q.soort==='lager'
+    ? `Je inkomen per maand was ${inkEuro(Q.income)}, je vaste salaris is ${inkEuro(Q.vast)}. Klopt je vaste salaris?`
+    : `Je overig vast van ${inkEuro(Q.bedrag)} kwam uit je oude inkomen per maand, toen er nog geen vast salaris stond. Zit je vaste salaris van ${inkEuro(Q.vast)} daarin?`;
+  const knop=(a,l,d)=>`<button class="btn sec" data-inkantw="${a}" onclick="inkVraagAntw('${a}')" style="flex:1"><span style="display:block">${l}</span><span class="small muted" style="display:block;font-weight:400">${d}</span></button>`;
+  return `<div id="${id}" data-inkvraag="${Q.soort}" style="padding:10px 12px;border-radius:12px;background:var(--card2);margin:${plek==="boven"?"0 0 12px":"12px 0 0"}">
+    <div class="small" data-inkvraagtekst style="line-height:1.5">${tekst}</div>
+    <div class="row" style="gap:8px;margin-top:8px">${Q.soort==='lager'
+      ? knop('klopt','Ja, klopt','je vaste salaris blijft '+inkEuro(Q.vast))+knop('aanpassen','Aanpassen','naar het veld Vast salaris')
+      : knop('erin','Ja, het zit erin','overig vast wordt '+inkEuro(Math.max(Q.bedrag-Q.vast,0)))+knop('erbij','Nee, het komt erbij','overig vast blijft '+inkEuro(Q.bedrag))}</div></div>`; }
+function inkSomHerteken(){ const w=document.querySelector('[data-inkomenpermaand]'); if(w){ w.textContent=inkEuro(inkomenHandmatig()); w.setAttribute('data-inkomenpermaand', inkomenHandmatig()); }
+  const o=document.querySelector('[data-inkomenopbouw]'); if(o) o.innerHTML=inkSomTekst()+' · vast salaris stel je in bij Je salaris';
+  for(const pl of ['boven','onder']){ const q=document.getElementById(pl==='boven'?'inkVraag476':'inkVraag476z'); if(q) q.outerHTML=inkVraagHTML(pl); } }
+function inkInstelRender(lijst){ window._setBehoud=window._setSub==='inkomen'; try{ render(); }catch(_){} window._setBehoud=false;
+  if(window._setSub!=='inkomen'){ try{ renderSet(); }catch(_){} return; }
+  if(lijst){ const l=document.getElementById('inkOverigLijst'); if(l) l.innerHTML=overigVastLijst().map(inkOverigRij).join('')||'<div class="small muted" data-overigleeg>Geen overig vast inkomen.</div>'; }
+  inkSomHerteken(); }
+function overigVastNieuw(){ SET.overigVast=overigVastLijst().slice(); SET.overigVast.push({id:'ov'+Date.now().toString(36), naam:'', bedrag:0}); save(); inkInstelRender(true);
+  try{ const r=document.querySelectorAll('[data-overigvast] [data-overignaam]'); if(r.length) r[r.length-1].focus(); }catch(_){} }
+function overigVastZet(id, veld, waarde){ SET.overigVast=overigVastLijst().map(x=>Object.assign({},x)); const x=SET.overigVast.find(y=>y.id===id); if(!x) return;
+  if(veld==='naam') x.naam=String(waarde||'').trim().slice(0,40);
+  else { const v=Math.round((numIn(waarde)||0)*100)/100; x.bedrag=v>0?v:0; }
+  save(); inkInstelRender(false); }
+function overigVastWeg(id){ SET.overigVast=overigVastLijst().filter(x=>x.id!==id); save(); inkInstelRender(true); }
+function inkVraagAntw(a){ const R=SET.inkomen476; if(!R) return; const Q=inkVraag476(); if(!Q) return;
+  if(Q.soort==='lager'){ if(a==='aanpassen'){ const v=document.querySelector('[data-salsplitvast]'); if(v){ try{ v.scrollIntoView({block:'center'}); }catch(_){} v.focus(); } return; }
+    R.antwoord={keuze:'klopt', op:vandaagYMD()}; }
+  else { SET.overigVast=overigVastLijst().map(x=>Object.assign({},x)); const ov=SET.overigVast.find(x=>x.bron==='overzetting' && x.zonderVast);
+    if(a==='erin' && ov){ ov.bedrag=Math.max(Math.round((ov.bedrag-Q.vast)*100)/100,0); if(!(ov.bedrag>0)) SET.overigVast=SET.overigVast.filter(x=>x!==ov); }
+    R.zonderVastAntw={keuze:a, op:vandaagYMD(), voor:Q.bedrag, vast:Q.vast}; }
+  save(); inkInstelRender(true); }
 function setVeldRender(){ window._setBehoud=true; try{ render(); }catch(_){} window._setBehoud=false; }
 function salSplitPartijTekst(C, bron){ return `Alles boven je vaste salaris telt als eenmalig, behalve wat reiskosten is.${C.key?` Partij: ${esc(C.naam||C.key)}.`:bron?` Partij: ${esc(bron.naam||bron.key)}.`:''}`; }
 function salSplitMaxPlaats(hoog){ return hoog!=null?'hoogste zonder eenmalig: '+numUit(hoog):'bovengrens'; }
@@ -26502,6 +26579,7 @@ function salSplitHerteken(veld){ const op=window._setSub==='inkomen' && document
   else { const p=document.querySelector('[data-salsplitpartij]'); if(p) p.innerHTML=salSplitPartijTekst(C, bron);
     const hg=salSplitHoogsteMeer(+C.vast||0), h=document.querySelector('[data-salsplithoogvak]'); if(h) h.innerHTML=salSplitHoogHTML(hg);
     const mx=document.querySelector('[data-salsplitmax]'); if(mx) mx.placeholder=salSplitMaxPlaats(hg); }
+  try{ inkSomHerteken(); }catch(_){}
   }
 function salSplitZet(veld, waarde){ const C=Object.assign({}, SET.salSplit||{}); const voor=JSON.stringify(C);
   if(veld==='vast'){ const v=Math.round((numIn(waarde)||0)*100)/100; if(v>0){ C.vast=v; if(!C.key){ let b=null; try{ b=salBron(); }catch(_){} if(b){ C.key=b.key; C.naam=b.naam||''; } } } else delete C.vast; }
@@ -28375,7 +28453,7 @@ function privacySub(){
 /* v181: zonder ingesteld inkomen is de uitkomst van deze twee niet nul maar onbekend. Home zegt
    daar het woord "onbekend" met een tik naar de invoer; de instellingsregel doet hetzelfde, en de
    tik zit al in de regel zelf. Geen tweede vorm, geen stellige nul (v59/v73). */
-function inkomenBekend(){ return (SET.autoIncome?baseIncome():(+SET.income||0))>0; }
+function inkomenBekend(){ return (SET.autoIncome?baseIncome():inkomenHandmatig())>0; }
 function spaardoelBekend(){
   return (SET.savingMode||'auto')==='amount' ? (+SET.savingAmount||0)>0 : inkomenBekend();
 }
@@ -28556,10 +28634,10 @@ function diagGrendel(){
   L.push('SET.savingMode: '+mode+'   <- welke tak monthlySavingTarget() leest');
   if(mode==='amount')       L.push('   amount  -> SET.savingAmount: '+_dV(()=>+SET.savingAmount||0)+'   een INSTELLING, geen meting');
   else if(mode==='percent') L.push('   percent -> SET.savingPercent: '+_dV(()=>+SET.savingPercent||0)+'%  van '
-                              +(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'SET.income: '+_dV(()=>+SET.income||0)));
-  else                      L.push('   auto    -> '+(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'SET.income: '+_dV(()=>+SET.income||0))
-                              +' min monthBudget(): '+_dV(()=>monthBudget(inkAuto?baseIncome():(+SET.income||0))));
-  L.push('SET.autoIncome: '+(inkAuto?'aan (baseIncome(), gemeten)':'uit (SET.income, een instelling)'));
+                              +(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'inkomenHandmatig(): '+_dV(()=>inkomenHandmatig())));
+  else                      L.push('   auto    -> '+(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'inkomenHandmatig(): '+_dV(()=>inkomenHandmatig()))
+                              +' min monthBudget(): '+_dV(()=>monthBudget(inkAuto?baseIncome():inkomenHandmatig())));
+  L.push('SET.autoIncome: '+(inkAuto?'aan (baseIncome(), gemeten)':'uit (inkomenHandmatig(): vast salaris + overig vast, een instelling)'));
   L.push('planCapTerugval(): '+_dV(()=>planCapTerugval())
     +'   waar = de cap is NIET je spaarinleg maar noodfondsModel().comfortTot');
   L.push('');
@@ -28576,7 +28654,7 @@ function diagGrendel(){
      daarom als waarneming en niet als bevestiging (v301). Alleen lezen (v244). */
   L.push('HET INKOMEN: WAAR DE NORM VANDAAN KOMT');
   const BI=_dT(()=>baseIncome(true),null);
-  L.push('   SET.autoIncome: '+(inkAuto?'aan':'uit')+'   SET.income: '+_dV(()=>+SET.income||0));
+  L.push('   SET.autoIncome: '+(inkAuto?'aan':'uit')+'   inkomen per maand (vast salaris + overig vast): '+_dV(()=>inkomenHandmatig())+'   SET.income (van voor v476, niet meer gelezen): '+_dV(()=>+SET.income||0));
   L.push('   baseIncome(): '+(BI?BI.waarde:'?')+'   tak: '+(BI?BI.tak:'?'));
   L.push('   INKOMEN_VENSTER: '+INKOMEN_VENSTER+' afgeronde maanden   venster: '
     +((BI&&BI.venster.length)?BI.venster.join(', '):'(leeg)'));
@@ -32663,6 +32741,18 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
       const ym=thisYM(); let R=null; try{ R=reisStand(ym); }catch(_){}
       if(R && R.bedrag>0) L.push(`    reiskosten ${ym}: ${euroC(R.bedrag)} tegen ${(CATS[R.pot]||{}).name||R.pot} (uitgegeven ${euroC(R.uitVoor)}) · verrekend ${euroC(R.af)} · over ${euroC(R.over)} (telt niet als inkomen)`);
       const Lg=(SET.salSplitLog||[]).slice(-5); if(Lg.length) L.push('    log: '+Lg.map(e=>`${ymdVan(new Date(e.op))} ${e.actie}${e.reis!=null?' reis '+e.reis:''}`).join(' · ')); } }
+  /* v476: INKOMEN PER MAAND = vast salaris + overig vast. De overzetting van SET.income, voor en na, en de stand nu. */
+  { const R=SET.inkomen476, r=(t,x)=>`    ${t}: SET.income ${euroC(x.income)} · vast salaris ${euroC(x.vast)} · overig vast ${euroC(x.overig)} · som (vast + overig vast) ${euroC(x.som)}`;
+    L.push('  INKOMEN PER MAAND (v476) — vast salaris + overig vast, '+(SET.autoIncome?'detectie staat aan: baseIncome() rekent, deze som wordt niet gelezen':'detectie staat uit: dit is je maandinkomen'));
+    if(!R) L.push('    nog niet overgezet');
+    else { L.push(r('voor de overzetting ('+R.op+')', R.voor)); L.push(r('na de overzetting', R.na));
+      L.push(`    regel: ${R.voor.income<=0?'geen SET.income, niets over te zetten':R.voor.vast<=0?'geen vast salaris, dus overig vast = SET.income':R.voor.income>R.voor.vast?'overig vast = SET.income - vast salaris':R.voor.income<R.voor.vast?'SET.income lager dan vast salaris: geen overig vast, een vraag in Instellingen':'SET.income = vast salaris: geen overig vast'}`);
+      if(R.vraag==='lager') L.push(`    vraag "Klopt je vaste salaris?": ${R.antwoord?'beantwoord ('+R.antwoord.keuze+', '+R.antwoord.op+')':'staat open'}`);
+      if(R.zonderVast) L.push(`    overig vast kwam zonder vast salaris: ${R.zonderVastAntw?'beantwoord ('+R.zonderVastAntw.keuze+', '+R.zonderVastAntw.op+')':inkVast()>0?'vraag staat open (zit je vaste salaris erin?)':'nog geen vast salaris'}`); }
+    const nu={income:+SET.income||0, vast:inkVast(), overig:overigVastSom(), som:inkomenHandmatig()};
+    L.push(r('nu', nu));
+    for(const x of overigVastLijst()) L.push(`      overig vast: ${x.naam||'(zonder naam)'} ${euroC(+x.bedrag||0)}${x.bron==='overzetting'?' · uit de overzetting':''}`);
+    L.push(`  CONTROLE inkomen per maand = vast salaris + overig vast: ${euroC(nu.som)} = ${euroC(nu.vast)} + ${euroC(nu.overig)} → ${Math.abs(nu.som-nu.vast-nu.overig)<0.005?'klopt':'VERSCHILT'}`); }
   /* v442 sectie 2e: INHALEN — een grootboek over de salarisperiodes (vervangt de twee definities A/B van v440). Per afgesloten
      periode met een tekort: netto, tekort (eruit), afgelost (met een overschot boven het doel of een terugzetten-bestemming) en
      wat open blijft; daaronder het totaal open. "Toegewezen zonder geld" (spaarOver().zonder) staat erbij ter vergelijking, want

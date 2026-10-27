@@ -1095,3 +1095,9 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **De mediaan noemt zijn bedragen.** Een getal dat een mediaan is, toont de waarden waaruit het komt; anders is het niet na te rekenen en wordt het verward met een ander getal (het rapport van v473 noemde `baseIncome()`).
 - **Reiskosten zijn een term in de controle, geen inkomen.** De vergoeding staat op je betaalrekening; een controle die alleen inkomen telt, vindt dan elke maand een verschil.
 - **Een veld op Instellingen bouwt zijn eigen pagina niet opnieuw.** Valkuil: een onchange vuurt op het moment dat je het volgende element aantikt, en een herbouw vervangt dat element onder je vinger. Bouw alleen het blok dat verandert opnieuw.
+
+## v476 · Inkomen per maand berekend
+- **Inkomen per maand is vast salaris plus overig vast, en wordt niet meer ingetypt.** Twee getallen voor je salaris (SET.income en SET.salSplit.vast) liepen uiteen; nu is er een bron en de rest is een lijst die je ziet.
+- **De overzetting trekt het vaste salaris eraf, nooit erbij.** Valkuil (de sabotage): SET.income ongewijzigd als overig vast overnemen telt je salaris twee keer (5216 + 5216 = 10432).
+- **Lager dan je vaste salaris is een vraag, geen correctie.** Welk van de twee klopt weet alleen jij; er wordt niets stil aangepast.
+- **Overig vast zonder vast salaris vraagt opnieuw zodra je een vast salaris invult.** Anders telt de som stil op tot het dubbele; de vraag staat onder Je salaris en niet erboven, want hij verschijnt terwijl je tikt.

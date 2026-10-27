@@ -103,13 +103,14 @@ test.describe('3 · Instellingen › Inkomen › Je salaris', () => {
     expect(r.vast).toBe('5216');
     expect(r.part).toContain('Partij: Werkgever');
   });
-  test('g. "Inkomen per maand" blijft beschrijfbaar terwijl je typt (dezelfde fout: elke toets bouwde de pagina opnieuw)', async ({ page }) => {
+  test('g. "Inkomen per maand" blijft beschrijfbaar terwijl je typt (sinds v476 een berekende waarde: het veld is overig vast)', async ({ page }) => {
     await boot(page, { cfg: false, auto: false });
     await page.evaluate(() => openSetSub('inkomen'));
-    const sel = 'input[placeholder="bv. 2500"]';
+    const sel = '[data-overigvast] [data-overigbedrag]';
     await page.fill(sel, '');
     await page.type(sel, '4250');
-    const r = await page.evaluate((sel) => ({ inc: SET.income, val: document.querySelector(sel).value, focus: document.activeElement === document.querySelector(sel) }), sel);
-    expect(r).toEqual({ inc: 4250, val: '4250', focus: true });
+    await page.keyboard.press('Tab');
+    const r = await page.evaluate((sel) => ({ ov: SET.overigVast.map((x) => +x.bedrag), som: inkomenHandmatig(), val: document.querySelector(sel).value }), sel);
+    expect(r).toEqual({ ov: [4250], som: 4250, val: '4250' });
   });
 });

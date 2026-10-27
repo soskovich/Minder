@@ -101,7 +101,7 @@ test.describe('c · zwijgen wanneer vergelijken niets zegt', () => {
 
   test('zonder basis geen vergelijking', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate((m) => { SET.income = 0; SET.autoIncome = false; save(); return kpiDelta('vari', m); }, M1);
+    const r = await page.evaluate((m) => { SET.income = 0; SET.overigVast = []; SET.autoIncome = false; save(); return kpiDelta('vari', m); }, M1);
     expect(r).toBeNull();                                    // v59/v73
   });
 

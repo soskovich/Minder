@@ -326,7 +326,7 @@ test.describe('v430 · fase 3', () => {
   test('2b. een verhoging van 300 euro (6%) is geen inkomen gestegen: de drempel is 25% EN 250 euro', async ({ page }) => {
     /* grip-kring-stand: een vast salaris van 5216 per maand, zonder holding; vanaf augustus 300 euro meer */
     await K.boot(page, {});
-    const v = await page.evaluate(() => { for (const t of TX) if (t.amount === 5216 && t.date >= '2026-08') t.amount = 5516; SET.income = 5516; TX.forEach(categorize); save();
+    const v = await page.evaluate(() => { for (const t of TX) if (t.amount === 5216 && t.date >= '2026-08') t.amount = 5516; SET.income = 5516; SET.overigVast = [{ id: 'ov', naam: 'overig vast', bedrag: 5516 }]; TX.forEach(categorize); save();
       const D = fase3Sal(); return D.R.map(r => Math.round(D.tot(r, 'salaris'))); });
     expect(v.slice(2)).toEqual([5216, 5216, 5216, 5216, 5216, 5516, 5516, 5516]);   // de invoer: +300 euro, 6%
     expect(await page.evaluate(() => inkomenStijging())).toBe(null);
