@@ -12845,9 +12845,15 @@ function openKrapRek(acc){ salKrapBekeken(); openTotSalaris(acc); }
 function totSalarisData(acc){ const SP=salPeriode(); if(!SP || SP.stil || SP.laat) return null; const P=rekVoorstel(); if(!P || !P.ok) return null;
   const r=P.rekAlle.find(x=>x.acc===acc); if(!r || !r.uitDagDelen) return null; const saldo=accBalance(acc); if(saldo==null) return null;
   const eind=SP.cur.eind, vandaag=vandaagYMD(); const T={vast:0, pot:0, kas:0}, vastRij=[]; let b=saldo, laagst=saldo, laagstDag=vandaag, nul=null;
-  for(let d=rekDag(vandaag,1); d<=eind; d=rekDag(d,1)){ const u=r.uitDagDelen(d); T.vast+=u.vast; T.pot+=u.pot; T.kas+=u.kas; b-=u.vast+u.pot+u.kas;
-    if(u.vast>0.005){ const posten=(r.termAlle||[]).filter(t=>t.date===d); vastRij.push({date:d, bedrag:Math.round(u.vast), saldoNa:Math.round(b), onder:b<-0.005,
-      naam:posten.map(p=>p.naam).join(', ')||'vaste last', keys:[...new Set(posten.map(p=>p.key))], nonSepa:posten.some(p=>p.nonSepa)}); }
+  for(let d=rekDag(vandaag,1); d<=eind; d=rekDag(d,1)){ const u=r.uitDagDelen(d); T.vast+=u.vast; T.pot+=u.pot; T.kas+=u.kas; const bStart=b; b-=u.vast+u.pot+u.kas;
+    /* v483: ELKE VASTE LAST EEN EIGEN REGEL (niet meer gegroepeerd op dag): per key de naam, het bedrag, of hij nonSepa is (een eigen
+       betaaldatum-keuze draagt) en het saldo na die post. De gegroepeerde regel koos de betaaldatum-keuze op keys[0] (de SEPA-post die
+       als eerste in termAlle staat) en niet op de woning, zodat "Na mijn salaris" op de verkeerde sleutel landde en de projectie niets
+       verschoof. Het saldo loopt per post door (bStart is het saldo aan het begin van de dag, voor de aftrek). */
+    if(u.vast>0.005){ const posten=(r.termAlle||[]).filter(t=>t.date===d), order=[], pk={};
+      for(const p of posten){ if(!pk[p.key]){ pk[p.key]={key:p.key, naam:p.naam, nonSepa:!!p.nonSepa, bedrag:0}; order.push(p.key); } pk[p.key].bedrag+=p.bedrag; }
+      let run=bStart; if(order.length) for(const key of order){ const g=pk[key]; run-=g.bedrag; vastRij.push({date:d, bedrag:Math.round(g.bedrag), saldoNa:Math.round(run), onder:run<-0.005, naam:g.naam, key, keys:order.slice(), nonSepa:g.nonSepa}); }
+      else vastRij.push({date:d, bedrag:Math.round(u.vast), saldoNa:Math.round(bStart-u.vast), onder:(bStart-u.vast)<-0.005, naam:'vaste last', key:null, keys:[], nonSepa:false}); }
     if(b<laagst-1e-9){ laagst=b; laagstDag=d; } if(nul==null && b<-0.005) nul=d; }
   const SV=SET.salVerdeling||{}, afspraak=(SV.rek && SV.rek[acc]!=null)?Math.round(SV.rek[acc]):null;
   let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null) naSal=Math.round(sb+rekAfgegaan(acc, PV.werkelijk, vandaag, rekParen(TX.filter(t=>t.date.slice(0,10)>=PV.werkelijk), new Set(rekBetaal())))); } }catch(_){}
@@ -12856,9 +12862,9 @@ function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salver
 function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   if(!D){ $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris"><div style="font-weight:800">Tot je salaris</div><div class="small" style="margin-top:6px">Dit is nu niet te rekenen.</div></div>`; return; }
   const e=euro0, rij=(l,v,attr)=>`<div class="row" ${attr||''} style="gap:8px;padding:3px 0"><span class="small" style="flex:1;min-width:0">${l}</span><span class="small" style="white-space:nowrap">${v}</span></div>`;
-  const vastRij=D.vastRij.map(x=>{ const kb=x.nonSepa && x.keys[0]; const dag=`<span style="color:var(--mut2)">${esc(dagKort(x.date))}</span>`;
+  const vastRij=D.vastRij.map(x=>{ const kb=x.nonSepa && x.key; const dag=`<span style="color:var(--mut2)">${esc(dagKort(x.date))}</span>`;
     const naam=kb?`<span data-totvastpost="${esc(kb)}" role="button" style="color:var(--teal);cursor:pointer" onclick="window._totsalKeuze=window._totsalKeuze==='${esc(kb).replace(/'/g,"\\'")}'?'':'${esc(kb).replace(/'/g,"\\'")}';renderTotSalaris()">${esc(x.naam)} ›</span>`:esc(x.naam);
-    const r=rij(`${dag} ${naam}`, `−${e(x.bedrag)} · ${x.onder?`<b style="color:var(--red)">${e(x.saldoNa)}</b>`:e(x.saldoNa)}`, `data-totvast="${esc(x.date)}"`);
+    const r=rij(`${dag} ${naam}`, `−${e(x.bedrag)} · ${x.onder?`<b style="color:var(--red)">${e(x.saldoNa)}</b>`:e(x.saldoNa)}`, `data-totvast="${esc(x.date)}"${kb?` data-totvastkey="${esc(kb)}"`:''}`);
     return r + ((kb && window._totsalKeuze===kb)?totBetaaldatumBlok(kb):''); }).join('')||rij('geen vaste last tot je salaris','€0');
   /* v482 (punt 1/5): per potje de maandreeks, het aandeel, het ritme, wat er deze periode al ging en wat er nog verwacht wordt.
      Zelden staat niet in de daling maar als "kan komen"-regel, met of de rekening dan tekort komt. */
@@ -33574,7 +33580,7 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
   for(const r of P.rekAlle){ L.push('', `${r.naam}${r.sal?' (salaris)':''}${P.rek.includes(r)?'':' · geen uitgaven verwacht, buiten het voorstel'}`);
     L.push(`  vaste lasten ${e(r.vastS)} (termijnen in de periode)`+(r.vast.length?': '+r.vast.map(x=>`${x.naam} ${x.n}× ${e(x.termijn)} = ${e(x.bedrag)}`).join(', '):'')+((r.vastBuiten||[]).length?` · geen termijn in de periode: ${r.vastBuiten.map(x=>x.naam).join(', ')}`:''));
     /* v481 punt 4: per vaste last de gebruikte datum en waar die vandaan komt (schema uit de afschrijvingen / je eigen keuze / standaard) */
-    if(r.vast.length) L.push(`  betaaldatum per post: ${r.vast.map(x=>{ const bron=x.nonSepa?(((SET.vastDatum||{})[x.key])?'keuze: '+((SET.vastDatum||{})[x.key].keuze):'standaard, de vaste dag uit je kennislaag'):'schema uit de afschrijvingen'; return `${x.naam} ${x.data.map(kd).join('/')||'-'} (${bron})`; }).join(' · ')}`);
+    if(r.vast.length) L.push(`  betaaldatum per post: ${r.vast.map(x=>{ const E=(SET.vastDatum||{})[x.key]; const bron=x.nonSepa?(E?'keuze: '+E.keuze+(E.periode?' ('+E.periode+')':''):'standaard, de vaste dag uit je kennislaag'):'schema uit de afschrijvingen'; return `${x.naam} [${x.key||'-'}] nonSepa=${x.nonSepa?'ja':'nee'} keuze=${E?E.keuze:'geen'} → ${x.data.map(kd).join('/')||'-'} (${bron})`; }).join(' · ')}`);
     L.push(`  potjes ${e(r.potS)}`+(r.potDelen.length?': '+r.potDelen.map(x=>`${x.naam}${x.zonder?' (zonder potje)':''} ${pc(x.aandeel)} van ${e(x.totaal)} (${e(x.maand)} × ${P.dagen}/${P.dimStart}) = ${e(x.bedrag)}`).join(', '):''));
     /* v482 (punt 1/6): per potje het ritme (vaak/soms/zelden) uit het venster, de maandreeks, wat er deze periode al ging en nog verwacht
        = verwachting voor de periode (${P.dagen}/${P.dimStart}) × aandeel − al deze periode (min 0); zelden telt niet in de daling */
