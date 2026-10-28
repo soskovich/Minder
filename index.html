@@ -3578,7 +3578,7 @@ function openSavingsPots(){
   showSheetBg();
 }
 // groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
-function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
+function recurKey(t){ perfHit('recurKey'); return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
 function shiftWeekendToMonday(d){ const x=new Date(d); const w=x.getDay(); if(w===6) x.setDate(x.getDate()+2); else if(w===0) x.setDate(x.getDate()+1); return x; }
 /* v413: EEN VERLOPEN POST VERDWIJNT NIET VANZELF UIT HET SCHEMA (gevraagd door de gebruiker). Tot v412 viel een vaste
    post eruit zodra zijn laatste betaling langer dan 1,6 keer zijn interval plus 7 dagen geleden was (55 dagen bij een
@@ -12457,6 +12457,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   /* v441 (1b/1c/1e): EEN venster sinds de huidige rekening-indeling, gedeeld door het aandeel, contant en de buffer. af6 is
      daarmee gelijk aan af (blok 23 leest nog P.af6; sectie 6 werkt de tekst bij). */
   const cur=thisYM(), VEN=rekAandeelVenster(BR), af=VEN.af, af6=af;
+  const rvSpan=(n,t0)=>{ if(typeof PERF!=='undefined' && PERF.on){ PERF.ms[n]=(PERF.ms[n]||0)+(performance.now()-t0); PERF.n[n]=(PERF.n[n]||0)+1; } }; let _rvT=performance.now();
   const venster=TX.filter(t=>t.date.slice(0,7)>=af[0]), paar=rekParen(venster, set);
   /* (1b) aandeel per categorie per rekening over het venster sinds de rekening-indeling */
   const per={}, totRek={};
@@ -12493,9 +12494,15 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     return s>0?Object.fromEntries(pos.map(([a,v])=>[a, v/s])):{[terugval]:1}; };
   /* (1b) de vaste lasten: rekening van de laatste betaling, alleen actief en niet uit reservering; v435: ALLEEN DE TERMIJNEN DIE IN
      DE PERIODE VALLEN tellen (een post zonder termijn in de periode telt niet, maar staat in de lijst) */
+  rvSpan('rv:index', _rvT); _rvT=performance.now();
   let SCH=[]; try{ SCH=recurringSchedule(true).filter(x=>x.type==='fixed'); }catch(_){}
   const vastAlle=[], vastNiet=[];
-  for(const x of SCH){ const L=TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===x.key).sort((a,b)=>b.date.localeCompare(a.date));
+  /* v492 (punt 1): ÉÉN index recurKey → afschrijvingen (aflopend op datum), zodat de SCH-lus niet per vaste post opnieuw ALLE
+     boekingen doorloopt (gemeten: recurKey 25.000× in één rekVoorstelRuw → ~1 per boeking). Zelfde boekingen, zelfde volgorde als
+     de oude filter, dus geen gedrag en geen getal verandert. */
+  const negPerKey={}, eersteMaandPerAcc={}; for(const t of TX){ const ym=t.date.slice(0,7); if(!eersteMaandPerAcc[t.acc] || ym<eersteMaandPerAcc[t.acc]) eersteMaandPerAcc[t.acc]=ym; if(t.pending || !(t.amount<0)) continue; const rk=recurKey(t); (negPerKey[rk]=negPerKey[rk]||[]).push(t); }
+  for(const _k in negPerKey) negPerKey[_k].sort((a,b)=>b.date.localeCompare(a.date));
+  for(const x of SCH){ const L=negPerKey[x.key]||[];
     /* v441 (1a): de rekening is die van de EXTERNE betaling, nooit een interne tussenstap (noodfonds → Salarisrekening →
        Betaalrekening). Een interne leg draagt een interne categorie; de externe betaling een uitgavencategorie. */
     const last=L.find(t=>(CATS[catOf(t)]||{}).type==='expense')||L[0]; if(!last) continue;
@@ -12543,6 +12550,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   /* v482 (punt 1/2): p.maand is de verwachting van de LOPENDE MAAND (maandVooruit().potjes[].eindR, min eenmalig); p.typisch is
      het TYPISCHE niveau (maandVooruit zet typisch = de mediaan van de afgeronde maanden). De daling gebruikt p.maand voor de dagen
      in de lopende maand en p.typisch voor de dagen daarna, zodat een uitschieter van deze maand niet doorwerkt in de volgende. */
+  rvSpan('rv:vast', _rvT); _rvT=performance.now();
   const potExp=[]; if(V && !V.onbekend){
     for(const x of (V.potjes||[])){ if(x.k===CONTANT_CAT) continue;   // v447: het potje Contant staat in kas (te pinnen), niet nog eens bij de potjes
       const e=Math.max((+x.eindR||0)-eenmaligInCat(x.k, cur), 0); if(e>0.005) potExp.push({k:x.k, naam:x.naam, maand:e, bedrag:e*schaal, rest:Math.max(+x.rest||0,0), typisch:Math.max(+x.typisch||0,0), maanden:(x.maanden||[]).slice(), zonder:false}); }
@@ -12587,6 +12595,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      voorstel (gemeten: krap 307 tegen voorstel 0). Nu is de daling voor ELKE dag kasRestNu gelijk verdeeld over de dagen tot
      SP.cur.eind, dus de som over de periode is kasRestNu (= kS − wat er deze maand al gepind is) en gelijk aan het voorstel. */
   const kasDagenOver=Math.max(salDagenTussen(vandaag, SP.cur.eind), 1);
+  rvSpan('rv:potExp', _rvT); _rvT=performance.now();
   const rek=BR.map(acc=>{
     const vp=vast.filter(x=>x.acc===acc), vS=vp.reduce((a,x)=>a+x.bedrag,0);
     /* v482 (punt 1): per potje het aandeel, het ritme (vaak/soms/zelden) uit het venster, de maandreeks, het typische niveau ×
@@ -12600,7 +12609,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
     /* (2c) buffer: p75 min mediaan van de werkelijke uitgaven per maand over 6 afgeronde maanden, vanaf de eerste maand met een boeking */
-    const eerste=(TX.filter(t=>t.acc===acc).map(t=>t.date.slice(0,7)).sort()[0])||af[0];
+    const eerste=(eersteMaandPerAcc[acc])||af[0];   // v492 (punt 1): eerste boekingmaand per rekening, één keer geïndexeerd i.p.v. TX.filter per rekening
     /* v441 (1e): de buffer over hetzelfde venster als het aandeel (af) */
     const bm=af.filter(ym=>ym>=eerste).map(ym=>{ const a=rekAfgegaan(acc, ym+'-01', ym+'-31', paar, true); return {ym, v:a.v, uit:a.uit}; });
     const vals=bm.map(x=>x.v), p75=rekKwantiel(vals, REKV.kwantiel), med=mediaan(vals);
@@ -12659,11 +12668,13 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     let verwachtSaldo=null; if(!nu && saldo!=null){ verwachtSaldo=saldo; for(let d=rekDag(vandaag,1); d<start; d=rekDag(d,1)) verwachtSaldo-=uitDag(d); }
     return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, kasNaSalBron:kasNaSal?(kasKennis?'kennis':'patroon'):null, uitDagDelen, termAlle, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand, potZelden}; });
   /* een rekening zonder verwachte uitgaven en zonder vaste last laat niets staan: die valt buiten het voorstel */
+  rvSpan('rv:perRek', _rvT); _rvT=performance.now();
   const actief=rek.filter(r=>r.vastS+r.potS+r.kasS>0.5 || r.sal);
   /* v441 sectie 2: de reserveringen staan tussen de rekeningen en opzij; opzij (naar je spaarrekening) is wat daarna overblijft */
   const RES=rekReserveringen(), reserveringen=RES.totaal;
   const som=actief.reduce((a,r)=>a+r.laten,0), opzij=salaris-som-reserveringen;
   const totVast=vast.reduce((a,x)=>a+x.bedrag,0), totPot=potExp.reduce((a,x)=>a+x.bedrag,0);
+  rvSpan('rv:slot', _rvT); _rvT=performance.now();
   return {ok:true, salaris, salAcc, salDatum:d0, nu, SP, per0, start, eind, dagen, dimStart, schaal, plan, rek:actief, rekAlle:rek, vast, vastAlle, vastBuiten, vastNiet, potExp, kas, kasP, kasMed, kasBud, kasStand, kasStandKey, kasStandBron, kasStandDatum, kasSchat, kasBron, kasMaand, kasAandeel, kasPatroon, opnPer, paar, som, opzij, reserveringen, resRijen:RES.rijen, resOk:RES.ok, resStand:RES.stand, resAcc:RES.acc, totVast, totPot,
     totVerwacht:actief.reduce((a,r)=>a+r.verwacht,0), BR, af, af6, potMaand:cur}; }
 function rekTermijnen(s, last, start, eind){ const out=[]; if(!s || !last) return out;
@@ -14148,7 +14159,7 @@ function gripStapOpen(){ try{ return (window._gripCyc||gripCyc()).kies.length>0;
 function gripStapSinds(P){
   const M=gripMaandMap('gripStapSinds', thisYM()); let nw=false;
   for(const p of P) if(!M[p.id]){ M[p.id]=vandaagYMD(); nw=true; }
-  if(nw) save(); return M;
+  if(nw) save(true); return M;   // v492: stil (geen _dataGen-bump) — een boekhoud-save tijdens het tekenen mag de rekencache niet legen (koude-cache-cascade over de tabs)
 }
 /* v391: het label van het bedrag op een patroonregel: wat het IS, geen effect. */
 function gripBedragLabel(p){
@@ -34355,10 +34366,13 @@ function controleBlokVoet(n, L){ const C=controlesLees(), U=(C.uitkomst||[]).fil
    gemeten (_dataGen++ ervoor), want dat is wat je bij het openen van de app of na een sync raakt; de kern draait dan een keer en
    niet meer. Het blok raakt geen gegevens aan: het bewaart #sheet, de sheet-achtergrond en de Grip-tab en zet ze terug, dus het
    tekenen gebeurt wel maar verandert niets wat je ziet. */
-function diagSnelheidMeet(fn){
+function diagSnelheidMeet(fn, warm){
   const sheet=$('#sheet'), sheetHtml=sheet?sheet.innerHTML:'', bg=$('#sheetBg'), bgShow=bg?bg.classList.contains('show'):false;
   const tab=window._gripTab;
-  _dataGen++;                         /* koude cache, zoals na het laden of na een sync */
+  /* v492: twee metingen per actie. KOUD = lege cache (zoals na het laden of een sync): _dataGen++ en meteen meten. WARM = zoals in
+     het echt, na de vorige actie: eerst een keer draaien zodat de rekencaches vol staan (geen _dataGen-bump), dan pas meten. */
+  if(warm){ try{ fn(); }catch(_){} }
+  else _dataGen++;
   perfReset(); const was=PERF.on; PERF.on=true; const t=performance.now();
   try{ fn(); }catch(_){}
   const ms=performance.now()-t; PERF.on=was;
@@ -34378,9 +34392,16 @@ function diagSnelheid(){
 function diagSnelheidKern(){
   save=function(){};                  /* geen enkele save tijdens het meten schrijft naar localStorage */
   const krap=(()=>{ try{ const T=salTekortData(); return T.length?T[0].acc:null; }catch(_){ return null; } })();
+  /* v492 (punt 4): de pop-up-controle in TWEE losse acties. Tot v490 stonden afsluit en krap in één actie
+     (afsluitPopupMisschien(); salKrapPopupMisschien()). De afsluit-pop-up opent als eerste een sheet (#sheetBg show), en
+     salKrapPopupMisschien() keert dan meteen terug op zijn eigen "nooit over een andere sheet"-grendel (v479) — vandaar "0 ms,
+     niets gemeten" terwijl een rekening krap was: de meting liep erlangs, de controle draaide niet IN DEZE actie. De krap-controle
+     zelf draait wel bij het opstarten (de bel via scoreNotifs 'rekgeld', en renderMaand). Apart gemeten draait salKrapPopupMisschien
+     zijn controle (salTekortBewaar + salTekortStand → rekVoorstel) nu wel, want geen afsluit-sheet staat ervoor. */
   const acties=[
     ['opstarten · eerste scherm (Home tekenen)', ()=>{ try{ renderDash(); }catch(_){} }],
-    ['opstarten · pop-up-controle (afsluit + krap)', ()=>{ try{ afsluitPopupMisschien(); salKrapPopupMisschien(); }catch(_){} }],
+    ['opstarten · afsluit-pop-up-controle', ()=>{ try{ afsluitPopupMisschien(); }catch(_){} }],
+    ['opstarten · krap-pop-up-controle', ()=>{ try{ salKrapPopupMisschien(); }catch(_){} }],
     ['wisselen naar Grip · Zien', ()=>{ window._gripTab='zien'; window._gripBeg={v:'lijst'}; renderMaand(); }],
     ['binnen Grip · Begrijpen', ()=>{ window._gripTab='begrijpen'; renderMaand(); }],
     ['binnen Grip · Kiezen', ()=>{ window._gripTab='kiezen'; renderMaand(); }],
@@ -34391,12 +34412,33 @@ function diagSnelheidKern(){
     ['krap-pop-up openen', ()=>{ try{ openKrapPopup(); }catch(_){} }],
     ['"tot je salaris" openen', ()=>{ if(krap){ try{ openTotSalaris(krap); }catch(_){} } }],
   ];
-  const L=['SNELHEID (v490) · alleen meten · elke actie vanuit een koude cache (de kern draait dan een keer, niet 120 keer)',
-    '  tijd op dit toestel, met de vijf duurste functies (aanroep-aantal · ms):'];
-  for(const [naam, fn] of acties){ const r=diagSnelheidMeet(fn);
-    L.push(`  ${naam}: ${r.ms} ms`);
-    if(!r.fns.length){ L.push('    (niets gemeten)'); continue; }
-    for(const f of r.fns) L.push(`    ${f.k}: ${f.n}x · ${f.ms} ms`); }
+  const L=['SNELHEID (v492) · alleen meten · twee getallen per actie: KOUD (lege cache, zoals na het laden of een sync) en WARM (na de vorige actie)',
+    '  tijd op dit toestel, met onder KOUD de vijf duurste functies (aanroep-aantal · ms); rv:* zijn de fasen binnen rekVoorstelRuw:'];
+  for(const [naam, fn] of acties){ const k=diagSnelheidMeet(fn,false), w=diagSnelheidMeet(fn,true);
+    L.push(`  ${naam}: koud ${k.ms} ms · warm ${w.ms} ms`);
+    if(!k.fns.length){ L.push('    (niets gemeten)'); continue; }
+    for(const f of k.fns) L.push(`    ${f.k}: ${f.n}x · ${f.ms} ms`); }
+  /* v492 (punt 2): per kaart van Zien de HTML-bouw, en apart het tekenen (innerHTML + layout in een los vlak op 390px, zodat het
+     zichtbare scherm niet verschuift). De twee duurste kaarten zijn de kandidaten om te versnellen. */
+  try{
+    window._gripTab='zien'; window._gripBeg={v:'lijst'};
+    let C=null, V=null; try{ C=gripCyclus(); }catch(_){} try{ V=maandVooruit(); }catch(_){}
+    const kaarten=[
+      ['Slim-regel', ()=>gripSlimRegel(C)],
+      ['salarisverdeling-melding', ()=>salVerdelingMeldingHtml()],
+      ['salaris niet binnen', ()=>salNietBinnenHtml()],
+      ['salaris-moment 1', ()=>salMoment1Html()],
+      ['salarisvoorstel-kaart', ()=>salVoorstelKaartHtml()],
+      ['stand-tabel', ()=>gripZienTabel()],
+      ['openstaand', ()=>gripOpenstaandKaart()],
+      ['signalen', ()=>gripSignalenKaart(C)],
+      ['gegevens', ()=>gripGegevensKaart()],
+    ];
+    L.push('  per kaart van Zien · HTML-bouw (koud, met een warme rekencache zoals na het tekenen van Zien):');
+    let html=''; for(const [nm, f] of kaarten){ let s=''; const t0=performance.now(); try{ s=f()||''; }catch(_){} const ms=Math.round((performance.now()-t0)*10)/10; html+=s; L.push(`    ${nm}: ${ms} ms`); }
+    const t1=performance.now(); let el=null; try{ el=document.createElement('div'); el.style.cssText='position:absolute;left:-9999px;top:0;width:390px;visibility:hidden'; document.body.appendChild(el); el.innerHTML=html; void el.offsetHeight; }catch(_){} const draw=Math.round((performance.now()-t1)*10)/10; if(el) el.remove();
+    L.push(`    tekenen (innerHTML + layout, 390px): ${draw} ms`);
+  }catch(_){}
   L.push('  doel op het toestel: eerste scherm < 1500 ms · Grip < 400 ms · andere wissels en een tik < 300 ms');
   L.push('  let op: een testmachine of een pc is sneller dan een telefoon; de getallen hierboven zijn van DIT toestel');
   return L;
