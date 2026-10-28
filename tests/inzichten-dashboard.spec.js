@@ -117,6 +117,7 @@ test.describe('e · geen handeling op Inzichten', () => {
   /* v382: de ingangen van de nieuwe vorm. Elk opent een sheet, wisselt een weergave (de verschuivingen, het filter)
      of verwijst naar Grip. */
   const MAG = ['openInsFilter', 'openInsTegel', 'openInsZonder', 'openWeekSheet', 'openWekelijks', 'openBudgetWijz', 'openVerwachtEind',   // v438: de kaart Verwacht saldo eind <maand> opent dezelfde sheet als op Home (lezen)
+    'openInsVastBetaald', 'openInsPotjes',   // v488: "vast" en "potjes" onder Uitgegeven openen de boekingen (lezen)
     'verschuivingToggle', 'verschuivingKies', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
   const MAG_SHEET = MAG.concat(['openWeekUitleg', 'openSetSub', 'closeSheet',   // v436: de uitleg van de week wijst naar Instellingen → Potjes
     'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet', 'openInsPotje', 'openSheet', 'wekKies']);

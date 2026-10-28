@@ -24756,7 +24756,7 @@ function insMaandKaart(P, soort){
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(puit)}</b> <span class="muted" data-insgetal>van ${euro0(pbud)} ${S.limiet?'inkomen-limiet':'potjes'}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
       <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${pbud>0?16:4}px">${segs}${streep}</div>
       ${pbud>0?`<div class="small muted" data-instempopot="${pt}">tempo potjes <span data-insgetal>${euro0(pt)}</span> op ${esc(dagTxt)} (${pct}% van de maand)</div>`:''}
-      <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk" data-inslegnog>Nog verwacht</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0))}</div>
+      <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk" data-inslegnog>Nog verwacht</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0), m)}</div>
       <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${buitenRegel([m])}${insSaldoEindRegel()}</div>`;
   }
   /* Per soort: variabel is potjes en zonder potje tegen het potjesdeel, vast is de vaste lasten tegen hun som. */
@@ -24788,7 +24788,7 @@ function insMaandKaart(P, soort){
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(uit)}</b> <span class="muted" data-insgetal>van ${euro0(bud)}${soort==='alle'&&S.limiet?' inkomen-limiet':''}</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     ${inlegTxt}<div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${bud>0?20:4}px">${segs}${streep}</div>
     <div class="ins-leg2"><div class="ins-legk">Uitgegeven</div><div class="ins-legk">Nog te gaan</div>
-      ${insLegPaar(delen.filter(d=>d.v!==0), nog.filter(d=>d.v!==0))}
+      ${insLegPaar(delen.filter(d=>d.v!==0), nog.filter(d=>d.v!==0), m)}
 </div>${insPersRegel(S)}${buitenRegel([m])}${fc}</div>`;
 }
 /* v443 1c: UITGEGEVEN + NOG TE GAAN PER GROEP = DE FORECAST VAN DIE GROEP. De forecast komt uit budgetPerGroep() (blok 20 punt 7,
@@ -24809,10 +24809,11 @@ function insSoortDelen(S, soort){
   return [{k:'vast', v:S.vast},{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}];
 }
 const INS_LEG={vast:'vast', potjes:'potjes', zonder:'zonder potje', nogvast:'vast', nogpot:'in potjes'};
-function insLegRij(k, v, alles, fc){
-  /* v443: de vaste lasten (uitgegeven) openen de vast-sheet, zoals de regel eronder tot v443 deed; "in potjes" als forecast-rest
-     (fc) opent de potjes-sheet in zijn forecast-vorm, die optelt tot dit getal */
-  const tik=k==='zonder'?` role="button" onclick="openInsZonder()"`:(k==='nogpot'?` role="button" onclick="openInsTegel('potjes'${fc?',1':''})"`:((k==='nogvast'||k==='vast')?` role="button" onclick="openInsTegel('vast')"`:''));
+function insLegRij(k, v, alles, fc, m){
+  /* v443: "in potjes" als forecast-rest (fc) opent de potjes-sheet in zijn forecast-vorm. v488: met een maand (de lopende-maandkaart)
+     opent "vast" onder Uitgegeven "Betaald · vast" (de boekingen) en "potjes" de lijst per potje; de Nog-verwacht-kant (nogvast/nogpot)
+     houdt zijn sheets, en zonder maand (een afgesloten periode) blijft "vast" de oude vast-sheet en is "potjes" niet aan te tikken. */
+  const tik=k==='zonder'?` role="button" onclick="openInsZonder()"`:(k==='nogpot'?` role="button" onclick="openInsTegel('potjes'${fc?',1':''})"`:(k==='nogvast'?` role="button" onclick="openInsTegel('vast')"`:(k==='vast'?` role="button" onclick="${m?`openInsVastBetaald('${esc(m)}')`:`openInsTegel('vast')`}"`:(m&&k==='potjes'?` role="button" onclick="openInsPotjes('${esc(m)}')"`:''))));
   const pijl=tik?' ›':'';
   const lab=k==='nogpot'&&v<0?'te veel in potjes':INS_LEG[k];
   /* v383: "EUR X · buiten budget ›" past in een kolom van de legenda niet naast het label; het bedrag breekt dan als
@@ -24821,10 +24822,10 @@ function insLegRij(k, v, alles, fc){
 }
 /* Een getal staat een keer op het scherm: is er maar een deel van uitgegeven, dan is dat deel het getal in de kop, en
    dan zegt de rij "alles" in plaats van het bedrag nog eens. */
-function insLegPaar(links, rechts){
+function insLegPaar(links, rechts, m){
   const n=Math.max(links.length, rechts.length); let h='';
   const alleen=links.length===1;
-  for(let i=0;i<n;i++) h+=(links[i]?insLegRij(links[i].k, links[i].v, alleen, links[i].fc):'<div></div>')+(rechts[i]?insLegRij(rechts[i].k, rechts[i].v, false, rechts[i].fc):'<div></div>');
+  for(let i=0;i<n;i++) h+=(links[i]?insLegRij(links[i].k, links[i].v, alleen, links[i].fc, m):'<div></div>')+(rechts[i]?insLegRij(rechts[i].k, rechts[i].v, false, rechts[i].fc, m):'<div></div>');
   return h;
 }
 /* v403: NIET STIL. Wat er als persoonlijke overboeking zonder potje buiten de kaart valt (buitenUitgave) staat eronder
@@ -25119,9 +25120,27 @@ function insVerschuiving(){
    dagen, dezelfde lineaire regel als het potjesdeel van het trap-tempo) en het patroon als GRIJZE STIP: wat je in je
    laatste drie afgeronde maanden gemiddeld op dezelfde dag uitgaf (maandVooruit().typisch, keuze B van de gebruiker).
    Het streepje zegt waar je budget je toelaat, de stip hoe jij normaal loopt. Verwacht eind maand blijft. */
-function openInsPotje(k){ window._insPotje=k; renderInsPotje(); showSheetBg(); }
+/* v488 (punt 5): het potjes-scherm kent een maandkeuze: de lopende maand plus de laatste zes afgeronde maanden (die er zijn). Zo kun
+   je juli en augustus van een potje (bv. Overig) doorlopen. De lopende maand houdt de forecast, het tempo en het typische niveau; een
+   afgeronde maand toont alleen wat eruit ging tegen het budget van die maand, plus de boekingen (insEenmaligLijst) van die maand. */
+function openInsPotje(k, m){ window._insPotje=k; window._insPotjeM=m||thisYM(); renderInsPotje(); showSheetBg(); }
+function insPotjeMaanden(){ const out=[thisYM()]; for(let i=1;i<=6;i++){ const p=valtOpYmPlus(thisYM(),-i); if(months().includes(p)) out.push(p); } return out; }
+function insPotjeKiezer(k, sel){ const mnden=insPotjeMaanden(); if(mnden.length<2) return '';
+  return `<div class="row" data-inspotjekiezer style="gap:6px;flex-wrap:wrap;margin:8px 0 2px">${mnden.map(ym=>`<span data-inspotjemaand="${esc(ym)}" role="button" onclick="openInsPotje('${esc(k)}','${esc(ym)}')" style="cursor:pointer;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);${ym===sel?'background:var(--teal);color:#fff;border-color:var(--teal)':'color:var(--mut)'}">${esc(monthLabel(ym))}</span>`).join('')}</div>`; }
 function renderInsPotje(){
-  const k=window._insPotje, m=thisYM(), E=daysElapsed(m), c=CATS[k]; if(!c) return;
+  const k=window._insPotje, mm=window._insPotjeM||thisYM(), c=CATS[k]; if(!c) return;
+  const kiezer=insPotjeKiezer(k, mm);
+  if(mm!==thisYM()){
+    const MB=maandPotjes(mm).B||{}, bud=Math.round(+MB[k]||0);
+    let uit=0; for(const t of txOfMonth(mm)) if(catOf(t)===k && insTxSoort(t, MB)==='potje') uit+=uitgaveNorm(t); uit=Math.round(uit);
+    $('#sheet').innerHTML=`<div class="grab"></div><div id="insPotjeSheet" data-inspotje="${esc(k)}" data-inspotjemnd="${esc(mm)}" data-uit="${uit}" data-bud="${bud}">
+      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(c.name)}</div>${kiezer}
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:4px"><span><b style="font-size:var(--fs-xl)">${euro0(uit)}</b> ${bud>0?`<span class="muted">van ${euro0(bud)}</span>`:''}</span><span class="small muted">${esc(ymFull(mm))}</span></div>
+      ${insEenmaligLijst(k, mm)}
+      ${insNaarGripLink(k)}</div>`;
+    return;
+  }
+  const m=mm, E=daysElapsed(m);
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const x=V&&!V.onbekend?(V.potjes||[]).find(p=>p.k===k):null;
   const pb=weekPotBudget(m);
@@ -25141,7 +25160,7 @@ function renderInsPotje(){
   let wk=''; try{ if(potWekelijks(k)===true){ const R=weekRekensom(); if(R.cur){ let u=0; for(const t of txOfMonth(m)){ const d=+String(t.date).slice(8,10); if(catOf(t)===k && d>=R.cur.van && d<=R.cur.tot && weekTelt(t)) u+=uitgaveNorm(t); } wk=euro0(Math.round(u)); } } }catch(_){}
   const rij=(l,v,attr)=>`<div class="row ins-srij"${attr||''} style="gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;font-size:13px">${l}</span><span style="font-weight:700;white-space:nowrap">${v}</span></div>`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="insPotjeSheet" data-inspotje="${esc(k)}" data-uit="${uit}" data-bud="${bud}" data-tempo="${tempo}"${normaal!=null?` data-normaal="${normaal}"`:''}>
-    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(c.name)}${potSchatTag(k)}</div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(c.name)}${potSchatTag(k)}</div>${kiezer}
     <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:4px"><span><b style="font-size:var(--fs-xl)">${euro0(uit)}</b> <span class="muted">van ${euro0(bud)}</span></span><span class="small muted">dag ${E.elapsed} van ${E.dim}</span></div>
     <div class="ins-pbar"><i style="width:${pc(uit)}%;background:${uit>bud?'var(--amber)':'var(--green)'}"></i><em data-pottempo style="left:${pc(tempo)}%"></em>${normaal!=null?`<b data-potnormaal style="left:${pc(normaal)}%"></b>`:''}</div>
     <div class="small" style="margin-top:6px;line-height:1.5"><span style="color:var(--txt)">│ tempo vandaag ${euro0(tempo)}</span>${normaal!=null?`<br><span style="color:var(--mut2)">● normaal op dag ${E.elapsed}: ${euro0(normaal)} (gemiddelde 3 mnd)</span>`:''}</div>
@@ -25153,18 +25172,57 @@ function renderInsPotje(){
     ${insEenmaligLijst(k, m)}
     ${insNaarGripLink(k)}</div>`;
 }
-/* v486 (punt 5): per boeking een klein "eenmalig ›" in de potjessheet, zodat je de boekingen die het typische niveau dragen
-   kunt doorlopen (ook Overig in juli en augustus: de lopende maand plus de laatste VOORUIT_MAANDEN afgeronde maanden). Een tik
-   opent de boeking (openSheet), waar de schakelaar "Eenmalig" staat; al gemarkeerd toont "✓ eenmalig". */
+/* v486 (punt 5): per boeking een klein "eenmalig ›" in de potjessheet, zodat je de boekingen die het typische niveau dragen kunt
+   doorlopen; een tik opent de boeking (openSheet), waar de schakelaar "Eenmalig" staat ("✓ eenmalig" als al gemarkeerd). v488: de
+   lijst toont de GEKOZEN maand (de maandkeuze erboven schakelt), dus juli en augustus van Overig loop je door via de kiezer. */
 function insEenmaligLijst(k, m){ if(!(CATS[k] && CATS[k].type==='expense')) return '';
-  const mnden=[m]; for(let i=1;i<=VOORUIT_MAANDEN;i++){ const p=valtOpYmPlus(m,-i); if(months().includes(p)) mnden.push(p); }
-  let rijen=''; for(const ym of mnden){ const tx=txOfMonth(ym).filter(t=>catOf(t)===k && CATS[catOf(t)].type==='expense' && !isFixed(t) && uitgaveNorm(t)>0.005).sort((a,b)=>b.date.localeCompare(a.date));
-    if(!tx.length) continue;
-    rijen+=`<div class="small muted" style="margin-top:6px">${esc(ymFull(ym))}</div>`;
-    for(const t of tx){ const em=!!eenmaligBevestigd(t);
-      rijen+=`<div class="row" data-insemrij="${esc(t.id)}" style="gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dagKort(t.date)} · ${esc(titleCase(cleanMerch(t.name)||t.name||''))}</span><span class="small" style="white-space:nowrap">${euro0(Math.round(uitgaveNorm(t)))}</span><span class="small" data-insem="${esc(t.id)}" role="button" style="cursor:pointer;white-space:nowrap;color:${em?'var(--mut2)':'var(--teal)'};font-weight:700" onclick="openSheet('${esc(t.id)}')">${em?'✓ eenmalig':'eenmalig ›'}</span></div>`; } }
-  if(!rijen) return '';
-  return `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Boekingen · markeer eenmalig</summary>${rijen}</details>`; }
+  const tx=txOfMonth(m).filter(t=>catOf(t)===k && CATS[catOf(t)].type==='expense' && !isFixed(t) && uitgaveNorm(t)>0.005).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!tx.length) return '';
+  let rijen=''; for(const t of tx){ const em=!!eenmaligBevestigd(t);
+    rijen+=`<div class="row" data-insemrij="${esc(t.id)}" style="gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dagKort(t.date)} · ${esc(titleCase(cleanMerch(t.name)||t.name||''))}</span><span class="small" style="white-space:nowrap">${euro0(Math.round(uitgaveNorm(t)))}</span><span class="small" data-insem="${esc(t.id)}" role="button" style="cursor:pointer;white-space:nowrap;color:${em?'var(--mut2)':'var(--teal)'};font-weight:700" onclick="openSheet('${esc(t.id)}')">${em?'✓ eenmalig':'eenmalig ›'}</span></div>`; }
+  return `<details style="margin-top:10px" open><summary class="small muted" style="cursor:pointer">Boekingen · markeer eenmalig</summary>${rijen}</details>`; }
+
+/* v488 (punt 5): UITGEGEVEN OPENT DE BOEKINGEN. "vast" onder Uitgegeven opent "Betaald · vast · <maand>" (niet "Nog te betalen"):
+   per vaste last de boeking(en) met datum en bedrag, en de som. Bovenaan "<verwacht> verwacht · <betaald> betaald · <X> meer",
+   met de posten die het verschil maken (booked meer dan vorige maand). De som van de rijen is in centen gelijk aan het getal
+   waarop je tikte (de legenda-waarde, Math.round(insMaandStand().vast), dezelfde als G.vast.uit); betaald leest die ENE bron en de
+   rijen zijn de boekingen, dus een overgeslagen post laat de som afwijken. */
+function insVastBetaald(m){ m=m||thisYM(); const vandaag=vandaagYMD();
+  const map=new Map(), pm=valtOpYmPlus(m,-1);
+  for(const t of txOfMonth(m)){ if(insTxSoort(t)!=='vast' || t.date>vandaag) continue;
+    const c=Math.round(uitgaveNorm(t)*100); if(!c) continue;
+    const key=((typeof recurKey==='function'?recurKey(t):'')||txNaam(t));
+    let g=map.get(key); if(!g){ g={key, naam:txNaam(t), tx:[], somC:0}; map.set(key,g); }
+    g.tx.push({date:t.date, c}); g.somC+=c; }
+  const prev=new Map();
+  if(months().includes(pm)) for(const t of txOfMonth(pm)){ if(insTxSoort(t)!=='vast') continue;
+    const key=((typeof recurKey==='function'?recurKey(t):'')||txNaam(t)); prev.set(key,(prev.get(key)||0)+Math.round(uitgaveNorm(t)*100)); }
+  const posten=[...map.values()].map(g=>({naam:g.naam, tx:g.tx.sort((a,b)=>a.date.localeCompare(b.date)), som:g.somC/100, somC:g.somC,
+      verschilC:prev.has(g.key)?g.somC-prev.get(g.key):0})).sort((a,b)=>b.somC-a.somC || (a.naam<b.naam?-1:1));
+  let betaaldC=0, verwachtC=0; try{ const st=insMaandStand(); betaaldC=Math.round(st.vast)*100; verwachtC=Math.round(st.vastSom)*100; }catch(_){}
+  return {m, betaald:betaaldC/100, betaaldC, verwacht:verwachtC/100, verwachtC, meer:(betaaldC-verwachtC)/100, posten}; }
+function openInsVastBetaald(m){ window._insVastM=m||thisYM(); renderInsVastBetaald(); showSheetBg(); }
+function renderInsVastBetaald(){ const m=window._insVastM||thisYM(), B=insVastBetaald(m);
+  const kop=`${euro0(B.verwacht)} verwacht · ${euro0(B.betaald)} betaald${B.meer?` · ${euro0(Math.abs(B.meer))} ${B.meer>0?'meer':'minder'}`:''}`;
+  const verschil=B.posten.filter(p=>Math.abs(p.verschilC)>=100);
+  const rij=p=>`<div class="tx" data-insvbrij="${esc(p.naam)}" data-vbsom="${p.somC}"><div class="info"><div class="nm">${esc(p.naam)}</div>
+    <div class="cat">${p.tx.map(x=>`${dagKort(x.date)} ${euroC(x.c/100)}`).join(' · ')}${p.verschilC>=100?` · +${euroC(p.verschilC/100)} t.o.v. vorige maand`:(p.verschilC<=-100?` · −${euroC(-p.verschilC/100)} t.o.v. vorige maand`:'')}</div></div>
+    <div class="amt">${euroC(p.som)}</div></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="insVastBetaald" data-insvastbetaald="${B.betaaldC}" data-verwacht="${B.verwachtC}">
+    ${insSheetKop('Betaald · vast · '+esc(ymFull(m)), kop, euro0(B.betaald))}
+    ${verschil.length?`<div class="small muted" data-vbverschil style="margin-top:4px">Verschil met vorige maand: ${esc(opsomming(verschil.map(p=>p.naam)))}</div>`:''}
+    <div style="margin-top:8px">${B.posten.map(rij).join('')||'<div class="small muted">Deze maand is er nog geen vaste last afgeschreven.</div>'}</div></div>`; }
+/* v488 (punt 5): "potjes" onder Uitgegeven is aan te tikken ("potjes <X> ›") en opent een lijst per potje met wat eruit ging; een
+   tik op een potje opent openInsPotje met de boekingen en "eenmalig ›". Zo is het potjes-scherm ook via Uitgegeven bereikbaar, niet
+   alleen via "Nog verwacht · in potjes" (die regel verdwijnt aan het eind van de maand). */
+function insPotjesLijst(m){ m=m||thisYM(); const MB=maandPotjes(m).B||{}; const acc={};
+  for(const t of txOfMonth(m)){ const s=insTxSoort(t, m===thisYM()?undefined:MB); if(s!=='potje') continue; const c=catOf(t); acc[c]=(acc[c]||0)+uitgaveNorm(t); }
+  return Object.keys(acc).map(c=>({k:c, naam:(CATS[c]||{}).name||c, uit:Math.round(acc[c]*100)/100})).filter(r=>Math.round(r.uit)!==0).sort((a,b)=>b.uit-a.uit || (a.naam<b.naam?-1:1)); }
+function openInsPotjes(m){ window._insPotjesM=m||thisYM(); renderInsPotjes(); showSheetBg(); }
+function renderInsPotjes(){ const m=window._insPotjesM||thisYM(), rows=insPotjesLijst(m), som=Math.round(rows.reduce((a,r)=>a+r.uit,0));
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="insPotjesSheet" data-inspotjeslijst="${som}">
+    ${insSheetKop('Uitgegeven · potjes · '+esc(ymFull(m)), 'per potje wat eruit ging', euro0(som))}
+    <div style="margin-top:8px">${rows.map(r=>insRij(esc(r.naam)+' ›', '', euro0(r.uit), ` data-inspotjerij="${esc(r.k)}" role="button" onclick="openInsPotje('${esc(r.k)}','${esc(m)}')"`)).join('')||'<div class="small muted">Nog geen potje-uitgaven deze maand.</div>'}</div></div>`; }
 
 /* v382: Inzichten op een scherm. Zie het blok "INZICHTEN OP EEN SCHERM" bovenaan deze sectie. */
 /* v438: VERWACHT SALDO EIND <MAAND> op Inzichten, onder de maandkaart (gevraagd door de gebruiker): hetzelfde getal als "Verwacht
