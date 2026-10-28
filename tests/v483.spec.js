@@ -58,7 +58,7 @@ test('b. na de keuze toont de pop-up het nieuwe tekort; past alles, dan verdwijn
   const krapNa = await page.evaluate((LEEF) => {
     const h = salKrapKaart(); if (h === '') return 'leeg'; const m = document.createElement('div'); m.innerHTML = h; const row = m.querySelector('[data-saltekortrij="' + LEEF + '"]'); return row ? +row.getAttribute('data-nodig') : null;
   }, LEEF);
-  expect(krap.voor).toBeGreaterThan(1000);      // voor de keuze: tekort > 1000
+  expect(krap.voor).toBeGreaterThan(900);       // voor de keuze: tekort > 900 (v485: de potje/contant-projectie is lager, tekort 950 i.p.v. >1026; de 300-sprong blijft)
   expect(krapNa).toBeGreaterThan(0);            // na de keuze: nog krap
   expect(krap.voor - krapNa).toBe(300);         // het tekort in de pop-up zakt met het huurbedrag
 
