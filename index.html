@@ -9645,6 +9645,13 @@ function eenmaligKlopt(k){ let x=null; try{ x=zonderPotjeStand(thisYM()).rijen.f
   const herstel=setSnap(['eenmaligOk']); SET.eenmaligOk=SET.eenmaligOk||{};
   for(const t of (x.tx||[])) if(!SET.eenmaligOk[t.id]) SET.eenmaligOk[t.id]={op:vandaagYMD(), cat:k};
   save(); keuzeKlaar(`${x.naam}: eenmalig`, herstel); }
+/* v486 (punt 5): de schakelaar "Eenmalig" in de boekingssheet, voor ELKE uitgave (ook oud, ook met een potje). Hij schrijft
+   hetzelfde label als "Klopt, eenmalig" (SET.eenmaligOk), de ENE bron van eenmaligLabel()/eenmaligBevestigd(). Aan: de boeking telt
+   niet in zijn potje (geenNormTx) en niet in het typische niveau (piekInScope valt weg → uit ritAdd). Uit: delete, en het komt terug.
+   De checkbox-stand leest alleen SET.eenmaligOk (een eenmalig-antwoord uit je kennislaag staat los in kennisBlok). */
+function eenmaligZet(id){ const t=TX.find(x=>x.id===id); if(!t) return; SET.eenmaligOk=SET.eenmaligOk||{};
+  if(SET.eenmaligOk[id]) delete SET.eenmaligOk[id]; else SET.eenmaligOk[id]={op:vandaagYMD(), cat:catOf(t)};
+  save(); openSheet(id); try{ render(); }catch(_){} }
 function zonderMaandBedrag(k, ym){ let v=0; for(const t of txOfMonth(ym)){ if(!piekInScope(t) || catOf(t)!==k) continue; v+=uitgaveNorm(t); } return v; }
 function zonderSignaal(x, m){ m=m||thisYM();
   if((x.bedragen||[]).filter(v=>v>=ZONDER_SIGNAAL_EUR).length<ZONDER_MIN_MAANDEN) return false;
@@ -12446,10 +12453,20 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      op welke dagen) en wat er DEZE periode al van die rekening in dat potje uitging (alPer). Een uitgave uit een reservering
      telt niet (uitgaveNorm nolt het reserveringsdeel; v<=0 valt weg: punt 4, de CJIB-boete uit "Boetes cjib" telt een keer). */
   const ritmeD={}, alPer={};
+  /* v486 (punt 5): naPer = de na-aftrek-som per cat/acc/maand, uit DEZELFDE lus als ritAdd (piekInScope, zonder eenmalig), dus de
+     reeks waar het typische niveau de mediaan van is (één bron). */
+  const naPer={}, emBij=(M,c,acc,ym,v)=>{ const a=(M[c]=M[c]||{}), b=(a[acc]=a[acc]||{}); b[ym]=(b[ym]||0)+v; };
   const ritAdd=(c,acc,ym,day,v)=>{ const m=ritmeD[c]=ritmeD[c]||{}, r=m[acc]=m[acc]||{n:0, som:0, maanden:new Set(), dagen:[]}; r.n++; r.som+=v; r.maanden.add(ym); r.dagen.push(day); };
   for(const ym of af) for(const t of txOfMonth(ym)){ if(t.pending || !set.has(t.acc) || paar.has(t.id) || !piekInScope(t) || eenmaligBevestigd(t)) continue;
     const c=catOf(t), v=uitgaveNorm(t); (per[c]=per[c]||{})[t.acc]=(per[c][t.acc]||0)+v; totRek[t.acc]=(totRek[t.acc]||0)+v;
-    if(v>0.005) ritAdd(c, t.acc, ym, +t.date.slice(8,10), v); }
+    if(v>0.005){ ritAdd(c, t.acc, ym, +t.date.slice(8,10), v); emBij(naPer, c, t.acc, ym, v); } }
+  /* v486 (punt 5): eenmPer = per cat/acc/maand het deel dat JIJ eenmalig noemde en dat anders in de reeks zou zitten (een uitgave in
+     een niet-vaste potje-boeking). Alleen voor de uitlezing in blok 23: bruto = na aftrek + eenmalig. Markeer je een boeking
+     eenmalig, dan valt hij uit piekInScope (geenNormTx leest het label) en dus uit ritAdd/naPer, en daalt het typische niveau. */
+  const eenmPer={};
+  for(const ym of af) for(const t of txOfMonth(ym)){ if(t.pending || !set.has(t.acc) || paar.has(t.id) || !eenmaligBevestigd(t)) continue;
+    const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || isFixed(t)) continue;
+    if(geenNorm(c)) continue; const v=uitgaveNorm(t); if(v>0.005) emBij(eenmPer, c, t.acc, ym, v); }
   /* v485 (punt 1): "al deze maand" telt alles wat er in de LOPENDE KALENDERMAAND al uitging (vanaf de 1e), niet pas vanaf de
      periodestart. De verwachting p.maand is de forecast van de hele lopende maand en de daling dekt de resterende dagen van die maand,
      dus de juiste aftrek is alles wat er die maand al ging. v482 nam de LATERE van de periodestart en de 1e: bij een periode die in de
@@ -12557,7 +12574,8 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const pd=potExp.map(p=>{ const A=aandeel(p.k), f=A[acc]||0; if(!(f>0)) return null; const R=ritmeVan(p.k, acc);
       const periodExp=p.bedrag*f, alP=((alPer[p.k]||{})[acc])||0;
       return {k:p.k, naam:p.naam, zonder:p.zonder, maand:p.maand, totaal:p.bedrag, aandeel:f, bedrag:periodExp, rest:p.rest*f,
-        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP, 0)}; }).filter(Boolean);
+        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP, 0),
+        afMaanden:af.slice(), grossAf:af.map(ym=>Math.round(((((naPer[p.k]||{})[acc]||{})[ym])||0)+((((eenmPer[p.k]||{})[acc]||{})[ym])||0))), eenmAf:af.map(ym=>Math.round((((eenmPer[p.k]||{})[acc]||{})[ym])||0))}; }).filter(Boolean);
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
     /* (2c) buffer: p75 min mediaan van de werkelijke uitgaven per maand over 6 afgeronde maanden, vanaf de eerste maand met een boeking */
@@ -25101,8 +25119,21 @@ function renderInsPotje(){
     ${wk?rij('Deze week', wk, ' data-potweek'):''}
     ${verg>0?rij('Reiskostenvergoeding uit je salaris', `vergoeding −${euroC(verg)}`, ` data-vergoeding="${verg}"`):''}
     ${vergOver>0?rij('Meer vergoed dan uitgegeven', `vergoeding over ${euroC(vergOver)}`, ` data-vergoedingover="${vergOver}"`):''}
+    ${insEenmaligLijst(k, m)}
     ${insNaarGripLink(k)}</div>`;
 }
+/* v486 (punt 5): per boeking een klein "eenmalig ›" in de potjessheet, zodat je de boekingen die het typische niveau dragen
+   kunt doorlopen (ook Overig in juli en augustus: de lopende maand plus de laatste VOORUIT_MAANDEN afgeronde maanden). Een tik
+   opent de boeking (openSheet), waar de schakelaar "Eenmalig" staat; al gemarkeerd toont "✓ eenmalig". */
+function insEenmaligLijst(k, m){ if(!(CATS[k] && CATS[k].type==='expense')) return '';
+  const mnden=[m]; for(let i=1;i<=VOORUIT_MAANDEN;i++){ const p=valtOpYmPlus(m,-i); if(months().includes(p)) mnden.push(p); }
+  let rijen=''; for(const ym of mnden){ const tx=txOfMonth(ym).filter(t=>catOf(t)===k && CATS[catOf(t)].type==='expense' && !isFixed(t) && uitgaveNorm(t)>0.005).sort((a,b)=>b.date.localeCompare(a.date));
+    if(!tx.length) continue;
+    rijen+=`<div class="small muted" style="margin-top:6px">${esc(ymFull(ym))}</div>`;
+    for(const t of tx){ const em=!!eenmaligBevestigd(t);
+      rijen+=`<div class="row" data-insemrij="${esc(t.id)}" style="gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dagKort(t.date)} · ${esc(titleCase(cleanMerch(t.name)||t.name||''))}</span><span class="small" style="white-space:nowrap">${euro0(Math.round(uitgaveNorm(t)))}</span><span class="small" data-insem="${esc(t.id)}" role="button" style="cursor:pointer;white-space:nowrap;color:${em?'var(--mut2)':'var(--teal)'};font-weight:700" onclick="openSheet('${esc(t.id)}')">${em?'✓ eenmalig':'eenmalig ›'}</span></div>`; } }
+  if(!rijen) return '';
+  return `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Boekingen · markeer eenmalig</summary>${rijen}</details>`; }
 
 /* v382: Inzichten op een scherm. Zie het blok "INZICHTEN OP EEN SCHERM" bovenaan deze sectie. */
 /* v438: VERWACHT SALDO EIND <MAAND> op Inzichten, onder de maandkaart (gevraagd door de gebruiker): hetzelfde getal als "Verwacht
@@ -25936,6 +25967,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
+    ${CATS[cur].type==='expense'?`<label class="row" data-eenmaligrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)"><input type="checkbox" data-eenmaligtoggle ${(SET.eenmaligOk||{})[id]?'checked':''} onchange="eenmaligZet('${id}')"><span class="small"><b>Eenmalig</b> · telt niet in je potje en niet in het typische niveau</span></label>`:''}
     ${kennisBlok(t)}${salSplitsing(t)?salSplitBlok(t):onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
@@ -33599,14 +33631,14 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
     /* v481 punt 4: per vaste last de gebruikte datum en waar die vandaan komt (schema uit de afschrijvingen / je eigen keuze / standaard) */
     if(r.vast.length) L.push(`  betaaldatum per post: ${r.vast.map(x=>{ const E=(SET.vastDatum||{})[x.key]; const bron=x.nonSepa?(E?'keuze: '+E.keuze+(E.periode?' ('+E.periode+')':''):'standaard, de vaste dag uit je kennislaag'):'schema uit de afschrijvingen'; return `${x.naam} [${x.key||'-'}] nonSepa=${x.nonSepa?'ja':'nee'} keuze=${E?E.keuze:'geen'} → ${x.data.map(kd).join('/')||'-'} (${bron})`; }).join(' · ')}`);
     L.push(`  potjes ${e(r.potS)}`+(r.potDelen.length?': '+r.potDelen.map(x=>`${x.naam}${x.zonder?' (zonder potje)':''} ${pc(x.aandeel)} van ${e(x.totaal)} (${e(x.maand)} × ${P.dagen}/${P.dimStart}) = ${e(x.bedrag)}`).join(', '):''));
-    /* v485 (punt 2): per potje het GEBRUIKTE TYPISCHE NIVEAU, uit welke maanden het komt (de maandreeks met maandlabels, de mediaan),
-       het ritme, het aandeel, wat er DEZE KALENDERMAAND al van deze rekening in dit potje ging, en NOG VERWACHT PER MAANDDEEL: de
-       lopende maand (de maandverwachting min al deze maand, over de resterende dagen) en de maanden daarna (het typische niveau × het
-       aandeel per maand). Zelden telt niet in de daling. */
-    if(r.potDelen.length) for(const x of r.potDelen){ const mnd=ym=>MNAMES[+ym.slice(5,7)-1], afm=P.af||[];
-      const reeks=(x.maanden||[]).map((v,i)=>`${afm.length===(x.maanden||[]).length?mnd(afm[i])+' ':''}${e(v)}`).join(' · ');
+    /* v485 (punt 2) / v486 (punt 5): per potje het GEBRUIKTE TYPISCHE NIVEAU en uit welke maanden het komt. PER MAAND het bruto
+       (alles wat er anders in de reeks zou zitten), WAARVAN EENMALIG (door jou gemarkeerd), en wat er NA AFTREK overblijft = het
+       getal waar het typische niveau de mediaan van is. Markeer je een boeking eenmalig, dan daalt na aftrek en dus het typische
+       niveau. Daarnaast ritme, aandeel, al deze maand, en nog verwacht per maanddeel. Zelden telt niet in de daling. */
+    if(r.potDelen.length) for(const x of r.potDelen){ const mnd=ym=>MNAMES[+ym.slice(5,7)-1], afm=x.afMaanden||[], gr=x.grossAf||[], em=x.eenmAf||[];
+      const reeks=afm.map((ym,i)=>{ const g=gr[i]||0, ee=em[i]||0; return `${mnd(ym)} ${e(g)}${ee>0?` (waarvan eenmalig ${e(ee)} → na aftrek ${e(g-ee)})`:''}`; }).join(' · ');
       const nogDeze=x.ritme==='zelden'?0:Math.round(x.nogVerwacht), volg=x.ritme==='zelden'?0:Math.round(x.typisch);
-      L.push(`    ${x.naam}: typisch ${e(x.typisch)} (mediaan van ${reeks||'-'}) · ritme ${x.ritme}${x.ud!=null?` (meestal dag ${x.ud})`:''} · aandeel ${pc(x.aandeel)} · al deze maand ${e(x.alPeriode)} · nog verwacht: deze maand ${x.ritme==='zelden'?'0 (niet in de daling)':e(nogDeze)}, daarna ${e(volg)}/mnd`); }
+      L.push(`    ${x.naam}: typisch ${e(x.typisch)} (mediaan van na aftrek) · maanden: ${reeks||'-'} · ritme ${x.ritme}${x.ud!=null?` (meestal dag ${x.ud})`:''} · aandeel ${pc(x.aandeel)} · al deze maand ${e(x.alPeriode)} · nog verwacht: deze maand ${x.ritme==='zelden'?'0 (niet in de daling)':e(nogDeze)}, daarna ${e(volg)}/mnd`); }
     if((r.potZelden||[]).length) L.push(`    kan komen (zelden, niet meegerekend): ${r.potZelden.map(z=>`${z.naam} gemiddeld ${e(z.gemiddeld)}`).join(', ')}`);
     L.push(`  contant ${pc(r.kasAandeel)} van ${e(P.kasP)} (${P.kasBron==='budget'?`te pinnen = potje Contant ${e(P.kasBud)} × ${P.dagen}/${P.dimStart} − stand portemonnee ${P.kasStand==null?'bij moment 2 onbekend (0, het hele budget)':P.kasStandBron==='schatting'?`${e(P.kasStand)} (SCHATTING, v450: laatste telling ${e(P.kasSchat.telling)} op ${P.kasStandDatum.slice(8,10)}-${P.kasStandDatum.slice(5,7)}${P.kasSchat.flows?` ${P.kasSchat.flows>0?'+':'−'} opgenomen/ontvangen sinds ${e(Math.abs(P.kasSchat.flows))}`:''} − ${P.kasSchat.dagen} dagen tempo van het potje ${e(P.kasSchat.tempo)}, minimaal 0; geen telling op moment 2, je antwoord bij moment 2 vervangt hem)`:`${e(P.kasStand)} (jouw antwoord bij moment 2${P.kasStandDatum?' op '+P.kasStandDatum.slice(8,10)+'-'+P.kasStandDatum.slice(5,7):''})`} = ${e(P.kasP)} (minimaal 0); v447, in plaats van de mediaan ${e(P.kasMed)}`:`mediaan ${e(P.kas)} × ${P.dagen}/${P.dimStart}`}) = ${e(r.kasS)} · opnamedag: ${r.kasPatroon.dag!=null?`dag ${r.kasPatroon.dag} na je salaris (${r.kasPatroon.n} opnames in ${r.kasPatroon.maanden} maanden), op de saldolijn ${r.kasDag}`:`geen patroon (${r.kasPatroon.maanden||0} maanden met een opname), gelijk verdeeld`}`);
     L.push(`  verwacht ${e(r.verwacht)} · buffer ${e(r.buffer)} = p75 ${e(r.p75)} min mediaan ${e(r.med)} = ${e(r.p75-r.med)}, minstens ${REKV.bufferMin}, hoogstens 20% van verwacht ${e(r.bufMax)}`);
