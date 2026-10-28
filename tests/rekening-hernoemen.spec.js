@@ -111,8 +111,11 @@ test.describe('b · de ingangen', () => {
     expect(await page.locator('#renInp').getAttribute('placeholder')).toBe('Buffer Rust');
   });
 
-  test('via het saldo-overzicht, waar de app al naar verwees', async ({ page }) => {
-    await boot(page);
+  test('via het saldo-overzicht, waar de app al naar verwees (een spaar-/reserveringsrekening)', async ({ page }) => {
+    /* v489: in het saldo-overzicht opent een tik op een BETAALrekening "tot je salaris" (zie v489.spec.js d); een
+       spaar- of reserveringsrekening houdt de hernoem-sheet. Buffer Rust staat hier als spaarrekening, zodat deze
+       ingang (rename via het saldo-overzicht) nog is wat hij was. Hernoemen van een betaalrekening gaat via Instellingen. */
+    await boot(page, seedRen({ savingsAcc: { [POT1]: true } }));
     await page.evaluate(() => openBalances());
     /* v378: "naam aanpassen" per rij is weg; een tik op de rij opent de rekening */
     expect(await page.locator('#sheet').innerText()).not.toContain('naam aanpassen');

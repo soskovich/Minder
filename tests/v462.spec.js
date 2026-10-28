@@ -214,27 +214,35 @@ test.describe('B6 · de regel onder het saldo en Je cijfers', () => {
     expect(t.t).not.toMatch(/meer ruimte dan je dacht/i);
     expect(t.notif.filter((k) => /voraut|correctie/.test(k))).toEqual([]);
   });
-  test('e. de bel: groep Cijfers met een vraag van €250, niets voor €7, niets voor soort 1 of 2; de Home-regel zegt 1 vraag', async ({ page }) => {
+  /* v489 (punt 3): de groep Cijfers is UIT de bel. De vraag over je cijfers staat in cijferVragen() en in de regel onder je saldo;
+     de bel toont geen cijfers-melding meer (zie v489.spec.js c). De drempel (€250 wel, €7 niet) is ongewijzigd. */
+  test('e. geen groep Cijfers in de bel; de vraag staat in cijferVragen en in de regel onder het saldo', async ({ page }) => {
     await boot(page, { tx: [['2026-10-10', -250, 'Kapsalon Vincent'], ['2026-04-08', -7, 'Kapsalon Klein']] });
     const r = await page.evaluate(() => { runControles('sync'); renderDash(); const N = scoreNotifs(); openNotifs(); const Q = cijferVragen();
-      return { n: Q.length, qt: Q.map((q) => q.t ? q.t.amount : null), alle: gegevensOpen().map((q) => q.t ? q.t.amount : null), keys: N.map((n) => n.key), vraag: N.filter((n) => n.key === 'cijfers-vraag').map((n) => n.l1), kop: !!document.querySelector('#sheet [data-notifgroep="cijfers"]'),
+      return { n: Q.length, qt: Q.map((q) => q.t ? q.t.amount : null), alle: gegevensOpen().map((q) => q.t ? q.t.amount : null), keys: N.map((n) => n.key), kop: !!document.querySelector('#sheet [data-notifgroep="cijfers"]'),
         regel: document.querySelector('[data-cijferregel]').dataset.cijferregel, regelT: document.querySelector('[data-cijferregel]').innerText,
         klein: vraagBovenDrempel({ t: TX.find((t) => t.amount === -7), bedrag: 7 }), groot: vraagBovenDrempel({ t: TX.find((t) => t.amount === -250), bedrag: 250 }) }; });
     expect(r.groot).toBe(true);
     expect(r.klein).toBe(false);
     expect(r.qt).toContain(-250);
     expect(r.qt).not.toContain(-7);
-    expect(r.vraag[0]).toBe(`${r.n} ${r.n === 1 ? 'vraag' : 'vragen'} over je cijfers`);
-    expect(r.kop).toBe(true);
-    expect(r.regel).toBe('vraag');
+    expect(r.kop).toBe(false);                                        // v489: geen groep Cijfers meer in de bel
+    expect(r.keys.filter((k) => /^cijfers/.test(k))).toEqual([]);     // en geen cijfers-melding in de bel
+    expect(r.regel).toBe('vraag');                                    // de vraag staat in de regel onder je saldo
     expect(r.regelT).toContain(`${r.n} ${r.n === 1 ? 'vraag' : 'vragen'} over je cijfers`);
-    expect(r.keys.filter((k) => /^cijfers-/.test(k) && !/^cijfers-(vraag|rek-|bewogen-)/.test(k))).toEqual([]);
   });
-  test('f. een getal dat na een nieuwe versie bewoog: een melding in de bel', async ({ page }) => {
+  test('f. een getal dat na een nieuwe versie bewoog staat in Je cijfers, niet in de bel', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { runControles('sync'); SET.controles.getallen.saldo = (SET.controles.getallen.saldo || 0) - 25; SET.controles.versie = 'oud'; save();
-      runControles('versie'); return scoreNotifs().filter((n) => /^cijfers-bewogen-/.test(n.key)).map((n) => n.l1 + ' | ' + n.l2); });
-    expect(r).toEqual([expect.stringMatching(/^totaal saldo veranderde na de update \| €[\d.]+ → €[\d.]+ · Je cijfers$/)]);
+      runControles('versie');
+      const bel = scoreNotifs().filter((n) => /^cijfers-bewogen-/.test(n.key)).map((n) => n.key);
+      openJeCijfers();
+      const bw = [...document.querySelectorAll('[data-cijfersbewogen]')].map((e) => ({ g: e.getAttribute('data-cijfersbewogen'), t: e.innerText.replace(/\s+/g, ' ').trim() }));
+      return { bel, bw }; });
+    expect(r.bel).toEqual([]);                                        // v489: niet in de bel
+    const saldo = r.bw.find((x) => x.g === 'saldo');
+    expect(saldo).toBeTruthy();                                       // wel in Je cijfers, "Veranderd na de update"
+    expect(saldo.t).toMatch(/totaal saldo veranderde na de update €[\d.]+ → €[\d.]+/);
   });
   test('g. een wachtende controle (soort 2) staat als grijze regel onderaan Je cijfers, en nooit in de bel', async ({ page }) => {
     await boot(page);

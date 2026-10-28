@@ -149,30 +149,6 @@ test.describe('c · ymdVan geeft een lokale dag, ook op lokale middernacht', () 
   });
 });
 
-test.describe('d · de accshort-sleutel noemt de dag die je ziet', () => {
-  const MAIN = 'NL01MAIN0000001111';
-  test('de sleutel komt uit ymdVan, niet uit toISOString', async ({ page }) => {
-    await page.route('**/sw.js', (r) => r.abort());
-    await page.goto('/index.html');
-    await page.waitForFunction(() => typeof scoreNotifs === 'function');
-    const src = await kaalUit(page, 'scoreNotifs');
-    expect(src).toContain("'accshort-'+s.acc+'-'+ymdVan(s.t)");
-    expect(src).not.toMatch(/accshort[^;]*toISOString/);
-  });
-
-  /* accshort staat in CRIT en is dus niet te snoozen; de datum in de sleutel houdt alleen twee
-     shortfalls uit elkaar. Dat blijft zo, en de sleutel noemt nu de dag van de afschrijving. */
-  test('de groep blijft accshort, dus snooze en mute veranderen niet', async ({ page }) => {
-    await page.route('**/sw.js', (r) => r.abort());
-    await page.goto('/index.html');
-    await page.waitForFunction(() => typeof scoreNotifs === 'function');
-    const r = await page.evaluate(() => {
-      const sleutel = 'accshort-' + 'NL01' + '-' + ymdVan(new Date(2026, 6, 14, 0, 0, 0, 0));
-      return { groep: sleutel.split('-')[0], sleutel,
-        crit: /CRIT=new Set\(\['lowbal','accshort'\]\)/.test(scoreNotifs.toString()) };
-    });
-    expect(r.groep).toBe('accshort');
-    expect(r.sleutel).toContain('2026-07-14');
-    expect(r.crit).toBe(true);
-  });
-});
+/* v489: blok d ("de accshort-sleutel noemt de dag die je ziet") is vervallen. Het oude 30-dagen-incassosignaal
+   (accountShortfalls) staat sinds v489 niet meer in de bel; het gebruikte de ymdVan-sleutel alleen als voertuig voor de
+   datum-invariant, en die staat in blok a/b/c. accountShortfalls() blijft als functie bestaan (zie v489.spec.js a). */

@@ -3521,10 +3521,15 @@ function openBalances(){
   const rows=OWN.filter(rekActief).map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null).sort((x,y)=>y.b-x.b);
   const bank=rows.reduce((s,r)=>s+r.b,0);
   let ach={}; try{ for(const x of saldoAchter()) ach[x.acc]=x; }catch(_){}
+  /* v489 (punt 4): een tik op een betaalrekening opent "<rekening> \u00b7 tot je salaris" (ook als hij past), zodat die sheet altijd
+     bereikbaar is, ook zonder de krap-pop-up. Een spaar- of reserveringsrekening houdt de hernoem-sheet (daar is "tot je salaris"
+     niet van toepassing). */
+  let BET=new Set(); try{ BET=new Set(rekBetaal()); }catch(_){}
   const rij=r=>{ const x=ach[r.a]; const bnk=(ACCMETA[r.a]&&ACCMETA[r.a].bank)||'';
     const sub=[bnk, isSavingsAcc(r.a)?'spaarrekening':''].filter(Boolean).join(' \u00b7 ');
     const oud=x?(x.reden==='sync'?`saldo ${esc(dagKort(x.saldoDatum))} \u00b7 niet bijgewerkt bij de laatste synchronisatie`:`saldo ${esc(dagKort(x.saldoDatum))} \u00b7 boekingen tot ${esc(dagKort(x.txDatum))}`):'';
-    return `<div class="tx" data-saldorij="${Math.round(r.b*100)}" data-rek="${esc(r.a)}" style="cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+    const aq=esc(String(r.a).replace(/'/g,"\\'")), act=BET.has(r.a)?`closeSheet();openTotSalaris('${aq}')`:`acctRenameOpen('${aq}')`;
+    return `<div class="tx" data-saldorij="${Math.round(r.b*100)}" data-rek="${esc(r.a)}"${BET.has(r.a)?' data-saldobetaal':''} style="cursor:pointer" onclick="${act}"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
       <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div>${sub?`<div class="cat">${esc(sub)}</div>`:''}${oud?`<div class="cat" data-saldooud>${oud}</div>`:''}</div>
       <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`; };
   const kop=(lab,bedrag,attr)=>`<div class="row" ${attr} style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:14px 2px 4px"><span style="flex:1">${lab}</span><span>${euro(bedrag)}</span></div>`;
@@ -5544,15 +5549,11 @@ function scoreNotifs(opts){
     push({key:'rekgeld', h:'direct', score:88, t:'warn', ic:ICON('bank'), rekgeld:true, l1:kop, l2:det, act:'openKrapPopup()'}); } }catch(_){}
   /* v460 (B3): een keuze die wachtte op een nagerekend getal staat weer open: een melding in de bel, groep Grip */
   try{ const KT=(SET.controles||{}).keuzeTerug; if(KT && Date.now()-KT.op<7*864e5) push({key:'grip-keuzeterug-'+KT.getal, h:'direct', score:66, t:'info', ic:ICON('check'),
-    l1:'Een keuze staat weer open', l2:`'${CONTROLE_GETAL_NAAM[KT.getal]||KT.getal}' is nagerekend · Kiezen`, act:"go('maand');gripKiesTab('kiezen')"}); }catch(_){}
-  /* v462 (B6): DE GROEP CIJFERS IN DE BEL. Alleen wat iets van je vraagt: een vraag boven de drempel, een rekening die niet actueel
-     is, een getal dat na een update bewoog. Nooit een melding voor soort 1 (Minder herstelde) of soort 2 (de bouwer zoekt het uit). */
-  try{ const Q=cijferVragen(); if(Q.length) push({key:'cijfers-vraag', h:'direct', score:64, t:'info', ic:ICON('check'), cijfers:true,
-    l1:`${Q.length} ${Q.length===1?'vraag':'vragen'} over je cijfers`, l2:'Kloppen mijn gegevens?', act:"openGegevensVragen('alle')"}); }catch(_){}
-  try{ for(const v of rekVersheid().filter(v=>v.oud)) push({key:'cijfers-rek-'+v.acc, h:'direct', score:65, t:'warn', ic:ICON('check'), cijfers:true,
-    l1:`${v.naam} niet bijgewerkt sinds ${v.gelukt!=null?nlDagMaand(v.gelukt):'onbekend'}`, l2:'Opnieuw koppelen', act:'psd2Connect()'}); }catch(_){}
-  try{ const BW=(SET.controles||{}).bewogen; if(BW && Date.now()-BW.op<7*864e5) for(const x of (BW.lijst||[])) push({key:'cijfers-bewogen-'+x.getal, h:'direct', score:63, t:'info', ic:ICON('check'), cijfers:true,
-    l1:`${CONTROLE_GETAL_NAAM[x.getal]||(/^pot:/.test(x.getal)?'verwacht in '+((CATS[x.getal.slice(4)]||{}).name||x.getal.slice(4)):x.getal)} veranderde na de update`, l2:`${euro0(x.voor)} → ${euro0(x.na)} · Je cijfers`, act:'openJeCijfers()'}); }catch(_){}
+    l1:'Een keuze staat weer open', l2:`${meldGetalNaam(KT.getal)} is nagerekend · Kiezen`, act:"go('maand');gripKiesTab('kiezen')"}); }catch(_){}
+  /* v489 (punt 3): DE GROEP CIJFERS IS UIT DE BEL. Een vraag over je cijfers staat in "Kloppen mijn gegevens?" en in de regel onder
+     je saldo; een rekening die niet actueel is staat op Home (homeRekKaart) en in Je cijfers; wat na een update bewoog staat in Je
+     cijfers (openJeCijfers, de groep "Veranderd na de update"). Dat blijft de enige plek; de bel toont ze niet meer, en Snooze en
+     "Niet meer tonen" voor die soort vervallen mee. */
   if(isNow){ try{ const {out:eb}=effectiveBudgets(m); const spend=catSpendMap(m); const B=SET.budgets||{}; const overs=[];
     const keys=new Set([...Object.keys(eb||{}), ...Object.keys(B).filter(k=>+B[k]>0)]);
     for(const k of keys){ if(!CATS[k]||CATS[k].type!=='expense') continue; const act=spend[k]||0; const potje=+B[k]||0;
@@ -5728,20 +5729,13 @@ function scoreNotifs(opts){
         l1: tb.known>0?'Van een deel van je rekeningen kennen we het saldo niet.':'We kennen je saldo niet, dus we kunnen niet waarschuwen.',
         l2:'Voeg je saldo toe, dan waarschuwt Minder je als er te weinig staat', act:'balNudgeGo()'});
     } }catch(_){}
-  // --- per-rekening: aankomende vaste last die het saldo van DIE rekening niet dekt ---
-  try{ const t0=new Date().setHours(0,0,0,0);
-    for(const s of accountShortfalls()){
-      const dd=Math.round((s.t-t0)/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':`over ${dd} dagen`;
-      /* v199: hier stond toISOString() op s.t, en dat is lokale middernacht uit accountShortfalls()
-         (setHours(0,0,0,0)). Die stempelt in Nederland het hele jaar door de dag ervoor. Vandaag
-         heeft dat geen zichtbaar gevolg - 'accshort' staat in CRIT en is dus niet te snoozen, en de
-         verschuiving is voor elke datum gelijk, dus twee shortfalls blijven uit elkaar te houden -
-         maar een sleutel die een andere dag noemt dan de gebruiker ziet is een val voor de volgende
-         die hem uitleest. Een sleutel is intern, dus hij volgt de lokale regel. */
-      out.push({key:'accshort-'+s.acc+'-'+ymdVan(s.t), h:'direct', score:94, t:'bad', ic:ICON('alert'),
-        l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
-        l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
-    } }catch(_){}
+  /* v489 (punt 1): HET OUDE 30-DAGEN-INCASSOSIGNAAL (accountShortfalls) IS UIT DE BEL. Het liep per rekening de herkende incasso's
+     op hun SCHEMA-datum af tot het volgende salaris en noemde de ene post die het saldo onder nul tipte, terwijl het tekort uit de SOM
+     kwam; het las de betaaldatum-keuze ("Na mijn salaris") niet en telde geen potjes of contant. De krap-melding (salTekortData, de
+     groep "Geld op je rekeningen") is de ENE bron: zij rekent per rekening saldo − vaste lasten op hun gekozen datum − potjes − contant
+     tot je salaris. De huur na je salaris valt zo buiten de periode, waar het oude signaal hem op de 1e binnen de periode zette en
+     daardoor een tekort meldde dat salTekortData als "past" leest. accountShortfalls() blijft als gemeten basis (verwachtInMaand-invariant
+     van bonus-en-opzeggen). */
   // mentale-rekening: stilstaand surplus BOVEN de buffer terwijl dure schuld rente kost (observatie, geen alarm)
   try{ const ma=mentalAccountingSignal();
     /* v189: dit signaal is het enige structurele met een samengestelde l1, en die werd als
@@ -5878,14 +5872,14 @@ function pushTopNotif(force){
   }catch(_){}
 }
 function openNotifs(){
-  const ns=notifList().map((n,i)=>[n,i]).sort((a,b)=>(a[0].cijfers?1:0)-(b[0].cijfers?1:0) || a[1]-b[1]).map(x=>x[0]); window._setSheet=null;   // v462: Cijfers als laatste groep
+  const ns=notifList(); window._setSheet=null;   // v489: de groep Cijfers is uit de bel (zie scoreNotifs), dus geen eigen sortering meer
   const nNew=(function(){ try{ return notifUnseen(); }catch(_){ return 0; } })();   // dit is exact wat de badge telde
   const perm=(typeof Notification!=='undefined')?Notification.permission:'denied';
   const enableRow = perm==='default' ? `<div class="small" style="margin:0 0 12px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="enableNotifs()">Meldingen op dit toestel aanzetten ›</span></div>` : '';
   const CRITN=new Set(['lowbal','accshort']);
-  let _cijKop=false, _rekKop=false;   // v462 (B6): cijfers onder een eigen kop; v479: krappe rekeningen ook
-  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g); const kopR=(n.rekgeld && !_rekKop)?(_rekKop=true, `<div class="hlabel" data-notifgroep="rekgeld" style="margin:10px 0 6px">Geld op je rekeningen</div>`):''; const kopC=(n.cijfers && !_cijKop)?(_cijKop=true, `<div class="hlabel" data-notifgroep="cijfers" style="margin:10px 0 6px">Cijfers</div>`):'';
-    return kopR+kopC+`<div class="coach ${n.t}" data-notif="${esc(n.key)}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
+  let _rekKop=false;   // v479: krappe rekeningen onder een eigen kop (de groep Cijfers is in v489 uit de bel)
+  const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g); const kopR=(n.rekgeld && !_rekKop)?(_rekKop=true, `<div class="hlabel" data-notifgroep="rekgeld" style="margin:10px 0 6px">Geld op je rekeningen</div>`):'';
+    return kopR+`<div class="coach ${n.t}" data-notif="${esc(n.key)}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
       + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px;flex-wrap:wrap">${g==='loandue'?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRepaidFromNotif('${n.key.replace(/^loandue-/,'')}')">Terugbetaald</span>`:''}<span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
   }).join('')
     /* v162: de lijst is vaker leeg, en dat is goed. Eén rustige regel, geen uitleg en geen
@@ -12907,8 +12901,12 @@ function totSalarisData(acc){ const SP=salPeriode(); if(!SP || SP.stil || SP.laa
       else vastRij.push({date:d, bedrag:Math.round(u.vast), saldoNa:Math.round(bStart-u.vast), onder:(bStart-u.vast)<-0.005, naam:'vaste last', key:null, keys:[], nonSepa:false}); }
     if(b<laagst-1e-9){ laagst=b; laagstDag=d; } if(nul==null && b<-0.005) nul=d; }
   const SV=SET.salVerdeling||{}, afspraak=(SV.rek && SV.rek[acc]!=null)?Math.round(SV.rek[acc]):null;
+  /* v489 (punt 4): een niet-SEPA vaste last met "Na mijn salaris" valt per constructie NA het eind van deze periode (de toegepaste
+     datum is de salarisdatum + VAST_NASAL_DAGEN, dus na het volgende salaris), en staat dus niet in de daling hierboven. Hij hoort toch
+     zichtbaar te zijn met zijn toegepaste datum en reden, zodat je ziet waar de huur heen ging; hij telt NIET mee in de stand. */
+  const vastNaSal=[]; try{ const seen={}; for(const x of (P.vastAlle||[])){ if(x.acc!==acc || !x.nonSepa || seen[x.key]) continue; seen[x.key]=1; const nu=vastDatumNu(x.key); if(nu && String(nu.datum)>String(eind)) vastNaSal.push({key:x.key, naam:x.naam, datum:nu.datum, reden:nu.reden, verlegd:nu.verlegd}); } }catch(_){}
   let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null) naSal=Math.round(sb+rekAfgegaan(acc, PV.werkelijk, vandaag, rekParen(TX.filter(t=>t.date.slice(0,10)>=PV.werkelijk), new Set(rekBetaal())))); } }catch(_){}
-  return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal}; }
+  return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, vastNaSal, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal}; }
 function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salverdeling'); return; } window._totsal=acc; window._totsalPot=false; window._totsalKeuze=''; renderTotSalaris(); showSheetBg(); }
 function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   if(!D){ $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris"><div style="font-weight:800">Tot je salaris</div><div class="small" style="margin-top:6px">Dit is nu niet te rekenen.</div></div>`; return; }
@@ -12916,7 +12914,18 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   const vastRij=D.vastRij.map(x=>{ const kb=x.nonSepa && x.key; const dag=`<span style="color:var(--mut2)">${esc(dagKort(x.date))}</span>`;
     const naam=kb?`<span data-totvastpost="${esc(kb)}" role="button" style="color:var(--teal);cursor:pointer" onclick="window._totsalKeuze=window._totsalKeuze==='${esc(kb).replace(/'/g,"\\'")}'?'':'${esc(kb).replace(/'/g,"\\'")}';renderTotSalaris()">${esc(x.naam)} ›</span>`:esc(x.naam);
     const r=rij(`${dag} ${naam}`, `−${e(x.bedrag)} · ${x.onder?`<b style="color:var(--red)">${e(x.saldoNa)}</b>`:e(x.saldoNa)}`, `data-totvast="${esc(x.date)}"${kb?` data-totvastkey="${esc(kb)}"`:''}`);
-    return r + ((kb && window._totsalKeuze===kb)?totBetaaldatumBlok(kb):''); }).join('')||rij('geen vaste last tot je salaris','€0');
+    /* v489 (punt 4): onder de huur staat altijd de datum die nu geldt, met de reden ("25 nov · na je salaris van 24 nov"); de drie
+       keuzes staan eronder zodra je de post opent (totBetaaldatumBlok noemt die datum dan opnieuw, dus hier alleen in gesloten staat). */
+    const nu=kb?vastDatumNu(kb):null;
+    const nuRegel=(kb && window._totsalKeuze!==kb && nu)?`<div class="small" data-totvastnu="${esc(kb)}" style="margin:-1px 0 4px;color:var(--mut2)">${esc(dagKort(nu.datum))} · ${esc(nu.reden)}</div>`:'';
+    return r + nuRegel + ((kb && window._totsalKeuze===kb)?totBetaaldatumBlok(kb):''); }).join('')||rij('geen vaste last tot je salaris','€0');
+  /* v489 (punt 4): de niet-SEPA vaste lasten die na je salaris vallen (de huur met "Na mijn salaris") staan hier, met hun toegepaste
+     datum en reden; ze tellen niet mee in de stand hierboven. De naam opent dezelfde drie keuzes als een in-periode post. */
+  const naSalRij=(D.vastNaSal||[]).map(x=>{ const kq=esc(x.key).replace(/'/g,"\\'");
+    const naam=`<span data-totvastpost="${esc(x.key)}" role="button" style="color:var(--teal);cursor:pointer" onclick="window._totsalKeuze=window._totsalKeuze==='${kq}'?'':'${kq}';renderTotSalaris()">${esc(x.naam)} ›</span>`;
+    const r=rij(naam, `<span style="color:var(--mut2)">na je salaris</span>`, `data-totnasal="${esc(x.key)}"`);
+    const nuRegel=(window._totsalKeuze!==x.key)?`<div class="small" data-totvastnu="${esc(x.key)}" style="margin:-1px 0 4px;color:var(--mut2)">${esc(dagKort(x.datum))} · ${esc(x.reden)}</div>`:'';
+    return r + nuRegel + ((window._totsalKeuze===x.key)?totBetaaldatumBlok(x.key):''); }).join('');
   /* v482 (punt 1/5): per potje de maandreeks, het aandeel, het ritme, wat er deze periode al ging en wat er nog verwacht wordt.
      Zelden staat niet in de daling maar als "kan komen"-regel, met of de rekening dan tekort komt. */
   const potOpen=window._totsalPot;
@@ -12934,6 +12943,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--card2)">
       ${rij('<b>Saldo nu</b>', `<b>${e(D.saldo)}</b>`, 'data-totsaldo')}
       <div class="small" style="font-weight:700;margin-top:4px;color:var(--mut2)">Vaste lasten</div>${vastRij}
+      ${naSalRij?`<div class="small" data-totnasalkop style="font-weight:700;margin-top:6px;color:var(--mut2)">Na je salaris</div>${naSalRij}`:''}
       <div class="row" data-totpot role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
       ${rij('Contant', `−${e(D.kas)}`, 'data-totkas')}
       <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:3px">${rij('<b>Stand dag voor je salaris</b>', `<b style="${D.eind<0?'color:var(--red)':''}">${e(D.eind)}</b>`, 'data-toteind')}</div>
@@ -26347,6 +26357,11 @@ function openJeCijfers(){ const C=controlesLees(), U=C.uitkomst||[], R=C.run, A=
       const zon=Z?`<div class="small" data-cijferszonderuitkomst style="margin-top:4px;line-height:1.4">zonder correctie: ${esc((CATS[Z.cat]||{}).name||Z.cat)} in ${esc(MFULL[+Z.ym.slice(5,7)-1].toLowerCase())} ${euro(Z.zonder)} (nu ${euro(Z.met)}) · springt terug zodra je de sheet sluit</div>`:'';
       return `<div data-cijferscorrectie="${esc(c.k)}" style="padding:8px 0;border-top:1px solid var(--line)"><b>${esc(c.partij)} · ${esc(dagKort(c.A.date))}</b><div class="small muted" style="line-height:1.4">${esc(zin)}</div>${zon}
         <div class="row" style="gap:12px;margin-top:6px"><button class="btn sec" data-zondercorrectie="${esc(c.k)}" style="width:auto;min-height:44px;padding:8px 12px" onclick="cijferToonZonder('${kk}')">${Z?'Toon met correctie':'Toon zonder correctie'}</button><span class="small" data-cijfersterug style="color:var(--mut2);cursor:pointer;min-height:44px;display:inline-flex;align-items:center" onclick="cijferTerug('${kk}')">terugdraaien</span></div></div>`; }).join(''); }
+  /* v489 (punt 3): wat na een update bewoog staat ALLEEN hier (niet meer in de bel): per getal de naam ("Zorg & apotheek", nooit
+     de sleutel), met voor → na. Zeven dagen zichtbaar, net als de melding in de bel dat was. */
+  const BW=(SET.controles||{}).bewogen;
+  if(BW && BW.lijst && BW.lijst.length && Date.now()-BW.op<7*864e5) h+=kop('Veranderd na de update')+BW.lijst.map(x=>
+    rij(`data-cijfersbewogen="${esc(x.getal)}"`, `${meldGetalNaam(x.getal)} veranderde na de update`, `${euro0(x.voor)} → ${euro0(x.na)}`, '')).join('');
   const ok=[...new Set(U.filter(u=>u.status==='klopt').map(u=>u.onderwerp||'overig'))].sort((a,b)=>(CONTROLE_ONDERWERP_VOLG.indexOf(a)+99)%99-(CONTROLE_ONDERWERP_VOLG.indexOf(b)+99)%99);
   if(ok.length) h+=kop('Klopt')+`<div class="small" data-cijfersklopt style="line-height:1.5;padding:4px 0">${esc(ok.join(' · '))}</div>`;
   const nW=U.filter(u=>u.soort===2 && u.status==='wacht').length;
@@ -33831,6 +33846,9 @@ function diagRekVerdeling(){ const L=['LATEN STAAN PER REKENING (v432/v435) · a
    het teken kunnen omdraaien. */
 const CONTROLE_KEUZE_DREMPEL=0.10, AANSL_TOLERANTIE_DAGEN=3, AANSL_VENSTER_DAGEN=7, CONTROLE_LOG_MAX=400;
 const CONTROLE_GETAL_NAAM={onderBudget:'onder budget', saldo:'totaal saldo'};
+/* v489 (punt 2): de leesbare naam van een nagerekend getal voor in een melding of in Je cijfers. Een potje-sleutel ('pot:zorg')
+   wordt de naam van het potje ("Zorg & apotheek"), nooit de interne sleutel. Geen enkele meldingstekst toont nog een sleutel. */
+function meldGetalNaam(g){ return CONTROLE_GETAL_NAAM[g] || (/^pot:/.test(g) ? (((CATS[g.slice(4)]||{}).name)||g.slice(4)) : g); }
 const CONTROLE_ONDERWERP_VOLG=['budget',CONTANT_CAT,'woning','terug te zetten','verdeling','voorautorisaties','boekingen','rekeningen'];
 /* de vier eisen van soort 1, per correctie uitgeschreven (B2) */
 const CONTROLE_CORRECTIES={
@@ -34149,7 +34167,8 @@ function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), 
     if(u.status==='verklaard' && u.maand && u.maand<thisYM()) u.archief=true;
     const p=vorigId.get(u.id); u.sinds=p && p.status===u.status ? (p.sinds||p.tijd||nu) : nu; u.tijd=nu; }
   /* keuze die terugkomt: wachtte een keuze aan een getal en nu niet meer, dan een melding in de bel (groep Grip) */
-  /* v462 (B6): een getal dat na een nieuwe versie bewoog (een euro of meer) krijgt een melding in de bel, groep Cijfers */
+  /* v462 (B6): een getal dat na een nieuwe versie bewoog (een euro of meer). v489 (punt 3): dit staat NIET meer in de bel, maar
+     alleen in Je cijfers (openJeCijfers, "Veranderd na de update"); C.bewogen blijft hier de bron, de bel leest hem niet meer. */
   if(bron==='versie' && C.getallen && typeof C.getallen==='object'){ const L=[]; for(const g of Object.keys(getallen)){ const a=C.getallen[g], b=getallen[g]; if(a!=null && b!=null && Math.abs(b-a)>=1) L.push({getal:g, voor:a, na:b}); }
     if(L.length) C.bewogen={op:nu, lijst:L}; }
   const oudWacht=new Set(C.wachtGetallen||[]); C.uitkomst=U; C.getallen=getallen;
