@@ -12408,12 +12408,14 @@ function rekVoorstelSleutel(){ return vandaagYMD()+'|'+_dataGen+'|'+JSON.stringi
    SET.vastDatum[key]={keuze, periode?, op}. vastDatumKeuze(key, periode) lost 'eenmalig' op tegen de gevraagde periode. De
    krap-berekening (salTekortData) en het voorstel (rekVoorstelRuw) lezen hem; de maand-forecast niet, want een storting op de ~24e
    plus een paar dagen valt in dezelfde kalendermaand. Zonder keuze verandert er niets (de standaard is de vaste dag van v432/v444). */
-const VAST_NASAL_DAGEN=3;
+const VAST_NASAL_DAGEN=1;   // v487: salaris + 1 dag (de huur valt net na je salaris)
 function vastDatumKeuze(key, periode){ const E=(SET.vastDatum||{})[key]; if(!E) return 'vastedag';
   if(E.keuze==='eenmalig') return E.periode===periode?'nasal':'vastedag';
   return E.keuze==='nasal'?'nasal':'vastedag'; }
-function vastDatumZet(key, keuze){ SET.vastDatum=SET.vastDatum||{};
+/* v487: "Op een vaste dag" draagt een gekozen dag (1-28), elke maand. nasal/eenmalig dragen geen dag. */
+function vastDatumZet(key, keuze, dag){ SET.vastDatum=SET.vastDatum||{};
   if(keuze==='vastedag'){ delete SET.vastDatum[key]; }
+  else if(keuze==='op'){ const d=Math.min(Math.max(Math.round(+dag||0),1),28)||+(((SET.vastDatum||{})[key]||{}).dag)||1; SET.vastDatum[key]={keuze:'op', dag:d, periode:null, op:vandaagYMD()}; }
   else { let per=thisYM(); try{ const SP=salPeriode(); if(SP) per=SP.cur.ym; }catch(_){} SET.vastDatum[key]={keuze, periode:keuze==='eenmalig'?per:null, op:vandaagYMD()}; }
   save(); window._rekV=null;   // het voorstel opnieuw laten rekenen met de nieuwe datum
   if(window._totsal){ try{ renderTotSalaris(); }catch(_){ render(); } } else render(); }
@@ -12425,12 +12427,16 @@ function vastDatumZet(key, keuze){ SET.vastDatum=SET.vastDatum||{};
 function vastDatumOpruim485(){ const V=SET.vastDatum; if(!V || typeof V!=='object') return false; const weg=[];
   for(const k of Object.keys(V)) if(k.indexOf('woning|')!==0){ weg.push(k); delete V[k]; }
   if(!weg.length) return false; const eerder=(SET.vastDatum485&&SET.vastDatum485.weg)||[]; SET.vastDatum485={weg:eerder.concat(weg.filter(k=>!eerder.includes(k))), op:vandaagYMD()}; return true; }
-/* de verwachte salarisdata + VAST_NASAL_DAGEN in [from,to], voor een post die je na je salaris betaalt */
-function salNaDatums(from, to){ let B=null,R=null; try{ B=salBron(); R=B&&salRegel(B); }catch(_){} if(!R) return [];
-  const out=[]; let ym=from.slice(0,7);
-  for(let i=0;i<40;i++){ let v=null; try{ v=salarisVerwacht(ym, R); }catch(_){} const d=v&&v.datum?rekDag(v.datum, VAST_NASAL_DAGEN):null;
-    if(d){ if(d>to) break; if(d>=from) out.push(d); } ym=nextYM(ym); }
-  return out; }
+/* v487: de datum "na mijn salaris" voor een gewone betaaldag g: de EERSTE verwachte salarisstorting OP OF NA g, plus VAST_NASAL_DAGEN.
+   Nooit een salaris dat VÓÓR g valt - dat was de v483-bug (salNaDatums liep vanaf de forward-start, pakte het salaris van de lopende
+   periode en legde de huur binnen de periode, zodat de stand niet veranderde). Geeft {datum, sal} of null. */
+function nasalDatumVan(g){ let B=null,R=null; try{ B=salBron(); R=B&&salRegel(B); }catch(_){} if(!R) return null;
+  let ym=prevYM(String(g).slice(0,7));
+  for(let i=0;i<40;i++){ let v=null; try{ v=salarisVerwacht(ym, R); }catch(_){}
+    if(v && v.datum && v.datum>=g) return {datum:rekDag(v.datum, VAST_NASAL_DAGEN), sal:v.datum}; ym=nextYM(ym); }
+  return null; }
+/* de nasal-datums voor een reeks gewone betaaldagen (elk via nasalDatumVan) */
+function salNaDatums(gDates){ const out=[]; for(const g of (gDates||[])){ const n=nasalDatumVan(g); if(n) out.push(n.datum); } return out; }
 function rekVoorstel(){ const s=rekVoorstelSleutel(); if(window._rekV && window._rekV.s===s) return window._rekV.R; let R=null; try{ R=rekVoorstelRuw(); }catch(e){ R={ok:false, reden:'kon niet rekenen: '+e.message}; } window._rekV={s, R}; return R; }
 function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length) return {ok:false, reden:'geen betaalrekening'};
   /* v435: DE PERIODE KOMT UIT salPeriode() (de verwachte salarisdatum met de weekendregel). Op de dag van de werkelijke storting is
@@ -12502,20 +12508,30 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      woning-betalingen zijn al isFixed (woningPaymentIds), dus ze tellen niet in het aandeel hierboven. */
   try{ const WF=woningForecast(cur), wrk=woningRecurKeys();
     if(WF && WF.actief && WF.bedrag>0 && ![...vastAlle, ...vastNiet].some(x=>wrk.has(x.key))){
-      const wk=WF.key.slice(7), dd=String(Math.min(Math.max(+WF.dag||1,1),28)).padStart(2,'0');
+      const wk=WF.key.slice(7), E=(SET.vastDatum||{})[WF.key]||null;
+      /* v487 (punt 3): "Op een vaste dag" draagt een eigen dag (1-28); anders de gewone dag uit je kennislaag. */
+      const dd=String(Math.min(Math.max((E&&E.keuze==='op'&&+E.dag)?+E.dag:(+WF.dag||1),1),28)).padStart(2,'0');
       const wp=TX.filter(t=>!t.pending && t.amount<0 && (CATS[catOf(t)]||{}).type==='expense' && woningKeyVan(t)===wk).sort((a,b)=>b.date.localeCompare(a.date));
       const acc=(wp[0] && set.has(wp[0].acc))?wp[0].acc:terugval;
       const base=prevYM(start.slice(0,7))+'-'+dd, sWon={cadans:'maand', intervalM:1, key:WF.key, name:WF.naam};
       /* v444: een termijn in een maand waarin er in deze periode al een betaling aan de woning was, vervalt (dezelfde regel als
          woningForecast); de termijn van een maand zonder betaling blijft staan */
       const WE=kennisGet(WF.key)||{}, betM=new Set(TX.filter(t=>t.date>=start && t.date<=eind && woningBetaling(t, wk, WE)).map(t=>t.date.slice(0,7)));
-      /* v481: de betaaldatum-keuze. 'nasal' legt de termijn op je salarisdatum + een paar dagen, dus buiten de lopende periode. De
-         voorstel-periode (per0) en de lopende forward-reeks (alleTerm, via genW) lossen de keuze elk tegen hun eigen periode op, zodat
-         "Alleen deze keer later" wel de lopende periode raakt maar de volgende weer op de vaste dag staat. */
-      const genFor=k=>((f,t)=>k==='nasal'?salNaDatums(f, t):rekTermijnen(sWon, base, f, t));
-      const perKeuze=vastDatumKeuze(WF.key, per0.ym), curKeuze=vastDatumKeuze(WF.key, SP.cur.ym);
-      const tmW=genFor(perKeuze)(start, eind).filter(d=>!betM.has(String(d).slice(0,7)));
-      vastAlle.push({key:WF.key, naam:WF.naam, acc, termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true, nonSepa:true, keuze:perKeuze, genW:genFor(curKeuze)}); } }catch(_){}
+      /* v487 (punt 1/2): de betaaldatum-keuze per GEWONE termijndag g. 'nasal' verlegt elke termijn naar het eerste salaris op of na g
+         (+1 dag), dus net buiten de periode. 'eenmalig' verlegt ALLEEN de termijn waarvan de gewone dag in de gekozen periode valt (de
+         lopende); de volgende staat weer op de gewone dag. 'op' en de standaard blijven op de gewone dag (dd zit al in base). Eén
+         generator voor zowel de voorstel-periode (tmW) als de forward-reeks (genW), zodat beide dezelfde regel lezen. */
+      const eenmW=(E && E.keuze==='eenmalig')?(()=>{ try{ return salPeriodeVan(E.periode); }catch(_){ return null; } })():null;
+      const moveG=g=>!!(E && (E.keuze==='nasal' || (E.keuze==='eenmalig' && eenmW && g>=eenmW.start && g<=eenmW.eind)));
+      /* De forward-reeks (genW, geen voorstelPer) verlegt een eenmalige termijn fysiek, ook als de nieuwe datum in de VOLGENDE periode
+         landt. Het voorstel van EEN periode (tmW, met voorstelPer=per0.ym) verlegt alleen als die periode zelf de eenmalige is: anders
+         staat de huur daar weer op de gewone dag, en een verlegde termijn uit een eerdere periode lekt niet in de voorstel-reeks. */
+      const genWoning=(f,t,voorstelPer)=>{ const F=rekDag(f,-62), out=new Set();
+        const mv=voorstelPer ? (g=>!!(E && (E.keuze==='nasal' || (E.keuze==='eenmalig' && E.periode===voorstelPer)))) : moveG;
+        for(const g of rekTermijnen(sWon, base, F, t)){ let d=g; if(mv(g)){ const n=nasalDatumVan(g); if(!n) continue; d=n.datum; } if(d>=f && d<=t) out.add(d); }
+        return Array.from(out).sort(); };
+      const tmW=genWoning(start, eind, per0.ym).filter(d=>!betM.has(String(d).slice(0,7)));
+      vastAlle.push({key:WF.key, naam:WF.naam, acc, termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true, nonSepa:true, keuze:vastDatumKeuze(WF.key, per0.ym), genW:genWoning}); } }catch(_){}
   const vast=vastAlle.filter(x=>x.n>0), vastBuiten=vastAlle.filter(x=>!x.n);
   /* (2b) potjes en zonder potje uit maandVooruit(), zonder eenmalig: het VERWACHTE eind van deze maand (niet je budget) */
   let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -12925,9 +12941,24 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
     <div class="small" data-totwaarom style="margin-top:8px;color:var(--mut2);line-height:1.45">${esc(waarom)}</div>
     <div class="small" data-totvolgend role="button" style="margin:10px 0 4px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();openSalVerdeling('salverdeling')">Volgend salaris: zo verdeel je ›</div></div>`; }
 /* v481 (punt 3): de drie keuzes voor de betaaldatum van een niet-SEPA vaste last, niets voorgeselecteerd */
+/* v487 (punt 4): de datum die NU geldt voor deze post, met de reden. De eerstvolgende termijn uit de forward-reeks (genW); is zijn
+   dag verlegd ten opzichte van de gewone dag, dan "na je salaris van <salarisdatum>" (de storting = de datum − VAST_NASAL_DAGEN),
+   anders "op de <dag>e". */
+function vastDatumNu(key){ let P=null; try{ P=rekVoorstel(); }catch(_){} if(!P || !P.ok) return null;
+  const wa=(P.vastAlle||[]).find(x=>x.key===key); if(!wa || !wa.genW) return null;
+  const va=vandaagYMD(), ds=wa.genW(rekDag(va,1), rekDag(va,400)); if(!ds.length) return null;
+  const d=ds[0], E=(SET.vastDatum||{})[key]||{};
+  const WF=(()=>{ try{ return woningForecast(); }catch(_){ return null; } })();
+  const gdag=Math.min(Math.max((E.keuze==='op'&&+E.dag)?+E.dag:(+((WF||{}).dag)||1),1),28);
+  const verlegd=(+String(d).slice(8,10)!==gdag);
+  const reden=verlegd?`na je salaris van ${dagKort(rekDag(d, -VAST_NASAL_DAGEN))}`:`op de ${gdag}e`;
+  return {datum:d, reden, verlegd}; }
 function totBetaaldatumBlok(key){ const E=(SET.vastDatum||{})[key]||{}, kq=esc(key).replace(/'/g,"\\'");
   const knop=(k,l)=>`<button class="btn sec" data-totdatumkeuze="${k}" ${E.keuze===k?'style="outline:2px solid var(--teal)"':''} onclick="vastDatumZet('${kq}','${k}')">${l}</button>`;
-  return `<div class="small" data-totdatum="${esc(key)}" style="margin:2px 0 6px;padding:7px 10px;border-radius:10px;background:var(--card)">Wanneer betaal je dit?<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:5px">${knop('nasal','Na mijn salaris')}${knop('vastedag','Op een vaste dag')}${knop('eenmalig','Alleen deze keer later')}</div></div>`; }
+  const nu=vastDatumNu(key), opDag=(E.keuze==='op'&&+E.dag)?+E.dag:'';
+  /* v487 (punt 3): "Op een vaste dag" opent een dagkeuze 1-28; die dag geldt elke maand */
+  const dagKeuze=E.keuze==='op'?`<div class="row" data-totdatumdag style="gap:6px;align-items:center;margin-top:5px"><span>Op dag</span><input type="text" inputmode="numeric" value="${opDag}" style="width:56px;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--txt);text-align:center" onchange="vastDatumZet('${kq}','op',numIn(this.value))"><span>van de maand</span></div>`:'';
+  return `<div class="small" data-totdatum="${esc(key)}" style="margin:2px 0 6px;padding:7px 10px;border-radius:10px;background:var(--card)">Wanneer betaal je dit?<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:5px">${knop('nasal','Na mijn salaris')}${knop('op','Op een vaste dag')}${knop('eenmalig','Alleen deze keer later')}</div>${dagKeuze}${nu?`<div data-totdatumnu style="margin-top:6px;color:var(--mut2)">Nu: <b style="color:var(--txt)">${esc(dagKort(nu.datum))}</b> · ${esc(nu.reden)}</div>`:''}</div>`; }
 function salKrapPopupMisschien(){ try{ if($('#sheetBg')&&$('#sheetBg').classList.contains('show')) return false; try{ salTekortBewaar(); }catch(_){} if(!salTekortStand().length || !salKrapOnbekeken()) return false; openKrapPopup(); return true; }catch(_){ return false; } }
 /* v436: ZONDER AKKOORD DE KAART "JE SALARISVERDELING": het voorstel voor de verwachte storting, per rekening en opzij, met een tik
    naar de sheet (dezelfde als in Kiezen). Hij staat er niet als de periode van dat voorstel al een geaccepteerde verdeling heeft. */
