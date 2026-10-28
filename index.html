@@ -959,11 +959,22 @@ const FILE_RX=/\.(sta|940|mt940|csv|txt)$/i;     // ondersteunde bestandstypen
 
 /* ---------- persistentie (localStorage, blijft lokaal op dit apparaat) ---------- */
 let _dataGen=0;   // bumpt bij elke mutatie; invalideert lichte caches (o.a. noodfondsModel)
-function save(){try{
+/* v490 (snelheid): PERF meet per draai hoe vaak en hoe lang de dure kernen draaien. Uit (PERF.on=false) in productie, dan is
+   perfK() een rechtstreekse aanroep. De SNELHEID-blok (diagSnelheid) en de perf-tests zetten hem aan, meten een actie, en lezen
+   PERF.n (aantal aanroepen) en PERF.ms (ingesloten tijd). Zie ook save(stil): een boekhoud-save bumpt _dataGen niet. */
+const PERF={on:false, n:{}, ms:{}};
+function perfReset(){ PERF.n={}; PERF.ms={}; }
+function perfK(name, fn){ if(!PERF.on) return fn(); const t=performance.now(); try{ return fn(); } finally{ PERF.n[name]=(PERF.n[name]||0)+1; PERF.ms[name]=(PERF.ms[name]||0)+(performance.now()-t); } }
+function perfHit(name){ if(PERF.on) PERF.n[name]=(PERF.n[name]||0)+1; }
+function save(stil){try{
   window._bwKeuze=null;   // v436: het label van een budgetwijziging geldt tot de eerste save() van die handeling
   try{ kennisSync(); }catch(_){}   // v426: leningen en gestopte posten staan bij elke wijziging ook in SET.kennis
   try{ kasGrensSync(); }catch(_){}   // v448: een potje Contant aan of uit zet de opnames voor de v420-grens om
-  _dataGen++;
+  /* v490: een boekhoud-save (stil) schrijft wel naar localStorage maar bumpt _dataGen NIET. Dat is voor velden die geen enkele
+     berekening voeden (SET.salTekort bekeken/stand, SET.maandGelezen, SET.afsluitPopup, salKrap-bekeken): zo overleeft de memo-laag
+     (rekVoorstel, salTekortData, maandVooruit, recurringSchedule, ...) het tekenen van een scherm, in plaats van bij elke save leeg
+     te lopen. Elke save die een GEMETEN invoer verandert (boekingen, saldi, OVR, een keuze) blijft de gewone save() en bumpt wel. */
+  if(!stil) _dataGen++;
   localStorage.setItem('minder_tx',JSON.stringify(TX));
   localStorage.setItem('minder_ovr',JSON.stringify(OVR));
   localStorage.setItem('minder_set',JSON.stringify(SET));
@@ -2524,7 +2535,7 @@ function maandInkomen(m){
   const ov=overschotInkomen(m); alles+=ov; onregelmatig+=ov;
   return {alles, onregelmatig, norm:alles-onregelmatig};
 }
-function totals(m){
+function totals(m){ perfHit('totals');
   const list=txOfMonth(m), BU=maandPotjes(m||thisYM()).B;   // v405: de potjes van die maand
   let spend=0, internal=0, buitenNorm=0, uitRes=0, persoonlijk=0; const persTx=[];
   const byCat={}, uitResCat={};
@@ -3576,7 +3587,7 @@ function shiftWeekendToMonday(d){ const x=new Date(d); const w=x.getDay(); if(w=
    tenzij jij hem op "nog actief" zette (SET.postStatus[key] actief bij die laatste betaling): dan telt hij weer. Lezers met
    `metOud`: postStatusMap() (dus Let op en de status), postZet(), openPostStatus(), blok 19 en Vaste lasten. */
 /* v461: binnen een run van de controles een keer per stand (runMemo); daarbuiten ongewijzigd */
-function recurringSchedule(metOud){ return runMemo('recurringSchedule', !!metOud, ()=>recurringScheduleKern(metOud)); }
+function recurringSchedule(metOud){ return runMemo('recurringSchedule', !!metOud, ()=>perfK('recurringScheduleKern', ()=>recurringScheduleKern(metOud))); }
 function recurringScheduleKern(metOud){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
@@ -9765,7 +9776,7 @@ function potVarMaanden(m){
   const perMaand=P.map(p=>{ const pm={}; for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const c=catOf(t); if(potHeelVast(c)) continue; pm[c]=(pm[c]||0)+uitgaveNorm(t); } return pm; });
   return (_potVarMemo.m[m]={P, perMaand});
 }
-function maandVooruit(){ return runMemo('maandVooruit', '', maandVooruitKern); }
+function maandVooruit(){ return runMemo('maandVooruit', '', ()=>perfK('maandVooruitKern', maandVooruitKern)); }
 function maandVooruitKern(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
   const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
@@ -10693,7 +10704,7 @@ function maandBeginBlok(B){
     <div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-maandbeginklopt style="flex:1" onclick="maandBeginKlopt(false)">Klopt</button><button class="btn sec" data-maandbeginaanpassen style="flex:1" onclick="maandBeginKlopt(true)">Aanpassen</button></div></div>`;
 }
 function maandBeginKlopt(aanpassen){
-  SET.maandBegin={maand:thisYM(), op:vandaagYMD()}; save();
+  SET.maandBegin={maand:thisYM(), op:vandaagYMD()}; save(true);   // v490: boekhoud-save
   if(aanpassen){ closeSheet(); openBudgetEditor(thisYM()); return; }
   const M=afsluitMaand(); if(afsluitNodig(M) && !(SET.maandAfsluiting||{})[M]) renderAfsluitSheet(M); else closeSheet();
 }
@@ -10706,11 +10717,11 @@ function afsluitPopupMisschien(){
     if(!afsluitPopupMag()) return false;
     const M=afsluitMaand();
     SET.afsluitPopup={maand:M, dag:vandaagYMD()};
-    if(!SET.maandGelezen){ save(); return false; }   // eerste keer ooit: geen maandwissel, wel 'vandaag gezien'
-    save(); openAfsluiting(M); return true;
+    if(!SET.maandGelezen){ save(true); return false; }   // eerste keer ooit: geen maandwissel, wel 'vandaag gezien' (v490: boekhoud-save)
+    save(true); openAfsluiting(M); return true;   // v490: boekhoud-save (afsluitPopup/maandGelezen voeden geen berekening)
   }catch(_){ return false; }
 }
-function afsluitLater(){ SET.afsluitPopup={maand:afsluitMaand(), dag:vandaagYMD()}; save(); closeSheet(); }
+function afsluitLater(){ SET.afsluitPopup={maand:afsluitMaand(), dag:vandaagYMD()}; save(true); closeSheet(); }   // v490: boekhoud-save
 /* De drie tegels van vorige maand: wat er boven de potjes eindigde, hoe je de vragen beantwoordde,
    en het totaal tegen je budget (dezelfde staaf als de grafiek en de bridge, maandStaaf()). */
 function afsluitTegels(M){
@@ -12431,7 +12442,7 @@ function nasalDatumVan(g){ let B=null,R=null; try{ B=salBron(); R=B&&salRegel(B)
   return null; }
 /* de nasal-datums voor een reeks gewone betaaldagen (elk via nasalDatumVan) */
 function salNaDatums(gDates){ const out=[]; for(const g of (gDates||[])){ const n=nasalDatumVan(g); if(n) out.push(n.datum); } return out; }
-function rekVoorstel(){ const s=rekVoorstelSleutel(); if(window._rekV && window._rekV.s===s) return window._rekV.R; let R=null; try{ R=rekVoorstelRuw(); }catch(e){ R={ok:false, reden:'kon niet rekenen: '+e.message}; } window._rekV={s, R}; return R; }
+function rekVoorstel(){ const s=rekVoorstelSleutel(); if(window._rekV && window._rekV.s===s) return window._rekV.R; let R=null; try{ R=perfK('rekVoorstelRuw', rekVoorstelRuw); }catch(e){ R={ok:false, reden:'kon niet rekenen: '+e.message}; } window._rekV={s, R}; return R; }
 function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length) return {ok:false, reden:'geen betaalrekening'};
   /* v435: DE PERIODE KOMT UIT salPeriode() (de verwachte salarisdatum met de weekendregel). Op de dag van de werkelijke storting is
      het de lopende periode (van die storting tot de dag voor de volgende verwachte); anders de komende periode (van de volgende
@@ -12800,7 +12811,7 @@ function rekSaldoOp(acc, ymd){ const b=accBalance(acc); if(b==null) return null;
 const SAL_M1_MARGE=25, SAL_M1_VAN=2, SAL_M1_TOT=4, SAL_TEKORT_OPNIEUW=100, SAL_M2_MARGE=50;
 function salAfspraakPeriode(){ const SV=SET.salVerdeling; if(!SV || !SV.rek) return null; let ym=SV.salYM; if(!ym){ const R=salRegel(); if(R && SV.start) ym=salStortingMaand(SV.start, R); } return ym?salPeriodeVan(ym):null; }
 /* de verwachte stand van een rekening vanaf vandaag tot en met tot: het laagste punt en de eerste dag onder nul */
-function salProjectie(r, saldo, tot){ let b=saldo, laagst=saldo, dag=vandaagYMD(), nul=null; for(let d=rekDag(vandaagYMD(),1); d<=tot; d=rekDag(d,1)){ b-=r.uitDag(d); if(b<laagst-1e-9){ laagst=b; dag=d; } if(nul==null && b<-0.005) nul=d; } return {laagst, dag, nul, eind:b}; }
+function salProjectie(r, saldo, tot){ perfHit('salProjectie'); let b=saldo, laagst=saldo, dag=vandaagYMD(), nul=null; for(let d=rekDag(vandaagYMD(),1); d<=tot; d=rekDag(d,1)){ b-=r.uitDag(d); if(b<laagst-1e-9){ laagst=b; dag=d; } if(nul==null && b<-0.005) nul=d; } return {laagst, dag, nul, eind:b}; }
 /* (4) MOMENT 1: twee dagen na de werkelijke storting (alleen na Akkoord), per rekening het advies tegen wat er na je salaris stond
    (het saldo nu plus wat er sindsdien afging); binnen EUR 25 is een vinkje. De kaart staat er van dag 2 tot en met dag 4 en
    verdwijnt eerder als alles klopt. */
@@ -12824,7 +12835,11 @@ function salMoment1Html(){ const M=salMoment1(); if(!M) return '';
 /* v436: ALLEEN IN EEN PERIODE DIE BEGON MET EEN GEACCEPTEERDE "ZO VERDEEL JE JE SALARIS" (salTekortActief). Zonder Akkoord is er
    geen verdeling om aan te toetsen: dan staat in Zien de kaart "Je salarisverdeling" met het voorstel (salVoorstelKaartHtml). */
 function salTekortActief(SP){ SP=SP||salPeriode(); const PV=salAfspraakPeriode(); return !!(SP && PV && PV.start===SP.cur.start); }
-function salTekortData(){ const SP=salPeriode(); if(!SP || SP.stil || SP.laat) return []; const vandaag=vandaagYMD(), eind=SP.cur.eind; if(vandaag>=eind) return [];
+/* v490 (snelheid): salTekortData deelt de memo met rekVoorstel (dezelfde sleutel: dag, _dataGen, salVerdeling, vastDatum). Alle
+   lezers (de pop-up, de bel, salTekortBewaar, salKrapKaart, de diagnose) krijgen zo één berekening per draai; een boekhoud-save
+   (stil) laat de memo staan. Een gemeten wijziging (sync, keuze) verandert de sleutel en dwingt een herberekening af (test c/d). */
+function salTekortData(){ const s=rekVoorstelSleutel(); if(window._salTek && window._salTek.s===s) return window._salTek.R; const R=perfK('salTekortDataKern', salTekortDataKern); window._salTek={s, R}; return R; }
+function salTekortDataKern(){ const SP=salPeriode(); if(!SP || SP.stil || SP.laat) return []; const vandaag=vandaagYMD(), eind=SP.cur.eind; if(vandaag>=eind) return [];
   if(!salTekortActief(SP)) return [];
   const P=rekVoorstel(); if(!P || !P.ok) return []; const SV=SET.salVerdeling||{}, out=[];
   for(const r of P.rek){ if(SV.rek && !(r.acc in SV.rek)) continue; const saldo=accBalance(r.acc); if(saldo==null) continue; const pr=salProjectie(r, saldo, eind); if(!(pr.laagst<-0.5)) continue;
@@ -12844,7 +12859,7 @@ function salGeenSpaarGekozen(){ const K=gripMaandLees('gripKeuze', thisYM())['sp
 /* de schrijver (bij het tekenen van Grip): een keer per rekening per periode, opnieuw bij meer dan EUR 100 erbij */
 function salTekortBewaar(){ const T=salTekortData(); if(!T.length) return false; const A=SET.salTekort=SET.salTekort||{}; let w=false;
   for(const x of T){ const P=A[x.start]=A[x.start]||{}, r=P[x.acc]; if(!r || x.tekort>r.tekort+SAL_TEKORT_OPNIEUW){ P[x.acc]={op:vandaagYMD(), tekort:x.tekort, datum:x.datum, eerder:r?r.tekort:null}; w=true; } }
-  if(w) save(); return w; }
+  if(w) save(true); return w; }   /* v490: boekhoud-save, bumpt _dataGen niet (zie save(stil)) */
 /* v479: salTekortStand is de LIVE stand (geen één-dag-regel meer): hij blijft tot alle rekeningen passen of de periode
    eindigt, en salTekortData is al zo begrensd. Zien toont hem niet meer; hij staat in de bel (groep "Geld op je
    rekeningen") en in een pop-up die bij elke app-opening verschijnt zolang de melding open is, tot je een rekening aantikt. */
@@ -12880,7 +12895,7 @@ function openKrapPopup(){ const html=salKrapKaart(); if(!html) return; window._s
    bestaande uitleg. Sluiten markeert niets, dus hij komt de volgende opening terug; een nieuwe melding (+EUR 100)
    herschrijft de entry in salTekortBewaar en wist bekeken, dus hij komt dan opnieuw. */
 function salKrapBekeken(){ const T=salTekortStand(); if(!T.length) return; const A=SET.salTekort=SET.salTekort||{}, d=vandaagYMD(); let w=false;
-  for(const x of T){ const P=A[x.start]=A[x.start]||{}; const r=P[x.acc]=P[x.acc]||{op:d, tekort:x.tekort, datum:x.datum}; if(r.bekeken!==d){ r.bekeken=d; w=true; } } if(w) save(); }
+  for(const x of T){ const P=A[x.start]=A[x.start]||{}; const r=P[x.acc]=P[x.acc]||{op:d, tekort:x.tekort, datum:x.datum}; if(r.bekeken!==d){ r.bekeken=d; w=true; } } if(w) save(true); }   /* v490: boekhoud-save */
 function salKrapOnbekeken(){ const A=SET.salTekort||{}; return salTekortStand().some(x=>!((A[x.start]||{})[x.acc]||{}).bekeken); }
 function openKrapRek(acc){ salKrapBekeken(); openTotSalaris(acc); }
 /* v481 (punt 2): de sheet "<rekening> · tot je salaris" voor de LOPENDE periode. Saldo nu, de vaste lasten op hun datum met het saldo
@@ -13417,7 +13432,7 @@ function gripAfgehandeldBewaar(C){ const m=C.m||thisYM(), vm=prevYM(m), A=SET.gr
     else { const t=symKeuzeTekst(s, C); if(nu[s.id].tekst!==t){ nu[s.id].tekst=t; w=true; } } }
   if(!Object.keys(nu).length) delete A[m];
   if(!Object.keys(A).length) delete SET.gripAfgehandeld;
-  if(w) save(); }
+  if(w) save(true); }   /* v490: boekhoud-save (SET.gripAfgehandeld voedt geen berekening), bumpt _dataGen niet */
 function gripAfToggle(){ window._gripAfOpen=!window._gripAfOpen; renderMaand(); }
 /* v436: HET LABEL UIT DE PATROONLOGICA BIJ EEN SIGNAAL (dezelfde bron als de tegels van v382, insPatronen). Per potje: herhaalt
    zich (de hoeveelste maand en het bedrag van vorige maand), past niet in je potje, of nieuw deze maand. "Herstelt zich" is een
@@ -13437,7 +13452,7 @@ function gripHerstelBewaar(){ let P=[]; try{ P=insPatronen('alle').filter(p=>p.s
   const m=thisYM(), A=SET.herstelGezien=SET.herstelGezien||{}, H=A[m]=A[m]||{}; let w=false;
   for(const p of P) if(!H[p.k]){ H[p.k]=vandaagYMD(); w=true; }
   if(!Object.keys(H).length) delete A[m]; if(!Object.keys(A).length) delete SET.herstelGezien;
-  if(w) save(); }
+  if(w) save(true); }   /* v490: boekhoud-save (SET.herstelGezien voedt geen berekening), bumpt _dataGen niet */
 /* Signalen: alleen feiten, elk met "waarom ›" naar hetzelfde symptoom in Begrijpen. Geen knop die iets verandert. */
 function gripSignalenKaart(C){ const PI=gripPatroonInfo(); if(!C.sym.length && !PI.herstel.length) return ''; const S=gripSignaalStand(C);
   const lbl=s=>{ const l=s.label||(s.k?PI.lab[s.k]:null); return l?`<span class="small" data-signaallabel="${l.soort}" style="display:block;font-size:var(--fs-xs);line-height:1.35"><span style="color:${l.soort==='nieuw'?'var(--blue)':'var(--red)'}">${esc(l.t)}</span>${l.b?` <span style="color:var(--mut2)">· ${esc(l.b)}</span>`:''}</span>`:''; };
@@ -14135,7 +14150,7 @@ function gripNaarBegrijpen(pid){
    bestaande sheet (openTeRuim()) en telt niet mee in "X van N": het is geen patroon maar een instelling. Hij verdwijnt
    na verlagen of "laten staan" in die maand. */
 function gripTeRuimBewaar(){ try{ const ym=thisYM(), ks=teRuim().map(x=>x.k).sort(); SET.teRuimMaand=SET.teRuimMaand||{};
-  if(JSON.stringify(SET.teRuimMaand[ym]||null)!==JSON.stringify(ks)){ SET.teRuimMaand[ym]=ks; save(); } }catch(_){} }
+  if(JSON.stringify(SET.teRuimMaand[ym]||null)!==JSON.stringify(ks)){ SET.teRuimMaand[ym]=ks; save(true); } }catch(_){} }   /* v490: snapshot bij het tekenen, stil opslaan (voedt geen gecachte berekening) */
 function gripTeRuimHerzien(){
   let TR=[]; try{ TR=teRuim(); }catch(_){ return []; }
   const ym=thisYM(), M=SET.teRuimMaand||{}, L=(SET.teRuimLaten||{})[ym]||{}, U=new Set(gripTeRuimUitgevoerd(ym).map(x=>x.k));
@@ -14193,7 +14208,7 @@ const GRIP_SPAAR_HALF=0.8;
 function gripOpzijVan(ym){ if(ym===thisYM()){ try{ return Math.round(planKpiData().opzij); }catch(_){ return null; } }
   const s=gripMaandLees('gripOpzij', ym); return (s && s.opzij!=null)?s.opzij:null; }
 function gripOpzijBewaar(){ try{ const o=planKpiData().opzij; if(o==null) return; const ym=thisYM(); SET.gripOpzij=SET.gripOpzij||{};
-  if(!SET.gripOpzij[ym] || SET.gripOpzij[ym].opzij!==Math.round(o)){ SET.gripOpzij[ym]={opzij:Math.round(o)}; save(); } }catch(_){} }
+  if(!SET.gripOpzij[ym] || SET.gripOpzij[ym].opzij!==Math.round(o)){ SET.gripOpzij[ym]={opzij:Math.round(o)}; save(true); } }catch(_){} }   /* v490: snapshot bij het tekenen, stil opslaan (voedt geen gecachte berekening) */
 function gripRegelUitkomst(r, ym){
   if(r.soort==='potmax'){ const sp=Math.round((catSpendMap(ym)||{})[r.k]||0);
     const potEind=ym===thisYM()?(+(SET.budgets||{})[r.k]||0):(+(maandPotjes(ym).B||{})[r.k]||0);
@@ -21926,6 +21941,10 @@ function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
    worden in plaats van dat er een tweede map naast kwam. */
 function catSpendMapRuw(m){ return catSpendMap(m, true); }   // v473: zonder de reiskostenvergoeding
 /* v473: de reiskostenvergoeding uit je salarisstorting gaat af van haar potje (reisStand()), niet onder nul */
+/* catSpendMap wordt NIET gememoiseerd: hij moet een OVR- of uitReservering-wijziging meteen weergeven, ook als die (in een test
+   of in app-code) nog niet via save() een _dataGen-bump kreeg. De zware herhaling zit in zijn lezers (recurringSchedule, maandVooruit),
+   en die cachet runMemo nu wel; catSpendMap zelf leest de al gememoiseerde txOfMonth/telbareTx, dus een eigen cache levert weinig op en
+   zou juist een stille, verouderde waarde kunnen geven (v490). */
 function catSpendMap(m, ruw){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
   if(!ruw){ try{ const R=reisStand(m, Object.assign({}, by)); if(R.af>0){ by[R.pot]=Math.round((by[R.pot]-R.af)*100)/100; if(by[R.pot]<=0) delete by[R.pot]; } }catch(_){} }   // v473: de reiskostenvergoeding gaat af van haar potje (reisStand()), niet onder nul
   return by; }
@@ -22242,7 +22261,7 @@ function valtOpSignals(m){
      categorie die binnen een maand rond de drempel schommelt houdt daarmee een record dat zegt dat
      je het gezien hebt, ook als hij later terugzakt. */
   for(const s of lijst){ if(!L[s.id].getoond){ L[s.id].getoond=true; dirty=true; } }
-  if(dirty) save();
+  if(dirty) save(true);   /* v490: het aanmaken van een valtOpLog-record en getoond zijn boekhouding bij het tekenen; stil opslaan zodat de eerste Grip-render in een maand de memo niet leegt (valtOpLog voedt geen gecachte berekening) */
   return lijst;
 }
 /* De actie op een signaal. Een record met een actie valt uit de lijst, op beide schermen, tot het
@@ -34085,16 +34104,25 @@ function potForecastGetallen(V, G){ if(!V || V.onbekend) return G; const bud={},
    ctrlSek() meet per onderdeel van een blok de duur en tot welke regel het liep, zodat elke CONTROLE-regel de duur van zijn onderdeel
    draagt; diagRun() zegt een blok dat het in de run zit en de stukken zonder CONTROLE kan overslaan (die rekent het pas als je het
    blok opent of deelt, met dezelfde functies). */
-function runMemo(naam, arg, fn){ const R=window._ctrlRun; if(!R || !R.memo) return fn();
-  const k=naam+'|'+_dataGen+'|'+vandaagYMD()+'|'+arg; if(R.memo.has(k)){ R.treffers=(R.treffers||0)+1; return structuredClone(R.memo.get(k)); }
-  const r=fn(); try{ R.memo.set(k, structuredClone(r)); }catch(_){} return r; }
+/* v490 (snelheid): runMemo cachet nu OOK buiten een controles-run. Tot v490 had hij alleen een store tijdens runControles
+   (window._ctrlRun.memo); bij het tekenen van een scherm was er geen store, dus recurringSchedule, maandVooruit, forecastModel,
+   maandLiqBasis en wijzForecastEffect herberekenden bij ELKE aanroep (gemeten: recurringSchedule 120x en maandVooruit 21x per
+   go('maand')). De globale store leegt alleen als _dataGen of de dag verandert, dus een boekhoud-save (stil) laat hem staan. Het
+   kloon-contract blijft gelijk aan de controles-store: de eerste aanroeper krijgt de verse uitkomst, elke volgende een kloon, en een
+   uitkomst die niet te klonen is wordt (net als voorheen) niet bewaard en gewoon herberekend. */
+let _runMemoGlobal={gen:-1, dag:'', map:new Map()};
+function runMemoStore(){ const g=_dataGen, d=vandaagYMD(); if(_runMemoGlobal.gen!==g || _runMemoGlobal.dag!==d) _runMemoGlobal={gen:g, dag:d, map:new Map()}; return _runMemoGlobal.map; }
+function runMemoVergeten(){ _runMemoGlobal={gen:-1, dag:'', map:new Map()}; }   /* v490: leegt alleen de render-memo (niet de txOfMonth/telbareTx-caches); test-haak, zoals telbaarVergeten() */
+function runMemo(naam, arg, fn){ const R=window._ctrlRun; const store=(R && R.memo)?R.memo:runMemoStore();
+  const k=naam+'|'+_dataGen+'|'+vandaagYMD()+'|'+arg; if(store.has(k)){ if(R) R.treffers=(R.treffers||0)+1; return structuredClone(store.get(k)); }
+  const r=fn(); try{ store.set(k, structuredClone(r)); }catch(_){} return r; }
 function diagRun(){ return !!(window._ctrlRun && window._ctrlRun.alleenControles); }
 function ctrlSek(blok, L){ let t=performance.now(); return naam=>{ const n=performance.now(); const R=window._ctrlRun; if(R) R.secties.push({blok, naam, ms:n-t, tot:L.length}); t=n; }; }
 function ctrlStap(R, naam, fn, U){ const t=performance.now(), n0=U?U.length:0; try{ return fn(); } finally { const ms=performance.now()-t; R.stappen.push({naam, ms}); if(U) for(let i=n0;i<U.length;i++) if(U[i].ms==null){ U[i].ms=Math.round(ms); U[i].sectie=naam; } } }
 function kiesRaakt(x){ if(!x || !['herzien','letop','patroon'].includes(x.bron)) return null; return x.k ? 'pot:'+x.k : 'onderBudget'; }
 /* DE RUN */
 function runControles(bron){ const vorRun=window._ctrlRun, RT=window._ctrlRun={memo:new Map(), alleenControles:true, stappen:[], secties:[], treffers:0};
-  try{ return runControlesKern(bron, RT); } finally { window._ctrlRun=vorRun||null; } }
+  try{ return perfK('runControlesKern', ()=>runControlesKern(bron, RT)); } finally { window._ctrlRun=vorRun||null; } }
 function runControlesKern(bron, RT){ const t0=performance.now(), nu=Date.now(), C=SET.controles=SET.controles||{};
   const vorig=Array.isArray(C.uitkomst)?C.uitkomst:[], vorigId=new Map(vorig.map(u=>[u.id,u])), U=[];
   C.uit=C.uit||{}; let hersteld=0;
@@ -34193,7 +34221,7 @@ function controleDuurRegels(R, U){ const L=[];
   const P=(U||[]).filter(u=>u.ms!=null).slice().sort((a,b)=>b.ms-a.ms);
   if(P.length) L.push('  PER CONTROLE (de duur van het onderdeel dat hem maakte):', ...P.map(u=>`    ${u.ms} ms · ${u.titel} (${u.sectie||'blok '+u.blok})`));
   return L; }
-function controlesFaseA(bron){ const t=performance.now(), C=SET.controles=SET.controles||{}; let h=0;
+function controlesFaseA(bron){ perfHit('controlesFaseA'); const t=performance.now(), C=SET.controles=SET.controles||{}; let h=0;
   try{ if(!(C.uit||{}).voraut) h=vorautAutoHerstel()||0; }catch(_){}
   return (window._ctrlFaseA={bron, ms:Math.round(performance.now()-t), hersteld:h, tijd:Date.now()}); }
 function controlesFaseB(bron){ const C0=SET.controles||{}, sleutel=C=>JSON.stringify([C.wachtGetallen||[], (C.keuzeTerug||{}).op||0]), oud=sleutel(C0);
@@ -34308,6 +34336,57 @@ function controleBlokVoet(n, L){ const C=controlesLees(), U=(C.uitkomst||[]).fil
   for(const u of controleRegelsVan(n, L||[])){ const s=st.get(u.id); if(s && s!==u.status && !(s==='verklaard'&&u.status==='wacht')) anders.push(`${u.titel}: nu ${u.status}, run ${s}`); }
   if(anders.length) out.push(`    LIVE ANDERS DAN DE RUN (de gegevens veranderden sindsdien): ${anders.join(' · ')}`);
   return out; }
+/* ===== SNELHEID (v490, gevraagd door de gebruiker, alleen meten) =====
+   Per actie de totale tijd en de vijf duurste functies met hun aanroep-aantal, uit PERF. Elke actie wordt vanuit een KOUDE cache
+   gemeten (_dataGen++ ervoor), want dat is wat je bij het openen van de app of na een sync raakt; de kern draait dan een keer en
+   niet meer. Het blok raakt geen gegevens aan: het bewaart #sheet, de sheet-achtergrond en de Grip-tab en zet ze terug, dus het
+   tekenen gebeurt wel maar verandert niets wat je ziet. */
+function diagSnelheidMeet(fn){
+  const sheet=$('#sheet'), sheetHtml=sheet?sheet.innerHTML:'', bg=$('#sheetBg'), bgShow=bg?bg.classList.contains('show'):false;
+  const tab=window._gripTab;
+  _dataGen++;                         /* koude cache, zoals na het laden of na een sync */
+  perfReset(); const was=PERF.on; PERF.on=true; const t=performance.now();
+  try{ fn(); }catch(_){}
+  const ms=performance.now()-t; PERF.on=was;
+  const fns=Object.keys(PERF.n).map(k=>({k, n:PERF.n[k], ms:Math.round((PERF.ms[k]||0)*10)/10})).sort((a,b)=>b.ms-a.ms || b.n-a.n).slice(0,5);
+  window._gripTab=tab;
+  if(sheet) sheet.innerHTML=sheetHtml; if(bg) bg.classList.toggle('show', bgShow);
+  return {ms:Math.round(ms), fns};
+}
+function diagSnelheid(){
+  if(typeof performance==='undefined' || !performance.now) return ['SNELHEID: performance.now() niet beschikbaar op dit toestel'];
+  /* het blok tekent om te meten, en tekenen doet boekhoud-saves die SET en localStorage raken; de diagnose hoort alleen te lezen
+     (v244). Daarom: save uitzetten (geen setItem), SET en _dataGen bewaren en na afloop exact terugzetten, zodat kijken niets verandert. */
+  const s0=save, gen0=_dataGen, snap=JSON.stringify(SET);
+  try{ return diagSnelheidKern(); }
+  finally{ save=s0; _dataGen=gen0; try{ const o=JSON.parse(snap); for(const k in SET) if(!(k in o)) delete SET[k]; Object.assign(SET, o); }catch(_){} }
+}
+function diagSnelheidKern(){
+  save=function(){};                  /* geen enkele save tijdens het meten schrijft naar localStorage */
+  const krap=(()=>{ try{ const T=salTekortData(); return T.length?T[0].acc:null; }catch(_){ return null; } })();
+  const acties=[
+    ['opstarten · eerste scherm (Home tekenen)', ()=>{ try{ renderDash(); }catch(_){} }],
+    ['opstarten · pop-up-controle (afsluit + krap)', ()=>{ try{ afsluitPopupMisschien(); salKrapPopupMisschien(); }catch(_){} }],
+    ['wisselen naar Grip · Zien', ()=>{ window._gripTab='zien'; window._gripBeg={v:'lijst'}; renderMaand(); }],
+    ['binnen Grip · Begrijpen', ()=>{ window._gripTab='begrijpen'; renderMaand(); }],
+    ['binnen Grip · Kiezen', ()=>{ window._gripTab='kiezen'; renderMaand(); }],
+    ['binnen Grip · Terugblik', ()=>{ window._gripTab='terugblik'; renderMaand(); }],
+    ['ter vergelijking · Home', ()=>{ renderDash(); }],
+    ['ter vergelijking · Inzichten', ()=>{ renderIns(); }],
+    ['ter vergelijking · Plan', ()=>{ renderVooruit(); }],
+    ['krap-pop-up openen', ()=>{ try{ openKrapPopup(); }catch(_){} }],
+    ['"tot je salaris" openen', ()=>{ if(krap){ try{ openTotSalaris(krap); }catch(_){} } }],
+  ];
+  const L=['SNELHEID (v490) · alleen meten · elke actie vanuit een koude cache (de kern draait dan een keer, niet 120 keer)',
+    '  tijd op dit toestel, met de vijf duurste functies (aanroep-aantal · ms):'];
+  for(const [naam, fn] of acties){ const r=diagSnelheidMeet(fn);
+    L.push(`  ${naam}: ${r.ms} ms`);
+    if(!r.fns.length){ L.push('    (niets gemeten)'); continue; }
+    for(const f of r.fns) L.push(`    ${f.k}: ${f.n}x · ${f.ms} ms`); }
+  L.push('  doel op het toestel: eerste scherm < 1500 ms · Grip < 400 ms · andere wissels en een tik < 300 ms');
+  L.push('  let op: een testmachine of een pc is sneller dan een telefoon; de getallen hierboven zijn van DIT toestel');
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -34335,6 +34414,7 @@ const DIAG_BLOKKEN=[
   {titel:'gedeelde transactie-ids na categorize()', lees:diagGedeeldeIds},
   {titel:'heen en terug op dezelfde rekening met je eigen naam, per maand', lees:diagEigenParen},
   {titel:'voorautorisatie, vrijgave en betaling op dezelfde rekening (A − V = B), per maand en per partij', lees:diagVorautPatroon},
+  {titel:'snelheid: de tijd per actie op dit toestel en de duurste functies (alleen meten)', lees:diagSnelheid},
 ];
 /* ===== GEDEELDE IDS NA categorize() (v451, alleen lezen) =====
    Elke import-route slaat een bestaande id over, dus via een import kan een id niet twee keer in TX komen. Wel bij het
@@ -34825,7 +34905,7 @@ function go(name){
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
     /* v176: het leesmoment gaat over de lopende maand. v233: Grip is altijd de lopende maand, dus
        de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
-    if(name==='maand'){ window._gripTab='zien'; window._gripBeg={v:'lijst'}; try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); else salKrapPopupMisschien(); }catch(_){} }
+    if(name==='maand'){ window._gripTab='zien'; window._gripBeg={v:'lijst'}; try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(true); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); else salKrapPopupMisschien(); }catch(_){} }   /* v490: maandGelezen is boekhouding, stil opslaan zodat de memo het tekenen van Grip overleeft */
   }
   /* v331: het logboek leest de stand van het moment waarop je hem opent. */
   if(name==='logboek'){ try{ renderLogboek(); }catch(_){} }

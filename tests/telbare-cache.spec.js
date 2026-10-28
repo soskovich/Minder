@@ -328,6 +328,7 @@ test.describe('a2 - txOfMonth vraagt de poort een keer per maand (v311)', () => 
       for (const [label, fn] of [['Home', renderDash], ['Inzichten', renderIns], ['Plan', renderVooruit],
         ['Grip', renderMaand], ['Vermogen', renderVermogen]]) {
         fn();                                            // de maanden die dit oppervlak leest staan nu in de memo
+        runMemoVergeten();                                // v490: leeg de render-memo (maandVooruit/recurringSchedule) maar HOUD de txOfMonth-snede warm, zodat de meting txOfMonth echt aanroept (tom hoog) terwijl de poort per maand één keer draait (viaTom 0)
         let viaTom = 0, direct = 0, tom = 0;
         window.txOfMonth = function (...a) {
           tom++; diep++;
