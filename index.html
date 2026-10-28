@@ -12595,7 +12595,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const pd=potExp.map(p=>{ const A=aandeel(p.k), f=A[acc]||0; if(!(f>0)) return null; const R=ritmeVan(p.k, acc);
       const periodExp=p.bedrag*f, alP=((alPer[p.k]||{})[acc])||0;
       return {k:p.k, naam:p.naam, zonder:p.zonder, maand:p.maand, totaal:p.bedrag, aandeel:f, bedrag:periodExp, rest:p.rest*f,
-        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP, 0),
+        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typischVol:(p.typisch||0), typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP, 0),
         afMaanden:af.slice(), grossAf:af.map(ym=>Math.round(((((naPer[p.k]||{})[acc]||{})[ym])||0)+((((eenmPer[p.k]||{})[acc]||{})[ym])||0))), eenmAf:af.map(ym=>Math.round((((eenmPer[p.k]||{})[acc]||{})[ym])||0))}; }).filter(Boolean);
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
@@ -12633,8 +12633,8 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const vaakCur=vaak.reduce((a,p)=>a+p.nogVerwacht,0), vaakPost=vaak.reduce((a,p)=>a+p.typisch,0);
     /* soms staat als termijn op de gebruikelijke dag; "al geweest deze periode → €0" volgt uit de dag zelf: ligt de gebruikelijke
        dag in het verleden, dan matcht uitDagDelen hem niet meer (d<=vandaag geeft 0). nog verwacht trekt een vroege uitgave al af. */
-    const somsCur=soms.map(p=>({ud:p.ud, bedrag:p.nogVerwacht})).filter(x=>x.ud!=null && x.bedrag>0.005);
-    const somsPost=soms.map(p=>({ud:p.ud, bedrag:p.typisch})).filter(x=>x.ud!=null && x.bedrag>0.005);
+    const somsCur=soms.map(p=>({k:p.k, ud:p.ud, bedrag:p.nogVerwacht})).filter(x=>x.ud!=null && x.bedrag>0.005);
+    const somsPost=soms.map(p=>({k:p.k, ud:p.ud, bedrag:p.typisch})).filter(x=>x.ud!=null && x.bedrag>0.005);
     const somsOp=(dag, lijst)=>lijst.reduce((a,x)=>a+(dag===x.ud?x.bedrag:0),0);
     const potRestNu=vaakCur+somsCur.reduce((a,x)=>a+x.bedrag,0), kasRestNu=Math.max(kS-kasNu,0), restNu=potRestNu+kasRestNu;
     const potMaand=vaakPost+somsPost.reduce((a,x)=>a+x.bedrag,0), pMaand=potMaand+kM, alleTerm={}, termAlle=[];
@@ -12644,6 +12644,15 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
       const kas=(kasNaSal && d<=SP.cur.eind)?0:(kasRestNu/kasDagenOver);
       return {vast:alleTerm[d]||0, pot, kas}; };
     const uitDag=d=>{ const u=uitDagDelen(d); return u.vast+u.pot+u.kas; };
+    /* v491 (punt 1): de bijdrage van elk potje aan "Potjes via deze rekening" over de periode (vandaag+1..SP.cur.eind). DEZELFDE
+       decompositie als uitDagDelen.pot — de lopende maand nog verwacht × aandeel gelijk over de resterende dagen, de maanden daarna
+       het typische niveau × aandeel naar rato van de dagen in de periode (soms op zijn gebruikelijke dag). De som over de potjes is
+       per constructie de potjesregel (T.pot), zodat de per-potje regels in de sheet in centen optellen tot dat getal. Dit leest
+       alleen vaak/soms uit en verandert geen enkel getal in de daling zelf. */
+    { const pm={}; for(let d=rekDag(vandaag,1); d<=SP.cur.eind; d=rekDag(d,1)){ const ym=d.slice(0,7), dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(), dd=+d.slice(8,10);
+        for(const p of vaak) pm[p.k]=(pm[p.k]||0)+(ym===cur?p.nogVerwacht/Math.max(dagenNa,1):p.typisch/dim);
+        for(const x of (ym===cur?somsCur:somsPost)) if(dd===x.ud) pm[x.k]=(pm[x.k]||0)+x.bedrag; }
+      for(const p of pdDal) p.periode=pm[p.k]||0; }
     const saldo=accBalance(acc);
     /* (3) overboeken rekent alleen op de dag van de werkelijke storting, met het dan bekende saldo; daarvoor het verwachte saldo op de
        verwachte storting */
@@ -12920,7 +12929,12 @@ function totSalarisData(acc){ const SP=salPeriode(); if(!SP || SP.stil || SP.laa
      datum is de salarisdatum + VAST_NASAL_DAGEN, dus na het volgende salaris), en staat dus niet in de daling hierboven. Hij hoort toch
      zichtbaar te zijn met zijn toegepaste datum en reden, zodat je ziet waar de huur heen ging; hij telt NIET mee in de stand. */
   const vastNaSal=[]; try{ const seen={}; for(const x of (P.vastAlle||[])){ if(x.acc!==acc || !x.nonSepa || seen[x.key]) continue; seen[x.key]=1; const nu=vastDatumNu(x.key); if(nu && String(nu.datum)>String(eind)) vastNaSal.push({key:x.key, naam:x.naam, datum:nu.datum, reden:nu.reden, verlegd:nu.verlegd}); } }catch(_){}
-  let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null) naSal=Math.round(sb+rekAfgegaan(acc, PV.werkelijk, vandaag, rekParen(TX.filter(t=>t.date.slice(0,10)>=PV.werkelijk), new Set(rekBetaal())))); } }catch(_){}
+  /* v491 (punt 3): "Na je salaris stond er" is de BEVROREN stand op de salarisdag, na de automatische overboekingen — niet "saldo nu
+     + afgegaan". Dat laatste las rekAfgegaan, dat interne overboekingen overslaat, dus een opzij-overboeking die na de salarisdag nog
+     verschoof (gemeld: EUR 100) werd niet teruggeteld en de stand zakte mee (EUR 1.511 → EUR 1.411). De stand op de salarisdag =
+     saldo nu − alles wat er NA de salarisdag nog op deze rekening gebeurde (ELKE boeking, ook intern); dat getal is per constructie
+     ongevoelig voor wat er na de salarisdag nog beweegt. */
+  let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null){ let na=0; for(const t of TX){ if(t.pending || t.acc!==acc) continue; const d=t.date.slice(0,10); if(d>PV.werkelijk && d<=vandaag) na+=t.amount; } naSal=Math.round(sb-na); } } }catch(_){}
   return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, vastNaSal, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal}; }
 function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salverdeling'); return; } window._totsal=acc; window._totsalPot=false; window._totsalKeuze=''; renderTotSalaris(); showSheetBg(); }
 function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
@@ -12949,7 +12963,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   const potDal=(D.potDelen||[]).filter(p=>p.ritme!=='zelden');
   const somZelden=(D.potZelden||[]).reduce((a,z)=>a+(+z.gemiddeld||0),0);
   const zeldenTekort=(D.eind>=0 && D.eind-somZelden<-0.5)?` · dan kom je ${e(Math.round(somZelden-D.eind))} tekort`:'';
-  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" style="padding:3px 0;border-top:1px solid var(--line)"><div><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> · ${Math.round(p.aandeel*100)}% · ${esc(ritLbl[p.ritme]||p.ritme)}</div><div style="color:var(--mut2)">typisch ${e(Math.round(p.typisch))} · ${potReeks(p)}</div><div style="color:var(--mut2)">al deze maand ${e(p.alPeriode)} · nog deze maand ${e(Math.round(p.nogVerwacht))} · daarna ${e(Math.round(p.typisch))}/mnd</div></div>`).join(''):rij('geen potjes via deze rekening','')}
+  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" style="padding:3px 0;border-top:1px solid var(--line)"><div><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> · ${Math.round(p.aandeel*100)}% · ${esc(ritLbl[p.ritme]||p.ritme)}</div><div style="color:var(--mut2)">typisch ${e(Math.round(p.typischVol!=null?p.typischVol:p.typisch))} · daarna ${e(Math.round(p.typisch))}/mnd via deze rekening · ${potReeks(p)}</div><div style="color:var(--mut2)">al deze maand ${e(p.alPeriode)} · nog deze maand ${e(Math.round(p.nogVerwacht))} · deze periode ${e(Math.round(p.periode||0))}</div></div>`).join(''):rij('geen potjes via deze rekening','')}
     ${(D.potZelden||[]).length?`<div class="small" data-totzelden style="padding:4px 0;color:var(--mut2);border-top:1px solid var(--line)">Kan komen, niet meegerekend: ${D.potZelden.map(z=>`${esc(z.naam)} gemiddeld ${e(z.gemiddeld)}`).join(' · ')}${zeldenTekort}</div>`:''}</div>`:'';
   const waarom=`${D.afspraak!=null?`Je sprak af ${e(D.afspraak)} te laten staan.`:'Nog geen verdeling afgesproken.'}${D.naSal!=null?` Na je salaris stond er ${e(D.naSal)}.`:''}`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris" data-totsalaris="${esc(acc)}">
@@ -12959,7 +12973,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
       ${rij('<b>Saldo nu</b>', `<b>${e(D.saldo)}</b>`, 'data-totsaldo')}
       <div class="small" style="font-weight:700;margin-top:4px;color:var(--mut2)">Vaste lasten</div>${vastRij}
       ${naSalRij?`<div class="small" data-totnasalkop style="font-weight:700;margin-top:6px;color:var(--mut2)">Na je salaris</div>${naSalRij}`:''}
-      <div class="row" data-totpot role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
+      <div class="row" data-totpot data-totpotcent="${Math.round((D.potExact||0)*100)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
       ${rij('Contant', `−${e(D.kas)}`, 'data-totkas')}
       <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:3px">${rij('<b>Stand dag voor je salaris</b>', `<b style="${D.eind<0?'color:var(--red)':''}">${e(D.eind)}</b>`, 'data-toteind')}</div>
     </div>
