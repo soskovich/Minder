@@ -100,7 +100,10 @@ test.describe('b · één formule voor de lokale dag', () => {
   });
 
   test('vandaagYMD leunt erop en rekent niet zelf', async () => {
-    expect(/function vandaagYMD\(\)\{\s*return ymdVan\(new Date\(\)\);\s*\}/.test(CODE)).toBe(true);
+    // v495: de voorbeeldweergave ("Bekijk als datum") mag vooraan window._voorbeeldDag teruggeven; de echte dag blijft
+    // ymdVan(new Date()). De invariant (vandaagYMD leunt op ymdVan en rekent de dag niet zelf uit) wordt bewaakt door
+    // de formule-telling hierboven (die staat alleen in ymdVan), dus hier alleen dat de echte tak nog via ymdVan loopt.
+    expect(/function vandaagYMD\(\)\{[^}]*return ymdVan\(new Date\(\)\);\s*\}/.test(CODE)).toBe(true);
   });
 
   test('de back-upnaam gebruikt de helper', async () => {

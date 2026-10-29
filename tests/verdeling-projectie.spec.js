@@ -5,6 +5,7 @@
    bij "het volgende doel"). De tests over de modi zelf (chips, percentage, de zachte hint op modi) zijn vervallen. */
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { pinDag } = require('./vaste-dag');   // v495: de advies-terugval van planCapacity (zonder spaarinleg) hangt aan de dag; pin hem
 
 const CAP = 300;
 function tweak(fn) {
@@ -58,6 +59,7 @@ test.describe('a · een bedrag per doel in de verdeling', () => {
     expect(P[0].alloc).toBe(50); expect(P[1].alloc).toBe(CAP - 50);
   });
   test('zonder spaarinleg rekent de verdeling over de capaciteit (v440: het advies als terugval)', async ({ page }) => {
+    await pinDag(page);   // v495: zonder spaarinleg komt cap uit het advies (rekVoorstel), dat per dag verschilt; pinnen maakt hem deterministisch
     await openV(page, zelf([D('gA', 'Vast', 2000), D('gB', 'Ander', 2000)], { gA: 100, gB: 5000 }, (s) => { s.savingAmount = 0; s.limit = 100; }));
     const r = await page.evaluate(() => ({ cap: planCapacity(), target: monthlySavingTarget() }));
     expect(r.target).toBe(0);              // geen ingestelde spaarinleg

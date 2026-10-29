@@ -99,7 +99,7 @@ test('e. de soort verandert niet zonder bevestiging', async ({ page }) => {
     const naRender = (SET.potWekelijks || {}).boodschappen;
     potSoortZet('boodschappen', 'dag');                  // bevestigen
     const naZet = (SET.potWekelijks || {}).boodschappen;
-    return { heeftLijst: /Soort per potje/.test(html), heeftRij: /data-potsoortrij="boodschappen"/.test(html), naRender, naZet, soort: potSoort('boodschappen') };
+    return { heeftLijst: /Per dag of per keer/.test(html), heeftRij: /data-potsoortrij="boodschappen"/.test(html), naRender, naZet, soort: potSoort('boodschappen') };
   });
   expect(r.heeftLijst).toBe(true);
   expect(r.heeftRij).toBe(true);

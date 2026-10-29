@@ -205,6 +205,7 @@ test.describe('v55 vast = herkende herhaling', () => {
   // Greenpeace komt hier binnen via het vangnet-pad in monthLiquidity ("robuust vangnet"), niet via het
   // strikte schema. Deze test bewaakt dat ook die route de betaalvorm meegeeft, niet alleen het bedrag.
   test('fixDue telt incasso en periodieke overboeking', async ({ page }) => {
+    await pinDag(page);                                    // v495: de huur (voorspeld, maandelijks) valt na ~de 28e buiten zijn due-tolerantie; pin de dag zodat de fixture altijd klopt
     await open(page, seed({ giftCharged: false }));
     const r = await page.evaluate(() => {
       const L = monthLiquidity();
@@ -218,6 +219,7 @@ test.describe('v55 vast = herkende herhaling', () => {
   });
 
   test('geen dubbeltelling: recurring potjes lopen via fixDue, niet via de reservering', async ({ page }) => {
+    await pinDag(page);                                    // v495: zie hierboven (huur-due hangt aan de dag)
     await open(page);
     const S = await page.evaluate(() => safeToSpend());
     expect(S.fixDue).toBe(FIXDUE);
@@ -229,6 +231,7 @@ test.describe('v55 vast = herkende herhaling', () => {
   });
 
   test('opbouw-sheet toont dezelfde posten, zonder de vervallen budget-post', async ({ page }) => {
+    await pinDag(page);                                    // v495: zie hierboven (huur-due hangt aan de dag)
     await open(page);
     const t = await sheet(page, () => openSafeToSpend());
     expect(t).toContain('Vrij te besteden');   // v367: de opbouw eindigt op vrij te besteden

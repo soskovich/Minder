@@ -120,9 +120,9 @@ test.describe('v436 · 2. Deze week', () => {
   test('2a. Instellingen → Potjes: per potje wekelijks of niet, in een tik', async ({ page }) => {
     await boot(page); await wekelijks(page);
     await page.evaluate(() => openSetSub('potjes'));
-    await expect(page.locator('#setPotjes')).toContainText('Wekelijkse potjes');
-    await page.locator('#setPotjes [data-setwek="overig:ja"]').click();
-    expect(await page.evaluate(() => potWekelijks('overig'))).toBe(true);
+    await expect(page.locator('#setPotjes')).toContainText('Per dag of per keer');   // v495 punt 4: één begrip, de "wekelijks/niet"-lijst heet nu "per dag / per keer"
+    await page.locator('#setPotjes [data-potsoortrij="overig"] [data-potsoort="dag"]').click();
+    expect(await page.evaluate(() => potWekelijks('overig'))).toBe(true);            // per dag = wekelijks meetellend (dezelfde SET.potWekelijks)
   });
   test('2b/2c. de tegel "Deze week · 12–18 okt", nog EUR X van EUR Y, dagen te gaan, potjes erover; het overzicht per potje met de boekingen, en nog = som weekbedragen - som uitgegeven', async ({ page }) => {
     await boot(page); await wekelijks(page);

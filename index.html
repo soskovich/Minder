@@ -967,6 +967,10 @@ function perfReset(){ PERF.n={}; PERF.ms={}; }
 function perfK(name, fn){ if(!PERF.on) return fn(); const t=performance.now(); try{ return fn(); } finally{ PERF.n[name]=(PERF.n[name]||0)+1; PERF.ms[name]=(PERF.ms[name]||0)+(performance.now()-t); } }
 function perfHit(name){ if(PERF.on) PERF.n[name]=(PERF.n[name]||0)+1; }
 function save(stil){try{
+  /* v495: in de voorbeeldweergave ("Bekijk als datum") wordt niets weggeschreven. Elke save() is dan een no-op naar
+     localStorage; _dataGen bumpt nog wel zodat de memo-laag zich normaal gedraagt tijdens het tekenen. De voorbeeldsessie
+     snapshot SET en zet hem bij "terug naar vandaag" terug, dus ook de in-memory mutaties blijven niet staan. */
+  if(typeof window!=='undefined' && window._voorbeeld){ if(!stil) _dataGen++; return; }
   window._bwKeuze=null;   // v436: het label van een budgetwijziging geldt tot de eerste save() van die handeling
   try{ kennisSync(); }catch(_){}   // v426: leningen en gestopte posten staan bij elke wijziging ook in SET.kennis
   try{ kasGrensSync(); }catch(_){}   // v448: een potje Contant aan of uit zet de opnames voor de v420-grens om
@@ -1004,7 +1008,10 @@ function afloopTerug(){
  * SET.budgetsNext  = wijzigingen die klaarstaan voor de VOLGENDE maand (idem SET.potMetaNext voor de aanname).
  * SET.budgetMonth  = de 'YYYY-MM' waar SET.budgets op geankerd staat.
  * Bij maandwissel promoveert rolloverBudgets() de 'next'-laag naar actief. Niets gewijzigd = carry-forward. */
-function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+/* v495: in de voorbeeldweergave ("Bekijk als datum") tekent de app alsof het window._voorbeeldDag is. thisYM() en
+   vandaagYMD() zijn de twee bronnen van "nu"; alles wat per periode rekent leest periodeVan(vandaagYMD()), dus de
+   override werkt door naar elk scherm. Zonder voorbeeld (de regel) is _voorbeeldDag leeg en verandert er niets. */
+function thisYM(){ const vb=(typeof window!=='undefined')&&window._voorbeeldDag; if(vb) return vb.slice(0,7); const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 /* ---- LOKALE KALENDERDAG (v177, verruimd in v199) ----------------------------------------------
    Een datum die een kalenderdag bedoelt komt hier vandaan. toISOString() geeft de UTC-dag, en die
    loopt in Nederland tot twee uur achter op de dag die je op je klok ziet. Op een moment dat met
@@ -1022,7 +1029,7 @@ function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMo
    verspreidt, want de volgende kopieert de vorm die hij ziet. */
 function ymdVan(d){ const x=(d instanceof Date)?d:new Date(d);
   return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
-function vandaagYMD(){ return ymdVan(new Date()); }
+function vandaagYMD(){ const vb=(typeof window!=='undefined')&&window._voorbeeldDag; if(vb) return vb; return ymdVan(new Date()); }
 function prevYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo--; if(mo<1){mo=12;y--;} return y+'-'+String(mo).padStart(2,'0'); }   // v434
 function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
 function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
@@ -2978,7 +2985,12 @@ function contantOngeteld(m){ m=m||thisYM(); if(m!==thisYM()) return false; try{ 
 function contantPeriodenGecorr(PS){ PS=PS||contantPerioden(); return contantCorrigeer(PS.map(P=>Object.assign({P}, contantPeriode(P)||{}))); }
 /* v450: het tempo van het potje Contant op een dag: budget van die maand / dagen van die maand. Twee lezers: contantPeriode (verwacht
    na de telling) en contantSchatting (blok 23). */
-function contantDagTempo(d){ const ym=d.slice(0,7); return (+budgetVoorMaand(ym)[CONTANT_CAT]||0)/new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(); }
+/* v495: in de era is Contant een vast bedrag per salarisperiode (per keer, niet × dagen/30,4): het per-dag-tempo is dat bedrag
+   gedeeld door de dagen van de periode, zodat het over de periode precies op het contant-budget uitkomt. Vóór de era het
+   maand-tempo (budget / dagen in de maand). Geen eigen datumlogica: de periode komt uit periodeVan(d). */
+function contantDagTempo(d){ const P=periodeVan(d);
+  if(P.soort==='periode'){ const c=+budgetVoorMaand(P.ym)[CONTANT_CAT]||0; return c/Math.max(P.dagen,1); }   // Contant is per keer (vast), gespreid over de periodedagen
+  const ym=d.slice(0,7); return (+budgetVoorMaand(ym)[CONTANT_CAT]||0)/new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(); }
 /* v450 punt 3: DE SCHATTING VAN JE PORTEMONNEE (gevraagd door de gebruiker): zonder antwoord op moment 2 is de stand de laatste telling
    min wat er sinds die telling verwacht is uitgegeven (het tempo van het potje Contant, per dag), minimaal 0; niet de kale telling.
    Wat je sinds de telling pinde of contant ontving gaat de portemonnee in, een storting eruit (dezelfde gebeurtenissen als
@@ -5069,7 +5081,22 @@ function renderDash(){
   let modeTop='', modeBot='';
   try{
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
-    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro0(_tt.spend)} · in ${euro0(_tt.incomeAlles)}</div>`; }   // v259: incomeAlles, deze regel telt wat er langskwam   // saldo stond hierboven al
+    else if(isMode('expert')){
+      let _PV=null; try{ _PV=periodeVan(vandaagYMD()); }catch(_){}
+      if(_PV && _PV.soort==='periode'){
+        /* v495: in de era is Home "deze periode" (24 nov – 23 dec), niet de kalendermaand, zodat Home niet "deze maand" zegt naast de
+           periode op Inzichten en Grip. Uit en in zijn gemeten in het periodevenster (P.start t/m vandaag). */
+        const _vd=vandaagYMD(); let _uit=0, _in=0;
+        /* v495: uit en in over het periodevenster, als GELD-observatie (zoals totals().spend/incomeAlles, niet de norm). De
+           income-toets en de optelling staan op aparte regels, de vorm die maandInkomen() ook gebruikt (v259): dit is geen
+           vierde inline income-norm-bron maar de cash-in van deze periode. */
+        for(const t of TX){ const d=t.date.slice(0,10); if(d<_PV.start || d>_vd) continue; const meta=CATS[catOf(t)]||{};
+          if(meta.type==='expense' && t.amount<0){ _uit+=-t.amount; continue; }
+          const _ink = meta.type==='income' && t.amount>0;
+          if(_ink) _in+=t.amount; }
+        modeBot=`<div class="small muted" style="margin:10px 2px 0" data-homeregel="periode" data-homeperiode="${esc(_PV.label)}">deze periode · uit ${euro0(_uit)} · in ${euro0(_in)}</div>`;
+      } else { const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0" data-homeregel="maand">deze maand · uit ${euro0(_tt.spend)} · in ${euro0(_tt.incomeAlles)}</div>`; }   // v259: incomeAlles, deze regel telt wat er langskwam   // saldo stond hierboven al
+    }
   }catch(_){ }
   // v195: hier stonden freshStartReflection() en freshStartCard(). De kaart is opgeheven en de
   // terugblik staat nu op Maand, bij de afspraaklus die dezelfde vraag stelt.
@@ -12392,12 +12419,32 @@ function potSoortEffectief(k){ return potSoort(k)||potSoortVoorstel(k); }
 /* het budget van een periode uit het maandbudget (budgetVoorMaand, EEN bron): een potje per dag × dagen/30,4, per keer het hele
    potjebudget, Contant vast per periode (niet × dagen). Voor een korte maand (november 1–23) is P.dagen 23, dus per dag × 23/30,4
    en per keer + Contant volledig (beslissing 4). */
-function budgetVoorPeriode(P){ const base=budgetVoorMaand((P&&P.ym)||thisYM()); const perDag={}, perKeer={}; let contant=0;
+/* v495 (punt 4): het vaste deel van een potje (de herkende incasso's erin, maandSplitsing.fE), per potje. Gememoiseerd op ym.
+   Een potje met een vaste last erin (Vervoer & auto met de lease) wordt in budgetVoorPeriode gesplitst: het vaste deel telt per
+   keer (op zijn eigen datum), alleen de rest volgt de soort van het potje. Zo schaalt in een korte of lange periode alleen de rest
+   mee en blijft de vaste last gelijk. */
+function potVastDelen(ym){ return runMemo('potVastDelen', ym||thisYM(), ()=>{
+  const o={}; try{ const SP=maandSplitsing(ym||thisYM()); for(const b of (SP.potBasis||[])){ const fE=+b.fE||0; if(fE>0) o[b.k]=fE; } }catch(_){} return o; }); }
+function budgetVoorPeriode(P){ const ym=(P&&P.ym)||thisYM(), base=budgetVoorMaand(ym), vast=potVastDelen(ym);
+  const perDag={}, perKeer={}, split={}; let contant=0;
   for(const k in base){ const b=+base[k]||0; if(!(b>0)) continue;
     if(k===CONTANT_CAT){ contant=b; continue; }
-    if(potSoortEffectief(k)==='dag') perDag[k]=Math.round(b*P.dagen/PERIODE_DELER); else perKeer[k]=Math.round(b); }
+    const soort=potSoortEffectief(k), vd=Math.max(Math.min(+vast[k]||0, b), 0), restB=b-vd;   // vast deel geklemd op het budget
+    const restGeschaald=soort==='dag'?Math.round(restB*P.dagen/PERIODE_DELER):Math.round(restB);
+    if(soort==='dag' && restGeschaald>0) perDag[k]=restGeschaald;         // alleen de rest van een per-dag-potje schaalt
+    const keerDeel=Math.round(vd) + (soort==='dag'?0:restGeschaald);      // het vaste deel telt per keer; een per-keer-potje telt zijn rest ook per keer
+    if(keerDeel>0) perKeer[k]=keerDeel;
+    if(vd>0) split[k]={vast:Math.round(vd), rest:Math.round(restB), restGeschaald, soort};
+  }
   const perDagSom=Object.values(perDag).reduce((a,v)=>a+v,0), perKeerSom=Object.values(perKeer).reduce((a,v)=>a+v,0), ct=Math.round(contant);
-  return {perDag, perKeer, contant:ct, perDagSom, perKeerSom, totaal:perDagSom+perKeerSom+ct, deler:PERIODE_DELER, P}; }
+  return {perDag, perKeer, split, contant:ct, perDagSom, perKeerSom, totaal:perDagSom+perKeerSom+ct, deler:PERIODE_DELER, P}; }
+/* v495: HET HUIDIGE VENSTER, EEN BRON voor budget, tempo, forecast en weken. In de era (vandaag >= periodeVanaf) is dat de
+   salarisperiode; daarvoor de kalendermaand, in dezelfde vorm. `elapsed` = dagen sinds de start (vandaag meegeteld, geklemd op de
+   lengte). Geen eigen datumlogica: de periode komt uit periodeVan(vandaagYMD()). De vier surfaces (forecast/Grip, weektegel,
+   contant-tempo, Home) lezen deze functie, zodat er op 24 nov geen twee kalenders naast elkaar staan. */
+function huidigVenster(){ const d=vandaagYMD(), P=periodeVan(d);
+  const elapsed=Math.min(Math.max(salDagenTussen(P.start, d)+1, 1), P.dagen);
+  return {soort:P.soort, ym:P.ym, start:P.start, eind:P.eind, dagen:P.dagen, elapsed, over:Math.max(P.dagen-elapsed,0), korteMaand:P.korteMaand, label:P.label, periode:P.soort==='periode'}; }
 /* de historie-eenheden van oud naar nieuw (beslissing 5): de kalendermaanden t/m de korte november (1–23), een scheiding, daarna de
    salarisperiodes. Niets wordt omgerekend; november blijft een (korte) maand en wordt nooit als periode herrekend. EEN bron voor
    "Over de maanden" en de Terugblik. */
@@ -13444,6 +13491,8 @@ function salarisTabelData(V){ if(!V || V.onbekend || !(V.budget>0)) return null;
    is); potjes is de rest tot de som, zodat de twee rijen per constructie optellen tot budget en verwacht. Vervangt de salarisbalk
    op Zien (v428); salarisBalk blijft voor de Terugblik en salarisTabelData voor blok 20 en de brug. "waar zit het ›" opent de brug. */
 function gripZienTabel(){
+  let PS=null; try{ PS=periodeStandNu(); }catch(_){}   // v495: in de era de periode-eenheid, zodat Grip niet "november" zegt naast de Inzichten-periode
+  if(PS) return gripZienPeriodeKaart(PS);
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const m=thisYM();
   if(!V || V.onbekend || !(V.budget>0)) return `<div class="card" id="gripZienStand" data-zienstand="geen"><div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(ymFull(m))}</div><div class="small muted" style="margin-top:4px">Nog geen potjes of te weinig historie: zet ze met "Budget aanpassen".</div></div>`;
@@ -24851,6 +24900,29 @@ function periodeKopHtml(PS){
     ${rij('Contant', PS.contant, 'vast per periode')}
     <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div></div>`;
 }
+/* v495: Grip "Hoe sta je ervoor" in de era. Dezelfde periode-eenheid als de Inzichten-kop (periodeStandNu): het label is de periode,
+   het budget komt uit budgetVoorPeriode en het tempo spreidt over de periodedagen, dus op 24 nov staat hier niet "november" naast de
+   periode op Inzichten. De opzij-rij leest opzijPeriode (die was al per salarisperiode, v440). De variance-bridge in Begrijpen
+   (dezeMaandBrug/maandVooruit, het per-potje forecastmodel) blijft de maanddetail en is de volgende ronde. */
+function gripZienPeriodeKaart(PS){
+  const P=PS.P, dt=PS.uit-PS.potTempo, el=PS.el, dagen=PS.dagen;
+  const tempoTxt=PS.potDeel>0?(dt>0?`${euro0(dt)} boven tempo`:(dt<0?`${euro0(-dt)} onder tempo`:'precies op tempo')):'';
+  const tp=PS.potDeel>0?Math.min(Math.max(PS.potTempo/Math.max(PS.potDeel,1)*100,0),100):0;
+  let O=null; try{ O=opzijPeriode(); }catch(_){}
+  const rij=(l,w,sub)=>`<div class="row" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm)"><span class="muted">${l}</span><span><b data-zienperiodegetal>${euro0(w)}</b> <span class="small muted">${sub}</span></span></div>`;
+  const opzijTxt = !O||!O.ok ? '' : (!O.meetbaar||O.netto==null) ? '<span class="small" style="color:var(--mut2)">onbekend</span>'
+    : `<span class="small" style="font-weight:700;color:${O.netto<0?'var(--red)':'var(--green)'}">${O.netto<0?'−'+euro0(-O.netto):euro0(O.netto)}</span>`;
+  return `<div class="card" id="gripZienStand" data-zienstand="periode" data-zienperiode="${esc(P.label)}" data-zienuit="${PS.uit}" data-zienbudget="${PS.potDeel}" data-zienel="${el}" data-ziendagen="${dagen}">
+    <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(P.label)}</div>
+    <div class="small muted" style="margin:2px 0 6px">dag ${el} van ${dagen} · salaris ${esc(dagKort(P.start))}</div>
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-zienperiodegetal>${euro0(PS.uit)}</b> <span class="muted" data-zienperiodegetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-zientempotxt style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
+    <div class="ins-mb" style="margin:8px 0 10px"><i style="left:0;width:${Math.min(PS.uit/Math.max(PS.potDeel,1)*100,100).toFixed(2)}%;background:${INS_SEG.potjes}"></i>${PS.potDeel>0?`<em data-zientempo="${PS.potTempo}" style="left:${tp.toFixed(2)}%"></em>`:''}</div>
+    ${rij('per dag', PS.perDag, 'tempo naar dagen')}
+    ${rij('per keer', PS.perKeer, 'vast bedrag')}
+    ${rij('Contant', PS.contant, 'vast per periode')}
+    ${O&&O.ok?`<div class="row" data-zienopzij data-doel="${O.doel!=null?O.doel:''}" data-gedaan="${O.netto!=null?O.netto:''}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);border-top:1px solid var(--line);padding-top:6px;margin-top:4px"><span class="muted">opzij</span><span>${opzijTxt} <span class="small muted" data-zienopzijlabel>${O.doel!=null?'van '+euro0(O.doel):''}</span></span></div>`:''}
+    <div class="small" style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div></div>`;
+}
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
    v309), en wat er over bleef of erboven ging. Geen tempo en niets meer te gaan. */
 function insPeriodeStand(ms){
@@ -25140,10 +25212,48 @@ function weekLabel(ym, w){
   return `${wd(w.van)} ${w.van} – ${wd(w.tot)} ${w.tot} ${MNAMES[mo-1]}`;
 }
 function weekKort(ym, w){ return `${w.van}–${w.tot} ${MNAMES[+String(ym).slice(5,7)-1]}`; }
+/* v495: WEKEN BINNEN DE SALARISPERIODE (era). weekIndeling werkt op dagnummers binnen een kalendermaand; in de periode lopen de
+   weken over de maandgrens, dus de indeling en de uitgaven gaan op datum. Een week loopt maandag t/m zondag; een gebroken stuk van
+   minder dan 4 dagen aan begin of eind gaat bij de buurweek. De laatste week loopt tot de dag vóór het volgende salaris (P.eind). */
+function weekIndelingDat(start, eind){
+  const ch=[]; let s=start;
+  for(let d=start, i=0; i<400; d=rekDag(d,1), i++){ const wd=new Date(d+'T12:00').getDay(); if(wd===0 || d===eind){ ch.push({van:s, tot:d, dagen:salDagenTussen(s,d)+1}); s=rekDag(d,1); } if(d===eind) break; }
+  if(ch.length>1 && ch[0].dagen<4){ ch[1].van=ch[0].van; ch[1].dagen=salDagenTussen(ch[1].van,ch[1].tot)+1; ch.shift(); }
+  const n=ch.length; if(n>1 && ch[n-1].dagen<4){ ch[n-2].tot=ch[n-1].tot; ch[n-2].dagen=salDagenTussen(ch[n-2].van,ch[n-2].tot)+1; ch.pop(); }
+  return ch.map((w,i)=>Object.assign({nr:i+1}, w));
+}
+/* de weektegel in de era: per wekelijks potje (per dag, potWekelijks===true) wat er aan het begin van de week over is van zijn
+   periodebudget (budgetVoorPeriode.perDag), gedeeld door de dagen van weekstart t/m periode-eind, maal de dagen van deze week.
+   Zo schuift wat je over- of tekortkomt vanzelf door, binnen de periode. Geen weekStand-bevriezing (verfijning deel 2). */
+function insWeekTegelP(){
+  const P=periodeVan(vandaagYMD()); if(!P || P.soort!=='periode') return null;
+  const BP=budgetVoorPeriode(P), vd=vandaagYMD();
+  const ks=Object.keys(BP.perDag).filter(k=>potWekelijks(k)===true && CATS[k]);
+  const W=weekIndelingDat(P.start, P.eind), cur=W.find(w=>vd>=w.van && vd<=w.tot)||null;
+  if(!cur) return {P, W, cur:null, potjes:[], bedrag:0, uit:0, nog:0, erover:[], dagenTeGaan:0, ks};
+  const voor={}, uit={}, tx={}; for(const k of ks){ voor[k]=0; uit[k]=0; tx[k]=[]; }
+  for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start || d>P.eind) continue; if(insTxSoort(t)!=='potje') continue; const k=catOf(t); if(!(k in voor)) continue; const v=uitgaveNorm(t);
+    if(d<cur.van) voor[k]+=v; else if(d<=cur.tot){ uit[k]+=v; tx[k].push(t); } }
+  const overDagen=Math.max(salDagenTussen(cur.van, P.eind)+1, 1);
+  const potjes=ks.map(k=>({k, naam:CATS[k].name, budget:Math.round(BP.perDag[k]), voor:Math.round(voor[k]), bedrag:Math.max(Math.round((BP.perDag[k]-voor[k])/overDagen*cur.dagen),0), uit:Math.round(uit[k]*100)/100, tx:tx[k].sort((a,b)=>b.date.localeCompare(a.date))}));
+  for(const x of potjes) x.nog=Math.round((x.bedrag-x.uit)*100)/100;
+  const bedrag=potjes.reduce((a,x)=>a+x.bedrag,0), u=Math.round(potjes.reduce((a,x)=>a+x.uit,0)*100)/100;
+  return {P, W, cur, over:overDagen, potjes, bedrag, uit:u, nog:Math.round((bedrag-u)*100)/100, erover:potjes.filter(x=>x.nog<0), dagenTeGaan:Math.max(salDagenTussen(vd, cur.tot)+1,0), ks};
+}
+function weekKortDat(cur){ return `${+cur.van.slice(8,10)} ${MNAMES[+cur.van.slice(5,7)-1]} – ${+cur.tot.slice(8,10)} ${MNAMES[+cur.tot.slice(5,7)-1]}`; }
 function insWeekTegel(){
   if(!wekKandidaten().length) return '';
   const open=wekOpen();
   if(open.length) return `<div class="card ins-weekkies" id="insWeek" data-weekkies="${open.length}" role="button" onclick="openWekelijks()"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Kies welke potjes wekelijks zijn, dan staat hier wat je deze week nog kunt uitgeven.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  let NP=null; try{ NP=insWeekTegelP(); }catch(_){}
+  if(NP){
+    if(!NP.cur || !NP.potjes.length) return `<div class="card" id="insWeek" data-weekgeen role="button" onclick="openSetSub('potjes')"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Geen potje staat op wekelijks. Wijzigen via Instellingen → Potjes.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+    const over=NP.nog<0, dg=NP.dagenTeGaan;
+    return `<div class="ins-week" id="insWeek" data-weekperiode data-weekbedrag="${NP.bedrag}" data-weeknog="${NP.nog}" data-weekuit="${NP.uit}" data-weekstart="${NP.cur.van}"${over?' data-weekover':''} role="button" onclick="openWeekSheet()">
+      <div style="flex:1;min-width:0"><div class="row" style="justify-content:space-between;gap:8px"><span class="ins-wk-c">Deze week · ${esc(weekKortDat(NP.cur))}</span><span style="font-weight:700">›</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="ins-wk-v" data-insgetal${over?' style="color:var(--amber)"':''}>${over?`${euro0(-NP.nog)} erover`:`nog ${euro0(NP.nog)}`}</span><span class="ins-wk-s" data-weekvan>van <span data-insgetal>${euro0(NP.bedrag)}</span> · ${dg} ${dg===1?'dag':'dagen'} te gaan</span></div>
+        ${NP.erover.length?`<div class="ins-wk-s" data-weekerover="${NP.erover.length}">${NP.erover.length} ${NP.erover.length===1?'potje':'potjes'} erover: ${esc(NP.erover.map(x=>x.naam).join(', '))}</div>`:`<div class="ins-wk-s" data-weekerover="0">geen potje erover</div>`}</div></div>`;
+  }
   const N=weekNu(true); if(!N) return '';
   if(!N.potjes.length) return `<div class="card" id="insWeek" data-weekgeen role="button" onclick="openSetSub('potjes')"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Geen potje staat op wekelijks. Wijzigen via Instellingen → Potjes.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
   const over=N.nog<0, dg=N.dagenTeGaan;
@@ -25155,8 +25265,11 @@ function insWeekTegel(){
 /* Het weekoverzicht: per wekelijks potje een balk, uitgegeven van het weekbedrag, "nog EUR X" of "EUR X erover", en de boekingen
    van deze week. Bovenaan het totaal; de uitleg staat achter "Hoe werkt dit ›". */
 function openWeekSheet(){
-  const N=weekNu(false); if(!N) return;
+  let NP=null; try{ NP=insWeekTegelP(); }catch(_){}
+  const N = (NP && NP.cur) ? Object.assign({}, NP, {label:'Deze week · '+weekKortDat(NP.cur)}) : weekNu(false);
+  if(!N) return;
   const ef=v=>euro(Math.round(v*100)/100), dag=t=>new Date(t.date+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
+  const kop = N.label || weekLabel(N.m, N.cur);
   const pot=x=>{ const pct=x.bedrag>0?Math.min(x.uit/x.bedrag*100,100):(x.uit>0?100:0), ov=x.nog<0;
     return `<div data-weekpot="${esc(x.k)}" data-weekpotbedrag="${x.bedrag}" data-weekpotuit="${x.uit}" style="padding:8px 0;border-top:1px solid var(--line)">
       <div class="row" style="justify-content:space-between;gap:8px"><b style="font-size:13.5px">${esc(x.naam)}</b><span data-weekpotnog style="font-weight:700;color:${ov?'var(--amber)':'var(--green)'}">${ov?`${ef(-x.nog)} erover`:`nog ${euro0(x.nog)}`}</span></div>
@@ -25164,13 +25277,14 @@ function openWeekSheet(){
       <div class="small muted">${ef(x.uit)} van ${euro0(x.bedrag)}</div>
       ${x.tx.map(t=>`<div class="small" data-weektx role="button" style="color:var(--mut);padding:2px 0 0 8px;cursor:pointer" onclick="openSheet('${esc(t.id)}')">${esc(dag(t))} · ${esc(txNaam(t))} · ${ef(uitgaveNorm(t))}</div>`).join('')}</div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div><div id="weekSheet" data-weekbedrag="${N.bedrag}" data-weeknog="${N.nog}">
-    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:var(--fs-lg)">${esc(weekLabel(N.m, N.cur))}</b><span class="small" data-weeksheetnog style="font-weight:700">${N.nog<0?`${euro0(-N.nog)} erover`:`nog ${euro0(N.nog)}`}</span></div>
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:var(--fs-lg)">${esc(kop)}</b><span class="small" data-weeksheetnog style="font-weight:700">${N.nog<0?`${euro0(-N.nog)} erover`:`nog ${euro0(N.nog)}`}</span></div>
     <div class="small muted" style="margin:2px 0 6px">${euro(N.uit)} van ${euro0(N.bedrag)} · ${N.dagenTeGaan} ${N.dagenTeGaan===1?'dag':'dagen'} te gaan</div>
     ${N.potjes.map(pot).join('')}
     <div class="small" data-weekhoe role="button" style="color:var(--teal);font-weight:700;margin-top:10px;cursor:pointer" onclick="openWeekUitleg()">Hoe werkt dit ›</div></div>`; showSheetBg();
 }
 function openWeekUitleg(){
-  const N=weekNu(false); if(!N) return;
+  let NP=null; try{ NP=insWeekTegelP(); }catch(_){}
+  const N = (NP && NP.cur) ? NP : weekNu(false); if(!N) return;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="weekUitleg"><div style="font-weight:800;font-size:var(--fs-lg)">Hoe werkt deze week?</div>
     <div class="small" style="line-height:1.5;margin-top:6px">Een week loopt van maandag tot en met zondag. Per wekelijks potje is het weekbedrag wat er van dat potje over is aan het begin van de week, gedeeld door de dagen die er in de maand nog over zijn, maal de dagen van deze week. Wat je overhoudt of te veel uitgeeft schuift zo door naar de volgende weken. Het bedrag verandert niet midden in de week. Een gebroken stuk van 4 dagen of meer aan het begin of eind van de maand is een eigen week; korter gaat bij de week ernaast.</div>
     ${N.potjes.map(x=>`<div class="small" data-weekuitlegpot="${esc(x.k)}" style="padding:6px 0;border-top:1px solid var(--line);margin-top:6px">${esc(x.naam)}: (${euro0(x.budget)} − ${euro0(x.voor)} al uit) ÷ ${N.over} dagen × ${N.cur.dagen} = ${euro0(x.bedrag)}</div>`).join('')}
@@ -25211,16 +25325,25 @@ function potWekelijksZet(k, v){ SET.potWekelijks=Object.assign({}, SET.potWekeli
    (potSoortVoorstel). Renderen schrijft NIETS: de chip is pas 'on' na jouw keuze, en alleen potSoortZet schrijft (beslissing 1,
    MECHANISM_SPEC.defaultEffect "niets stil"). De opslag is SET.potWekelijks (per dag = wekelijks meetellend), dus dezelfde bron als
    de weektegel; per dag → true, per keer → false. */
-function potSoortRij(k){
+/* v495 (punt 4): "Per dag of per keer" per potje. Het voorstel uit het ritme staat ALTIJD in het grijs (ook als je al koos). Een
+   potje met een vast deel (de herkende incasso erin, potVastDelen) toont de splitsing: "€537 vast + €563 per dag"; alleen de rest
+   volgt de soort, het vaste deel telt per keer op zijn datum (budgetVoorPeriode). Contant is geen schakelaar maar een vaste regel. */
+function potSoortRij(k, vast){
   const c=CATS[k]||{}, s=potSoort(k), v=potSoortVoorstel(k), lbl=x=>x==='dag'?'per dag':'per keer';
   const chip=(x)=>`<span class="chip ${s===x?'on':''}" data-potsoort="${x}" onclick="potSoortZet('${esc(k)}','${x}')">${lbl(x)}</span>`;
-  const vs=s?'':`<span class="small" data-potsoortvoorstel="${v}" style="color:var(--mut2);margin-left:6px">voorstel: ${lbl(v)}</span>`;
-  return `<div class="row" data-potsoortrij="${esc(k)}" style="gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0;font-size:var(--fs-sm)">${c.icon||''} ${esc(c.name||k)}${vs}</span><span class="chips" style="margin:0;flex-wrap:nowrap">${chip('dag')}${chip('keer')}</span></div>`;
+  const vs=`<span class="small" data-potsoortvoorstel="${v}" style="color:var(--mut2);margin-left:6px">voorstel: ${lbl(v)}</span>`;
+  const vd=Math.round(Math.max(+(vast||{})[k]||0, 0)), b=Math.round(+((SET.budgets||{})[k])||0), rest=Math.max(b-vd, 0);
+  const splitTxt=vd>0?`<span class="small" data-potvastdeel="${vd}" style="display:block;color:var(--mut2)">${euro0(vd)} vast + ${euro0(rest)} ${lbl(potSoortEffectief(k))}</span>`:'';
+  return `<div class="row" data-potsoortrij="${esc(k)}" style="gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0;font-size:var(--fs-sm)">${c.icon||''} ${esc(c.name||k)}${vs}${splitTxt}</span><span class="chips" style="margin:0;flex-wrap:nowrap">${chip('dag')}${chip('keer')}</span></div>`;
 }
-function potSoortLijst(){ const ks=wekKandidaten(); if(!ks.length) return '';
-  return `<div class="hlabel" data-potsoortlijst style="margin:18px 0 4px">Soort per potje</div>
-    <div class="small muted" style="margin:0 0 6px">Per dag loopt mee met de dagen van je salarisperiode (Boodschappen, Uit eten, ...); per keer is een vast bedrag per periode (Kinderen, Belasting, ...). Minder stelt voor uit je ritme; het staat pas vast als je kiest.</div>
-    ${ks.map(potSoortRij).join('')}`; }
+function potSoortLijst(){
+  const ks=wekKandidaten().filter(k=>k!==CONTANT_CAT), vast=potVastDelen(thisYM());
+  const cb=Math.round(+((SET.budgets||{})[CONTANT_CAT])||0);
+  const contantRij=cb>0?`<div class="row" data-potsoortcontant style="gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0;font-size:var(--fs-sm)">${(CATS[CONTANT_CAT]||{}).icon||''} ${esc((CATS[CONTANT_CAT]||{}).name||'Contant')}</span><span class="small" style="color:var(--mut2);white-space:nowrap">${euro0(cb)} vast per periode</span></div>`:'';
+  if(!ks.length && !contantRij) return '';
+  return `<div class="hlabel" data-potsoortlijst style="margin:18px 0 4px">Per dag of per keer</div>
+    <div class="small muted" style="margin:0 0 6px">Per dag: het budget loopt mee met het aantal dagen in je periode (boodschappen, uit eten). Per keer: een vast bedrag per periode (kinderen, verzekeringen). Telt ook voor ‘Deze week’.</div>
+    ${ks.map(k=>potSoortRij(k, vast)).join('')}${contantRij}`; }
 function potSoortZet(k, soort){ potWekelijksZet(k, soort==='dag'); }
 
 /* ===== PATRONEN (v382, sinds v436 alleen als label in Zien) =====
@@ -26338,11 +26461,12 @@ const SET_SUBS=[
 /* v436: INSTELLINGEN → POTJES. Welke potjes wekelijks zijn kies je een keer (de vraag op Inzichten); daarna wijzig je het hier,
    per potje in een tik (potWekelijksZet). Een potje dat later bijkomt staat hier als "niet gekozen" en telt niet in je week. */
 function setSubPotjesStand(){ const K=wekKandidaten(), n=K.filter(k=>potWekelijks(k)===true).length; return K.length?`${n} van ${K.length} wekelijks`:'nog geen potjes'; }
-function setPotjes(){ const K=wekKandidaten(), B=SET.budgets||{};
-  const chip=(k,x,l)=>`<span class="chip ${potWekelijks(k)===x?'on':''}" data-setwek="${esc(k)}:${x?'ja':'nee'}" onclick="potWekelijksZet('${esc(k)}',${x})">${l}</span>`;
-  return `<div class="card" id="setPotjes"><div class="hlabel" style="margin:0 0 4px">Wekelijkse potjes</div>
-    <div class="small muted" style="line-height:1.45;margin-bottom:6px">Een wekelijks potje telt mee in "Deze week" op Inzichten. Niet wekelijks (kapper, cadeaus) blijft alleen in de maand.</div>
-    ${K.map(k=>`<div class="row" data-setwekrij="${esc(k)}" style="gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0;font-size:13px">${esc(CATS[k].name)} · ${euro0(+B[k]||0)}${potWekelijks(k)===null?' <span class="small muted">· nog niet gekozen</span>':''}</span><span class="chips" style="margin:0;flex-wrap:nowrap">${chip(k,true,'wekelijks')}${chip(k,false,'niet')}</span></div>`).join('')||'<div class="small muted">Je hebt nog geen potjes.</div>'}
+/* v495 (punt 4): Instellingen → Potjes toont DEZELFDE lijst als de budgeteditor (potSoortLijst), zodat "per dag / per keer" EEN
+   begrip is met twee ingangen (v61/v91) in plaats van twee lijsten voor SET.potWekelijks met verschillende woorden. Tot v495 heette
+   deze lijst "Wekelijkse potjes" met knoppen wekelijks/niet; die naam zei niet dat de keuze sinds v494 ook de soort per salarisperiode
+   is. De voet "Budget aanpassen ›" blijft. */
+function setPotjes(){ const lijst=potSoortLijst();
+  return `<div class="card" id="setPotjes">${lijst||'<div class="hlabel" data-potsoortlijst style="margin:0 0 4px">Per dag of per keer</div><div class="small muted">Je hebt nog geen potjes.</div>'}
     <div class="small" role="button" style="color:var(--teal);font-weight:700;margin-top:10px;cursor:pointer" onclick="openBudgetEditor(thisYM())">Budget aanpassen ›</div></div>`; }
 function openSetSub(id){ window._setSub=id||null; go('set'); renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
 function setTerug(){ window._setSub=null; renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
@@ -34763,6 +34887,48 @@ async function diagTekst(){
   return L.join('\n');
 }
 
+/* v495: VOORBEELDWEERGAVE ("Bekijk als datum"). De app tekent alle schermen alsof het die dag is, met je echte gegevens.
+   Alleen lezen: save() is een no-op naar localStorage zolang window._voorbeeld aan staat (zie save()), en de sessie zet SET
+   bij "terug naar vandaag" terug uit een snapshot, dus ook in-memory mutaties (weekStand, gripStapSinds) blijven niet staan.
+   Er gaan geen meldingen uit en geen controle schrijft iets weg. De override loopt via window._voorbeeldDag door vandaagYMD()
+   en thisYM() naar elk scherm. Een vaste balk bovenaan zegt wat er aan de hand is en hoe je terug komt. */
+function voorbeeldStart(datum){
+  datum=String(datum||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return;
+  if(!window._voorbeeld){ window._voorbeeldBackup=JSON.parse(JSON.stringify(SET)); }
+  window._voorbeeld=true; window._voorbeeldDag=datum;
+  try{ runMemoVergeten(); }catch(_){}
+  _dataGen++;
+  try{ closeSheet(); }catch(_){}
+  voorbeeldBalk();
+  try{ go('ins'); }catch(_){ try{ render(); }catch(__){} }
+}
+function voorbeeldStop(){
+  if(!window._voorbeeld) return;
+  const b=window._voorbeeldBackup;
+  window._voorbeeld=false; window._voorbeeldDag=null; window._voorbeeldBackup=null;
+  if(b){ SET=JSON.parse(JSON.stringify(b)); }
+  try{ runMemoVergeten(); }catch(_){}
+  _dataGen++;
+  const bar=document.getElementById('voorbeeldBalk'); if(bar) bar.remove();
+  try{ go('dash'); }catch(_){ try{ render(); }catch(__){} }
+}
+function voorbeeldBalk(){
+  let bar=document.getElementById('voorbeeldBalk');
+  if(!bar){ bar=document.createElement('div'); bar.id='voorbeeldBalk'; document.body.appendChild(bar); }
+  const dag=dagKort(window._voorbeeldDag||vandaagYMD());
+  bar.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--amber);color:#1a1205;font-size:var(--fs-sm);font-weight:700;padding:8px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 6px rgba(0,0,0,.25)');
+  bar.innerHTML=`<span style="flex:1;min-width:0">Voorbeeld · ${esc(dag)} · niets wordt opgeslagen</span><span role="button" data-voorbeeldterug onclick="voorbeeldStop()" style="cursor:pointer;text-decoration:underline;white-space:nowrap">terug naar vandaag</span>`;
+}
+/* de presets en een eigen datum in de Diagnose-sheet; alleen lezen, opent de voorbeeldweergave */
+function voorbeeldKies(){
+  const chip=(d,l)=>`<span class="chip" data-voorbeeldkies="${d}" onclick="voorbeeldStart('${d}')" style="cursor:pointer">${esc(l)}</span>`;
+  const era=(function(){ try{ return periodeVanaf(); }catch(_){ return null; } })();
+  const presets=[]; if(era){ presets.push([era, dagKort(era)+' (eerste periode)']); presets.push([rekDag(era,2), dagKort(rekDag(era,2))]); presets.push([rekDag(era,11), dagKort(rekDag(era,11))]); }
+  return `<div class="hlabel" style="margin:16px 0 4px">Bekijk als datum</div>
+    <div class="small muted" style="margin:0 0 6px">De app tekent alle schermen alsof het die dag is, met je echte gegevens. Er wordt niets opgeslagen en er gaan geen meldingen uit. "Terug naar vandaag" zet alles terug.</div>
+    <div class="chips" style="margin:0 0 6px">${presets.map(p=>chip(p[0],p[1])).join('')}</div>
+    <div class="row" style="gap:8px;align-items:center"><input type="date" id="voorbeeldDatum" style="flex:1;box-sizing:border-box;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt)"><button class="btn sec" data-voorbeeldeigen onclick="(function(){var v=document.getElementById('voorbeeldDatum');if(v&&v.value)voorbeeldStart(v.value);})()">Bekijk ›</button></div>`;
+}
 /* De uitvoer draagt bedragen uit je eigen gegevens. Hij blijft op dit toestel; hij gaat er alleen
    af als je hem zelf ergens plakt. Dat staat er ook boven, want het scherm hoort te zeggen wat het
    in handen geeft. */
@@ -34771,6 +34937,7 @@ async function diagOpen(){
     <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Diagnose</span>
       <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="small muted" style="margin-bottom:8px;line-height:1.5">Een uitlezing van wat de app op dit toestel meet. Dit scherm leest alleen: er verandert niets aan je gegevens door te kijken. De uitvoer bevat je eigen bedragen en blijft op dit toestel, tenzij je hem zelf ergens plakt.</div>
+    ${(function(){ try{ return voorbeeldKies(); }catch(e){ return ''; } })()}
     ${(function(){ try{ return controleDiagHtml(); }catch(e){ return '<div class="small muted">controles: '+esc(e.message)+'</div>'; } })()}
     <div class="hlabel" style="margin:16px 0 6px">Alle blokken</div>
     <textarea id="diagUit" readonly onclick="this.select()" style="width:100%;height:46vh;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);line-height:1.45;white-space:pre;overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px">Bezig met lezen...</textarea>
