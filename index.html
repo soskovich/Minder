@@ -1976,7 +1976,7 @@ function contantPotje(){ if(typeof SET==='undefined' || !SET) return false; cons
 function netSpend(txns){ let s=0; for(const t of txns){ if(isExpenseTx(t)) s+=-t.amount; } return s; }
 
 /* ---------- maand-helpers ---------- */
-function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
+function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); s.add(thisYM()); return [...s].sort(); }   // v497: thisYM() i.p.v. new Date(), zodat de voorbeeldweergave ("Bekijk als datum") de voorbeeldmaand in de lijst heeft en Inzichten de periode toont i.p.v. terug te vallen op de laatste echte maand
 /* v285: DE POORT ALS LIJST. `csvDubbel()` is sinds v284 de ene poort, maar elke lezer drukte zijn
    eigen lus over `TX` uit en vier van hen hebben die poort nooit gekregen. GEMETEN op het toestel:
    sectie 6 van blok 10 had geen csv-groep meer terwijl meting 1 vier regels hoger nog
@@ -8970,7 +8970,25 @@ function afspraakDekkingKnop(r){
    er later iets aan die maand (een late boeking, een andere categorie), dan zegt die regel dat.
    GEEN TELLER DIE IETS GOEDKEURT: "4 van 6 klaar" is een stand en geen score, en er is geen reeks
    over maanden heen. */
-function afsluitMaand(){ return valtOpYmPlus(thisYM(), -1); }
+/* v497 (punt 5): in de era sluit je een EENHEID af, niet per se een kalendermaand. De eenheden komen uit historiePerioden (de
+   kalendermaanden t/m de korte november 1–23, daarna de salarisperiodes); een eenheid is afsluitbaar als hij is afgelopen
+   (eind < vandaag) en nog niet in SET.maandAfsluiting staat. De sleutel van een periode is 'P:'+start, die van een maand zijn ym.
+   Oud → nieuw; de pop-up toont de nieuwste. Buiten de era is de lijst enkel maanden en gebruikt afsluitMaand hem niet (byte-gelijk). */
+function afsluitEenheden(vandaag){ vandaag=vandaag||vandaagYMD();
+  let H=[]; try{ H=historiePerioden(vandaag); }catch(_){ return []; }
+  const out=[];
+  for(const P of H){ if(!P || P.soort==='scheiding') continue; if(!(String(P.eind)<vandaag)) continue;
+    const key=P.soort==='periode'?('P:'+P.start):P.ym; if((SET.maandAfsluiting||{})[key]) continue;
+    out.push({key, soort:P.soort, label:P.label, start:P.start, eind:P.eind, ym:P.ym}); }
+  return out; }
+function afsluitPeriodeKey(key){ return typeof key==='string' && key.slice(0,2)==='P:'; }
+/* het label van een afsluit-eenheid: de korte november "(1–23)" of een periodelabel in de era, anders de maandnaam. */
+function afsluitLabel(key){ if(afsluitPeriodeKey(key)){ try{ return periodeVan(key.slice(2)).label; }catch(_){ return key.slice(2); } }
+  try{ const P=periodeVan(key+'-15'); if(P.korteMaand){ const l=P.label; return l.charAt(0).toUpperCase()+l.slice(1); } }catch(_){}
+  return valtOpHoofd(key); }
+function afsluitMaand(){
+  try{ const HV=huidigVenster(); if(HV&&HV.periode){ const E=afsluitEenheden(); if(E.length) return E[E.length-1].key; } }catch(_){}
+  return valtOpYmPlus(thisYM(), -1); }
 /* De vingerafdruk van een maand: welke boekingen er zijn, met hun categorie en bedrag. Een late
    boeking of een andere categorie verandert hem. */
 function afsluitVinger(M){
@@ -8997,7 +9015,10 @@ function afsluitPunten(M, R){
     if(bov.length){ const n=bov.filter(x=>x.r.antwoord).length;
       P.push({punt:'logboek', naam:'Logboekvragen beantwoord', feit:`${n} van ${bov.length}`, af:n===bov.length, act:"go('logboek')"}); } }catch(_){}
   try{ const MP=maandPotjes(M), had=MP.bron==='bewaard' && Object.keys(MP.B||{}).length>0, tb=totalBudget();   // de bewaarde bedragen via hun ene lezer (v335)
-    if(had || tb>0) P.push({punt:'potjes', naam:`Potjes voor ${afMnd(nu)} staan`, feit:tb>0?`samen ${euro0(tb)}`:`nog geen potjes voor ${afMnd(nu)}`, af:tb>0, act:`openPotjesVerdeling('${nu}')`}); }catch(_){}
+    /* v497 punt 2/5: in de era noemt de punt de LOPENDE PERIODE en het periode-budget (budgetVoorPeriode), niet het maandbudget
+       (EUR 3.570). Zo leest de pop-up "Potjes voor de periode · samen EUR X" met hetzelfde getal als Zien/Inzichten. */
+    let pot=tb, lab='voor '+afMnd(nu); try{ const HV=huidigVenster(); if(HV&&HV.periode){ const PB=periodeBudget(); if(PB){ pot=Math.round(PB.totaal); lab='voor de periode'; } } }catch(_){}
+    if(had || pot>0) P.push({punt:'potjes', naam:`Potjes ${lab} staan`, feit:pot>0?`samen ${euro0(pot)}`:`nog geen potjes ${lab}`, af:pot>0, act:`openPotjesVerdeling('${nu}')`}); }catch(_){}
   try{ const tx=afsluitOverigTx(M);
     P.push({punt:'categorie', naam:'Boekingen zonder categorie', feit:tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} nog op Overig`:'geen', af:!tx.length, act:tx.length?`openAfsluitOverig('${M}')`:''}); }catch(_){}
   /* v374: DE VRAGEN OVER BOEKINGEN DIE JE ZELF BEOORDEELT ZIJN EEN AFSLUITTAAK, net als boekingen zonder categorie:
@@ -9017,6 +9038,7 @@ function afsluitPunten(M, R){
   return P;
 }
 function afsluitStand(M, R){
+  if(afsluitPeriodeKey(M)) return {M, P:[], A:[], tot:0, af:0, klaar:true};   // v497: een periode-afsluiting heeft (nog) geen punten-lijst
   const P=afsluitPunten(M, R), A=afsprakenVoor(M).map(a=>({a, S:afspraakStand(a)||{status:'loopt',feit:'',af:false}}));
   /* v365: DE TELLER TELT ALLEEN DE AFSLUITTAKEN. Afsluiten is controleren of de maand klopt; een afspraak over
      een latere maand hoort daar niet en staat sinds v365 op de logboekpagina (logAfsprakenBlok()). A blijft
@@ -9026,6 +9048,7 @@ function afsluitStand(M, R){
 }
 function afsluitNodig(M){
   if((SET.maandAfsluiting||{})[M]) return false;
+  if(afsluitPeriodeKey(M)){ try{ const P=periodeVan(M.slice(2)); return String(P.eind)<vandaagYMD(); }catch(_){ return false; } }
   try{ return txOfMonth(M).length>0; }catch(_){ return false; }
 }
 function afsluitPuntRij(p){
@@ -9076,13 +9099,31 @@ function afsluitOverigOpen(id,M){ window._werklijst=M; openSheet(id); }
 function overigKlopt(id,M){ if(!TX.some(t=>t.id===id)) return; OVR[id]='overig'; save(); render(); openAfsluitOverig(M); }
 function openAfsluiting(M){ renderAfsluitSheet(M); showSheetBg(); }
 /* De sheet rekent opnieuw (v319/v320): tussen tekenen en tikken kan er een import binnenkomen. */
+/* v497 (punt 5): een AFGELOPEN salarisperiode sluit je af; de sleutel is 'P:'+start. Een minimale kaart (label, het periode-budget
+   met de indeling, en wat er in de periode uitging), met één knop. De volledige punten-lijst per periode is een vervolg; november
+   (1–23) en de maanden lopen nog via de maand-machinerie hierboven. */
+function periodeAfsluiten(key){ if(!afsluitPeriodeKey(key)) return; SET.maandAfsluiting=SET.maandAfsluiting||{};
+  let P=null; try{ P=periodeVan(key.slice(2)); }catch(_){} SET.maandAfsluiting[key]={op:vandaagYMD(), start:key.slice(2), eind:P?P.eind:''}; save(); closeSheet(); render(); }
+function renderAfsluitPeriode(key){ let P=null; try{ P=periodeVan(key.slice(2)); }catch(_){} if(!P){ closeSheet(); return; }
+  let BP=null; try{ BP=budgetVoorPeriode({ym:P.ym, dagen:P.dagen}); }catch(_){}
+  let spend=0; try{ for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start||d>P.eind) continue; const s=insTxSoort(t); if(s==='potje'||s==='zonder') spend+=uitgaveNorm(t); } }catch(_){} spend=Math.round(spend);
+  const bud=BP?Math.round(BP.totaal):0, d=spend-bud;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${esc(key)}" data-afsluitperiode="${esc(P.label)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.label)} afsluiten</div>
+    <div class="small muted" style="margin:2px 0 10px">de salarisperiode is afgelopen · sluit hem af om hem in je logboek te zetten</div>
+    <div class="row" data-afperiodebudget="${bud}" style="justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--line)"><span class="muted">Budget deze periode</span><b>${euro0(bud)}</b></div>
+    <div class="row" data-afperiodeuit="${spend}" style="justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--line)"><span class="muted">Uitgegeven in je potjes</span><b>${euro0(spend)}</b></div>
+    <div class="row" style="justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-weight:800"><span>${d<=0?'Over':'Erboven'}</span><span>${d<0?'−'+euro0(-d):euro0(d)}</span></div>
+    <button class="btn" data-afsluit="klaar" style="margin-top:12px;width:100%" onclick="periodeAfsluiten('${esc(key)}')">${esc(P.label)} afsluiten</button>
+    <div class="small" data-afsluitlater style="text-align:center;margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afsluitLater()">Later</div></div>`; }
 function renderAfsluitSheet(M){
   M=M||afsluitMaand();
+  if(afsluitPeriodeKey(M)){ if((SET.maandAfsluiting||{})[M] || !afsluitNodig(M)){ closeSheet(); return; } renderAfsluitPeriode(M); return; }
   let MB=null; try{ MB=maandBeginData(); }catch(_){}
   if((SET.maandAfsluiting||{})[M] || !afsluitNodig(M)){
     if(MB){ $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">${maandBeginBlok(MB)}<div class="small" data-afsluitlater style="text-align:center;margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afsluitLater()">Later</div></div>`; return; }
     closeSheet(); return; }
-  const S=afsluitStand(M), Mn=valtOpHoofd(M);
+  const S=afsluitStand(M), Mn=afsluitLabel(M);
   const pct=S.tot?Math.round(S.af/S.tot*100):0;
   const knop = S.klaar
     ? `<button class="btn" data-afsluit="klaar" style="margin-top:12px;width:100%" onclick="maandAfsluiten('${M}',false)">${esc(Mn)} afsluiten</button>`
@@ -9122,7 +9163,7 @@ function openAfsluitOpen(M){
   const S=afsluitStand(M);
   const open=S.P.filter(p=>!p.af).map(p=>({naam:p.naam, feit:p.feit}));   // v365: alleen afsluittaken
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(valtOpHoofd(M))} afsluiten met open punten</div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(afsluitLabel(M))} afsluiten met open punten</div>
     <div class="small muted" style="margin:2px 0 10px">Deze punten worden bij ${esc(afMnd(M))} bewaard.</div>
     ${open.map(o=>`<div data-afopen style="padding:7px 0;border-top:1px solid var(--line)"><div class="small">${esc(o.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(o.feit)}</div></div>`).join('')}
     <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="maandAfsluiten('${M}',true)">Afsluiten</button><button class="btn sec" onclick="closeSheet()">Annuleren</button></div>`;
@@ -10793,7 +10834,7 @@ function logTijdlijnData(){
 function logTijdlijn(){
   const D=logTijdlijnData(); let open='';
   if(D.open){ const S=afsluitStand(D.open);
-    open=`<div class="row" data-logopen="${D.open}" style="gap:10px;cursor:pointer;padding:2px 0 10px" onclick="openAfsluiting('${D.open}')"><span style="flex:1;font-weight:700">${esc(valtOpHoofd(D.open))} afsluiten</span><span class="small muted">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px">›</span></div>`; }
+    open=`<div class="row" data-logopen="${D.open}" style="gap:10px;cursor:pointer;padding:2px 0 10px" onclick="openAfsluiting('${D.open}')"><span style="flex:1;font-weight:700">${esc(afsluitLabel(D.open))} afsluiten</span><span class="small muted">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px">›</span></div>`; }
   if(!D.maanden.length && !open && !(D.perioden&&D.perioden.length)) return '';
   const kol=x=>`<div class="tl3-kol" data-logmaand="${x.m}" style="cursor:pointer" onclick="openLogMaand('${x.m}')"><div class="tl3-dot"></div>
     <div class="tl3-m">${esc(MNAMES[+x.m.slice(5,7)-1])}${x.korteMaand?' <span class="small" style="color:var(--mut2)">(1–23)</span>':''}</div><div class="tl3-e" style="font-weight:700;color:var(--txt)">${euro0(x.spend)}</div>
@@ -12401,7 +12442,10 @@ function periodeVan(d){ d=String(d||vandaagYMD()).slice(0,10); const pv=periodeV
   }
   const ym=d.slice(0,7); let start=ym+'-01', eind=ym+'-'+String(daysElapsed(ym).dim).padStart(2,'0'), korte=false;
   if(pv && ym===pv.slice(0,7)){ eind=rekDag(pv,-1); korte=true; }
-  return {soort:'maand', ym, start, eind, dagen:salDagenTussen(start, eind)+1, korteMaand:korte, label:ymFull(ym)+(korte?' (korte maand)':'')};
+  /* v497 (punt 5): de korte cutover-maand (november 1–23) heet naar zijn dagbereik, niet "korte maand". Alleen era (korte is
+     uitsluitend waar voor de ene cutover-maand), dus pre-era byte-voor-byte gelijk. */
+  const korteLabel=korte?' (1–'+String(+eind.slice(8,10))+')':'';
+  return {soort:'maand', ym, start, eind, dagen:salDagenTussen(start, eind)+1, korteMaand:korte, label:ymFull(ym)+korteLabel};
 }
 function periodeLabel(start, eind){ const k=x=>new Date(x+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); return k(start)+' – '+k(eind); }
 /* het ritme van een potje over de afgeronde maanden van het venster (vaak/soms/zelden), potje-breed en niet per rekening (de
@@ -12454,9 +12498,29 @@ function periodeBudget(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return nul
   let ym=P.per0.ym, dagen=P.dagen, start=P.start, eind=P.eind;
   try{ const M=periodeMoment(); if(M && M.ym){ ym=M.ym; start=M.start; eind=M.eind; const pp=periodeVan(start); if(pp && pp.soort==='periode') dagen=pp.dagen; } }catch(_){}
   const BP=budgetVoorPeriode({ym, dagen}), base=budgetVoorMaand(ym);
+  /* v497 (punt 2): HERINDELING, niet het totaal. Het totaal blijft budgetVoorPeriode + de vaste lasten zonder potje (v496). De
+     INDELING wordt: vast = alle vaste lasten in de periode (op hun datum), inclusief het vaste deel van een gesplitst potje (huur,
+     lease); potjes = alleen het variabele deel; Contant apart. Het vaste deel per potje = min(budget, max(SEPA-herkend fE uit
+     budgetVoorPeriode.split, de vaste lasten in die categorie uit P.vast)), zodat ook een niet-SEPA last (de woning in Huur) bij vast
+     telt. potjes is de REST (totaal − vast − Contant), dus de herindeling verschuift geld tussen de potten zonder het totaal te raken
+     (test c/d, in centen). */
   const vasteLasten=(P.vast||[]).filter(x=>!((+base[x.cat]||0)>0));
   const vlSom=vasteLasten.reduce((a,x)=>a+Math.round(+x.bedrag||0),0);
-  return {ym, dagen, start, eind, BP, vasteLasten, vlSom, totaal:BP.totaal+vlSom, P}; }
+  const vastPerCat={}; for(const x of (P.vast||[])){ const c=x.cat||''; vastPerCat[c]=(vastPerCat[c]||0)+(+x.bedrag||0); }
+  const vastDeel={}; for(const k in base){ if(k===CONTANT_CAT) continue; const b=+base[k]||0; if(!(b>0)) continue;
+    const vd=Math.min(b, Math.max((BP.split[k]?BP.split[k].vast:0)||0, vastPerCat[k]||0)); if(vd>0) vastDeel[k]=Math.round(vd); }
+  const contant=BP.contant, totaal=BP.totaal+vlSom;
+  const vastPotjesSom=Object.values(vastDeel).reduce((a,v)=>a+v,0), vastTotaal=vastPotjesSom+vlSom;
+  const potjesTotaal=totaal-vastTotaal-contant;   // de rest = het variabele deel, exact (geen afrondingsdrift op het totaal)
+  /* het variabele deel per potje, voor de weergave per dag / per keer (de bucket-som is de rest hierboven) */
+  const perDag={}, perKeer={};
+  for(const k in base){ if(k===CONTANT_CAT) continue; const b=+base[k]||0; if(!(b>0)) continue;
+    const soort=potSoortEffectief(k), variabel=Math.max(b-(vastDeel[k]||0),0);
+    const sc=soort==='dag'?Math.round(variabel*dagen/PERIODE_DELER):Math.round(variabel);
+    if(sc>0){ if(soort==='dag') perDag[k]=sc; else perKeer[k]=sc; } }
+  return {ym, dagen, start, eind, BP, base, vastDeel, vasteLasten, vlSom, contant,
+    vast:{totaal:vastTotaal, deel:vastDeel, los:vasteLasten}, potjes:{totaal:potjesTotaal, perDag, perKeer},
+    totaal, P}; }
 /* Het bevestigen van een periode is een keuze van jou, niet iets dat de 1e automatisch doet (punt 1: "automatisch vastleggen op de
    1e vervalt vanaf de era"). SET.periodeBevestigd[ym] wordt alleen door periodeVastleggen gezet (de sheet van punt 1) of door de
    restant-verdeling van punt 2; zonder keuze blijft hij leeg en toont de kop "nog niet bevestigd" (punt 3). */
@@ -12999,21 +13063,24 @@ function salVerdelingMeldingHtml(){ const t=salVerdelingMelding(); return t?`<di
    De sheet van punt 1 is renderSalVerdeling in de periode-modus (S.periode): dezelfde verdeling van v440 met een budget-blok ervoor
    (periodeBudgetHtml) en de knoppen Vastleggen / Aanpassen / Later. Vastleggen legt budget EN verdeling samen vast. */
 function openPeriodeStart(){ const M=periodeMoment()||{}; window._salv={key:'periode', modus:null, eigen:null, hoe:{}, bron:'', periode:true, vroeg:M.soort==='vroeg'}; renderSalVerdeling(); showSheetBg(); }
-/* het budget-blok van de nieuwe periode: de vaste lasten met een termijn in de periode (op hun datum), de potjes per dag en per keer,
-   het vaste deel van een gesplitst potje apart, Contant, en het totaal. EEN bron (periodeBudget); data-periodebudget draagt het totaal
-   in centen zodat de controle het tegen budgetVoorPeriode + de vaste lasten kan leggen (test e). */
-function periodeBudgetHtml(P){ const PB=periodeBudget(P); if(!PB) return ''; const e=euro0, BP=PB.BP;
+/* het budget-blok van de nieuwe periode in de indeling van v497: VAST (de vaste lasten in de periode op hun datum, inclusief het vaste
+   deel van een gesplitst potje), POTJES (alleen het variabele deel, per dag / per keer), en Contant apart; het totaal is ongewijzigd.
+   EEN bron (periodeBudget); data-periodebudget draagt het totaal in centen, data-pbvasttotaal / data-pbpotjestotaal de buckets. */
+function periodeBudgetHtml(P){ const PB=periodeBudget(P); if(!PB) return ''; const e=euro0, cnaam=k=>(CATS[k]||{}).name||k;
   const rij=(l,v,attr)=>`<div class="row" ${attr||''} style="gap:8px;padding:2px 0"><span style="flex:1;min-width:0">${l}</span><span style="white-space:nowrap">${v}</span></div>`;
-  const vl=PB.vasteLasten.map(x=>rij(`${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.termijn)}`:''} · ${x.data.map(dagKort).join(', ')}`, e(x.bedrag), `data-pbvast="${esc(x.key)}"`)).join('');
-  const cnaam=k=>(CATS[k]||{}).name||k;
-  const perDag=Object.entries(BP.perDag).map(([k,v])=>rij(esc(cnaam(k)), e(v), 'data-pbperdag')).join('');
-  const perKeer=Object.entries(BP.perKeer).map(([k,v])=>{ const sp=BP.split[k]; const sub=sp&&sp.vast>0?` <span class="muted">(vast ${e(sp.vast)}${sp.restGeschaald>0?` + ${e(sp.restGeschaald)}`:''})</span>`:''; return rij(esc(cnaam(k))+sub, e(v), 'data-pbperkeer'); }).join('');
-  return `<div class="small" data-periodebudget="${Math.round(PB.totaal*100)}" style="margin:6px 0 2px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
+  /* VAST: de vaste lasten uit P.vast op hun datum; een last met een potje toont zijn vaste deel (geklemd op het budget), een last
+     zonder potje het hele bedrag. Zo staat huur en de lease hier, niet bij de potjes. */
+  const vastRijen=(PB.P.vast||[]).filter(x=>x.n>0).map(x=>{ const inPotje=(+PB.base[x.cat]||0)>0, bedr=inPotje?Math.min(Math.round(+x.bedrag||0), PB.vastDeel[x.cat]||0):Math.round(+x.bedrag||0);
+    if(!(bedr>0)) return ''; return rij(`${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.termijn)}`:''} · ${x.data.map(dagKort).join(', ')}`, e(bedr), `data-pbvast="${esc(x.key)}"`); }).filter(Boolean).join('');
+  const perDag=Object.entries(PB.potjes.perDag).map(([k,v])=>rij(esc(cnaam(k)), e(v), 'data-pbperdag')).join('');
+  const perKeer=Object.entries(PB.potjes.perKeer).map(([k,v])=>rij(esc(cnaam(k)), e(v), 'data-pbperkeer')).join('');
+  return `<div class="small" data-periodebudget="${Math.round(PB.totaal*100)}" data-pbvasttotaal="${Math.round(PB.vast.totaal*100)}" data-pbpotjestotaal="${Math.round(PB.potjes.totaal*100)}" style="margin:6px 0 2px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
     <div style="font-weight:700">Budget deze periode</div>
-    ${vl?`<div style="font-weight:600;margin-top:3px">Vaste lasten</div>${vl}`:''}
-    ${perDag?`<div style="font-weight:600;margin-top:3px">Potjes per dag</div>${perDag}`:''}
-    ${perKeer?`<div style="font-weight:600;margin-top:3px">Potjes per keer</div>${perKeer}`:''}
-    ${BP.contant>0?rij('Contant','<span>'+e(BP.contant)+'</span>','data-pbcontant'):''}
+    <div class="row" style="gap:8px;padding:2px 0;font-weight:600"><span style="flex:1">Vaste lasten</span><span data-pbvastsom>${e(PB.vast.totaal)}</span></div>${vastRijen}
+    <div class="row" style="gap:8px;padding:2px 0;font-weight:600"><span style="flex:1">Potjes (variabel)</span><span data-pbpotsom>${e(PB.potjes.totaal)}</span></div>
+    ${perDag?`<div class="muted" style="margin-top:1px">per dag</div>${perDag}`:''}
+    ${perKeer?`<div class="muted" style="margin-top:1px">per keer</div>${perKeer}`:''}
+    ${PB.contant>0?rij('<b>Contant</b>','<b>'+e(PB.contant)+'</b>','data-pbcontant'):''}
     <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:2px">${rij('<b>Totaal</b>',`<b data-pbtotaal>${e(PB.totaal)}</b>`)}</div></div>`; }
 /* Vastleggen legt budget EN verdeling SAMEN vast (punt 1): salVerdelingZet schrijft de verdeling (SET.salVerdeling + de afspraak),
    periodeBevestigZet legt de periode vast. In de voorbeeldweergave schrijft hij niets (punt 6/test f): de guard hieronder, en save()
@@ -13705,7 +13772,12 @@ function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MA
   if(!Q.length) return '';
   return `<div class="card" id="gripGegevens"><div class="row" data-gegevensregel role="button" style="justify-content:space-between;cursor:pointer" onclick="openGegevensVragen()"><span class="hlabel" style="margin:0">Kloppen mijn gegevens?</span><span class="small" style="color:var(--teal);font-weight:700">${Q.length} ›</span></div>${Q.map(q=>`<div class="row" data-gegevenskaart="${esc(q.qkey)}" role="button" style="gap:8px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGegevensVragen('${esc(q.qkey).replace(/'/g,"\\'")}')"><span class="small" style="flex:1;min-width:0">${esc(gegevensVraagKort(q))}</span>${gripPijl}</div>`).join('')}</div>`; }
 function gripSlimRegel(C){ const m=thisYM(), n=C.kies.length;
-  return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover style="color:var(--mut)">nog ${maandDagenOver(m)} ${maandDagenOver(m)===1?'dag':'dagen'} in ${esc(ymFull(m).split(' ')[0])}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
+  /* v497 (punt 1/4): in de era telt de dagteller de lopende SALARISPERIODE, niet de kalendermaand (huidigVenster leest periodeVan).
+     Buiten de era de kalendermaand, byte-voor-byte gelijk. */
+  let HV=null; try{ HV=huidigVenster(); }catch(_){}
+  const over = HV&&HV.periode ? HV.over : maandDagenOver(m);
+  const waar = HV&&HV.periode ? 'deze periode' : esc(ymFull(m).split(' ')[0]);
+  return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover="${over}" style="color:var(--mut)">nog ${over} ${over===1?'dag':'dagen'} in ${waar}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
 function gripZienHtml(C, V){
   return gripSlimRegel(C)+periodeStartKaart()+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
 }
@@ -13814,8 +13886,14 @@ function openBudgetWijz(){ let W=null; try{ W=maandBudgetWijz(thisYM()); }catch(
 function gripGroepBrugKaart(V){ const Br=gripGroepBrug(V);
   if(!Br){ const T=totals(thisYM()); return `<div class="card gm-stage" id="gripGroepKaart" data-groepbrug="onbekend"><div style="font-weight:700">${euro0(Math.round(T.spendNorm||0))} uitgegeven</div><div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`; }
   const vs=Br.verschil;
-  return `<div class="card gm-stage" id="gripGroepKaart" data-groepbrug="${Br.projectie}"><div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:800">Waar zit de ${euro0(Math.abs(vs))}?</span><span class="small" data-pergroep role="button" style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="openGripGroepen()">per groep ›</span></div>
-    <div class="small" data-groepkop data-groepverschil="${vs}" role="button" style="color:var(--mut2);font-size:var(--fs-xs);cursor:pointer" onclick="openGripMeter('budget')">${vs>0?`${euro0(vs)} boven budget`:vs<0?`${euro0(-vs)} onder budget`:'op budget'} · budget ${esc(budgetVastTekst(V))} · forecast ${euro0(Br.projectie)}</div>
+  /* v497 (punt 2/4): in de era leest de budget-regel HETZELFDE periode-budget als Zien en Inzichten (periodeBudget), met de indeling
+     vast · potjes · Contant eronder. Zo staat er niet langer een maandbudget (EUR 3.570) naast het periode-budget (EUR 3.251). De
+     variance-bridge eronder blijft voorlopig de maanddetail per potje (de v496-note). Buiten de era: byte-voor-byte gelijk. */
+  let PB=null; try{ const HV=huidigVenster(); if(HV&&HV.periode) PB=periodeBudget(); }catch(_){}
+  const budTxt = PB ? `budget ${euro0(PB.totaal)} per periode` : `budget ${esc(budgetVastTekst(V))}`;
+  const indeling = PB ? `<div class="small" data-groepindeling data-pbtotaal="${PB.totaal}" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:2px">vaste lasten ${euro0(PB.vast.totaal)} · potjes ${euro0(PB.potjes.totaal)} · Contant ${euro0(PB.contant)}</div>` : '';
+  return `<div class="card gm-stage" id="gripGroepKaart" data-groepbrug="${Br.projectie}"${PB?` data-groepperiode="${PB.totaal}"`:''}><div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:800">Waar zit de ${euro0(Math.abs(vs))}?</span><span class="small" data-pergroep role="button" style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="openGripGroepen()">per groep ›</span></div>
+    <div class="small" data-groepkop data-groepverschil="${vs}" role="button" style="color:var(--mut2);font-size:var(--fs-xs);cursor:pointer" onclick="openGripMeter('budget')">${vs>0?`${euro0(vs)} boven budget`:vs<0?`${euro0(-vs)} onder budget`:'op budget'} · ${budTxt} · forecast ${euro0(Br.projectie)}</div>${indeling}
     <div id="gripGroepBrug">${brugGrafiek(Br)}</div>${Br.stappen.some(x=>x.soort==='zonder'&&x.geboekt&&x.verwacht)?'<div class="small" data-zienlicht style="color:var(--mut2);font-size:var(--fs-xs)">licht = nog verwacht</div>':''}${budgetWijzRegel()}</div>`; }
 function openGripGroepen(){ renderGripGroepen(); showSheetBg(); }
 function renderGripGroepen(){ let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -24969,28 +25047,32 @@ function insMaandStand(){
 function periodeStandNu(){
   const P=periodeVan(vandaagYMD()); if(!P || P.soort!=='periode') return null;
   const BP=budgetVoorPeriode(P), vandaag=vandaagYMD();
-  let pu=0, zp=0; for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start || d>vandaag) continue; const s=insTxSoort(t); if(!s) continue; const v=uitgaveNorm(t); if(s==='potje') pu+=v; else if(s==='zonder') zp+=v; }
+  let PB=null; try{ PB=periodeBudget(); }catch(_){}
+  /* v497 (punt 2): het tempo gaat alleen over het VARIABELE deel. De teller is de variabele uitgave (potje/zonder, NIET de vaste
+     lasten: die horen bij vast, niet bij het potjes-tempo), de noemer is PB.potjes.totaal (het variabele budget). */
+  let pu=0, zp=0; for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start || d>vandaag) continue; if(isFixed(t)) continue; const s=insTxSoort(t); if(!s) continue; const v=uitgaveNorm(t); if(s==='potje') pu+=v; else if(s==='zonder') zp+=v; }
   const uit=Math.round(pu+zp), el=Math.max(salDagenTussen(P.start, vandaag)+1, 1), dagen=Math.max(P.dagen,1);
-  const potDeel=BP.perDagSom+BP.perKeerSom, potTempo=Math.round(potDeel*el/dagen);
-  return {P, BP, uit, el, dagen, potDeel, potTempo, perDag:BP.perDagSom, perKeer:BP.perKeerSom, contant:BP.contant, potjesTotaal:BP.totaal};
+  const potDeel=PB?PB.potjes.totaal:(BP.perDagSom+BP.perKeerSom), vast=PB?PB.vast.totaal:0, contant=PB?PB.contant:BP.contant;
+  const potTempo=Math.round(potDeel*el/dagen), totaal=PB?PB.totaal:BP.totaal;
+  return {P, BP, PB, uit, el, dagen, potDeel, potTempo, vast, perDag:PB?Object.values(PB.potjes.perDag).reduce((a,v)=>a+v,0):BP.perDagSom, perKeer:PB?Object.values(PB.potjes.perKeer).reduce((a,v)=>a+v,0):BP.perKeerSom, contant, potjesTotaal:totaal};
 }
-/* de kop van Inzichten in de era: "PERIODE 24 NOV – 23 DEC · dag X van Y", het budget gesplitst in per dag / per keer / Contant,
-   en het tempo over de periode (mockup scherm 1). */
+/* de kop van Inzichten in de era (mockup scherm 1). v497: de indeling is VAST (de vaste lasten incl. het vaste deel van een gesplitst
+   potje) · POTJES (alleen het variabele deel) · Contant, hetzelfde als de sheet, Grip en blok 20. Het tempo gaat over de potjes. */
 function periodeKopHtml(PS){
   const P=PS.P, dt=PS.uit-PS.potTempo;
   const tempoTxt=PS.potDeel>0?(dt>0?`${euro0(dt)} boven tempo`:(dt<0?`${euro0(-dt)} onder tempo`:'precies op tempo')):'';
   const tp=PS.potDeel>0?Math.min(Math.max(PS.potTempo/Math.max(PS.potDeel,1)*100,0),100):0;
-  const rij=(l,w,sub)=>`<div class="row" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm)"><span class="muted">${l}</span><span><b data-insgetal>${euro0(w)}</b> <span class="small muted">${sub}</span></span></div>`;
+  const rij=(l,w,sub,attr)=>`<div class="row" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm)"><span class="muted">${l}</span><span><b data-insgetal ${attr||''}>${euro0(w)}</b> <span class="small muted">${sub}</span></span></div>`;
   const onb=periodeOnbevestigd();   // v496 (punt 3): zonder keuze bij je salaris toont de kop "nog niet bevestigd" met een stip
-  return `<div class="card" id="insMaand" data-insmaand="periode" data-insperiode="${esc(P.label)}" data-insuit="${PS.uit}" data-insbudget="${PS.potDeel}" data-insel="${PS.el}" data-insdagen="${PS.dagen}" data-instempoverschil="${dt}">
+  return `<div class="card" id="insMaand" data-insmaand="periode" data-insperiode="${esc(P.label)}" data-insuit="${PS.uit}" data-insbudget="${PS.potDeel}" data-insvast="${PS.vast}" data-inscontant="${PS.contant}" data-insel="${PS.el}" data-insdagen="${PS.dagen}" data-instempoverschil="${dt}">
     <div class="hlabel" style="margin:0 0 2px">Periode ${esc(P.label)}${onb?` <span data-insonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:0 0 6px">dag ${PS.el} van ${PS.dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(PS.uit)}</b> <span class="muted" data-insgetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     <div class="ins-mb" id="insMbBalk" style="margin:8px 0 10px"><i data-insseg="potjes" style="left:0;width:${Math.min(PS.uit/Math.max(PS.potDeel,1)*100,100).toFixed(2)}%;background:${INS_SEG.potjes}"></i>${PS.potDeel>0?`<em data-instempo="${PS.potTempo}" style="left:${tp.toFixed(2)}%"></em>`:''}</div>
-    ${rij('per dag', PS.perDag, 'tempo naar dagen')}
-    ${rij('per keer', PS.perKeer, 'vast bedrag')}
+    ${rij('Vaste lasten', PS.vast, 'op hun datum', 'data-insvastrij')}
+    ${rij('Potjes', PS.potDeel, 'variabel', 'data-inspotjesrij')}
     ${rij('Contant', PS.contant, 'vast per periode')}
-    <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div></div>`;
+    <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over het variabele deel van je potjes</div></div>`;
 }
 /* v495: Grip "Hoe sta je ervoor" in de era. Dezelfde periode-eenheid als de Inzichten-kop (periodeStandNu): het label is de periode,
    het budget komt uit budgetVoorPeriode en het tempo spreidt over de periodedagen, dus op 24 nov staat hier niet "november" naast de
@@ -25005,16 +25087,16 @@ function gripZienPeriodeKaart(PS){
   const opzijTxt = !O||!O.ok ? '' : (!O.meetbaar||O.netto==null) ? '<span class="small" style="color:var(--mut2)">onbekend</span>'
     : `<span class="small" style="font-weight:700;color:${O.netto<0?'var(--red)':'var(--green)'}">${O.netto<0?'−'+euro0(-O.netto):euro0(O.netto)}</span>`;
   const onb=periodeOnbevestigd();   // v496 (punt 3): ook de Grip-kop toont "nog niet bevestigd" met een stip
-  return `<div class="card" id="gripZienStand" data-zienstand="periode" data-zienperiode="${esc(P.label)}" data-zienuit="${PS.uit}" data-zienbudget="${PS.potDeel}" data-zienel="${el}" data-ziendagen="${dagen}">
+  return `<div class="card" id="gripZienStand" data-zienstand="periode" data-zienperiode="${esc(P.label)}" data-zienuit="${PS.uit}" data-zienbudget="${PS.potDeel}" data-zienvast="${PS.vast}" data-ziencontant="${PS.contant}" data-zienel="${el}" data-ziendagen="${dagen}">
     <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(P.label)}${onb?` <span data-zienonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:2px 0 6px">dag ${el} van ${dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-zienperiodegetal>${euro0(PS.uit)}</b> <span class="muted" data-zienperiodegetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-zientempotxt style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     <div class="ins-mb" style="margin:8px 0 10px"><i style="left:0;width:${Math.min(PS.uit/Math.max(PS.potDeel,1)*100,100).toFixed(2)}%;background:${INS_SEG.potjes}"></i>${PS.potDeel>0?`<em data-zientempo="${PS.potTempo}" style="left:${tp.toFixed(2)}%"></em>`:''}</div>
-    ${rij('per dag', PS.perDag, 'tempo naar dagen')}
-    ${rij('per keer', PS.perKeer, 'vast bedrag')}
+    ${rij('Vaste lasten', PS.vast, 'op hun datum')}
+    ${rij('Potjes', PS.potDeel, 'variabel')}
     ${rij('Contant', PS.contant, 'vast per periode')}
     ${O&&O.ok?`<div class="row" data-zienopzij data-doel="${O.doel!=null?O.doel:''}" data-gedaan="${O.netto!=null?O.netto:''}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);border-top:1px solid var(--line);padding-top:6px;margin-top:4px"><span class="muted">opzij</span><span>${opzijTxt} <span class="small muted" data-zienopzijlabel>${O.doel!=null?'opzij volgens je verdeling '+euro0(O.doel):''}</span></span></div>`:''}
-    <div class="small" style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div></div>`;
+    <div class="small" style="color:var(--mut2);margin-top:4px">tempo gaat alleen over het variabele deel van je potjes</div></div>`;
 }
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
    v309), en wat er over bleef of erboven ging. Geen tempo en niets meer te gaan. */
@@ -25032,6 +25114,9 @@ const INS_SEG={vast:'var(--mut2)', potjes:'var(--green)', zonder:'var(--amber)',
   nogpot:'color-mix(in srgb,var(--green) 32%,var(--card2))'};
 function insMaandKaart(P, soort){
   const Li=laatsteImport(), m=thisYM();
+  /* v497: in de era is de lopende periode de kop, ook zonder boekingen van deze maand (de "onbekend"-tak hieronder hoort bij de
+     kalendermaand). periodeStandNu is null buiten de era, dus pre-era byte-voor-byte gelijk. */
+  if(P.key==='nu' && soort==='alle'){ let PS0=null; try{ PS0=periodeStandNu(); }catch(_){} if(PS0) return periodeKopHtml(PS0); }
   if(P.key==='nu' && Li && Li.datum < m+'-01'){
     /* v311: je potjes verdwijnen niet van de pagina op een dag zonder boekingen; het is een budget, geen restant. */
     let vbO=0; try{ vbO=Math.round(varBudget()); }catch(_){}
@@ -25535,7 +25620,9 @@ function renderInsPotje(){
       ${insNaarGripLink(k)}</div>`;
     return;
   }
-  const m=mm, E=daysElapsed(m);
+  const m=mm; let E=daysElapsed(m), perLabel=ymFull(m);
+  /* v497 (punt 4): in de era telt de kop de lopende salarisperiode (huidigVenster), niet de kalendermaand ("dag 30 van 30"). */
+  try{ const HV=huidigVenster(); if(HV&&HV.periode){ E={elapsed:HV.elapsed, dim:HV.dagen}; perLabel='periode '+HV.label; } }catch(_){}
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const x=V&&!V.onbekend?(V.potjes||[]).find(p=>p.k===k):null;
   const pb=weekPotBudget(m);
@@ -25559,7 +25646,7 @@ function renderInsPotje(){
     <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:4px"><span><b style="font-size:var(--fs-xl)">${euro0(uit)}</b> <span class="muted">van ${euro0(bud)}</span></span><span class="small muted">dag ${E.elapsed} van ${E.dim}</span></div>
     <div class="ins-pbar"><i style="width:${pc(uit)}%;background:${uit>bud?'var(--amber)':'var(--green)'}"></i><em data-pottempo style="left:${pc(tempo)}%"></em>${normaal!=null?`<b data-potnormaal style="left:${pc(normaal)}%"></b>`:''}</div>
     <div class="small" style="margin-top:6px;line-height:1.5"><span style="color:var(--txt)">│ tempo vandaag ${euro0(tempo)}</span>${normaal!=null?`<br><span style="color:var(--mut2)">● normaal op dag ${E.elapsed}: ${euro0(normaal)} (gemiddelde 3 mnd)</span>`:''}</div>
-    ${x?rij(`Verwacht eind ${esc(ymFull(m))}`, `${euro0(x.eind)}${Math.round(x.eind-x.bud)?` (${x.eind>x.bud?'+':'−'}${euro0(Math.abs(Math.round(x.eind-x.bud)))})`:''}`, ' data-potverwacht'):''}
+    ${x?rij(`Verwacht eind ${esc(perLabel)}`, `${euro0(x.eind)}${Math.round(x.eind-x.bud)?` (${x.eind>x.bud?'+':'−'}${euro0(Math.abs(Math.round(x.eind-x.bud)))})`:''}`, ' data-potverwacht'):''}
     ${vor?rij(MFULL[+prev.slice(5,7)-1].replace(/^./,s=>s.toUpperCase()), vor):''}
     ${wk?rij('Deze week', wk, ' data-potweek'):''}
     ${verg>0?rij('Reiskostenvergoeding uit je salaris', `vergoeding −${euroC(verg)}`, ` data-vergoeding="${verg}"`):''}
@@ -33512,6 +33599,15 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
         if(t>0) L.push(`    ${p.type==='noodfonds'?'Noodfonds':p.naam}: toegewezen ${euroC(t)} · gespaard ${euroC(x.geld)} · nog terug ${euroC(n)}${kz>0?` (terugzetkeuze verwacht nog ${euroC(kz)})`:''}`); }
       som=Math.round(som*100)/100;
       L.push(`    CONTROLE terug te zetten op Plan = som van nog terug per doel: ${euroC(R.totaal)} tegen ${euroC(som)} → ${Math.abs(R.totaal-som)<0.01?'klopt':'VERSCHILT'}`); } }
+  /* v497 punt 2: in de era de INDELING van het periode-budget (vast · potjes · Contant), hetzelfde totaal als budgetVoorPeriode,
+     in centen, met de controle dat vast + potjes + Contant = totaal. Alleen lezen. */
+  try{ const HV=huidigVenster(); if(HV&&HV.periode){ const PB=periodeBudget(); if(PB){
+    const cV=Math.round(PB.vast.totaal*100), cP=Math.round(PB.potjes.totaal*100), cC=Math.round(PB.contant*100), cT=Math.round(PB.totaal*100);
+    L.push('', `PERIODE-BUDGET (v497): ${PB.label||HV.label} · indeling in centen, hetzelfde totaal als budgetVoorPeriode`);
+    L.push(`  vaste lasten ${euroC(PB.vast.totaal)} (${cV}c) · potjes variabel ${euroC(PB.potjes.totaal)} (${cP}c) · Contant ${euroC(PB.contant)} (${cC}c)`);
+    for(const k in (PB.vast.deel||{})) L.push(`    vast deel ${(CATS[k]||{}).name||k}: ${euroC(PB.vast.deel[k])}`);
+    for(const x of (PB.vasteLasten||[])) L.push(`    vaste last zonder potje ${esc(x.naam||x.cat||'')}: ${euroC(Math.round(+x.bedrag||0))}`);
+    L.push(`  CONTROLE indeling = totaal: ${cV}+${cP}+${cC} = ${cV+cP+cC}c tegen ${cT}c → ${cV+cP+cC===cT?'klopt':'VERSCHILT'}`); } } }catch(e){ L.push('  PERIODE-BUDGET (v497): fout '+(e&&e.message)); }
   if(!vk || !V || V.onbekend){ L.push('  forecast onbekend (geen drie afgeronde maanden)'); return L; }
   /* v456 punt 1: het budget van deze maand is het vastgelegde budget van de 1e, ook met een potje Contant dat deze maand ontstaat */
   L.push(`  CONTROLE budget ${ymFull(m).split(' ')[0]} = budget op 01-${m.slice(5,7)}: ${euro0(Math.round(V.budget))} tegen ${euro0(Math.round(MB.totaal))} → ${Math.round(V.budget)===Math.round(MB.totaal)?'klopt':'VERSCHILT'}`);
@@ -34988,8 +35084,12 @@ async function diagTekst(){
    en thisYM() naar elk scherm. Een vaste balk bovenaan zegt wat er aan de hand is en hoe je terug komt. */
 function voorbeeldStart(datum){
   datum=String(datum||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return;
-  if(!window._voorbeeld){ window._voorbeeldBackup=JSON.parse(JSON.stringify(SET)); }
+  if(!window._voorbeeld){ window._voorbeeldBackup=JSON.parse(JSON.stringify(SET)); window._voorbeeldViewBak={curMonth, insPer:window._insPer, insSoort:window._insSoort}; }
   window._voorbeeld=true; window._voorbeeldDag=datum;
+  /* v497 (punt 1): de maandkiezer van Inzichten is module-state (curMonth, _insPer, _insSoort), geen datumbron; zonder reset blijft
+     Inzichten op de maand staan die je vóór het voorbeeld bekeek. Zet hem op de voorbeelddag (curMonth=null → kijkMaand() = de
+     voorbeeldmaand → de periode). Terug naar vandaag herstelt de oude kiezer. */
+  curMonth=null; window._insPer=null; window._insSoort=null;
   try{ runMemoVergeten(); }catch(_){}
   _dataGen++;
   try{ closeSheet(); }catch(_){}
@@ -35000,6 +35100,8 @@ function voorbeeldStop(){
   if(!window._voorbeeld) return;
   const b=window._voorbeeldBackup;
   window._voorbeeld=false; window._voorbeeldDag=null; window._voorbeeldBackup=null;
+  const vb=window._voorbeeldViewBak; window._voorbeeldViewBak=null;
+  if(vb){ curMonth=vb.curMonth; window._insPer=vb.insPer; window._insSoort=vb.insSoort; }
   if(b){ SET=JSON.parse(JSON.stringify(b)); }
   try{ runMemoVergeten(); }catch(_){}
   _dataGen++;
