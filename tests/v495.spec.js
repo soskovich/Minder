@@ -30,7 +30,7 @@ test('a. op 26 nov rekenen Grip, Home, de weektegel en het contant-tempo over de
     const week = insWeekTegel();
     const P = periodeVan(vandaagYMD()); let cs = 0; for (let d = P.start; d <= P.eind; d = rekDag(d, 1)) cs += contantDagTempo(d);
     return {
-      gripPeriode: /data-zienstand="periode"/.test(grip), gripLabel: (grip.match(/Hoe sta je ervoor · ([^<]+)</) || [])[1], gripNov: /Hoe sta je ervoor · november/.test(grip),
+      gripPeriode: /data-zienstand="periode"/.test(grip), gripLabel: ((grip.match(/Hoe sta je ervoor · ([^<]+)</) || [])[1] || '').trim(), gripNov: /Hoe sta je ervoor · november/.test(grip),   // v496: de kop kan nu een "nog niet bevestigd"-stip dragen; het label is het deel vóór de stip
       homePeriode: homeEl ? homeEl.getAttribute('data-homeregel') === 'periode' : false, homeTxt: homeEl ? homeEl.textContent : '',
       weekPeriode: /data-weekperiode/.test(week), weekKort: (week.match(/Deze week · ([^<]+)</) || [])[1],
       contantSom: Math.round(cs), contantBud: budgetVoorPeriode(P).contant, contantMaand: Math.round((+budgetVoorMaand('2026-11')[CONTANT_CAT] || 0)),

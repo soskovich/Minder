@@ -5585,6 +5585,10 @@ function scoreNotifs(opts){
     const kop=T.length===1?`${T[0].naam} wordt krap`:`${T.length} rekeningen worden krap`;
     const det=T.map(x=>`${x.naam} nodig ${euro0(x.tekort)} ${nabij(x)?'nu':'rond '+dagKort(x.datum)}`).join(' · ');
     push({key:'rekgeld', h:'direct', score:88, t:'warn', ic:ICON('bank'), rekgeld:true, l1:kop, l2:det, act:'openKrapPopup()'}); } }catch(_){}
+  /* v496 (punt 3): zonder keuze bij je salaris komt er NA drie dagen ÉÉN melding dat de nieuwe periode nog niet bevestigd is. Eén
+     sleutel (periode-onbevestigd), de tik opent de sheet van punt 1. Niets wordt stil vastgelegd; dit is alleen een melding. */
+  try{ const M=periodeMoment(); if(M && M.soort==='onbevestigd' && M.meldKlaar) push({key:'periode-onbevestigd', h:'direct', score:70, t:'info', ic:ICON('bank'),
+    l1:'Je nieuwe periode is nog niet bevestigd', l2:`${periodeLabel(M.start, M.eind)} · bevestigen of aanpassen`, act:'openPeriodeStart()'}); }catch(_){}
   /* v460 (B3): een keuze die wachtte op een nagerekend getal staat weer open: een melding in de bel, groep Grip */
   try{ const KT=(SET.controles||{}).keuzeTerug; if(KT && Date.now()-KT.op<7*864e5) push({key:'grip-keuzeterug-'+KT.getal, h:'direct', score:66, t:'info', ic:ICON('check'),
     l1:'Een keuze staat weer open', l2:`${meldGetalNaam(KT.getal)} is nagerekend · Kiezen`, act:"go('maand');gripKiesTab('kiezen')"}); }catch(_){}
@@ -12438,6 +12442,44 @@ function budgetVoorPeriode(P){ const ym=(P&&P.ym)||thisYM(), base=budgetVoorMaan
   }
   const perDagSom=Object.values(perDag).reduce((a,v)=>a+v,0), perKeerSom=Object.values(perKeer).reduce((a,v)=>a+v,0), ct=Math.round(contant);
   return {perDag, perKeer, split, contant:ct, perDagSom, perKeerSom, totaal:perDagSom+perKeerSom+ct, deler:PERIODE_DELER, P}; }
+/* ===== v496: HET MOMENT VAN JE SALARIS (deel 2) =====
+   Het budget van de nieuwe periode als EEN bron, gelezen door de moment-1-sheet, blok 20/23 en de kaart "Je salarisverdeling"
+   (punt 5). Dat is budgetVoorPeriode (potjes per dag/per keer, het vaste deel van een gesplitst potje, Contant) PLUS de vaste lasten
+   met een termijn in de periode die NIET al in een potje zitten: een vaste last waarvan de categorie een potje heeft (de lease in
+   Vervoer) staat met zijn vaste deel al in budgetVoorPeriode.split en telt hier dus niet nog een keer (test e, "vast deel één keer"). */
+function periodeBudget(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return null;
+  /* De periode die je bevestigt is die van periodeMoment (de lopende/komende era-periode), niet per se rekVoorstel().per0: op de
+     salarisdag vallen die samen, een paar dagen later wijst rekVoorstel al naar het VOLGENDE salaris. Het budget leest dus de
+     periode van het moment; de vaste lasten (P.vast) komen uit rekVoorstel en zijn op de salarisdag exact. */
+  let ym=P.per0.ym, dagen=P.dagen, start=P.start, eind=P.eind;
+  try{ const M=periodeMoment(); if(M && M.ym){ ym=M.ym; start=M.start; eind=M.eind; const pp=periodeVan(start); if(pp && pp.soort==='periode') dagen=pp.dagen; } }catch(_){}
+  const BP=budgetVoorPeriode({ym, dagen}), base=budgetVoorMaand(ym);
+  const vasteLasten=(P.vast||[]).filter(x=>!((+base[x.cat]||0)>0));
+  const vlSom=vasteLasten.reduce((a,x)=>a+Math.round(+x.bedrag||0),0);
+  return {ym, dagen, start, eind, BP, vasteLasten, vlSom, totaal:BP.totaal+vlSom, P}; }
+/* Het bevestigen van een periode is een keuze van jou, niet iets dat de 1e automatisch doet (punt 1: "automatisch vastleggen op de
+   1e vervalt vanaf de era"). SET.periodeBevestigd[ym] wordt alleen door periodeVastleggen gezet (de sheet van punt 1) of door de
+   restant-verdeling van punt 2; zonder keuze blijft hij leeg en toont de kop "nog niet bevestigd" (punt 3). */
+function periodeBevestigd(ym){ return !!(SET.periodeBevestigd && SET.periodeBevestigd[ym]); }
+function periodeBevestigZet(ym){ if(!ym) return; SET.periodeBevestigd=SET.periodeBevestigd||{}; SET.periodeBevestigd[ym]={op:vandaagYMD()}; }
+const PERIODE_MELD_DAGEN=3;
+/* De stand van het moment, EEN bron voor de kaart, de kop-stip en de bel. Leest salPeriode (die werkt over de era-grens heen):
+   - vroeg: het salaris van de komende periode kwam VÓÓR de regeldatum; de oude periode loopt nog, de nieuwe begint op de regel
+     (periodeVan.start is al de regeldatum, niet de binnenkomst — besluit 2). Je kunt nu al verdelen (punt 2).
+   - onbevestigd: we zijn op of na de regeldatum, in de era-periode, en de periode is nog niet vastgelegd (punt 3). dagenSinds telt
+     vanaf de regeldatum; na PERIODE_MELD_DAGEN één bel-melding.
+   - bevestigd / null: niets te tonen. Alleen in de era (de komende/lopende periode begint op of na periodeVanaf). */
+function periodeMoment(vandaag){ vandaag=vandaag||vandaagYMD(); const pv=periodeVanaf(); if(!pv) return null;
+  let SP=null; try{ SP=salPeriode(vandaag); }catch(_){} if(!SP||!SP.cur) return null; const C=SP.cur;
+  if(!(C.verwacht>=pv)) return null;   // de lopende/komende periode is pas een era-periode vanaf de era-grens
+  if(C.werkelijk && C.werkelijk<C.verwacht && vandaag<C.verwacht)
+    return {soort:'vroeg', ym:C.ym, start:C.verwacht, eind:C.eind, binnen:C.werkelijk};
+  if(vandaag>=C.verwacht){
+    if(periodeBevestigd(C.ym)) return {soort:'bevestigd', ym:C.ym, start:C.verwacht, eind:C.eind};
+    const dagen=salDagenTussen(C.verwacht, vandaag);
+    return {soort:'onbevestigd', ym:C.ym, start:C.verwacht, eind:C.eind, dagenSinds:dagen, meldKlaar:dagen>=PERIODE_MELD_DAGEN}; }
+  return null; }
+function periodeOnbevestigd(){ try{ const M=periodeMoment(); return !!(M && M.soort==='onbevestigd'); }catch(_){ return false; } }
 /* v495: HET HUIDIGE VENSTER, EEN BRON voor budget, tempo, forecast en weken. In de era (vandaag >= periodeVanaf) is dat de
    salarisperiode; daarvoor de kalendermaand, in dezelfde vorm. `elapsed` = dagen sinds de start (vandaag meegeteld, geklemd op de
    lengte). Geen eigen datumlogica: de periode komt uit periodeVan(vandaagYMD()). De vier surfaces (forecast/Grip, weektegel,
@@ -12636,7 +12678,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     if(!verwachtInMaand(x.key, start.slice(0,7)) && !verwachtInMaand(x.key, eind.slice(0,7))){ vastNiet.push({key:x.key, naam, reden:'uit reservering'}); continue; }   // de ene lezer van de uitsluiting (v369)
     if(!set.has(last.acc)){ vastNiet.push({key:x.key, naam, reden:'afgeschreven van '+rekNaam(last.acc)}); continue; }
     const tm=rekTermijnen(x, last.date.slice(0,10), start, eind);
-    vastAlle.push({key:x.key, naam, acc:last.acc, termijn:Math.abs(last.amount), maand:postMaandBedrag(x, Math.abs(last.amount)), data:tm, n:tm.length, bedrag:Math.abs(last.amount)*tm.length, last:last.date.slice(0,10), s:x}); }
+    vastAlle.push({key:x.key, naam, acc:last.acc, cat:catOf(last), termijn:Math.abs(last.amount), maand:postMaandBedrag(x, Math.abs(last.amount)), data:tm, n:tm.length, bedrag:Math.abs(last.amount)*tm.length, last:last.date.slice(0,10), s:x}); }   // v496: cat = categorie van de laatste betaling, zodat periodeBudget een vaste last die in een potje zit (het vaste deel) niet dubbel telt
   /* v442 sectie 3: DE WONING (Cathalina) als vaste last met een termijn op zijn eigen datum, op de rekening van de externe
      betaling. De huur komt via een Tikkie/iDEAL binnen en vormt geen herkend schema (recurKey verschilt per betaling), dus hij
      staat niet in SCH en viel uit het voorstel (gemeld: geen huur op 1-11). woningForecast is de ene bron; de dedup voorkomt
@@ -12667,7 +12709,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
         for(const g of rekTermijnen(sWon, base, F, t)){ let d=g; if(mv(g)){ const n=nasalDatumVan(g); if(!n) continue; d=n.datum; } if(d>=f && d<=t) out.add(d); }
         return Array.from(out).sort(); };
       const tmW=genWoning(start, eind, per0.ym).filter(d=>!betM.has(String(d).slice(0,7)));
-      vastAlle.push({key:WF.key, naam:WF.naam, acc, termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true, nonSepa:true, keuze:vastDatumKeuze(WF.key, per0.ym), genW:genWoning}); } }catch(_){}
+      vastAlle.push({key:WF.key, naam:WF.naam, acc, cat:'huur', termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true, nonSepa:true, keuze:vastDatumKeuze(WF.key, per0.ym), genW:genWoning}); } }catch(_){}   // v496: de woning is huur; periodeBudget telt hem als vaste last tenzij er een Huur-potje is dat hem al dekt
   const vast=vastAlle.filter(x=>x.n>0), vastBuiten=vastAlle.filter(x=>!x.n);
   /* (2b) potjes en zonder potje uit maandVooruit(), zonder eenmalig: het VERWACHTE eind van deze maand (niet je budget) */
   let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -12911,13 +12953,19 @@ function renderSalVerdeling(){ const S=window._salv||{}, P=rekVoorstel(); if(!P 
   /* v440 sectie 4: de knoppen hangen van de modus af. Advies: Advies volgen (akkoord met rekVoorstel) · Andere verdeling (naar het
      aanpassen-veld) · Niet nu, niets voorgeselecteerd. Andere verdeling: Deze kiezen (de eigen bedragen vastleggen) · Terug naar
      advies. De confirm houdt data-salvakkoord in beide modi; opzij en het gevolg rekenen live mee (salVerdelingVeld). */
+  /* v496 (punt 1): in de periode-modus legt de knop budget EN verdeling samen vast (periodeVastleggen); de labels zijn Vastleggen /
+     Aanpassen / Later. Buiten de era is het de verdeling van v440 (Advies volgen / Andere verdeling / Niet nu). Niets voorgeselecteerd. */
+  const akFn=S.periode?`periodeVastleggen('${kq}')`:`salVerdelingZet('${kq}')`;
   const knoppen=aan
-    ? `<button class="btn sec" data-salvakkoord ${reden?'disabled':''} onclick="salVerdelingZet('${kq}')">Deze kiezen</button><button class="btn sec" data-salvterug onclick="window._salv.modus=null;window._salv.eigen=null;renderSalVerdeling()">Terug naar advies</button>`
-    : `<button class="btn sec" data-salvakkoord ${reden?'disabled':''} onclick="salVerdelingZet('${kq}')">Advies volgen</button><button class="btn sec" data-salvaanpassen onclick="window._salv.modus='aanpassen';window._salv.eigen=window._salv.eigen||rekBedragen(rekVoorstel());renderSalVerdeling()">Andere verdeling</button><button class="btn sec" data-salvnietnu onclick="closeSheet()">Niet nu</button>`;
+    ? `<button class="btn sec" data-salvakkoord ${reden?'disabled':''} onclick="${akFn}">${S.periode?'Vastleggen':'Deze kiezen'}</button><button class="btn sec" data-salvterug onclick="window._salv.modus=null;window._salv.eigen=null;renderSalVerdeling()">Terug naar advies</button>`
+    : `<button class="btn sec" data-salvakkoord ${reden?'disabled':''} onclick="${akFn}">${S.periode?'Vastleggen':'Advies volgen'}</button><button class="btn sec" data-salvaanpassen onclick="window._salv.modus='aanpassen';window._salv.eigen=window._salv.eigen||rekBedragen(rekVoorstel());renderSalVerdeling()">${S.periode?'Aanpassen':'Andere verdeling'}</button><button class="btn sec" data-salvnietnu onclick="closeSheet()">${S.periode?'Later':'Niet nu'}</button>`;
   const voet=`<div class="sheet-voet" data-voet style="margin-top:10px">${voetRedenHTML(reden)}<div class="small" data-salvgevolg style="margin-bottom:8px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.45">${salGevolgHtml(P, B)}</div><div class="row" style="gap:8px">${knoppen}</div></div>`;
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="salVerdeling"><div class="small muted">${S.bron==='moment2'?'Voorstel uit je terugblik · volgende periode':'Betaalrekening op · salaris opgedeeld'}</div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">Zo verdeel je je salaris</div>
+  const eyebrow=S.periode?(S.vroeg?'Je salaris is er al · verdeel alvast':'Nieuwe periode · leg vast'):(S.bron==='moment2'?'Voorstel uit je terugblik · volgende periode':'Betaalrekening op · salaris opgedeeld');
+  const titel=S.periode?`Nieuwe periode · ${esc(periodeLabel(P.start, P.eind))}`:'Zo verdeel je je salaris';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="salVerdeling"><div class="small muted">${eyebrow}</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${titel}</div>
     <div class="small" data-salvfeit style="margin-top:6px;line-height:1.45">Salaris ${euro0(P.salaris)} · van ${dagKort(P.start)} tot en met ${dagKort(P.eind)} (${P.dagen} dagen). Wat er per rekening nodig is tot je volgende salaris, uit de rekening waar je uitgaven echt van afgingen.</div>
+    ${S.periode?periodeBudgetHtml(P):''}
     ${salRouteHtml(P)}
     ${P.rek.map(rij).join('')}
     ${salResHtml(P)}
@@ -12947,6 +12995,43 @@ function salVerdelingMelding(){ const SV=SET.salVerdeling; if(!SV || !SV.rek) re
   const delen=Object.entries(SV.rek).sort((a,b)=>(a[0]===SV.salAcc)-(b[0]===SV.salAcc)).map(([a,v])=>`${rekNaam(a)} ${euro0(v)}`);
   return `Salaris binnen: ${delen.join(', ')}, opzij ${euro0(SV.opzij)}`; }
 function salVerdelingMeldingHtml(){ const t=salVerdelingMelding(); return t?`<div class="card" data-salvmelding style="padding:10px 14px"><div class="small" style="font-weight:700;line-height:1.45">${esc(t)}</div>${gripSub('alleen een melding · Minder verplaatst niets')}</div>`:''; }
+/* ===== v496: DE MOMENT-1-SHEET EN DE KAART =====
+   De sheet van punt 1 is renderSalVerdeling in de periode-modus (S.periode): dezelfde verdeling van v440 met een budget-blok ervoor
+   (periodeBudgetHtml) en de knoppen Vastleggen / Aanpassen / Later. Vastleggen legt budget EN verdeling samen vast. */
+function openPeriodeStart(){ const M=periodeMoment()||{}; window._salv={key:'periode', modus:null, eigen:null, hoe:{}, bron:'', periode:true, vroeg:M.soort==='vroeg'}; renderSalVerdeling(); showSheetBg(); }
+/* het budget-blok van de nieuwe periode: de vaste lasten met een termijn in de periode (op hun datum), de potjes per dag en per keer,
+   het vaste deel van een gesplitst potje apart, Contant, en het totaal. EEN bron (periodeBudget); data-periodebudget draagt het totaal
+   in centen zodat de controle het tegen budgetVoorPeriode + de vaste lasten kan leggen (test e). */
+function periodeBudgetHtml(P){ const PB=periodeBudget(P); if(!PB) return ''; const e=euro0, BP=PB.BP;
+  const rij=(l,v,attr)=>`<div class="row" ${attr||''} style="gap:8px;padding:2px 0"><span style="flex:1;min-width:0">${l}</span><span style="white-space:nowrap">${v}</span></div>`;
+  const vl=PB.vasteLasten.map(x=>rij(`${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.termijn)}`:''} · ${x.data.map(dagKort).join(', ')}`, e(x.bedrag), `data-pbvast="${esc(x.key)}"`)).join('');
+  const cnaam=k=>(CATS[k]||{}).name||k;
+  const perDag=Object.entries(BP.perDag).map(([k,v])=>rij(esc(cnaam(k)), e(v), 'data-pbperdag')).join('');
+  const perKeer=Object.entries(BP.perKeer).map(([k,v])=>{ const sp=BP.split[k]; const sub=sp&&sp.vast>0?` <span class="muted">(vast ${e(sp.vast)}${sp.restGeschaald>0?` + ${e(sp.restGeschaald)}`:''})</span>`:''; return rij(esc(cnaam(k))+sub, e(v), 'data-pbperkeer'); }).join('');
+  return `<div class="small" data-periodebudget="${Math.round(PB.totaal*100)}" style="margin:6px 0 2px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
+    <div style="font-weight:700">Budget deze periode</div>
+    ${vl?`<div style="font-weight:600;margin-top:3px">Vaste lasten</div>${vl}`:''}
+    ${perDag?`<div style="font-weight:600;margin-top:3px">Potjes per dag</div>${perDag}`:''}
+    ${perKeer?`<div style="font-weight:600;margin-top:3px">Potjes per keer</div>${perKeer}`:''}
+    ${BP.contant>0?rij('Contant','<span>'+e(BP.contant)+'</span>','data-pbcontant'):''}
+    <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:2px">${rij('<b>Totaal</b>',`<b data-pbtotaal>${e(PB.totaal)}</b>`)}</div></div>`; }
+/* Vastleggen legt budget EN verdeling SAMEN vast (punt 1): salVerdelingZet schrijft de verdeling (SET.salVerdeling + de afspraak),
+   periodeBevestigZet legt de periode vast. In de voorbeeldweergave schrijft hij niets (punt 6/test f): de guard hieronder, en save()
+   is daar al een no-op; zonder de guard zou SET.salVerdeling / SET.periodeBevestigd in het geheugen tóch muteren. */
+function periodeVastleggen(key){ if(window._voorbeeld){ try{ toast('Voorbeeld · niets vastgelegd'); }catch(_){} closeSheet(); return; }
+  const P=rekVoorstel(); if(!P||!P.ok) return;
+  /* de periode die je bevestigt is die van periodeMoment (dezelfde die de kop-stip leest), zodat de stip na Vastleggen weg is, ook
+     als rekVoorstel().per0 al naar het volgende salaris wijst */
+  let ym=P.per0.ym; try{ const M=periodeMoment(); if(M && M.ym) ym=M.ym; }catch(_){}
+  salVerdelingZet(key);          // schrijft de verdeling (en sluit de sheet via keuzeKlaar)
+  periodeBevestigZet(ym); save();   // en legt de periode vast
+}
+/* De kaart op Home/Zien die het moment toont: de melding bij een vroeg salaris (punt 2) of de ingang "nog niet bevestigd" (punt 3).
+   Allebei openen de sheet van punt 1. */
+function periodeStartKaart(){ let M=null; try{ M=periodeMoment(); }catch(_){} if(!M) return '';
+  if(M.soort==='vroeg') return `<div class="card" data-periodevroeg style="padding:10px 14px"><div class="small" style="font-weight:700;line-height:1.45">Je salaris is er al · ${esc(dagKort(M.binnen))}</div>${gripSub(`Je periode begint ${dagKort(M.start)}. Je kunt nu al verdelen: opzij, je reserveringen en de vaste lasten van de nieuwe periode.`)}<div style="margin-top:6px"><button class="btn sec" data-periodeverdeel onclick="openPeriodeStart()">Nu verdelen ›</button></div></div>`;
+  if(M.soort==='onbevestigd') return `<div class="card" data-periodeonbevestigd style="padding:10px 14px"><div class="small" style="font-weight:700;line-height:1.45">Nieuwe periode · ${esc(periodeLabel(M.start, M.eind))}</div>${gripSub('nog niet bevestigd')}<div style="margin-top:6px"><button class="btn sec" data-periodebevestig onclick="openPeriodeStart()">Bevestigen of aanpassen ›</button></div></div>`;
+  return ''; }
 /* (5) TERUGBLIK een maand na Akkoord: per rekening de onttrekkingen voor tegen na, en het laagste saldo verwacht tegen werkelijk */
 function rekSaldoOp(acc, ymd){ const b=accBalance(acc); if(b==null) return null; return b-TX.filter(t=>t.acc===acc && !t.pending && t.date.slice(0,10)>ymd).reduce((a,t)=>a+t.amount,0); }
 /* ===== v435: TWEE CONTROLEMOMENTEN PER SALARISPERIODE EN EEN WAARSCHUWING TUSSENDOOR =====
@@ -13622,7 +13707,7 @@ function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MA
 function gripSlimRegel(C){ const m=thisYM(), n=C.kies.length;
   return `<div class="row small" id="gripSlim" style="justify-content:space-between;gap:8px;margin:0 2px 10px"><span data-dagenover style="color:var(--mut)">nog ${maandDagenOver(m)} ${maandDagenOver(m)===1?'dag':'dagen'} in ${esc(ymFull(m).split(' ')[0])}</span>${n?`<span data-keuzesopen="${n}" role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="gripKiesTab('kiezen')">${n} ${n===1?'keuze staat':'keuzes staan'} open ›</span>`:'<span data-keuzesopen="0" style="color:var(--mut2)">geen keuzes open</span>'}</div>`; }
 function gripZienHtml(C, V){
-  return gripSlimRegel(C)+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
+  return gripSlimRegel(C)+periodeStartKaart()+salVerdelingMeldingHtml()+salNietBinnenHtml()+salMoment1Html()+salVoorstelKaartHtml()+gripZienTabel()+gripOpenstaandKaart()+gripSignalenKaart(C)+gripGegevensKaart();
 }
 /* ===== BEGRIJPEN ===== */
 /* De groepen van maandGroepen() (punt 7 van blok 20) in vier: vast, potjes, zonder potje, Plan-inleg. Potjes buiten de norm
@@ -17370,6 +17455,12 @@ function planKpi(P,cap,TL,SE){
   return `<div id="planKpi" data-kpigeld="${K.geld}" data-kpidoel="${K.doel}" data-kpipct="${K.pct}" data-nogtegaan="${K.nogTeGaan}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px"><style>#planKpi .jrg{color:var(--kpi-txt)!important;border-bottom-color:color-mix(in srgb,var(--kpi-txt) 60%,transparent)}</style>
     <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Gespaard voor je doelen</span><span style="font-size:var(--fs-sm)">${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
     <div style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px"><span data-kpigeldtekst>${euro0(K.geld)}</span> <span style="font-size:var(--fs-md);font-weight:600">van ${euro0(K.doel)}</span></div>
+    ${(()=>{ /* v496 (punt 4): in de era staat het Plan-doel (monthlySavingTarget, de EUR 2.200) hier als "doel per periode"; dat getal
+       is iets anders dan "opzij volgens je verdeling" (de EUR 1.766, SET.salVerdeling.opzij). Alleen in de era, zodat Plan vóór de era
+       byte-voor-byte gelijk blijft. */
+      let per=false; try{ per=periodeVan(vandaagYMD()).soort==='periode'; }catch(_){} if(!per) return '';
+      let d=0; try{ d=monthlySavingTarget(); }catch(_){} if(!(d>0)) return '';
+      return `<div class="small" data-planperiodedoel="${Math.round(d)}" style="opacity:.85;margin-top:2px">doel ${euro0(d)} per periode</div>`; })()}
     <div data-kpibalk style="height:8px;background:color-mix(in srgb,var(--kpi-txt) 25%,transparent);border-radius:5px;margin:8px 0 10px;overflow:hidden"><i style="display:block;height:8px;width:${K.pct}%;background:var(--kpi-txt);border-radius:5px"></i></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       ${(()=>{ const O=opzijPeriode();   /* v440: opzij is wat er netto naar je spaarrekening ging deze periode (opzijPeriode), tegen het doel uit Kiezen; niet meer "deze maand opzij" uit de inleg */
@@ -24890,8 +24981,9 @@ function periodeKopHtml(PS){
   const tempoTxt=PS.potDeel>0?(dt>0?`${euro0(dt)} boven tempo`:(dt<0?`${euro0(-dt)} onder tempo`:'precies op tempo')):'';
   const tp=PS.potDeel>0?Math.min(Math.max(PS.potTempo/Math.max(PS.potDeel,1)*100,0),100):0;
   const rij=(l,w,sub)=>`<div class="row" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm)"><span class="muted">${l}</span><span><b data-insgetal>${euro0(w)}</b> <span class="small muted">${sub}</span></span></div>`;
+  const onb=periodeOnbevestigd();   // v496 (punt 3): zonder keuze bij je salaris toont de kop "nog niet bevestigd" met een stip
   return `<div class="card" id="insMaand" data-insmaand="periode" data-insperiode="${esc(P.label)}" data-insuit="${PS.uit}" data-insbudget="${PS.potDeel}" data-insel="${PS.el}" data-insdagen="${PS.dagen}" data-instempoverschil="${dt}">
-    <div class="hlabel" style="margin:0 0 2px">Periode ${esc(P.label)}</div>
+    <div class="hlabel" style="margin:0 0 2px">Periode ${esc(P.label)}${onb?` <span data-insonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:0 0 6px">dag ${PS.el} van ${PS.dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(PS.uit)}</b> <span class="muted" data-insgetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     <div class="ins-mb" id="insMbBalk" style="margin:8px 0 10px"><i data-insseg="potjes" style="left:0;width:${Math.min(PS.uit/Math.max(PS.potDeel,1)*100,100).toFixed(2)}%;background:${INS_SEG.potjes}"></i>${PS.potDeel>0?`<em data-instempo="${PS.potTempo}" style="left:${tp.toFixed(2)}%"></em>`:''}</div>
@@ -24912,15 +25004,16 @@ function gripZienPeriodeKaart(PS){
   const rij=(l,w,sub)=>`<div class="row" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm)"><span class="muted">${l}</span><span><b data-zienperiodegetal>${euro0(w)}</b> <span class="small muted">${sub}</span></span></div>`;
   const opzijTxt = !O||!O.ok ? '' : (!O.meetbaar||O.netto==null) ? '<span class="small" style="color:var(--mut2)">onbekend</span>'
     : `<span class="small" style="font-weight:700;color:${O.netto<0?'var(--red)':'var(--green)'}">${O.netto<0?'−'+euro0(-O.netto):euro0(O.netto)}</span>`;
+  const onb=periodeOnbevestigd();   // v496 (punt 3): ook de Grip-kop toont "nog niet bevestigd" met een stip
   return `<div class="card" id="gripZienStand" data-zienstand="periode" data-zienperiode="${esc(P.label)}" data-zienuit="${PS.uit}" data-zienbudget="${PS.potDeel}" data-zienel="${el}" data-ziendagen="${dagen}">
-    <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(P.label)}</div>
+    <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(P.label)}${onb?` <span data-zienonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:2px 0 6px">dag ${el} van ${dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-zienperiodegetal>${euro0(PS.uit)}</b> <span class="muted" data-zienperiodegetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-zientempotxt style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
     <div class="ins-mb" style="margin:8px 0 10px"><i style="left:0;width:${Math.min(PS.uit/Math.max(PS.potDeel,1)*100,100).toFixed(2)}%;background:${INS_SEG.potjes}"></i>${PS.potDeel>0?`<em data-zientempo="${PS.potTempo}" style="left:${tp.toFixed(2)}%"></em>`:''}</div>
     ${rij('per dag', PS.perDag, 'tempo naar dagen')}
     ${rij('per keer', PS.perKeer, 'vast bedrag')}
     ${rij('Contant', PS.contant, 'vast per periode')}
-    ${O&&O.ok?`<div class="row" data-zienopzij data-doel="${O.doel!=null?O.doel:''}" data-gedaan="${O.netto!=null?O.netto:''}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);border-top:1px solid var(--line);padding-top:6px;margin-top:4px"><span class="muted">opzij</span><span>${opzijTxt} <span class="small muted" data-zienopzijlabel>${O.doel!=null?'van '+euro0(O.doel):''}</span></span></div>`:''}
+    ${O&&O.ok?`<div class="row" data-zienopzij data-doel="${O.doel!=null?O.doel:''}" data-gedaan="${O.netto!=null?O.netto:''}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);border-top:1px solid var(--line);padding-top:6px;margin-top:4px"><span class="muted">opzij</span><span>${opzijTxt} <span class="small muted" data-zienopzijlabel>${O.doel!=null?'opzij volgens je verdeling '+euro0(O.doel):''}</span></span></div>`:''}
     <div class="small" style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div></div>`;
 }
 /* Een afgesloten periode: de drie delen van wat er uitging tegen de bewaarde potjebedragen van die maanden (maandPotjes,
@@ -34675,6 +34768,7 @@ function diagSnelheidKern(){
     let C=null, V=null; try{ C=gripCyclus(); }catch(_){} try{ V=maandVooruit(); }catch(_){}
     const kaarten=[
       ['Slim-regel', ()=>gripSlimRegel(C)],
+      ['periode-start', ()=>periodeStartKaart()],
       ['salarisverdeling-melding', ()=>salVerdelingMeldingHtml()],
       ['salaris niet binnen', ()=>salNietBinnenHtml()],
       ['salaris-moment 1', ()=>salMoment1Html()],
