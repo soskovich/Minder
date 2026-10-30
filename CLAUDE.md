@@ -130,6 +130,29 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v502: TOEWIJZING VERPLAATSEN TUSSEN DOELEN, "OP SCHEMA" IN MAANDEN, EN DE OPZIJ-TEGEL PER PERIODE** (`v502`, gevraagd door de
+  gebruiker, mockup "Plan doelen" scherm 1 t/m 6; gebouwd naar de beschrijving, het mockupbestand staat niet in de repo). (1) EEN BRON:
+  de toewijzing per doel staat waar hij al stond, `SET.nfToegewezen` (noodfonds) en `SET.goals[].gespaard` (doel), gelezen via `planMap()`
+  (`planToeVan()`, `planToeZet()`). Verplaatsen schrijft die twee velden en verder niets, dus spaarsaldo, verdeling (`allocatePlan()`),
+  opzij en de stilstaand-som van v501 (`stilstaandDelen()`) volgen vanzelf. `openPlanVerplaats(van)` ("⇄ verplaats" op de rij
+  (`data-verplaats`) en in de detailsheet (`data-doelverplaats`), alleen bij een toewijzing boven EUR 0), sheet "Toewijzing verplaatsen"
+  (`#planVerplaats`): van vast, naar een keuzelijst (`data-pvnaar`), bedrag leeg (`#pvBedrag`), NIETS VOORGEKOZEN; maximum
+  `planVerplaatsMax()` = de toewijzing van het van-doel en bij het noodfonds als naar-doel doel min toegewezen; de knop staat uit met de
+  reden (`planVerplaatsReden()`) en `planVerplaatsZet()` toetst opnieuw. Het gevolg vooraf (`planVerplaatsGevolg()`, in het geheugen via
+  `planToeSim()`, zonder `save()`): per doel oud → nieuw bedrag, vol-maand oud → nieuw met "X maanden eerder/later" (`data-pvschuif`), bij een
+  streefdoel of de streefdatum haalbaar blijft (`data-pvstreef`), en "Alles vol blijft <maand> · verplaatsen verandert het totaal niet"
+  (`data-pvallesvol`; verschilt het toch, dan staat het verschil er). UIT HET NOODFONDS: de waarschuwing VOOR de knop
+  (`data-pvwaarschuwing`), de knop heet "Toch verplaatsen", en het gevolg zegt dat de maandinleg eerst weer naar het noodfonds gaat tot hij
+  vol is (`data-pvnfvol`; de grendel van v242 doet dat, er is geen tweede regel). NAAR HET NOODFONDS: een vol noodfonds is grijs
+  (`data-pvvol`) met "vol (EUR X van EUR X) · verhoog eerst het doel ›" naar `openNoodfondsPanel()`. Bevestigen schrijft `SET.planVerplaatsLog`
+  (hooguit `PV_LOG_MAX`, de laatste vijf in de uitleg achter de ⓘ op Plan, `planVerplaatsLogHTML()`) en geeft "Toewijzing verplaatst: EUR X
+  van A naar B · ongedaan maken" (`keuzeKlaar()`); ongedaan maken zet beide toewijzingen exact terug en markeert de logregel `ongedaan`.
+  (2) "OP SCHEMA" IN MAANDEN (`planSchema()`): Alles vol tegen de laatste streefdatum van de doelen die lopen (K uit `planTijdlijnData()`):
+  "X maanden voor je streefdatum (jan 2028)", "X maanden na je streefdatum" in amber (`data-kpischemalaat`), "in de maand van"; zonder
+  streefdatum geen chip, alleen de maand. `data-kpischemamnd` draagt het getal. (3) DE OPZIJ-TEGEL toont geen "eenmalig ontvangen" meer
+  (de sheet erachter wel); in de era leest hij `opzijPlanO()`: de lopende salarisperiode (`eraEenheidNu()`) met gestort, eruit en netto uit
+  `opzijEenheid()` (`data-kpiopzijeenheid`), en de herleiding leest hetzelfde venster. Spec `v502.spec.js` (9 tests a-i) op
+  `v502-stand.js`; `v473` h en `plan-dashboard` gemigreerd.
 - **v481: PER REKENING, IS JE SALDO GENOEG TOT JE SALARIS (PUNT 1 t/m 4; punt 5 potjes-ritme is v482)** (`v481`, gevraagd door de
   gebruiker, mockup `Minder_Tot_Je_Salaris_Mockup.html`). GEMETEN op het toestel (blok 23, 27-10), Betaalrekening: saldo EUR 1.003,
   vaste lasten tot 23 nov EUR 1.076 (huur Nathaniel Cathalina EUR 300 op 1 nov, Hiltermann EUR 537 op 12 nov), op 23 nov −EUR 311. Je

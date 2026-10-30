@@ -17817,7 +17817,7 @@ function renderPlan(bare){
     'Bovenaan staat wat er voor je doelen op je spaarrekening staat, tegen wat je doelen samen vragen. Geld dat nog terug moet telt pas als het er weer staat.',
     'Per doel een rij: het geld dicht, wat er deze maand bijkomt gearceerd, en de maand waarin het vol is. Tik op een doel voor de rekensom.',
     planMaandTekst()
-  ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
+  ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('')+planVerplaatsLogHTML();   // v502: de log van verplaatsingen
   /* de meldingen die een keuze of een verschil noemen blijven, onder de kop: een open terugzetvraag, toegewezen zonder
      geld, de eenmalige melding over de verdeling en de gemeten inleg (v319) */
   let tzKaart=''; try{ const TZ=terugzetVoor(thisYM()); const D0=(!TZ || (window._terugzetWijzig && TZ.i===0))?terugzetData():null;
@@ -17919,7 +17919,7 @@ function opzijHerleiding(O){
     begin:alleBegin?rek.reduce((a,r)=>a+c(r.begin),0)/100:null, nu:alleNu?rek.reduce((a,r)=>a+c(r.nu),0)/100:null,
     gaten:rek.filter(r=>r.verschil!=null && Math.abs(r.verschil)>=0.005), onvolledig:rek.filter(r=>r.onvolledig)}; }
 function openOpzijHerleiding(){
-  let H=null; try{ H=opzijHerleiding(); }catch(_){} if(!H){ closeSheet(); return; }
+  let H=null; try{ H=opzijHerleiding(opzijPlanO()); }catch(_){}   // v502: hetzelfde venster als de tegel if(!H){ closeSheet(); return; }
   const dag=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||'')); return m?`${+m[3]} ${MNAMES[+m[2]-1]}`:''; };
   const rij=(attr,l,b,stijl)=>`<div class="row small" ${attr} style="gap:8px;padding:5px 0;border-top:1px solid var(--line);${stijl||''}"><span style="flex:1;min-width:0">${l}</span><b style="white-space:nowrap">${b==null?'onbekend':euroC(b)}</b></div>`;
   let h='';
@@ -18002,7 +18002,11 @@ function planKpi(P,cap,TL,SE){
   const chip=(t,fn,attr)=>`<span ${attr||''} ${fn?`role="button" onclick="event.stopPropagation();${fn}"`:''} style="display:inline-block;background:color-mix(in srgb,var(--kpi-txt) 20%,transparent);border-radius:10px;padding:2px 8px;margin-top:4px;${fn?'cursor:pointer':''}">${t}</span>`;
   const p1=K.laat[0];
   const vol=K.allesVol!=null?etaDatum(K.allesVol):(K.loopt?'nog niet te zeggen':'alles is vol');
-  const sub2=p1?`${esc(p1.naam)} haalt ${esc(doelDatumLabel(p1.streefdatum,true))} niet${K.laat.length>1?` (en ${K.laat.length-1} ander${K.laat.length>2?'e':''})`:''}`:'op schema';
+  /* v502 (punt 4): "op schema" in maanden: Alles vol tegen de LAATSTE streefdatum van de doelen die lopen (planSchema(), de K van
+     planTijdlijnData()). Ervoor: "X maanden voor je streefdatum (jan 2028)"; erna: "X maanden na je streefdatum", amber; zonder
+     streefdatum alleen de maand (de tegel zelf). Een los doel dat zijn eigen datum niet haalt blijft de regel van v380. */
+  const SCH=planSchema(P,TL,K);
+  const sub2=(SCH&&SCH.na>0)?SCH.tekst:p1?`${esc(p1.naam)} haalt ${esc(doelDatumLabel(p1.streefdatum,true))} niet${K.laat.length>1?` (en ${K.laat.length-1} ander${K.laat.length>2?'e':''})`:''}`:(SCH?SCH.tekst:'');
   return `<div id="planKpi" data-kpigeld="${K.geld}" data-kpidoel="${K.doel}" data-kpipct="${K.pct}" data-nogtegaan="${K.nogTeGaan}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px"><style>#planKpi .jrg{color:var(--kpi-txt)!important;border-bottom-color:color-mix(in srgb,var(--kpi-txt) 60%,transparent)}</style>
     <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Gespaard voor je doelen</span><span style="font-size:var(--fs-sm)">${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
     <div style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px"><span data-kpigeldtekst>${euro0(K.geld)}</span> <span style="font-size:var(--fs-md);font-weight:600">van ${euro0(K.doel)}</span></div>
@@ -18014,19 +18018,183 @@ function planKpi(P,cap,TL,SE){
       return `<div class="small" data-planperiodedoel="${Math.round(d)}" style="opacity:.85;margin-top:2px">doel ${euro0(d)} per periode</div>`; })()}
     <div data-kpibalk style="height:8px;background:color-mix(in srgb,var(--kpi-txt) 25%,transparent);border-radius:5px;margin:8px 0 10px;overflow:hidden"><i style="display:block;height:8px;width:${K.pct}%;background:var(--kpi-txt);border-radius:5px"></i></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${(()=>{ const O=opzijPeriode();   /* v440: opzij is wat er netto naar je spaarrekening ging deze periode (opzijPeriode), tegen het doel uit Kiezen; niet meer "deze maand opzij" uit de inleg */
-        const val=O.netto==null?'onbekend':euro0(O.netto);
+      ${(()=>{ const O=opzijPlanO();   /* v440: opzij is wat er netto naar je spaarrekening ging deze periode (opzijPeriode), tegen het doel uit Kiezen; niet meer "deze maand opzij" uit de inleg. v502: in de era de lopende salarisperiode (opzijPlanO) */
+        const OE=O.eenheid?O.OE:null;
+        const val=O.netto==null?'onbekend':euro0(OE?OE.netto:O.netto);
         let H=null; try{ H=opzijHerleiding(O); }catch(_){} const onv=!!(H && H.onvolledig.length);   // v472: transacties van een spaarrekening ontbraken
         const sub=O.netto==null?`<span data-kpibron style="display:block">geen spaarrekening herkend</span>`
           :(O.doel==null?`<span data-kpibron style="display:block">nog geen doel · kies in Kiezen</span>`
             :`<span data-kpibron style="display:block">volgens je verdeling ${euro0(O.doel)}</span>`);   // v469 punt 3: dezelfde woorden als Zien (v464), geen percentage tegen een getal dat geen doel is
         const sub2=onv?`<span data-kpionvolledig style="display:block;font-weight:700">onvolledig</span>`:'';
-        /* v473 (punt 5): eenmalig geld dat deze periode binnenkwam staat erbij; opzij blijft de echte beweging, er wordt niets uit gerekend */
-        let em=0; try{ em=eenmaligPeriode(O); }catch(_){}
-        const emTxt=em>=0.5?`<span data-kpieenmalig="${em}" style="display:block">eenmalig ontvangen ${euro0(em)}</span>`:'';
-        return tegel('Opzij deze periode', val, sub2+sub+emTxt, `data-kpiopzij="${O.netto==null?'':O.netto}" data-kpiopzijexact="${O.nettoExact==null?'':O.nettoExact}" data-kpiopzijdoel="${O.doel==null?'':O.doel}" data-kpiopzijperiode${H?' role="button" onclick="openOpzijHerleiding()"':''}`); })()}
-      ${tegel('Alles vol', vol, chip(sub2,p1?'openPlanTijdlijn()':'', `data-kpischema="${p1?'laat':'ok'}"`), `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
+        /* v502 (punt 5): geen "eenmalig ontvangen" meer (dat staat op Inzichten). In de era de periode met gestort en eruit uit
+           opzijEenheid() (v500), dezelfde bron als de Terugblik. */
+        const eenh=OE?`<span data-kpiopzijeenheid="${esc(O.eenheid.start)}|${esc(O.eenheid.eind)}" style="display:block">${esc(periodeLabel(O.eenheid.start, O.eenheid.eind))}: gestort ${euro0(OE.erin)} · eruit ${euro0(OE.uit)}</span>`:'';
+        return tegel('Opzij deze periode', val, sub2+eenh+sub, `data-kpiopzij="${O.netto==null?'':(OE?OE.netto:O.netto)}" data-kpiopzijexact="${O.nettoExact==null?'':O.nettoExact}" data-kpiopzijdoel="${O.doel==null?'':O.doel}" data-kpiopzijperiode${H?' role="button" onclick="openOpzijHerleiding()"':''}`); })()}
+      ${tegel('Alles vol', vol, sub2?chip(sub2,(p1||(SCH&&SCH.na>0))?'openPlanTijdlijn()':'', `data-kpischema="${(p1||(SCH&&SCH.na>0))?'laat':'ok'}" data-kpischemamnd="${SCH?SCH.verschil:''}"${(SCH&&SCH.na>0)?' data-kpischemaamber':''}`):'', `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
     </div></div>`;
+}
+/* v502 (punt 4): HOEVEEL MAANDEN "ALLES VOL" VOOR OF NA DE LAATSTE STREEFDATUM LIGT. De streefdatum is de laatste van de doelen
+   die nog lopen (K uit planTijdlijnData(), dezelfde maandtelling als de waarschuwing per doel: vol-1 tegen K). Zonder doel met een
+   streefdatum geen schema (null): dan zegt de tegel alleen de maand. */
+function planSchema(P,TL,K){
+  if(!K || K.allesVol==null || !TL) return null;
+  let maxK=null, sd='';
+  for(const p of (P||[])){ if(p.type!=='goal' || !p.streefdatum || p.status==='bereikt' || p.status==='gepauzeerd') continue;
+    const k=(TL.per[p.id]||{}).K; if(k!=null && (maxK==null || k>maxK)){ maxK=k; sd=p.streefdatum; } }
+  if(maxK==null) return null;
+  const verschil=maxK-(K.allesVol-1), n=Math.abs(verschil), lab=esc(doelDatumLabel(sd,true)), mnd=`${n} ${n===1?'maand':'maanden'}`;
+  const tekst=verschil>0?`${mnd} voor je streefdatum (${lab})`
+    :verschil<0?`<span data-kpischemalaat style="color:var(--amber);font-weight:700">${mnd} na je streefdatum (${lab})</span>`
+    :`in de maand van je streefdatum (${lab})`;
+  return {verschil, na:verschil<0?n:0, tekst, streef:sd};
+}
+/* v502 (punt 5): DE OPZIJ-TEGEL OP PLAN IN DE ERA. Vóór de era is het opzijPeriode() zoals het was. In de era de lopende
+   salarisperiode (eraEenheidNu(), de eenheid van periodeVan()), met gestort, eruit en netto uit opzijEenheid() (v500) en de boekingen
+   van datzelfde venster voor de herleiding, zodat de tegel en de sheet erachter over hetzelfde venster gaan. Het doel ("volgens je
+   verdeling") blijft dat van opzijPeriode(). */
+function opzijPlanO(){
+  const O=opzijPeriode(); let E=null; try{ E=eraEenheidNu(); }catch(_){} if(!E) return O;
+  const vandaag=vandaagYMD(), tot=String(E.eind)<vandaag?String(E.eind):vandaag;
+  let OE=null; try{ OE=opzijEenheid({soort:'periode', ym:E.ym, start:E.start, eind:E.eind}); }catch(_){}
+  let tx=[], netto=null; if(O.meetbaar){ try{ netto=savedNetRange(E.start, tot); tx=savedTxRange(E.start, tot); }catch(_){} }
+  const nettoExact=netto==null?null:Math.round(tx.reduce((a,t)=>a+Math.round((+t.amount||0)*100),0))/100;
+  return Object.assign({}, O, {ok:true, start:E.start, eind:E.eind, ym:E.ym, netto, nettoExact, tx, eenheid:E, OE,
+    pct:(O.doel>0 && netto!=null)?Math.max(Math.round(netto/O.doel*100),0):null});
+}
+/* ============================================================
+   v502 (punt 1-3): TOEWIJZING VERPLAATSEN TUSSEN DOELEN
+   Gevraagd door de gebruiker, mockup "Plan doelen" scherm 2 t/m 6. EEN BRON: de toewijzing per doel staat waar hij al stond,
+   SET.nfToegewezen voor het noodfonds en SET.goals[].gespaard voor een doel (planMap() leest ze). Verplaatsen schrijft die twee
+   velden en verder niets: geen geld, geen tweede staat. Het spaarsaldo, de verdeling (allocatePlan()), opzij en de stilstaand-som
+   van v501 (stilstaandDelen(), leest planMap()) volgen dus vanzelf. Het gevolg wordt vooraf in het geheugen doorgerekend
+   (planToeSim(): de velden tijdelijk gezet, allocatePlan() en planTijdlijnData() gelezen, en in een finally terug), zonder save().
+   Niets voorgekozen: geen naar-doel en geen bedrag. Bevestigen schrijft de toewijzing, een regel in SET.planVerplaatsLog (in de
+   uitleg achter de ⓘ op Plan) en een melding met ongedaan maken, dat beide toewijzingen exact terugzet.
+   ============================================================ */
+const PV_LOG_MAX=60;
+const pvR2=v=>Math.round((+v||0)*100)/100;
+function planToeVan(id){ const p=planMap()[id]; return p?Math.max(pvR2(p.gespaard),0):0; }
+function planToeZet(id, v){ v=Math.max(pvR2(v),0);
+  if(id===PLAN_NF){ SET.nfToegewezen=v; return; }
+  const g=(SET.goals||[]).find(x=>x&&x.id===id); if(g) g.gespaard=v; }
+function planToeSim(wijz, fn){
+  const g0=JSON.stringify(SET.goals||[]), had=Object.prototype.hasOwnProperty.call(SET,'nfToegewezen'), nf0=SET.nfToegewezen;
+  try{ for(const id of Object.keys(wijz||{})) planToeZet(id, wijz[id]); return fn(); }
+  finally{ SET.goals=JSON.parse(g0); if(had) SET.nfToegewezen=nf0; else delete SET.nfToegewezen; }
+}
+function planVerplaatsRijen(){ let P=[]; try{ P=allocatePlan(); }catch(_){} return P.filter(p=>(p.type==='goal'||p.type==='noodfonds') && !p.nfOnbekend); }
+function planVerplaatsMag(id){ return planVerplaatsRijen().some(p=>p.id===id) && planToeVan(id)>0; }
+/* Hoeveel er ten hoogste kan: wat er bij het van-doel staat, en bij het noodfonds als naar-doel wat het nog kan hebben (doel min
+   toegewezen). Een doel als naar-doel heeft geen maximum: dat is hoe de editor het ook toestaat. */
+function planVerplaatsMax(van, naar){
+  const P=planMap(); const v=planToeVan(van); let n=Infinity;
+  if(naar===PLAN_NF){ const d=Math.max(Math.round(+(P[PLAN_NF]||{}).doel||0),0); n=Math.max(d-planToeVan(PLAN_NF),0); }
+  return {van:v, naar:n, max:pvR2(Math.min(v,n))};
+}
+function planNfVol(){ const p=planMap()[PLAN_NF]; if(!p) return false; const d=Math.max(Math.round(+p.doel||0),0); return d>0 && planToeVan(PLAN_NF)>=d; }
+function planVerplaatsStand(){
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  const P=allocatePlan(), TL=planTijdlijnData(P,cap), K=planKpiData(P,cap,TL);
+  const per={}; for(const p of P){ if(p.type!=='goal'&&p.type!=='noodfonds') continue; const t=TL.per[p.id]||{};
+    per[p.id]={id:p.id, naam:p.type==='noodfonds'?'Noodfonds':p.naam, type:p.type, toe:planToeVan(p.id), doel:Math.max(Math.round(+p.doel||0),0),
+      vol:p.status==='bereikt'?0:(t.vol!=null?t.vol:null), warn:!!t.warn, streefdatum:p.streefdatum||'', alloc:Math.max(Math.round(+p.alloc||0),0)}; }
+  return {per, allesVol:K.allesVol, P};
+}
+/* het gevolg: voor en na, per doel. null zolang er geen geldige keuze is. */
+function planVerplaatsGevolg(van, naar, b){
+  b=pvR2(b); if(!van || !naar || van===naar || !(b>0)) return null;
+  const M=planVerplaatsMax(van, naar); if(b>M.max+0.004) return null;
+  const voor=planVerplaatsStand();
+  const na=planToeSim({[van]:planToeVan(van)-b, [naar]:planToeVan(naar)+b}, planVerplaatsStand);
+  return {van, naar, b, voor, na};
+}
+function pvVolTekst(v){ return v===0?'vol':v>0?`vol ${etaDatum(v)}`:'geen vol-datum'; }
+function pvGevolgHTML(G){
+  const rijen=[];
+  for(const id of Object.keys(G.na.per)){
+    const a=G.voor.per[id], z=G.na.per[id]; if(!a||!z) continue;
+    const toeVerandert=Math.abs(a.toe-z.toe)>0.004, volVerandert=a.vol!==z.vol;
+    if(!toeVerandert && !volVerandert) continue;
+    let schuif='';
+    if(a.vol!=null && z.vol!=null && a.vol!==z.vol){ const d=z.vol-a.vol, n=Math.abs(d);
+      schuif=` · <span data-pvschuif="${d}">${n} ${n===1?'maand':'maanden'} ${d>0?'later':'eerder'}</span>`; }
+    let streef='';
+    if(z.type==='goal' && z.streefdatum) streef=`<span data-pvstreef="${z.warn?'niet':'ja'}" style="display:block;color:${z.warn?'var(--amber)':'var(--mut)'}">streefdatum ${esc(doelDatumLabel(z.streefdatum,true))} ${z.warn?(a.warn?'blijft niet haalbaar':'niet meer haalbaar'):(a.warn?'wordt haalbaar':'blijft haalbaar')}</span>`;
+    const nfTerug=(id===PLAN_NF && z.toe<a.toe)?`<span data-pvnfvol="${z.vol==null?'':z.vol}" style="display:block;color:var(--mut)">je maandinleg gaat eerst weer naar je noodfonds, tot hij ${z.vol>0?`vol is in ${etaDatum(z.vol)}`:z.vol===0?'weer vol is':'weer vol is (de maand is nog niet te zeggen)'}</span>`:'';
+    rijen.push(`<div class="small" data-pvgevolg="${id}" data-pvtoe="${z.toe}" data-pvvol="${z.vol==null?'':z.vol}" style="padding:7px 0;border-top:1px solid var(--line);line-height:1.45">
+      <div class="row" style="gap:8px"><b style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(z.naam)}</b><b style="white-space:nowrap">${euroC(a.toe)} → ${euroC(z.toe)}</b></div>
+      <span style="display:block;color:var(--mut)">${esc(pvVolTekst(a.vol))} → ${esc(pvVolTekst(z.vol))}${schuif}</span>${streef}${nfTerug}</div>`);
+  }
+  const av=G.voor.allesVol, zv=G.na.allesVol;
+  const alles=av===zv
+    ?`<div class="small" data-pvallesvol="gelijk" style="margin-top:8px;color:var(--mut)">Alles vol blijft ${av!=null?esc(etaDatum(av)):'gelijk'} · verplaatsen verandert het totaal niet</div>`
+    :`<div class="small" data-pvallesvol="anders" style="margin-top:8px;color:var(--mut)">Alles vol: ${av!=null?esc(etaDatum(av)):'nog niet te zeggen'} → ${zv!=null?esc(etaDatum(zv)):'nog niet te zeggen'}</div>`;
+  return `<div class="small" style="font-weight:700;margin-top:10px">Gevolg</div>${rijen.join('')}${alles}`;
+}
+function openPlanVerplaats(van){ if(!planVerplaatsMag(van)) return; window._pv={van, naar:null, bedrag:''}; renderPlanVerplaats(); showSheetBg(); }
+function planVerplaatsNaar(id){ const S=window._pv; if(!S) return; if(id===PLAN_NF && planNfVol()) return; S.naar=id; renderPlanVerplaats(); }
+function planVerplaatsBedrag(v){ const S=window._pv; if(!S) return; S.bedrag=String(v==null?'':v); planVerplaatsHerteken(); }
+function planVerplaatsReden(S){
+  if(!S || !S.naar) return 'Kies waar het heen gaat';
+  const b=pvR2(numIn(S.bedrag)); if(!(b>0)) return 'Vul een bedrag in';
+  const M=planVerplaatsMax(S.van, S.naar);
+  if(b>M.max+0.004) return M.naar<M.van?`Je noodfonds kan nog ${euroC(M.naar)} hebben`:`Er staat ${euroC(M.van)} bij ${S.van===PLAN_NF?'je noodfonds':esc((planMap()[S.van]||{}).naam||'')}`;
+  return '';
+}
+function planVerplaatsDeel(S){
+  const reden=planVerplaatsReden(S), b=pvR2(numIn(S.bedrag));
+  const G=reden?null:planVerplaatsGevolg(S.van, S.naar, b);
+  const uitNf=S.van===PLAN_NF;
+  let waarsch='';
+  if(uitNf && !reden){ const d=Math.max(Math.round(+(planMap()[PLAN_NF]||{}).doel||0),0), na=pvR2(planToeVan(PLAN_NF)-b);
+    waarsch=`<div class="small" data-pvwaarschuwing style="margin-top:10px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--amber) 14%,transparent);line-height:1.45">Je noodfonds zakt naar ${euroC(na)}, ${euroC(Math.max(d-na,0))} onder je doel van ${euroC(d)}. Dat is je buffer voor onverwachte kosten. Je plan vult hem daarna eerst weer aan.</div>`; }
+  const knop=`<button class="btn" data-pvbevestig ${reden?'disabled':''} style="width:100%" onclick="planVerplaatsZet()">${uitNf?'Toch verplaatsen':'Verplaatsen'}</button>`;
+  return (G?pvGevolgHTML(G):'')+waarsch+sheetVoet(knop, reden, '12px');
+}
+function planVerplaatsHerteken(){ const el=document.getElementById('pvDeel'); if(el && window._pv) el.innerHTML=planVerplaatsDeel(window._pv); }
+function renderPlanVerplaats(){
+  const S=window._pv; if(!S || !planVerplaatsMag(S.van)){ closeSheet(); return; }
+  const PM=planMap(), naamVan=id=>id===PLAN_NF?'Noodfonds':((PM[id]||{}).naam||'');
+  const rijen=planVerplaatsRijen().filter(p=>p.id!==S.van).map(p=>{
+    const toe=planToeVan(p.id), d=Math.max(Math.round(+p.doel||0),0);
+    if(p.id===PLAN_NF && planNfVol())
+      return `<div class="row small" data-pvnaar="${p.id}" data-pvvol style="gap:8px;padding:8px 0;border-top:1px solid var(--line);color:var(--mut2)"><span style="width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);flex-shrink:0"></span><span style="flex:1;min-width:0">Noodfonds <span style="display:block">vol (${euroC(toe)} van ${euroC(d)}) · <span role="button" data-pvverhoog style="color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();openNoodfondsPanel()">verhoog eerst het doel ›</span></span></span></div>`;
+    const gek=S.naar===p.id;
+    return `<div class="row small" data-pvnaar="${p.id}" data-gekozen="${gek?1:0}" role="button" onclick="planVerplaatsNaar('${p.id}')" style="gap:8px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer"><span style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${gek?'var(--teal)':'var(--bar)'};${gek?'background:var(--teal);':''}flex-shrink:0"></span><span style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(naamVan(p.id))}</span><span style="white-space:nowrap;color:var(--mut)">${euroC(toe)} van ${euroC(d)}</span></div>`;
+  }).join('');
+  const M=S.naar?planVerplaatsMax(S.van, S.naar):{max:planToeVan(S.van)};
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="planVerplaats" data-pvvan="${S.van}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Toewijzing verplaatsen</div>
+    <div class="small muted" data-pvuitleg style="margin:4px 0 10px;line-height:1.45">Het geld blijft op je spaarrekening. Minder verplaatst niets; je verdeelt opnieuw wat er staat.</div>
+    <div class="small" style="font-weight:700">Van</div>
+    <div class="row small" data-pvvanrij style="gap:8px;padding:6px 0"><span style="flex:1;min-width:0;font-weight:600">${esc(naamVan(S.van))}</span><span style="white-space:nowrap;color:var(--mut)">${euroC(planToeVan(S.van))} toegewezen</span></div>
+    <div class="small" style="font-weight:700;margin-top:8px">Naar</div>${rijen||'<div class="small muted">Er is geen ander doel.</div>'}
+    <label class="fld" style="margin-top:10px">Bedrag (€)</label><input id="pvBedrag" type="text" inputmode="decimal" data-pvmax="${M.max}" value="${esc(S.bedrag)}" placeholder="hoogstens ${euroC(M.max)}" style="width:100%" oninput="planVerplaatsBedrag(this.value)">
+    <div id="pvDeel">${planVerplaatsDeel(S)}</div></div>`;
+}
+function planVerplaatsZet(){
+  const S=window._pv; if(!S || planVerplaatsReden(S)) return;
+  const b=pvR2(numIn(S.bedrag)), van=S.van, naar=S.naar, PM=planMap();
+  const naam=id=>id===PLAN_NF?'Noodfonds':((PM[id]||{}).naam||'');
+  const voor={van:planToeVan(van), naar:planToeVan(naar)};
+  /* het exacte herstel: de twee toewijzingen zoals ze waren (ook een nfToegewezen boven het doel, of een die er nog niet was) */
+  const g0=JSON.parse(JSON.stringify((SET.goals||[]).filter(g=>g&&(g.id===van||g.id===naar)))), hadNf=Object.prototype.hasOwnProperty.call(SET,'nfToegewezen'), nf0=SET.nfToegewezen;
+  planToeZet(van, voor.van-b); planToeZet(naar, voor.naar+b);
+  const rec={id:'pv'+Date.now().toString(36), op:vandaagYMD(), van, naar, vanNaam:naam(van), naarNaam:naam(naar), bedrag:b, voor, na:{van:planToeVan(van), naar:planToeVan(naar)}};
+  SET.planVerplaatsLog=(SET.planVerplaatsLog||[]).concat([rec]).slice(-PV_LOG_MAX);
+  save(); window._pv=null;
+  const herstel=()=>{
+    for(const g of g0){ const x=(SET.goals||[]).find(y=>y&&y.id===g.id); if(x) x.gespaard=g.gespaard; }
+    if(van===PLAN_NF||naar===PLAN_NF){ if(hadNf) SET.nfToegewezen=nf0; else delete SET.nfToegewezen; }
+    const L=(SET.planVerplaatsLog||[]).find(x=>x.id===rec.id); if(L) L.ongedaan=vandaagYMD();
+    save(); try{ render(); }catch(_){} };
+  keuzeKlaar(`Toewijzing verplaatst: ${b%1?euroC(b):euro0(b)} van ${rec.vanNaam} naar ${rec.naarNaam}`, herstel);
+}
+/* de log in de uitleg achter de ⓘ op Plan: de laatste vijf verplaatsingen */
+function planVerplaatsLogHTML(){
+  const L=(SET.planVerplaatsLog||[]).slice(-5).reverse(); if(!L.length) return '';
+  const dag=d=>{ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||'')); return m?`${+m[3]} ${MNAMES[+m[2]-1]}`:''; };
+  return `<div data-pvlog style="margin-bottom:7px"><b>Verplaatst</b>${L.map(r=>`<div data-pvlogrij="${esc(r.id)}">${esc(dag(r.op))} · ${euroC(r.bedrag)} van ${esc(r.vanNaam)} naar ${esc(r.naarNaam)}${r.ongedaan?' (ongedaan gemaakt)':''}</div>`).join('')}</div>`;
 }
 /* v380: DE RIJ, EEN VORM VOOR ELK DOEL: nummer, naam, status, een balk (het geld dicht, wat er deze maand bijkomt
    gearceerd), links "EUR geld / EUR doel", rechts de vol-datum, en een kleine grijze regel. Geen rekensom: die staat in
@@ -18078,7 +18246,7 @@ function planDoelRij(p,i,TL,SE,tints){
     <div class="row" style="gap:8px;align-items:baseline">${nr}<span class="wf-naam" data-rijnaam style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
     ${balk}
     <div class="row small" style="gap:8px;align-items:baseline"><span data-rijgeld style="flex:1;min-width:0"><b style="font-weight:700">${p.nfOnbekend?'onbekend':euro0(geld)}</b> <span style="color:var(--mut)">/ ${euro0(doel)}</span></span><span data-rijvol style="white-space:nowrap;color:var(--mut)">${esc(vol)}${voorl?` <span data-voorlopig style="color:var(--mut2)">· voorlopig</span>`:''} ›</span></div>
-    <div class="small" data-rijsub data-rijdezemaand="${dezeMaand}" style="color:${t.warn?'var(--amber)':'var(--mut2)'};margin-top:1px">${esc(sub)}</div></div>`;
+    <div class="row small" style="gap:8px;align-items:baseline;margin-top:1px"><span data-rijsub data-rijdezemaand="${dezeMaand}" style="flex:1;min-width:0;color:${t.warn?'var(--amber)':'var(--mut2)'}">${esc(sub)}</span>${(p.type!=='aflossen' && !p.nfOnbekend && Math.round(+p.gespaard||0)>0)?`<span role="button" data-verplaats="${p.id}" style="white-space:nowrap;color:var(--teal);font-weight:700;cursor:pointer" onclick="event.stopPropagation();openPlanVerplaats('${p.id}')">⇄ verplaats</span>`:''}</div></div>`;
 }
 /* v380: DE DETAILSHEET. De rekensom van een doel: wat er nu op je spaarrekening staat, plus wat er deze maand terug gaat,
    plus de inleg van deze maand, is de stand eind deze maand (planStandEind()). "vol" alleen als die stand het doel haalt;
@@ -18125,7 +18293,7 @@ function renderPlanDoel(){
     <div class="small muted" style="margin:2px 0 8px">doel ${euro0(doel)} · ${plek} in de volgorde</div>
     <div class="bar-track" style="height:10px;margin:0 0 6px;position:relative"><div class="bar-fill" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}${streep}</div>
     ${som}${dat}
-    <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${p.type==='aflossen'?act('Maandbedrag ›',`closeSheet();${planAllocOpen(p)}`,'data-doelmaandbedrag'):''}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
+    <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${(p.type!=='aflossen'&&planVerplaatsMag(p.id))?act('⇄ verplaats',`openPlanVerplaats('${p.id}')`,'data-doelverplaats'):''}${p.type==='aflossen'?act('Maandbedrag ›',`closeSheet();${planAllocOpen(p)}`,'data-doelmaandbedrag'):''}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
 }
 /* v381: TOEGEWEZEN ZONDER GELD, NOG NIET GEKOZEN. De twee bestaande keuzes uit de sheet achter de melding (spaarOverData()):
    terugzetten (alles deze maand) en niet terugzetten (de toewijzing van deze bron verlagen), elk met zijn gevolg voor de

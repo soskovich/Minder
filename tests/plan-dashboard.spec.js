@@ -45,12 +45,14 @@ test.describe('b · de chip alleen bij terug', () => {
     await page.evaluate(() => go('vooruit'));
     expect(await page.locator('[data-kpiterug]').count()).toBe(0);
     expect(await page.evaluate(() => planStandEind() && Object.values(planStandEind().per).reduce((a, x) => a + x.tb, 0))).toBe(0);
-    /* hier haalt Inrichting (streef mrt 2027, na Kosten Koper) zijn datum niet, en de tegel noemt hem */
-    expect(await tekst(page, '[data-kpischema]')).toBe('Inrichting haalt mrt 2027 niet');
+    /* hier haalt Inrichting (streef mrt 2027, na Kosten Koper) zijn datum niet; sinds v502 noemt de tegel eerst dat alles vol een
+       maand na de laatste streefdatum ligt (planSchema()), en de waarschuwing per doel blijft in de rij en de tijdlijn */
+    expect(await tekst(page, '[data-kpischema]')).toBe('1 maand na je streefdatum (mei 2027)');
+    expect(await page.evaluate(() => Object.values(planTijdlijnData().per).some((x) => x.warn))).toBe(true);
   });
   test('op de stand van het toestel staat alles op schema', async ({ page }) => {
     await T.boot(page, 'nu'); await page.evaluate(() => go('vooruit'));
-    expect(await tekst(page, '[data-kpischema]')).toBe('op schema');
+    expect(await tekst(page, '[data-kpischema]')).toBe('in de maand van je streefdatum (jun 2027)');   // v502: in maanden, niet meer "op schema"
     expect(await page.evaluate(() => Object.values(planTijdlijnData().per).some((x) => x.warn))).toBe(false);
   });
 });

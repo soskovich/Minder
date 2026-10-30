@@ -114,13 +114,13 @@ test.describe('punt 3, 4 en 5', () => {
     expect(r.bo).toBe(false);                            // geen tweede regel "telt mee zodra binnen"
     expect(Math.round(r.m.onregelmatig)).toBe(2200);     // telt een keer
   });
-  test('h. Plan: "eenmalig ontvangen €2.200" in de tegel en de sheet; "Toch vast" vraagt eerst; de instelling kiest niets voor', async ({ page }) => {
+  /* v502 (punt 5): de opzij-tegel op Plan toont geen "eenmalig ontvangen" meer (dat staat op Inzichten); de sheet erachter wel */
+  test('h. Plan: "eenmalig ontvangen €2.200" in de sheet en niet meer in de tegel; "Toch vast" vraagt eerst; de instelling kiest niets voor', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 277));
     const r = await page.evaluate(() => { go('vooruit'); renderVooruit(); const t = document.querySelector('[data-kpiopzijperiode]'); const e = t && t.querySelector('[data-kpieenmalig]');
       openOpzijHerleiding(); const s = document.querySelector('[data-opzijeenmalig]'); return { e: e ? +e.dataset.kpieenmalig : null, et: e ? e.innerText : '', s: s ? +s.dataset.opzijeenmalig : null }; });
-    expect(r).toMatchObject({ e: 2200, s: 2200 });
-    expect(r.et).toBe('eenmalig ontvangen €2.200');
+    expect(r).toMatchObject({ e: null, s: 2200 });
     const tv = await page.evaluate(() => { salSplitTochVast(_sid('2026-10')); return { vast: SET.salSplit.vast, sheet: !!document.querySelector('#salSplitVast') }; });
     expect(tv).toEqual({ vast: 5216, sheet: true });     // eerst het gevolg, niets geschreven
     const ins = await page.evaluate(() => { SET.salSplit = { key: SET.salSplit.key }; save(); document.body.insertAdjacentHTML('beforeend', '<div id="tst">' + salSplitInstelHTML() + '</div>'); const d = document.querySelector('#tst');
