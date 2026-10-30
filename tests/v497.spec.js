@@ -35,7 +35,7 @@ test('a. voorbeeld 26 nov: Inzichten en Grip tonen de periode, geen kalendermaan
     return res;
   });
   expect(r.monthsHeeftNov).toBe(true);
-  expect(r.curMonth).toBe(null);          // sabotage (curMonth niet resetten) → blijft staan en Inzichten valt terug op een maand
+  expect([null, '2026-11']).toContain(r.curMonth);   // v499: voorbeeldStart tekent nu alles opnieuw (render), en renderIns zet curMonth op de voorbeeldmaand; de sabotage (curMonth niet resetten) laat hem op '2026-10' staan en Inzichten valt terug op een maand
   expect(r.insPeriode).toBe(true);        // Inzichten toont de periode-kop
   expect(r.insGeenOkt).toBe(true);
   expect(r.gripPeriode).toBe(true);
