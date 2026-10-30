@@ -183,7 +183,7 @@ test('v499 i: een opzij-bedrag, het voorstel over 24 nov met zijn afwijking', as
     const t = k ? k.innerText : '';
     return { aanwezig: !!k, start: k ? k.getAttribute('data-salvoorstel') : null, bron: k ? k.getAttribute('data-salvopzijbron') : null, opzij: k ? +k.getAttribute('data-salvkaartopzij') : null,
       laat: k ? k.hasAttribute('data-salvlaat') : null, t, afw: k ? (k.querySelector('[data-salvoorstelafwijk]') || {}).innerText || null : null,
-      voorstelOpzij: P.opzij, doel: O.doel, opzijTelling: (t.match(/opzij/g) || []).length };
+      voorstelOpzij: P.opzij, doel: O.doel, opzijTelling: (t.match(/opzij/g) || []).length, uitleg: k ? [...k.querySelectorAll('[data-rekuitleg]')].map(e => e.innerText) : [] };
   });
   expect(r.aanwezig).toBe(true);
   expect(r.start).toBe('2026-11-24');                                 // 26 nov: het salaris van 24 nov, niet 24 dec
@@ -193,5 +193,5 @@ test('v499 i: een opzij-bedrag, het voorstel over 24 nov met zijn afwijking', as
   expect(r.doel).toBe(3000);                                          // dezelfde bron als Zien en de Doelen-meter
   expect(r.t).toMatch(/opzij volgens je verdeling €3\.000/);
   expect(r.t).not.toMatch(/· opzij €(?!3\.000)/);                     // geen tweede opzij-bedrag zonder uitleg
-  if (Math.abs(r.voorstelOpzij - 3000) > 25) { expect(r.afw).toMatch(/Het voorstel komt op opzij €/); expect(r.afw).toMatch(/heeft nog .* dus €.* erbij in plaats van €|vragen samen minder/); }
+  if (Math.abs(r.voorstelOpzij - 3000) > 25) { expect(r.afw).toMatch(/Het voorstel komt op opzij €/); expect(r.uitleg.length).toBeGreaterThan(0); for (const u of r.uitleg) expect(u).toMatch(/nodig tot .* − saldo nu €.* = €.* (erbij|over) · je afspraak €/); }   // v500 (punt 1): de uitleg is een rekensom per rekening
 });

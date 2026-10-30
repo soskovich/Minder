@@ -6,8 +6,11 @@ const { test, expect } = require('@playwright/test');
 const S = require('./v432-stand');
 const { MAIN, LEEF, SPAAR } = S;
 const add = (page, rows) => page.evaluate(rows => { for (const [acc, d, a, n, ds, cat] of rows) { const t = { id: 'v435' + acc.slice(-4) + d + n + a, date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; } TX.sort((a, b) => a.date.localeCompare(b.date)); window._rekV = null; save(); }, rows);
+const euro = (n) => '€' + Math.round(n).toLocaleString('nl-NL');
 const sal = (d, a) => [MAIN, d, a || 5216, 'Werkgever', 'SALARIS LOON'];
 const boot = async (page, o) => { await page.setViewportSize({ width: 390, height: 844 }); await S.boot(page, o); };
+/* v500 (punt 2): een oordeel op moment 2 vraagt dekking van de hele periode; een geslaagde sync op 23 nov dekt hem zonder de saldolijn te raken */
+const SYNC23 = () => ({ [MAIN]: new Date(2026, 10, 23, 12).getTime(), [LEEF]: new Date(2026, 10, 23, 12).getTime() });
 const SV = (extra) => Object.assign({ op: '2026-10-20', ym: '2026-10', salYM: '2026-10', rek: { [MAIN]: 1200, [LEEF]: 850 }, opzij: 3166, plan: 280, salaris: 5216, salAcc: MAIN, start: '2026-10-26', eind: '2026-11-23', dagen: 29, buffer: { [MAIN]: 103, [LEEF]: 136 }, verwacht: { [MAIN]: 1077, [LEEF]: 678 }, voor: { ont: {}, laagst: { [MAIN]: 123, [LEEF]: 172 } } }, extra || {});
 
 test.describe('v435 · 0. de verwachte salarisdatum', () => {
@@ -209,41 +212,50 @@ test.describe('v435 · 4/5/6. de momenten', () => {
     await boot(page, { dag: '2026-11-22', set: { salVerdeling: SV(), manualBal: { [MAIN]: 900, [LEEF]: 40 } } });
     await add(page, [sal('2026-10-26')]);
     expect(await page.evaluate(() => salMoment2())).toBeNull();
-    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 900, [LEEF]: 40 } } });
+    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 900, [LEEF]: 40 }, syncGelukt: SYNC23() } });
     await add(page, [sal('2026-10-26'), [SPAAR, '2026-11-12', -150, 'Eigen overboeking', 'OVERBOEKING NAAR LEEFGELD', 'intern'], [LEEF, '2026-11-12', 150, 'Eigen overboeking', 'OVERBOEKING VAN SPAREN', 'intern'],
       [MAIN, '2026-10-27', -3000, 'Eigen overboeking', 'OVERBOEKING NAAR SPAREN', 'intern'], [SPAAR, '2026-10-27', 3000, 'Eigen overboeking', 'OVERBOEKING VAN SALARISREKENING', 'intern']]);
-    const M = await page.evaluate(() => { const M = salMoment2(); return { PV: [M.PV.start, M.PV.eind, M.PV.dagen], volg: M.volg.dagen, schaal: M.schaal, R: M.R.map(x => [x.acc, x.oordeel, x.ont, x.basis, x.voorstel, x.eind]), som: M.som, opzijVolg: M.opzijVolg, salaris: M.salaris, opzijW: M.opzijW }; });
+    const M = await page.evaluate(() => { const M = salMoment2(); return { PV: [M.PV.start, M.PV.eind, M.PV.dagen], volg: M.volg.dagen, schaal: M.schaal, R: M.R.map(x => [x.acc, x.oordeel, x.ont, x.bron, x.voorstel, x.eind]), som: M.som, opzijVolg: M.opzijVolg, salaris: M.salaris, opzijW: M.opzijW, N: Object.fromEntries(salVoorstelNu().rek.map(x => [x.acc, x.voorstel])) }; });
     expect(M.PV).toEqual(['2026-10-26', '2026-11-23', 29]); expect(M.volg).toBe(30);   // 24 nov t/m 23 dec
     const l = M.R.find(x => x[0] === LEEF), m = M.R.find(x => x[0] === MAIN);
-    expect(l[1]).toBe('te krap'); expect(l[2]).toBe(150); expect(l[3]).toBe(850 + 150); expect(l[4]).toBe(Math.round(1000 * 30 / 29));
-    expect(m[1]).toBe('te ruim'); expect(m[3]).toBe(1200 - Math.floor((900 - 103) / 50) * 50); expect(m[4]).toBe(Math.round(m[3] * 30 / 29));
+    /* v500 (punt 1): het voorstel voor de volgende periode is het ene voorstel (salVoorstelNu), niet meer de eigen schaalmethode (afspraak ± overschot × 30/29) */
+    expect(l[1]).toBe('te krap'); expect(l[2]).toBe(150); expect(l[3]).toBe('voorstel'); expect(l[4]).toBe(M.N[LEEF]);
+    expect(m[1]).toBe('te ruim'); expect(m[3]).toBe('voorstel'); expect(m[4]).toBe(M.N[MAIN]);
     expect(M.som + M.opzijVolg).toBe(M.salaris);
     expect(M.opzijW).toBe(3000 - 150);
     await page.evaluate(() => { go('maand'); gripKiesTab('terugblik'); });
     const k = page.locator('[data-salmoment2]');
     await expect(k).toContainText('Heeft je salarisverdeling gewerkt?');
     await expect(k.locator(`[data-m2rek="${LEEF}"]`)).toHaveAttribute('data-m2oordeel', 'te krap');
-    await expect(k.locator('[data-m2opzij]')).toHaveText('Je zette €2.850 opzij, advies was €3.166');
+    await expect(k.locator('[data-m2opzij]')).toContainText('netto €2.850');   // v500 (punt 3): gestort · eruit · netto, dezelfde woorden als Afsluiten en het spaardoel
+    await expect(k.locator('[data-m2opzij]')).toContainText('volgens je verdeling €3.166');
     await expect(page.locator('text=Was het bedrag te laag?')).toHaveCount(0);
     await k.locator('[data-m2open]').click();
-    expect(await page.evaluate(acc => [window._salv.bron, window._salv.eigen[acc]], LEEF)).toEqual(['moment2', l[4]]);
+    /* v500 (punt 1): de sheet opent zonder eigen bedragen (eigen is null), want het voorstel IS het ene voorstel; de bedragen in de sheet zijn die van de Terugblik */
+    expect(await page.evaluate(acc => [window._salv.bron, window._salv.eigen, (document.querySelector(`[data-salvrek="${acc}"] [data-salvbedrag]`) || {}).innerText], LEEF)).toEqual(['moment2', null, euro(l[4])]);
     await expect(page.locator('#salVerdeling [data-salvakkoord]')).toBeVisible();
     const d = await page.evaluate(() => diagRekVerdeling().join('\n'));
     expect(d).toMatch(/moment 2: voorstellen \d+ \+ opzij \d+ = 5216 tegen salaris 5216: sluit/);
     expect(d).toContain('Leefgeld: advies 850 · buffer 136');
   });
   test('6. te krap door onttrekkingen alleen: het laagste saldo bleef boven nul en het eindsaldo onder buffer + EUR 50', async ({ page }) => {
-    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 } } });
+    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 }, syncGelukt: SYNC23() } });
     await add(page, [sal('2026-10-26'), [SPAAR, '2026-11-12', -150, 'Eigen overboeking', 'OVERBOEKING NAAR LEEFGELD', 'intern'], [LEEF, '2026-11-12', 150, 'Eigen overboeking', 'OVERBOEKING VAN SPAREN', 'intern']]);
-    const x = await page.evaluate(acc => salMoment2().R.find(x => x.acc === acc), LEEF);
+    const x = await page.evaluate(acc => { const x = salMoment2().R.find(x => x.acc === acc); x.N = salVoorstelNu().rek.find(y => y.acc === acc).voorstel; return x; }, LEEF);
     expect(x.laagst).toBeGreaterThanOrEqual(0); expect(x.eind).toBeLessThanOrEqual(136 + 50);   // de invoer: alleen de onttrekking maakt het krap
-    expect(x.ont).toBe(150); expect(x.oordeel).toBe('te krap'); expect(x.basis).toBe(850 + 150);
+    expect(x.ont).toBe(150); expect(x.oordeel).toBe('te krap'); expect(x.gedekt).toBe(true); expect(x.voorstel).toBe(x.N);   // v500: het ene voorstel
   });
   test('6. paste: geen onttrekkingen en eindsaldo hoogstens buffer + EUR 50; geen wijziging', async ({ page }) => {
-    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 } } });
+    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 }, syncGelukt: SYNC23() } });
     await add(page, [sal('2026-10-26')]);
-    const R = await page.evaluate(() => salMoment2().R.map(x => [x.oordeel, x.basis, x.advies]));
-    expect(R).toEqual([['paste', 1200, 1200], ['paste', 850, 850]]);
+    const R = await page.evaluate(() => salMoment2().R.map(x => [x.oordeel, x.gedekt, x.advies]));
+    expect(R).toEqual([['paste', true, 1200], ['paste', true, 850]]);   // v500: 'basis' (de eigen schaalmethode) bestaat niet meer; het voorstel komt uit salVoorstelNu
+  });
+  test('6. zonder dekking van de periode (v500): geen oordeel en het voorstel blijft je afspraak', async ({ page }) => {
+    await boot(page, { dag: '2026-11-23', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 } } });
+    await add(page, [sal('2026-10-26')]);   // laatste boeking 26 okt, geen sync: de periode tot 23 nov is niet gedekt
+    const R = await page.evaluate(() => salMoment2().R.map(x => [x.oordeel, x.gedekt, x.gedektTot, x.bron, x.voorstel]));
+    expect(R).toEqual([['nog niet te beoordelen', false, '2026-10-26', 'afspraak', 1200], ['nog niet te beoordelen', false, '2026-10-09', 'afspraak', 850]]);
   });
   test('6. eerder dan de regel: komt de volgende storting eerder, dan is moment 2 de dag ervoor', async ({ page }) => {
     await boot(page, { dag: '2026-11-19', set: { salVerdeling: SV(), manualBal: { [MAIN]: 150, [LEEF]: 180 } } });
