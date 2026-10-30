@@ -132,7 +132,8 @@ test.describe('b · vastgelegde gesprekken', () => {
 
   test('een afspraak uit een vorige maand komt één keer terug, daarna niet meer', async ({ page }) => {
     await coach(page, basis((s) => {
-      const d = new Date(); d.setMonth(d.getMonth() - 1);
+      /* v502: de 15e van vorige maand, niet setMonth(-1): op de 31e rolt die naar de 1e van DEZE maand (gemeten op 31 okt) */
+      const n = new Date(), d = new Date(n.getFullYear(), n.getMonth() - 1, 15);
       s.coachLog = [{ ts: d.getTime(), type: 'afspraak', text: 'ik neem één keer per week iets mee', cat: null }];
     }));
     await wachtKeuze(page, 'Bespaartips');
