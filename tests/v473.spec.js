@@ -99,7 +99,9 @@ test.describe('punt 3, 4 en 5', () => {
     const r = await page.evaluate(() => { const D = salarisData(6); return D.R.map((x) => [x.ym, Math.round(x.salaris)]); });
     for (const [ym, s] of r) if (ym >= '2026-05') expect([ym, s]).toEqual([ym, 5216]);
     const kies = await page.evaluate(() => { try { window._gripCyc = null; } catch (_) {} const C = gripCyclus(); return C.kies.map((k) => k.naam); });
-    expect(kies).toContain('Eenmalig €2.200 verdelen');
+    /* v501 (punt 3): eerst meten. In deze stand ging er sinds de storting €300 boven je afspraak naar opzij, dus de keuze zegt dat dat deel
+       al verdeeld lijkt (klopt / niet) in plaats van "verdelen"; het eenmalige deel blijft een eigen keuze */
+    expect(kies).toContain('Eenmalig €2.200 lijkt voor €300 al verdeeld');
   });
   test('g. de verwachte bonus is gekoppeld aan het eenmalige deel, een keer', async ({ page }) => {
     await boot(page);

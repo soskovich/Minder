@@ -204,7 +204,7 @@ test.describe('5 · het signaal', () => {
     expect(boven.t).toContain('Contant boven je potje');
     const herh = await page.evaluate((LEEF) => { const t = { id: 'kt3', date: '2026-10-12', amount: -450, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
       go('maand'); const e = [...document.querySelectorAll('#gripSignalen [data-signaal]')].find((x) => /^Contant boven je/.test(x.innerText)); return { l: kasTempo().label, t: e ? e.innerText : '', id: e ? e.dataset.signaal : '' }; }, S432.LEEF);
-    expect(herh.l).toMatchObject({ soort: 'herhaalt', t: 'herhaalt zich · 2e maand', b: 'okt +€50' });
+    expect(herh.l).toMatchObject({ soort: 'herhaalt', t: 'herhaalt zich · 2e keer', b: 'okt +€50' });
     /* met de maand ervoor erboven neemt het bestaande patroon "boven je potje" het over (een signaal per potje), met zijn label */
     expect(herh.id).toBe('pat:pot:contant');
     expect(herh.t).toContain('herhaalt zich');

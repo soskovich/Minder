@@ -170,7 +170,7 @@ test.describe('v436 · 3. Patronen', () => {
     expect(await rij.locator('[data-waarom]').count()).toBe(0);
     expect(await rij.evaluate(e => getComputedStyle(e.querySelector('span span span')).color === (() => { const d = document.createElement('i'); d.style.color = 'var(--green)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })())).toBe(true);
     const lab = await page.evaluate(() => Object.values(gripPatroonInfo().lab).find(x => x.soort === 'herhaalt'));
-    expect(lab.t).toMatch(/^herhaalt zich · \d+e maand$/); expect(lab.b).toMatch(/^[a-z]{3} \+€\d+$/);
+    expect(lab.t).toMatch(/^herhaalt zich · \d+e keer$/);   // v501 (punt 7): 'keer', want in de era is de eenheid een periode expect(lab.b).toMatch(/^[a-z]{3} \+€\d+$/);
     /* de eerste dag staat vast (SET.herstelGezien); zeven dagen later is hij afgehandeld */
     const op = await page.evaluate(k => SET.herstelGezien[thisYM()][k], k[0]);
     expect(op).toBe(await page.evaluate(() => vandaagYMD()));
