@@ -24,7 +24,7 @@ test.describe('v500', () => {
       const N = salVoorstelNu();
       renderMaand(); gripKiesTab('zien');
       const zien = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrij]')].map(e => [e.dataset.salvrij, +e.dataset.bedrag]));
-      const zienOpzij = +(document.querySelector('[data-salvoorstelafwijk]') || { dataset: {} }).dataset.salvoorstelafwijk;
+      const zienOpzij = +document.getElementById('salVoorstelKaart').dataset.salvkaartopzij;   // v501 (punt 1): het ene opzij-getal van de kaart
       gripKiesTab('terugblik');
       const m2 = Object.fromEntries([...document.querySelectorAll('[data-m2rek]')].map(e => [e.dataset.m2rek, +e.querySelector('[data-m2voorstel]').dataset.m2voorstel]));
       const m2Opzij = +document.querySelector('[data-m2volgopzij]').dataset.m2volgopzij;
@@ -42,7 +42,7 @@ test.describe('v500', () => {
       expect(num(r.sheet[a]), 'sheet ' + a).toBe(r.N[a]);
     }
     expect(r.m2Opzij).toBe(r.Nopzij); expect(num(r.sheetOpzij)).toBe(r.Nopzij);
-    if (!Number.isNaN(r.zienOpzij)) expect(r.zienOpzij).toBe(r.Nopzij);
+    expect(r.zienOpzij).toBe(r.Nopzij);   // v501: altijd, ook onder SALV_AFWIJK (de €14 van 26 nov bleef hierdoor onzichtbaar)
     expect(r.m2Tekst).toContain('hetzelfde als "Je salarisverdeling" op Zien');
     /* het voorstel wijkt af van de afspraak (1.200 / 850), anders is "hetzelfde voorstel" niet van "allebei de afspraak" te onderscheiden */
     expect(Object.values(r.N).some(v => v !== 1200 && v !== 850)).toBe(true);

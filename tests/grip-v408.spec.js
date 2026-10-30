@@ -28,7 +28,7 @@ test.describe('A1 · een potje dat te ruim is krijgt geen "boven budget"; met ee
     expect(huur[0].naam).toBe('Huur veranderd · was €760/mnd, nu €137');
     expect(huur[0].sub).toBe('jul €760 · aug €760 · sep €137 · budget €700 (huidig budget)');   // v409: geen bewaarde potjes
     expect(huur[0].act).toBe("openTeRuim('huur')");
-    expect(L.map(x => x.naam).join('|')).not.toMatch(/Huur · \d van 3 mnd boven budget/);
+    expect(L.map(x => x.naam).join('|')).not.toMatch(/Huur · \d van (3 mnd|de laatste \d)/);   // v501: het label noemt de eenheden bij naam
     await page.evaluate(() => { openTeRuim('huur'); });
     await expect(page.locator('#sheet')).toContainText('Huur');
     await expect(page.locator('[data-teruimoptie="a"]')).toHaveCount(1);
@@ -92,11 +92,11 @@ test.describe('A2 · laten staan geldt deze maand voor alle signalen van dat pot
 });
 
 test.describe('B3 · maanden altijd met naam, oud naar nieuw', () => {
-  test('een potje zonder patroon: "Overig · 2 van 3 mnd boven budget" met de maanden met naam en het budget', async ({ page }) => {
+  test('een potje zonder patroon: "Overig · 2 van de laatste 3 (jul, aug, sep) boven budget" met de maanden met naam en het budget', async ({ page }) => {
     await S.boot(page);
     await page.evaluate(({ MAIN }) => { for (const d of ['2026-07-25', '2026-08-25']) { const t = { id: 'x8ov' + d, date: d, amount: -220, acc: MAIN, name: 'Hema Winkel', desc: 'X', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'overig'; } save(); }, { MAIN: S.MAIN });
     const o = (await letop(page)).find(x => x.key === 'overig');
-    expect(o).toEqual(expect.objectContaining({ soort: 'boven', groep: 'a', naam: 'Overig · 2 van 3 mnd boven budget', sub: 'jul €600 · aug €600 · sep €380 · budget €500 (huidig budget)', act: "openPotHerzien('overig')" }));
+    expect(o).toEqual(expect.objectContaining({ soort: 'boven', groep: 'a', naam: 'Overig · 2 van de laatste 3 (jul, aug, sep) boven budget', sub: 'jul €600 · aug €600 · sep €380 · budget €500 (huidig budget)', act: "openPotHerzien('overig')" }));
     const h = await page.evaluate(() => { openPotHerzien('overig'); return [...document.querySelectorAll('[data-phhist]')].map(e => e.dataset.phhist); });
     expect(h).toEqual(['2026-07', '2026-08', '2026-09']);
   });

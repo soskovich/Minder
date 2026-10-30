@@ -298,11 +298,11 @@ test.describe('g · patronen als label in Zien', () => {
   test('herhaalt telt de maanden op rij boven het potje', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     const twee = await page.evaluate(() => (gripPatroonInfo().lab.uiteten || {}).t);
-    expect(twee).toBe('herhaalt zich · 2e maand');
+    expect(twee).toBe('herhaalt zich · 2e keer');   // v501 (punt 7): 'keer', want in de era is de eenheid een periode
     await page.evaluate(() => { const t = { id: 'aug1', date: '2026-08-15', amount: -400, acc: TX[0].acc, name: 'Restaurant Aug', desc: 'BEA, BETAALPAS RESTAURANT AUG', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
       TX.push(t); categorize(t); OVR[t.id] = 'uiteten'; save(); });
     const L = await page.evaluate(() => gripPatroonInfo().lab.uiteten);
-    expect(L.t).toBe('herhaalt zich · 3e maand'); expect(L.b).toMatch(/^sep \+€194$/);
+    expect(L.t).toBe('herhaalt zich · 3e keer'); expect(L.b).toMatch(/^sep \+€194$/);
   });
   test('nieuw deze maand en herstelt zich staan in Zien, en Inzichten draagt geen tegels', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);

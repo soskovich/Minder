@@ -182,16 +182,20 @@ test('v499 i: een opzij-bedrag, het voorstel over 24 nov met zijn afwijking', as
     const k = document.getElementById('salVoorstelKaart'), P = rekVoorstel(), O = opzijPeriode();
     const t = k ? k.innerText : '';
     return { aanwezig: !!k, start: k ? k.getAttribute('data-salvoorstel') : null, bron: k ? k.getAttribute('data-salvopzijbron') : null, opzij: k ? +k.getAttribute('data-salvkaartopzij') : null,
-      laat: k ? k.hasAttribute('data-salvlaat') : null, t, afw: k ? (k.querySelector('[data-salvoorstelafwijk]') || {}).innerText || null : null,
+      laat: k ? k.hasAttribute('data-salvlaat') : null, t, afw: k ? (k.querySelector('[data-salvopzijverschil]') || {}).innerText || null : null, verdeling: k ? +k.getAttribute('data-salvverdeling') : null, N: salVoorstelNu().opzij,
       voorstelOpzij: P.opzij, doel: O.doel, opzijTelling: (t.match(/opzij/g) || []).length, uitleg: k ? [...k.querySelectorAll('[data-rekuitleg]')].map(e => e.innerText) : [] };
   });
   expect(r.aanwezig).toBe(true);
   expect(r.start).toBe('2026-11-24');                                 // 26 nov: het salaris van 24 nov, niet 24 dec
   expect(r.laat).toBe(true);
-  expect(r.bron).toBe('verdeling');
-  expect(r.opzij).toBe(3000);
+  /* v501 (punt 1): het ene opzij-getal van de kaart is het voorstel (salVoorstelNu, hetzelfde als de Terugblik en de sheet); je verdeling
+     (3.000, dezelfde bron als de Doelen-meter) staat als data-salvverdeling en, zodra het voorstel afwijkt, in de regel eronder met het verschil */
+  expect(r.bron).toBe('voorstel');
+  expect(r.opzij).toBe(r.N);
+  expect(r.verdeling).toBe(3000);
   expect(r.doel).toBe(3000);                                          // dezelfde bron als Zien en de Doelen-meter
-  expect(r.t).toMatch(/opzij volgens je verdeling €3\.000/);
-  expect(r.t).not.toMatch(/· opzij €(?!3\.000)/);                     // geen tweede opzij-bedrag zonder uitleg
-  if (Math.abs(r.voorstelOpzij - 3000) > 25) { expect(r.afw).toMatch(/Het voorstel komt op opzij €/); expect(r.uitleg.length).toBeGreaterThan(0); for (const u of r.uitleg) expect(u).toMatch(/nodig tot .* − saldo nu €.* = €.* (erbij|over) · je afspraak €/); }   // v500 (punt 1): de uitleg is een rekensom per rekening
+  expect(r.t).toMatch(new RegExp('· opzij €' + r.N.toLocaleString('nl-NL').replace('.', '\\.')));
+  expect(r.opzijTelling).toBe(1);                                     // het getal een keer; de verdeling staat eronder zonder het woord opzij
+  if (r.N !== 3000) { expect(r.afw).toMatch(/volgens je verdeling €3\.000/); }
+  if (Math.abs(r.voorstelOpzij - 3000) > 25) { expect(r.uitleg.length).toBeGreaterThan(0); for (const u of r.uitleg) expect(u).toMatch(/nodig tot .* − saldo nu €.* = €.* (erbij|over) · je afspraak €/); }   // v500 (punt 1): de uitleg is een rekensom per rekening
 });

@@ -232,20 +232,21 @@ test.describe('f · Je belegde EUR 100 in Peaks (Kayani) onder Vraagt aandacht',
     await page.evaluate(() => zetBezitVoorwaarden('kayani', false));
     expect((await grip(page)).rij).toBe(false);
   });
-  test('met een open vraag staat de regel er, en de sheet vraagt eerst of ze gelden', async ({ page }) => {
+  test('met een open vraag staat er GEEN regel: de vraag staat in Kloppen mijn gegevens, en na Ja komt de regel', async ({ page }) => {
+    /* v501 punt 6 (gemigreerd): tot v500 stond de belegging met een open vraag als signaal met "nog niet gekozen of ze hiervoor
+       gelden". Zonder keuze is het nu een gegevensvraag (belegvw) en geen signaal; niets voorgekozen. */
     await start(page);
     await koppel(page, 'kayani');
     const g = await grip(page);
-    expect(g.rij).toBe(true);
-    /* v340, bewust rood gelaten: de Let op-regel zegt bij een open vraag alleen nog 'voorwaarden nog niet
-       gehaald'. Tot v340 zei belegVraagRij() erbij dat je nog niet koos of ze hiervoor gelden. */
-    expect(g.rijTekst).toContain('nog niet gekozen of ze hiervoor gelden');
-    await belegRij(page).click();
-    await expect(page.locator('#sheet [data-belegopen]')).toBeVisible();
-    await expect(page.locator('#sheet [data-belegkeuze]')).toHaveCount(0);
-    await page.locator('#sheet [data-belegopen] button', { hasText: 'Ja' }).click();
-    await expect(page.locator('#sheet [data-belegkeuze]')).toBeVisible();
+    expect(g.rij).toBe(false);
+    const q = await page.evaluate(() => gegevensVragen().filter((x) => x.soort === 'belegvw').map((x) => ({ id: x.asset.id, bedrag: x.bedrag })));
+    expect(q).toEqual([{ id: 'kayani', bedrag: 100 }]);
+    await page.evaluate(() => openGegevensVragen('alle'));
+    await expect(page.locator('#sheet [data-gegevensvraag="belegvw"]')).toContainText('Gelden de voorwaarden voor beleggen voor Peaks (Kayani)?');
+    await page.locator('#sheet [data-belegvw="ja"]').click();
     expect(await page.evaluate(() => SET.assets.find((a) => a.id === 'kayani').voorwaarden)).toBe(true);
+    expect((await grip(page)).rij).toBe(true);
+    expect(await page.evaluate(() => gegevensVragen().filter((x) => x.soort === 'belegvw').length)).toBe(0);
   });
   test('zonder koppeling geen regel: een ingevulde periodieke inleg is geen meting', async ({ page }) => {
     await start(page);
