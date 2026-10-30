@@ -3,6 +3,10 @@
 // afgeleid. Geen instelling, geen norm, dus geen kleur, geen doel en geen melding.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v498: de dag staat vast (dim - 7). Test b eist het MEERVOUD van het dagwoord ("nog N dagen") en viel op
+   30 oktober 2026, de op-een-na-laatste dag: dan is het restant 1 en zegt de app terecht "nog 1 dag".
+   Dat is de as van v299; de maand blijft de echte maand, dus CUR/MS hieronder kloppen nog. */
+const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -38,6 +42,7 @@ function seed(o = {}) {
 async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
+  await pinDag(page);   // v498: voor de goto, anders leest de boot de echte klok (v299)
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof vrijPerDag === 'function');
 }

@@ -116,7 +116,12 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
     /* v324: blok 10 leest een venster van 60 dagen vanaf vandaag, en de fixture draagt een vaste maand
        (2026-08). Op 3 oktober 2026 viel het eerste paar uit dat venster: groen op 2 oktober, rood op 3,
        met dezelfde code. Een restant pint geen maand, dus deze pint een genoemde dag. */
-    'correctie-en-uitlezing'];
+    'correctie-en-uitlezing',
+    /* v498: test b eist het MEERVOUD van het dagwoord ("nog N dagen") en viel op 30 oktober 2026, de
+       op-een-na-laatste dag van een maand van 31: restant 1, en de app zegt terecht "nog 1 dag". Dezelfde
+       as als de zeven van v299; de spec stond niet in deze lijst. GEMETEN: groen op 29 okt, rood op 30 okt,
+       met dezelfde code (de eerste volle v498-run tegen de tweede). */
+    'vrij-per-dag'];
   /* v310: DE BRON WORDT KAAL GELEZEN. Deze drie tests zochten in de RUWE bron, dus een
      `require('./vaste-dag')` of een `pinDag(page)` in een COMMENT hield ze groen. Dat is de vorm die
      v309b heeft opgeruimd, en deze spec was er nog een van (meetles: een bronzoekende assertie die
