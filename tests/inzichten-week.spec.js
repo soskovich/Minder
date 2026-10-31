@@ -90,8 +90,14 @@ test.describe('c · het weekbedrag', () => {
       return { cur: R.cur, tot: Math.round(tot), voor, verwacht: Math.round((tot - voor) / (R.dim - R.cur.van + 1) * R.cur.dagen), tegel: +document.querySelector('#insWeek').dataset.weekbedrag }; });
     expect(r.cur.van).toBe(5); expect(r.cur.tot).toBe(11);
     expect(r.voor).toBeGreaterThan(0);
-    expect(r.cur.bedrag).toBe(r.verwacht);
-    expect(r.tegel).toBe(r.verwacht);
+    expect(r.cur.bedrag).toBe(r.verwacht);   // de oude rekensom (weekRekensom) blijft bestaan
+    /* v505 (punt 4): de TEGEL volgt de nieuwe regel: per wekelijks potje basis = budget / dagen x dagen van de week, minus wat er
+       ingehaald wordt (de overschrijding voor deze week over de resterende weken, hooguit 25% van de basis); onderbesteding schuift niet door */
+    const n = await page.evaluate(() => { const m = thisYM(), pb = weekPotBudget(m), W = weekIndeling(m), E = daysElapsed(m), cur = W.find(w => E.elapsed >= w.van && E.elapsed <= w.tot), nW = W.filter(w => w.van >= cur.van).length;
+      let som = 0; for (const k in pb) { if (!SET.potWekelijks[k]) continue; let voor = 0; for (const t of txOfMonth(m)) { if (insTxSoort(t) === 'potje' && catOf(t) === k && +t.date.slice(8, 10) < cur.van) voor += uitgaveNorm(t); }
+        const basis = pb[k] / E.dim * cur.dagen, over = Math.max(voor - pb[k] / E.dim * (cur.van - 1), 0); som += Math.max(Math.round(basis) - Math.round(Math.min(over / nW, basis * 0.25)), 0); }
+      return { som, tegel: +document.querySelector('#insWeek').dataset.weekbedrag }; });
+    expect(n.tegel).toBe(n.som);
   });
   test('niet-wekelijkse potjes en vaste lasten tellen niet, zonder potje wel', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
