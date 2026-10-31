@@ -25840,7 +25840,7 @@ function periodeKopHtml(PS){
   const onb=periodeOnbevestigd();   // v496 (punt 3): zonder keuze bij je salaris toont de kop "nog niet bevestigd" met een stip
   return `<div class="card" id="insMaand" data-insmaand="periode" data-insperiode="${esc(P.label)}" data-insuit="${PS.uit}" data-insbudget="${PS.potDeel}" data-insvast="${PS.vast}" data-inscontant="${PS.contant}" data-insel="${PS.el}" data-insdagen="${PS.dagen}" data-instempoverschil="${dt}">
     ${(function(){ let U=null; try{ U=uitgegevenStand({start:P.start, eind:vandaagYMD()<P.eind?vandaagYMD():P.eind}); U.o={start:P.start, eind:P.eind}; }catch(_){} if(!U) return '';
-      return insUitgegevenKop(U)+`<div class="small muted" data-insuitgegevendelen style="margin:-2px 0 6px">${[['vast',U.r.vast],['potjes',U.r.potjes],['zonder potje',U.r.zonder],['buiten je potjes',U.r.buiten],['contant',U.r.contant]].filter(x=>x[1]!==0).map(x=>`${x[0]} ${euro0(x[1])}`).join(' · ')}${U.eenmaligR>0?` · waarvan eenmalig ${euro0(U.eenmaligR)}`:''}</div>`; })()}
+      return insUitgegevenKop(U)+`<div class="small muted" data-insuitgegevendelen style="margin:-2px 0 6px">${[['vast',U.r.vast],['potjes',U.r.potjes],['zonder potje',U.r.zonder],['buiten je potjes',U.r.buiten],['contant (nieuw potje)',U.r.kasNieuw]].filter(x=>x[1]!==0).map(x=>`${x[0]} ${euro0(x[1])}`).join(' · ')}${U.eenmaligR>0?` · waarvan eenmalig ${euro0(U.eenmaligR)}`:''}</div>`; })()}
     <div class="hlabel" style="margin:0 0 2px">Periode ${esc(P.label)}${onb?` <span data-insonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:0 0 6px">dag ${PS.el} van ${PS.dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer" role="button" data-insmaandkop onclick="openInsTegel('uitgegeven')"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-insgetal>${euro0(PS.uit)}</b> <span class="muted" data-insgetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-instempotxt data-insgetal style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
@@ -25992,11 +25992,11 @@ function insMaandKaart(P, soort){
    contant in zijn eerste maand) komen uit dezelfde uitgegevenStand() en tellen er in hele euro's (brugAfronden) en in centen toe op. */
 function insUitgegevenKop(U){ if(!U) return '';
   const d=U.r, ce=U.cent;
-  return `<div class="row" data-insuitgegeven="${U.totaalR}" data-cent="${ce.vast+ce.potjes+ce.zonder+ce.buiten+ce.contant}" data-vast="${d.vast}" data-potjes="${d.potjes}" data-zonder="${d.zonder}" data-buiten="${d.buiten}" data-contant="${d.contant}" data-eenmalig="${U.eenmaligR}" style="justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--line)"><span class="small" style="font-weight:700">Uitgegeven ${esc(uitgegevenLabel(U.o))}</span><b style="font-size:var(--fs-md)">${euro0(U.totaalR)}</b></div>`; }
+  return `<div class="row" data-insuitgegeven="${U.totaalR}" data-cent="${ce.vast+ce.potjes+ce.zonder+ce.buiten+ce.kasNieuw}" data-vast="${d.vast}" data-potjes="${d.potjes}" data-zonder="${d.zonder}" data-buiten="${d.buiten}" data-contant="${d.kasNieuw}" data-eenmalig="${U.eenmaligR}" style="justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--line)"><span class="small" style="font-weight:700">Uitgegeven ${esc(uitgegevenLabel(U.o))}</span><b style="font-size:var(--fs-md)">${euro0(U.totaalR)}</b></div>`; }
 /* contant in de maand waarin het potje ontstaat: een deel van uitgegeven, buiten je budget van deze maand (v456) */
-function insContantLaterRegel(U){ if(!U || !(U.r.contant>0)) return '';
+function insContantLaterRegel(U){ if(!U || !(U.r.kasNieuw>0)) return '';
   let vm=''; try{ vm=ymFull(valtOpYmPlus(String(U.o.m||thisYM()),1)).split(' ')[0]; }catch(_){}
-  return `<div class="small" data-inscontantlater="${U.r.contant}" style="color:var(--mut2);margin-top:6px">contant ${euro0(U.r.contant)} · nieuw potje, telt vanaf 1 ${esc(vm)} in je budget</div>`; }
+  return `<div class="small" data-inscontantlater="${U.r.kasNieuw}" style="color:var(--mut2);margin-top:6px">contant ${euro0(U.r.kasNieuw)} · nieuw potje, telt vanaf 1 ${esc(vm)} in je budget</div>`; }
 function insGroepen(S){ S=S||insMaandStand();
   const vU=Math.round(S.vast), pU=Math.round(S.potjes+S.zonder);
   let BG=null; try{ BG=budgetPerGroep(maandVooruit()); }catch(_){}
@@ -26052,7 +26052,7 @@ function insLegPaar(links, rechts, m){
 function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
   let txs; if(m){ txs=txOfMonth(m); if(o.totDag!=null) txs=txs.filter(t=>+String(t.date).slice(8,10)<=o.totDag); }
   else { const a=String(o.start).slice(0,10), b=String(o.eind).slice(0,10); txs=telbareTx().filter(t=>{ const d=String(t.date).slice(0,10); return d>=a && d<=b; }); }
-  const c={vast:0, potjes:0, zonder:0, buiten:0, eenmalig:0, contant:0}, per={}, groep={}, tx={vast:[], potjes:[], zonder:[], buiten:[], contant:[]};
+  const c={vast:0, potjes:0, zonder:0, buiten:0, eenmalig:0, kasNieuw:0}, per={}, groep={}, tx={vast:[], potjes:[], zonder:[], buiten:[], kasNieuw:[]};
   const cLaterVan={}; const cLater=ym=>{ if(!(ym in cLaterVan)){ let v=false; try{ v=contantNieuwIn(ym); }catch(_){} cLaterVan[ym]=v; } return cLaterVan[ym]; };
   const Bvan={}; const Bm=ym=>Bvan[ym]||(Bvan[ym]=maandPotjes(ym).B||{});
   let reis=0; for(const t of txs){ try{ reis+=reisDeel(t)||0; }catch(_){} }
@@ -26060,16 +26060,16 @@ function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
     /* buiten je potjes: dezelfde toets en hetzelfde bedrag als buitenMaand() (de regel en de sheet), zodat die regel een deel van dit totaal is */
     if(CATS[k] && CATS[k].type==='expense' && geenNormTx(t)){ g='buiten'; v=-t.amount; if(eenmaligLabel(t)) c.eenmalig+=v; }
     else { if(!isUitgave(t, B)) continue; v=uitgaveNorm(t); }
-    if(!g) g=(k===CONTANT_CAT && cLater(ym))?'contant':insVastTx(t)?'vast':((+B[k]||0)>0?'potjes':'zonder');
+    if(!g) g=(k===CONTANT_CAT && cLater(ym))?'kasNieuw':insVastTx(t)?'vast':((+B[k]||0)>0?'potjes':'zonder');
     c[g]+=v; tx[g].push(t); const key=g==='vast'?'~vast':k; per[key]=(per[key]||0)+v; if(g!=='vast') groep[k]=g; }
   /* de reiskostenvergoeding: af van haar potje (tot wat daar uitging), in het deel waar dat potje in valt */
   let reisAf=0; try{ const C=salSplitCfg(); const pot=C&&C.reisPot; if(reis>0 && pot){ const g=groep[pot]||(potHeelVast(pot)?'vast':null), key=g==='vast'?'~vast':pot;
     if(g){ const uitVoor=Math.max(g==='vast'?tx.vast.filter(t=>catOf(t)===pot).reduce((a,t)=>a+uitgaveNorm(t),0):(per[pot]||0), 0); reisAf=Math.min(reis, uitVoor);
       if(reisAf>0){ c[g]-=reisAf; per[key]=(per[key]||0)-reisAf; } } } }catch(_){}
   const r2=x=>Math.round(x*100)/100; for(const k in c) c[k]=r2(c[k]); for(const k in per) per[k]=r2(per[k]);
-  const totaal=r2(c.vast+c.potjes+c.zonder+c.buiten+c.contant);
+  const totaal=r2(c.vast+c.potjes+c.zonder+c.buiten+c.kasNieuw);
   /* de afgeronde delen tellen op tot het afgeronde totaal (brugAfronden: de grootste-rest-methode) */
-  const R=brugAfronden(['vast','potjes','zonder','buiten','contant'].map(k=>({k, v:c[k]})), Math.round(totaal));
+  const R=brugAfronden(['vast','potjes','zonder','buiten','kasNieuw'].map(k=>({k, v:c[k]})), Math.round(totaal));
   return {o, cent:c, r:R, totaal, totaalR:Math.round(totaal), eenmaligR:Math.round(c.eenmalig), reisAf:r2(reisAf), per, tx}; }
 /* het label van het venster: "oktober", of "24 nov – 23 dec" */
 function uitgegevenLabel(o){ if(o.m) return ymFull(o.m).split(' ')[0]; return `${dagKort(o.start)} – ${dagKort(o.eind)}`; }
@@ -26077,7 +26077,7 @@ function uitgegevenLabel(o){ if(o.m) return ymFull(o.m).split(' ')[0]; return `$
    categorieen zonder norm, geenNormTx) en contant in de maand waarin dat potje ontstaat (v456: aan beide kanten weg). Zonder potje zit
    WEL in verwacht (V.zonder, v402) en telt hier dus niet nog eens. */
 function buitenBudget(o){ let U=null; try{ U=uitgegevenStand(o||{m:thisYM()}); }catch(_){ return {bedrag:0, buiten:0, contant:0, eenmalig:0}; }
-  return {bedrag:U.r.buiten+U.r.contant, buiten:U.r.buiten, contant:U.r.contant, eenmalig:U.eenmaligR}; }
+  return {bedrag:U.r.buiten+U.r.kasNieuw, buiten:U.r.buiten, contant:U.r.kasNieuw, eenmalig:U.eenmaligR}; }
 function buitenMaand(ms){ ms=(Array.isArray(ms)?ms:String(ms||thisYM()).split(',')).filter(Boolean);
   const E={tx:[], n:0, bedrag:0}, Z={tx:[], n:0, bedrag:0};
   for(const m of ms) for(const t of txOfMonth(m)){ const c=catOf(t); if(!CATS[c] || CATS[c].type!=='expense' || !geenNormTx(t)) continue;
@@ -35792,8 +35792,8 @@ function diagUitgegeven(){
     '  niet: opzij, reserveringen, beleggen, interne overboekingen, persoonlijke overboekingen zonder potje'];
   for(const m of [thisYM(), prevYM(thisYM())]){ let U=null; try{ U=uitgegevenStand({m}); }catch(x){ L.push(`  ${m}: FOUT ${x&&x.message}`); continue; }
     L.push('', `${ymFull(m).toUpperCase()} (uitgegevenStand)`);
-    L.push(`  vast ${e(U.cent.vast)} · potjes ${e(U.cent.potjes)} · zonder potje ${e(U.cent.zonder)} · buiten je potjes ${e(U.cent.buiten)} (waarvan eenmalig ${e(U.cent.eenmalig)}) · contant (nieuw potje) ${e(U.cent.contant)}`);
-    L.push(`  = UITGEGEVEN ${e(U.totaal)} (afgerond ${U.totaalR}; rijen ${U.r.vast} + ${U.r.potjes} + ${U.r.zonder} + ${U.r.buiten} + ${U.r.contant} = ${U.r.vast+U.r.potjes+U.r.zonder+U.r.buiten+U.r.contant})`);
+    L.push(`  vast ${e(U.cent.vast)} · potjes ${e(U.cent.potjes)} · zonder potje ${e(U.cent.zonder)} · buiten je potjes ${e(U.cent.buiten)} (waarvan eenmalig ${e(U.cent.eenmalig)}) · contant (nieuw potje) ${e(U.cent.kasNieuw)}`);
+    L.push(`  = UITGEGEVEN ${e(U.totaal)} (afgerond ${U.totaalR}; rijen ${U.r.vast} + ${U.r.potjes} + ${U.r.zonder} + ${U.r.buiten} + ${U.r.kasNieuw} = ${U.r.vast+U.r.potjes+U.r.zonder+U.r.buiten+U.r.kasNieuw})`);
     L.push(`  reiskostenvergoeding af van haar potje: ${e(U.reisAf)}`);
     /* de boekingsgroepen die NIET in uitgegeven zitten, per type */
     const T=totals(m), uitT={}; for(const t of txOfMonth(m)){ const c=catOf(t), meta=CATS[c]; if(!meta || meta.type==='expense' || meta.type==='income') continue; if(t.amount<0) uitT[c]=(uitT[c]||0)-t.amount; }

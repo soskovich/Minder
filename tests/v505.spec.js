@@ -37,7 +37,7 @@ test('v505 a: een totaal uitgegeven bovenaan Inzichten, de delen tellen er in ce
   expect(r.zon).toBe(4137);
   expect(Math.round(r.Uc.buiten * 100)).toBe(r.bui);
   expect(r.delen.reduce((a, v) => a + v, 0)).toBe(r.tot);
-  const c = r.Uc; expect(Math.round((c.vast + c.potjes + c.zonder + c.buiten + c.contant) * 100)).toBe(Math.round(r.Ut * 100));
+  const c = r.Uc; expect(Math.round((c.vast + c.potjes + c.zonder + c.buiten + c.kasNieuw) * 100)).toBe(Math.round(r.Ut * 100));
   expect(r.tot).toBe(Math.round(r.Ut));
   expect(r.leg.reduce((a, v) => a + v, 0) + r.delen[3] + r.delen[4]).toBe(r.tot);   // de legenda + buiten je potjes + contant
   expect(r.buiten).toBe(r.Uc.buiten);

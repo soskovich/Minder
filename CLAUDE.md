@@ -152,7 +152,7 @@ genoemde versietag.)*
   `inhalen`, en de sleutel draagt `v505|`, zodat een bedrag van de oude regel niet blijft staan. (4) De voorbeeldbalk is EEN regel
   ("Voorbeeld 26 nov · salaris + verdeling aan", knoppen "salaris aan/uit" en "terug"), de uitleg achter een tik (`voorbeeldUitleg()`),
   en `voorbeeldRuimte()` zet de hoogte van de balk als padding op body (ResizeObserver, resize, orientationchange); `voorbeeldBalkWeg()`
-  haalt balk en ruimte weg. Spec `v505.spec.js` (7 tests a-g, 10 van 10 sabotages rood; g pas nadat de spec ook de kop van de app las: de
+  haalt balk en ruimte weg. De groep heet in de code `kasNieuw` en niet `'contant'`: die string is de categoriesleutel en `geennorm-hardcode.spec.js` valt er terecht op. Spec `v505.spec.js` (7 tests a-g, 10 van 10 sabotages rood; g pas nadat de spec ook de kop van de app las: de
   korte balk bedekte het totaalsaldo zonder ruimte al niet, meetles a); `v499` g en `v504` c gemigreerd (de korte balktekst).
 - **v504: DE VOORBEELDWEERGAVE SIMULEERT OOK JE VERDELING, EEN SALDO UIT HET VERLEDEN ZEGT DAT, EN EEN ONBETAALDE TERMIJN VERDWIJNT
   NIET STIL** (`v504`, gevraagd door de gebruiker voor de generale repetitie van 24 nov; gemeten: "Bekijk als 26 nov" met salaris erbij
