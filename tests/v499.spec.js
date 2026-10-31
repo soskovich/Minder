@@ -150,7 +150,7 @@ test('v499 g: voorbeeldStart tekent Inzichten zelf opnieuw', async ({ page }) =>
   expect(r.naPeriode).toBe('periode');
   expect(r.naLabel).toBe('24 nov – 23 dec');
   expect(r.naOkt).toBe(false);
-  expect(r.schakelaar).toMatch(/salaris erbij: uit ›/);
+  expect(r.schakelaar).toMatch(/salaris aan/);   // v505: de korte balk (de knop zegt wat hij doet)
   expect(r.terug).toBe(true);
 });
 

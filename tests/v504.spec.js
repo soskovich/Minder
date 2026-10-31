@@ -52,12 +52,13 @@ test('v504 b: de verdeling is geen uitgave en geen inkomen', async ({ page }) =>
 test('v504 c: terug naar vandaag wist salaris en verdeling', async ({ page }) => {
   await voorbeeld(page);
   const r = await page.evaluate(() => {
-    const balk = document.getElementById('voorbeeldBalk').innerText;
+    const balk = document.getElementById('voorbeeldBalk').innerText, uitleg = document.querySelector('#voorbeeldBalk [data-voorbeelduitleg]').getAttribute('title');
     const voor = TX.filter(t => String(t.id).startsWith('vb:')).length;
     voorbeeldStop();
-    return { balk, voor, na: TX.filter(t => String(t.id).startsWith('vb:') || String(t.src) === 'voorbeeld').length, ovr: Object.keys(OVR).filter(k => k.startsWith('vb:')).length };
+    return { balk, uitleg, voor, na: TX.filter(t => String(t.id).startsWith('vb:') || String(t.src) === 'voorbeeld').length, ovr: Object.keys(OVR).filter(k => k.startsWith('vb:')).length };
   });
-  expect(r.balk).toContain('met verwacht salaris, je verdeling en vaste lasten');
+  expect(r.balk).toContain('salaris + verdeling aan');   // v505: een regel; de volledige uitleg staat achter de tik
+  expect(r.uitleg).toContain('met verwacht salaris, je verdeling en vaste lasten');
   expect(r.voor).toBeGreaterThan(6);
   expect(r.na).toBe(0);
   expect(r.ovr).toBe(0);
