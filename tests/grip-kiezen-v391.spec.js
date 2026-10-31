@@ -103,7 +103,7 @@ test.describe('10 · te ruim begroot vanaf de 2e maand in Kiezen', () => {
     const r = await page.evaluate(() => { const rows = [...document.querySelectorAll('[data-kiezen] [data-kiesherzien], [data-kiezen] [data-kiesrij]')];
       return { eerste: rows[0].dataset.kiesherzien, tekst: rows[0].innerText.replace(/\s+/g, ' ') }; });
     expect(r.eerste).toBe('huur');
-    expect(r.tekst).toContain('Huur herzien'); expect(r.tekst).toContain('2e maand'); expect(r.tekst).toContain('€558 te ruim');
+    expect(r.tekst).toContain('Huur herzien'); expect(r.tekst).toContain('2e keer'); expect(r.tekst).toContain('€558 te ruim');
     expect(await page.locator('[data-kiesvoortgang]').getAttribute('data-tekiezen')).toBe(String(await page.evaluate(() => gripCyc().kies.length)));   // v428: Te kiezen telt elke open keuze, herzien ook
     await page.click('[data-kiesherzien="huur"]');
     expect(await page.locator('#teRuimSheet').count()).toBe(1);

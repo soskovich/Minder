@@ -12094,7 +12094,7 @@ function gripCyclus(SIG){
   /* keuzes: te ruim herzien, de actieregel bij je bank, een reservering voor wat terugkomt, de patronen zonder keuze, en de
      handelingen uit Let op met hun signaal als reden */
   const kies=[];
-  for(const x of G3open){ const kq=esc(x.key).replace(/'/g,"\\'"); kies.push({id:'vastpost:'+x.key, sym:'vast:gestegen', bron:'vast', naam:x.status==='vervangt'?`${x.naam} · verschil ${x.verschil>=0?'+':'−'}${euro0(Math.abs(x.verschil))}/mnd · accepteren of nakijken`:`${x.naam}: ${x.status==='nieuw'?'nieuw':'gestegen'} +${euro0(x.verschil)} · accepteren of nakijken`, reden:`oorzaak zeker uit je boekingen · ${x.status==='nieuw'?'nieuwe vaste last':x.status==='vervangt'?'vervangt een gestopte post · alleen het verschil telt':`${euro0(x.mV)} → ${euro0(x.mN)} per maand`}`, act:`openVastPostKeuze('${kq}')`, x}); }
+  for(const x of G3open){ const kq=esc(x.key).replace(/'/g,"\\'"); kies.push({id:'vastpost:'+x.key, sym:'vast:gestegen', bron:'vast', naam:x.status==='vervangt'?`${x.naam} · verschil ${x.verschil>=0?'+':'−'}${euro0(Math.abs(x.verschil))}/mnd · accepteren of nakijken`:x.onbekend?`${x.naam}: nieuw · bedrag nog onbekend · nakijken`:`${x.naam}: ${x.status==='nieuw'?'nieuw':'gestegen'} +${euro0(x.verschil)} · accepteren of nakijken`, reden:`oorzaak zeker uit je boekingen · ${x.status==='nieuw'?`nieuwe vaste last${x.sinds?' sinds '+dagKort(x.sinds):''}`:x.status==='vervangt'?'vervangt een gestopte post · alleen het verschil telt':`${euro0(x.mV)} → ${euro0(x.mN)} per maand`}`, act:`openVastPostKeuze('${kq}')`, x}); }
   const inkGekozen=N3 && (SET.inkomenVerdeeld||{})[N3.ym];
   if(N3 && !inkGekozen) kies.push({id:'inkomen:verdeel', sym:'inkomen:na', bron:'inkomen', naam:'Verhoging verdelen', reden:`vast inkomen +${euro0(N3.d)} (+${N3.pct}%) vanaf ${f3MN(N3.ym)}${N3.geenNa?'':' · '+naJeSalarisTekst(N3)}`, act:'openVerhogingVerdelen()'});
   /* v473: eenmalig geld uit je salaris is een eigen keuze, los van de verhoging en zonder voorkeuze */
@@ -12108,7 +12108,7 @@ function gripCyclus(SIG){
   /* v501 punt 8: de salarisverdeling komt pas in Kiezen na twee salarissen op rij met meer dan SALM2_HERZIEN afwijking per rekening */
   try{ const HZ=salM2Herzien(); if(HZ) kies.push({id:'salm2:herzien', sym:'', bron:'salaris', naam:'Zo verdeel je je salaris', reden:`twee salarissen op rij (${HZ.periodes.map(f3MN).join(', ')}) week ${HZ.rek.map(a=>aanslNaam(a)).join(' en ')} meer dan ${euro0(SALM2_HERZIEN)} af van je afspraak`, act:"openSalVerdeling('salverdeling')"}); }catch(_){}
   let H=[]; try{ H=gripTeRuimHerzien(); }catch(_){}
-  for(const x of H) kies.push({id:'herz:'+x.k, k:x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e maand · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
+  for(const x of H) kies.push({id:'herz:'+x.k, k:x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e keer · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
   let A=[]; try{ A=overboekActiesOpen(); }catch(_){}
   for(const a of A) kies.push({id:'actie:'+a.soort, bron:'actie', naam:overboekActieTekst(a), reden:`bij je bank · sinds ${gripKortDatum(a.op)} · nog niet gezien`, act:'', a});
   /* v443: is het potje Huur lager dan de verwachte huur plus de andere vaste posten in Huur vanaf volgende maand, dan een keuze */
@@ -12857,6 +12857,7 @@ function rekVoorstelSleutel(){ return vandaagYMD()+'|'+_dataGen+'|'+JSON.stringi
    SET.vastDatum[key]={keuze, periode?, op}. vastDatumKeuze(key, periode) lost 'eenmalig' op tegen de gevraagde periode. De
    krap-berekening (salTekortData) en het voorstel (rekVoorstelRuw) lezen hem; de maand-forecast niet, want een storting op de ~24e
    plus een paar dagen valt in dezelfde kalendermaand. Zonder keuze verandert er niets (de standaard is de vaste dag van v432/v444). */
+const WONING_TOL_DAGEN=7;   // v503: zo lang blijft een niet-geboekte huurtermijn verwacht na zijn gekozen betaaldatum (POST_TOL.maand)
 const VAST_NASAL_DAGEN=1;   // v487: salaris + 1 dag (de huur valt net na je salaris)
 function vastDatumKeuze(key, periode){ const E=(SET.vastDatum||{})[key]; if(!E) return 'vastedag';
   if(E.keuze==='eenmalig') return E.periode===periode?'nasal':'vastedag';
@@ -12991,10 +12992,22 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
       /* De forward-reeks (genW, geen voorstelPer) verlegt een eenmalige termijn fysiek, ook als de nieuwe datum in de VOLGENDE periode
          landt. Het voorstel van EEN periode (tmW, met voorstelPer=per0.ym) verlegt alleen als die periode zelf de eenmalige is: anders
          staat de huur daar weer op de gewone dag, en een verlegde termijn uit een eerdere periode lekt niet in de voorstel-reeks. */
-      const genWoning=(f,t,voorstelPer)=>{ const F=rekDag(f,-62), out=new Set();
+      /* v503 (punt 2): EEN TERMIJN DIE VOORBIJ IS ZONDER BOEKING BLIJFT VERWACHT, binnen WONING_TOL_DAGEN vanaf de GEKOZEN
+         betaaldatum d (bij "Na mijn salaris" salaris + 1), niet vanaf de gewone dag g. Gemeten (salaris 24 nov, huur 25 nov): vanaf
+         25 nov viel de november-huur uit de forward-reeks (die begint morgen), dus de krap en de daling telden hem niet meer terwijl hij
+         nog niet geboekt was. Hij staat nu op morgen, met zijn eigen betaaldatum in .orig (de "Nu"-regel en de sheet tonen 25 nov).
+         Alleen de forward-reeks (geen voorstelPer): het voorstel van een periode houdt zijn eigen termijnen. Geboekt = een woning-betaling
+         in de maand van d of binnen de tolerantie rond d. */
+      const wpD=TX.filter(t=>woningBetaling(t, wk, WE)).map(t=>t.date.slice(0,10));
+      const geboekt=d=>wpD.some(x=>x.slice(0,7)===d.slice(0,7) || (x>=rekDag(d,-WONING_TOL_DAGEN) && x<=rekDag(d,WONING_TOL_DAGEN)));
+      const genWoning=(f,t,voorstelPer)=>{ const F=rekDag(f,-62), out=new Set(), orig={};
         const mv=voorstelPer ? (g=>!!(E && (E.keuze==='nasal' || (E.keuze==='eenmalig' && E.periode===voorstelPer)))) : moveG;
-        for(const g of rekTermijnen(sWon, base, F, t)){ let d=g; if(mv(g)){ const n=nasalDatumVan(g); if(!n) continue; d=n.datum; } if(d>=f && d<=t) out.add(d); }
-        return Array.from(out).sort(); };
+        /* v503: begin een maand eerder dan base, zodat de gewone termijn van vóór de periodestart (1 nov voor de periode van 24 dec)
+           ook gegenereerd wordt: zijn gekozen datum (25 nov) kan nog binnen de tolerantie openstaan */
+        for(const g of rekTermijnen(sWon, prevYM(base.slice(0,7))+base.slice(7), F, t)){ let d=g; if(mv(g)){ const n=nasalDatumVan(g); if(!n) continue; d=n.datum; }
+          if(d>=f && d<=t) out.add(d);
+          else if(!voorstelPer && d<f && f<=t && rekDag(d, WONING_TOL_DAGEN)>=rekDag(f,-1) && !geboekt(d)){ out.add(f); orig[f]=d; } }
+        const A=Array.from(out).sort(); A.orig=orig; return A; };
       const tmW=genWoning(start, eind, per0.ym).filter(d=>!betM.has(String(d).slice(0,7)));
       vastAlle.push({key:WF.key, naam:WF.naam, acc, cat:'huur', termijn:WF.bedrag, maand:WF.bedrag, data:tmW, n:tmW.length, bedrag:WF.bedrag*tmW.length, last:base, s:sWon, woning:true, nonSepa:true, keuze:vastDatumKeuze(WF.key, per0.ym), genW:genWoning}); } }catch(_){}   // v496: de woning is huur; periodeBudget telt hem als vaste last tenzij er een Huur-potje is dat hem al dekt
   const vast=vastAlle.filter(x=>x.n>0), vastBuiten=vastAlle.filter(x=>!x.n);
@@ -13102,7 +13115,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const somsOp=(dag, lijst)=>lijst.reduce((a,x)=>a+(dag===x.ud?x.bedrag:0),0);
     const potRestNu=vaakCur+somsCur.reduce((a,x)=>a+x.bedrag,0), kasRestNu=Math.max(kS-kasNu,0), restNu=potRestNu+kasRestNu;
     const potMaand=vaakPost+somsPost.reduce((a,x)=>a+x.bedrag,0), pMaand=potMaand+kM, alleTerm={}, termAlle=[];
-    for(const x of vastAlle.filter(x=>x.acc===acc)) for(const d of (x.genW?x.genW(rekDag(vandaag,1), horizon):rekTermijnen(x.s, x.last, rekDag(vandaag,1), horizon))){ alleTerm[d]=(alleTerm[d]||0)+x.termijn; termAlle.push({date:d, bedrag:x.termijn, naam:x.naam, key:x.key, nonSepa:!!x.nonSepa}); }
+    for(const x of vastAlle.filter(x=>x.acc===acc)){ const ds=x.genW?x.genW(rekDag(vandaag,1), horizon):rekTermijnen(x.s, x.last, rekDag(vandaag,1), horizon), og=ds.orig||{}; for(const d of ds){ alleTerm[d]=(alleTerm[d]||0)+x.termijn; termAlle.push({date:d, bedrag:x.termijn, naam:x.naam, key:x.key, nonSepa:!!x.nonSepa, betaaldatum:og[d]||d, achter:!!og[d]}); } }
     const uitDagDelen=d=>{ if(d<=vandaag) return {vast:0, pot:0, kas:0}; const ym=d.slice(0,7), dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(), dd=+d.slice(8,10);
       const pot=ym===cur?(vaakCur/Math.max(dagenNa,1)+somsOp(dd, somsCur)):(vaakPost/dim+somsOp(dd, somsPost));
       const kas=(kasNaSal && d<=SP.cur.eind)?0:(kasRestNu/kasDagenOver);
@@ -13544,7 +13557,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
 function vastDatumNu(key){ let P=null; try{ P=rekVoorstel(); }catch(_){} if(!P || !P.ok) return null;
   const wa=(P.vastAlle||[]).find(x=>x.key===key); if(!wa || !wa.genW) return null;
   const va=vandaagYMD(), ds=wa.genW(rekDag(va,1), rekDag(va,400)); if(!ds.length) return null;
-  const d=ds[0], E=(SET.vastDatum||{})[key]||{};
+  const d=(ds.orig||{})[ds[0]]||ds[0], E=(SET.vastDatum||{})[key]||{};   // v503: een termijn die nog niet geboekt is houdt zijn betaaldatum
   const WF=(()=>{ try{ return woningForecast(); }catch(_){ return null; } })();
   const gdag=Math.min(Math.max((E.keuze==='op'&&+E.dag)?+E.dag:(+((WF||{}).dag)||1),1),28);
   const verlegd=(+String(d).slice(8,10)!==gdag);
@@ -13803,9 +13816,9 @@ function vastGestegenData(){ const D=fase3Sal(); if(!D) return null; const A=D.R
     const tV=laatsteIn(k, voor), tN=laatsteIn(k, na), tA=tN||tV;
     const mB=x=>x?Math.round(postMaandBedrag(sch, Math.abs(x.amount))):0;
     const inV=vV.some(v=>v>0.005), inN=vN.some(v=>v>0.005), verwacht=st.status==='actief' || st.status==='afloop';
-    let status=null, vB=0, nB=0, naam=titleCase(cleanMerch(t.name)||t.name||k), van=null;
+    let status=null, vB=0, nB=0, naam=titleCase(cleanMerch(t.name)||t.name||k), van=null, reeks=null;
     if(doorJou){ status='gestopt'; vB=mB(tA); nB=0; }
-    else if(!inV && inN){ if(vN[2]>0.005 || verwacht){ status='nieuw'; nB=mB(tN); } else { vragen.push({key:k, naam, cat:catOf(t), na:vN.map(Math.round), laatste:tN?tN.date.slice(0,10):''}); continue; } }
+    else if(!inV && inN){ if(vN[2]>0.005 || verwacht){ status='nieuw'; const Rk=vastReeks(k, sch); nB=Rk.maand; reeks=Rk; } else { vragen.push({key:k, naam, cat:catOf(t), na:vN.map(Math.round), laatste:tN?tN.date.slice(0,10):''}); continue; } }
     else if(inV && !inN && !verwacht){ status='gestopt'; vB=mB(tV); }
     else { vB=inV?mB(tV):mB(tN); nB=inN?mB(tN):vB;
       if(vB>0 && nB>=vB*(1+VAST_STIJG.deel) && nB-vB>=VAST_STIJG.euro) status='gestegen'; else vB=nB; }
@@ -13813,9 +13826,20 @@ function vastGestegenData(){ const D=fase3Sal(); if(!D) return null; const A=D.R
     totVoor+=vB; totNa+=nB;
     if(!status) continue;
     if(status==='vervangt' && Math.abs(nB-vB)<0.5) continue;
-    P.push({key:k, naam, cat:catOf(t), status, van, door:doorJou?'jij':'', voor:vV.map(Math.round), na:vN.map(Math.round), mV:vB, mN:nB, termijn:Math.round(Math.abs((tA||{}).amount||0)), cadans:postCadansTxt(sch)||'per maand', verschil:nB-vB, geaccepteerd:(SET.vastAccept||{})[k]||null}); }
+    P.push({key:k, naam, cat:catOf(t), status, van, sinds:reeks?reeks.eerste:'', onbekend:!!(reeks && reeks.onbekend), door:doorJou?'jij':'', voor:vV.map(Math.round), na:vN.map(Math.round), mV:vB, mN:nB, termijn:Math.round(Math.abs((tA||{}).amount||0)), cadans:postCadansTxt(sch)||'per maand', verschil:nB-vB, geaccepteerd:(SET.vastAccept||{})[k]||null}); }
   const ord={nieuw:0, vervangt:0, gestegen:1, gestopt:2}; P.sort((a,b)=>ord[a.status]-ord[b.status] || Math.abs(b.verschil)-Math.abs(a.verschil));
   return {voor:voor.map(r=>r.ym), na:na.map(r=>r.ym), totVoor, totNa, stijging:totNa-totVoor, posten:P, stijg:P.filter(p=>p.status!=='gestopt'), gestopt:P.filter(p=>p.status==='gestopt'), vragen, woning:WK}; }
+/* v503 (punt 1): HET BEDRAG VAN EEN NIEUWE VASTE LAST KOMT UIT ZIJN HERKENDE REEKS, niet uit een maand. Gemeten op het toestel:
+   "SportCity: nieuw +EUR 0" en "nieuw sinds ," (zonder datum) terwijl "Bekijk als 26 nov" "+EUR 40" gaf: het bedrag kwam uit de
+   laatste boeking in de afgeronde maanden (tN), en daar stond alleen een minibedrag (een kaartcontrole van centen) dat afrondt op 0;
+   de echte afschrijving viel in de lopende maand. Nu: alle afschrijvingen met die sleutel (telbareTx, ook de lopende maand), het
+   bedrag is de LAATSTE afschrijving van minstens VAST_REEKS_MIN (omgerekend per maand, postMaandBedrag), de datum de EERSTE boeking
+   van de reeks. Is er geen afschrijving van dat formaat, dan is het bedrag onbekend (geen EUR 0, geen "vervangt"). */
+const VAST_REEKS_MIN=1;
+function vastReeks(k, sch){ const L=telbareTx().filter(x=>!x.pending && x.amount<0 && recurKey(x)===k).sort((a,b)=>a.date<b.date?-1:1);
+  const echt=L.filter(x=>-x.amount>=VAST_REEKS_MIN), laatst=echt[echt.length-1]||null;
+  return {eerste:L.length?String(L[0].date).slice(0,10):'', laatste:laatst?String(laatst.date).slice(0,10):'', termijn:laatst?Math.round(-laatst.amount*100)/100:0,
+    maand:laatst?Math.round(postMaandBedrag(sch, -laatst.amount)):0, onbekend:!laatst}; }
 /* v498 (punt 5): het label volgt de NETTO richting. De som kan dalen (totNa < totVoor) terwijl er wel nieuwe/gestegen posten zijn
    (stijg.length>0, bv. een grote vaste last stopte): dan heet het "gedaald", niet "gestegen". EEN bron voor de kop, de drill en de
    keuze-sheet. */
@@ -13842,18 +13866,21 @@ function renderVastPostKeuze(){ const S=window._vpk||{}, G=vastGestegenData(), p
   const BR=vastPostBronnen(p), b=BR.find(x=>x.id===S.bron);
   const bron=S.optie==='accepteren'?`<div data-vpkbron style="margin:6px 0 0 24px"><div class="small" style="font-weight:700">Waar komt ${euro0(p.verschil)} per maand vandaan?</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${BR.map(x=>`<span class="chip${S.bron===x.id?' on':''}" data-vpkbronkeuze="${esc(x.id)}" style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="window._vpk.bron='${esc(x.id)}';renderVastPostKeuze()">uit ${esc(x.naam)}</span>`).join('')}</div></div>`:'';
   /* v501 punt 4: een nieuwe post kan een gestopte vervangen; de gestopte vaste lasten staan als chips, niets voorgekozen */
-  const GP=(p.status==='nieuw'||p.status==='vervangt')?vastGestoptePosten(p.key):[], gv=GP.find(x=>x.key===S.van), nwNaam=p.naam.split(' → ').pop();
+  const magVervang=(p.status==='nieuw'||p.status==='vervangt') && !p.onbekend;   // v503: zonder bekend bedrag is er geen verschil, dus geen "vervangt"
+  const GP=magVervang?vastGestoptePosten(p.key):[], gv=GP.find(x=>x.key===S.van), nwNaam=p.naam.split(' → ').pop();
   const vervang=S.optie==='vervangt'?`<div data-vpkvan style="margin:6px 0 0 24px"><div class="small" style="font-weight:700">Welke gestopte post vervangt ${esc(nwNaam)}?</div>${GP.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${GP.map(x=>`<span class="chip${S.van===x.key?' on':''}" data-vpkvankeuze="${esc(x.key)}" style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="window._vpk.van='${esc(x.key).replace(/'/g,"\\'")}';renderVastPostKeuze()">${esc(x.naam)} · ${euro0(x.maand)}/mnd</span>`).join('')}</div>`:gripSub('geen gestopte vaste last gevonden')}</div>`:'';
   const gev=S.optie==='nakijken'?`De post ${esc(p.naam)} gaat open (status, laatste betaling). Er verandert niets aan je budget.`
     :S.optie==='vervangt'?(gv?`<span data-vpkverschil="${p.mN-gv.maand}">${esc(gv.naam)} → ${esc(nwNaam)} · verschil ${p.mN-gv.maand>=0?'+':'−'}${euro0(Math.abs(p.mN-gv.maand))}/mnd</span> · alleen het verschil telt in je vaste lasten`:'')
     :S.optie==='accepteren'&&b?`${esc(cn)} ${euro0(A)} → ${euro0(A+p.verschil)} per maand${b.k?`<br>${esc(b.naam)} ${euro0(b.bud)} → ${euro0(b.bud-p.verschil)}`:''}<br><span data-budgetgevolg>${esc(budgetWijzGevolgTekst(budgetWijzGevolg(()=>{ const m=thisYM(); potPlanZet(p.cat, m, A+p.verschil); if(b.k) potPlanZet(b.k, m, b.bud-p.verschil); })))}</span>`:'';
-  const reden=!S.optie?'Kies accepteren, nakijken of vervangt':S.optie==='accepteren'&&!b?`Kies waar ${euro0(p.verschil)} vandaan komt`:S.optie==='vervangt'&&!gv?'Kies welke gestopte post hij vervangt':'';
+  /* v503: de reden noemt de keuzes die er staan, in dezelfde volgorde (Accepteren · Nakijken · Vervangt een gestopte post) */
+  const kz=[p.verschil>0?'accepteren':null, 'nakijken', magVervang?'vervangt':null].filter(Boolean);
+  const reden=!S.optie?'Kies '+(kz.length>1?kz.slice(0,-1).join(', ')+' of '+kz[kz.length-1]:kz[0]):S.optie==='accepteren'&&!b?`Kies waar ${euro0(p.verschil)} vandaan komt`:S.optie==='vervangt'&&!gv?'Kies welke gestopte post hij vervangt':'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="vastPostKeuze" data-vastpost="${esc(p.key)}" data-vastpoststatus="${esc(p.status)}"><div class="small muted">${esc(vastGestegenTitel(G))} · zeker uit je boekingen</div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${esc(p.naam)} ${p.status==='nieuw'?'is nieuw':p.status==='vervangt'?'':'is gestegen'}</div>
-    <div class="small" data-vpkfeit style="margin-top:6px;line-height:1.45">${p.status==='nieuw'?`nieuw sinds ${esc(f3MN(G.na[p.na.findIndex(v=>v>0)]))}, ${euro0(p.verschil)} per maand`:p.status==='vervangt'?`vervangt een gestopte post van ${euro0(p.mV)} · nu ${euro0(p.mN)} · verschil ${p.verschil>=0?'+':'−'}${euro0(Math.abs(p.verschil))} per maand`:`${G.voor.map(f3MN).join(' · ')}: ${p.voor.map(euro0).join(' · ')} → ${G.na.map(f3MN).join(' · ')}: ${p.na.map(euro0).join(' · ')} · +${euro0(p.verschil)} per maand`} · in ${esc(cn)}</div>
+    <div class="small" data-vpkfeit style="margin-top:6px;line-height:1.45">${p.status==='nieuw'?`${p.sinds?`nieuw sinds ${esc(dagKort(p.sinds))}`:'nieuw'}, ${p.onbekend?'<span data-vpkonbekend>bedrag nog onbekend</span>':`${euro0(p.verschil)} per maand`}`:p.status==='vervangt'?`vervangt een gestopte post van ${euro0(p.mV)} · nu ${euro0(p.mN)} · verschil ${p.verschil>=0?'+':'−'}${euro0(Math.abs(p.verschil))} per maand`:`${G.voor.map(f3MN).join(' · ')}: ${p.voor.map(euro0).join(' · ')} → ${G.na.map(f3MN).join(' · ')}: ${p.na.map(euro0).join(' · ')} · +${euro0(p.verschil)} per maand`} · in ${esc(cn)}</div>
     ${p.verschil>0?opt('accepteren', `Accepteren: ${esc(cn)} ${euro0(p.verschil)} omhoog`, 'het vaste budget omhoog, jij kiest uit welk potje')+bron:''}
-    ${(p.status==='nieuw'||p.status==='vervangt')?opt('vervangt', p.status==='vervangt'?'Vervangt een andere gestopte post':'Vervangt een gestopte post', 'alleen het verschil met die post telt')+vervang:''}
     ${opt('nakijken', 'Nakijken', 'de post openen: klopt hij, loopt hij nog')}
+    ${magVervang?opt('vervangt', p.status==='vervangt'?'Vervangt een andere gestopte post':'Vervangt een gestopte post', 'alleen het verschil met die post telt')+vervang:''}
     ${gev?`<div class="small" data-vpkgevolg style="margin-top:8px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.45"><b>Gevolg</b><br>${gev}</div>`:''}
     ${sheetVoet(`<button class="btn" data-vpkbevestig ${reden?'disabled':''} onclick="vastPostKeuzeZet('${kq}')">${S.optie==='nakijken'?'Post openen':S.optie==='vervangt'?'Vastleggen':'Bevestigen'}</button><button class="btn sec" onclick="closeSheet()">Terug</button>`, reden)}</div>`; }
 function vastPostKeuzeZet(key){ const S=window._vpk||{}, G=vastGestegenData(), p=G&&G.posten.find(x=>x.key===key); if(!p || !S.optie) return;   /* leest opnieuw (v319) */
@@ -18123,7 +18150,7 @@ function pvGevolgHTML(G){
     const nfTerug=(id===PLAN_NF && z.toe<a.toe)?`<span data-pvnfvol="${z.vol==null?'':z.vol}" style="display:block;color:var(--mut)">je maandinleg gaat eerst weer naar je noodfonds, tot hij ${z.vol>0?`vol is in ${etaDatum(z.vol)}`:z.vol===0?'weer vol is':'weer vol is (de maand is nog niet te zeggen)'}</span>`:'';
     rijen.push(`<div class="small" data-pvgevolg="${id}" data-pvtoe="${z.toe}" data-pvvol="${z.vol==null?'':z.vol}" style="padding:7px 0;border-top:1px solid var(--line);line-height:1.45">
       <div class="row" style="gap:8px"><b style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(z.naam)}</b><b style="white-space:nowrap">${euroC(a.toe)} → ${euroC(z.toe)}</b></div>
-      <span style="display:block;color:var(--mut)">${esc(pvVolTekst(a.vol))} → ${esc(pvVolTekst(z.vol))}${schuif}</span>${streef}${nfTerug}</div>`);
+      <span style="display:block;color:var(--mut)" data-pvvol>${a.vol===z.vol?`blijft ${esc(pvVolTekst(z.vol))}`:`${esc(pvVolTekst(a.vol))} → ${esc(pvVolTekst(z.vol))}`}${schuif}</span>${streef}${nfTerug}</div>`);
   }
   const av=G.voor.allesVol, zv=G.na.allesVol;
   const alles=av===zv
