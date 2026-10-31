@@ -18,6 +18,7 @@ async function boot(page, o) {
     for (const m of ['2026-07', '2026-08', '2026-09', '2026-10']) add(MAIN, m + '-18', -1200, 'Vastgoedbeheer Noord BV', 'SEPA Incasso Vastgoedbeheer Noord BV termijn ' + m);
     /* de woning via Tikkie (geen SEPA-schema), gewone dag 1, booked jul/aug/sep → okt/nov verwacht */
     for (const m of ['2026-07', '2026-08', '2026-09']) add(MAIN, m + '-01', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' ' + m, 'huur');
+    if (o.oktNa) add(MAIN, '2026-10-25', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' 2026-10');   // v503: de oktoberhuur na het salaris (24 okt + 1)
     SET.kennis = Object.assign({}, SET.kennis, { ['woning|' + CATH]: { soort: 'woning', ja: true, iban: CATH, partij: 'Nathaniel Cathalina', bedrag: 300, dag: 1, vanaf: '2026-07', op: '2026-07-01' } });
     const wk = (() => { try { return woningForecast().key; } catch (_) { return 'woning|' + CATH; } })();
     SET.vastDatum = Object.assign({}, SET.vastDatum, { [wk]: { keuze: 'nasal' } });

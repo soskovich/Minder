@@ -70,7 +70,7 @@ test('c. de cache levert de ware waarde en ververst na een sync', async ({ page 
 
 test('d. na een keuze (betaaldatum) ververst het getal', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, {});
+  await S.boot(page, { oktNa: true });   // v503: oktober betaald na het salaris
   const r = await page.evaluate(() => {
     const wk = woningForecast().key;
     const voorDatum = vastDatumNu(wk).datum;

@@ -16,7 +16,8 @@ async function boot(page, o) {
     add(MAIN, '2026-10-24', 5216, 'Werkgever', 'SALARIS LOON');
     /* de woning via Tikkie MET de IBAN in de omschrijving, op de 1e; booked:false laat oktober weg (nov nog verwacht) */
     const maanden = o.booked === false ? ['2026-07', '2026-08', '2026-09'] : ['2026-07', '2026-08', '2026-09', '2026-10'];
-    let i = 0; for (const m of maanden) add(LEEF, m + '-01', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' ' + m + ' ref' + (i++), 'huur');
+    if (o.oktNa) maanden.push('2026-10-25');   // v503: de oktoberhuur na het salaris (24 okt + 1), zoals op het toestel
+    let i = 0; for (const m of maanden) add(LEEF, m.length > 7 ? m : m + '-01', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' ' + m + ' ref' + (i++), 'huur');
     /* de SEPA-incasso van Allianz op de 1e, herkend als vaste last (schema), op dezelfde dag als de woning. EUR 99,40 (centen),
        zodat de som van de afgeronde per-post-regels afwijkt van het exacte totaal: dan bijt test c's sabotage ("lees de vaste
        lasten uit de gegroepeerde/afgeronde regel"). De woning blijft op precies EUR 300 voor test a (stand stijgt met 300). */

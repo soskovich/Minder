@@ -19,6 +19,9 @@ async function boot(page, o) {
     if (o.novSalaris !== false) add(MAIN, '2026-11-24', 5216, 'Werkgever', 'SALARIS LOON');
     /* de woning via Tikkie MET de IBAN in de omschrijving, gewone dag 1; booked:false laat okt/nov weg (verwacht) */
     for (const m of ['2026-07', '2026-08', '2026-09']) add(LEEF, m + '-01', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' ' + m, 'huur');
+    /* v503: o.oktNa boekt de oktoberhuur na het salaris (27 okt), zoals op het toestel; zonder staat oktober open, en met "Na mijn salaris"
+       blijft die termijn (27 okt) dan verwacht tot hij geboekt is */
+    if (o.oktNa) add(LEEF, '2026-10-27', -300, 'Nathaniel Cathalina', 'iDEAL Tikkie Nathaniel Cathalina ' + CATH + ' 2026-10');
     SET.kennis = Object.assign({}, SET.kennis, { ['woning|' + CATH]: { soort: 'woning', ja: true, iban: CATH, partij: 'Nathaniel Cathalina', bedrag: 300, dag: 1, vanaf: '2026-07', op: '2026-07-01' } });
     SET.manualBal = Object.assign({}, SET.manualBal, { [LEEF]: (o.leef != null ? o.leef : 2000), [MAIN]: (o.main != null ? o.main : 1750) });
     Object.assign(SET, o.set || {});

@@ -19,7 +19,7 @@ const { LEEF } = S;
 /* leef laag: na de keuze nog steeds krap (test a + b-tekort + c). leef hoog: na de keuze past alles (test b-leeg). */
 test('a. "Na mijn salaris" op de woning haalt de huur uit de periode; de SEPA-post blijft, de stand stijgt met het huurbedrag', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, { booked: false, leef: 350 });
+  await S.boot(page, { booked: false, oktNa: true, leef: 350 });
   const wk = await page.evaluate(() => woningForecast().key);
   const stand = (p) => p.evaluate((LEEF) => {
     const P = rekVoorstel(), rr = P.rekAlle.find((x) => x.acc === LEEF), SP = salPeriode();
@@ -47,7 +47,7 @@ test('a. "Na mijn salaris" op de woning haalt de huur uit de periode; de SEPA-po
 test('b. na de keuze toont de pop-up het nieuwe tekort; past alles, dan verdwijnt de pop-up', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   /* leef 350: blijft krap, het tekort zakt mee */
-  await S.boot(page, { booked: false, leef: 350 });
+  await S.boot(page, { booked: false, oktNa: true, leef: 350 });
   const krap = await page.evaluate((LEEF) => {
     const nodig = () => { const h = salKrapKaart(); if (h === '') return 'leeg'; const m = document.createElement('div'); m.innerHTML = h; const row = m.querySelector('[data-saltekortrij="' + LEEF + '"]'); return row ? +row.getAttribute('data-nodig') : null; };
     return { voor: nodig() };
@@ -63,7 +63,7 @@ test('b. na de keuze toont de pop-up het nieuwe tekort; past alles, dan verdwijn
   expect(krap.voor - krapNa).toBe(300);         // het tekort in de pop-up zakt met het huurbedrag
 
   /* leef 1200: na de keuze past alles, dus de pop-up verdwijnt (sabotage: de leeg-gate overslaan → hij blijft) */
-  await S.boot(page, { booked: false, leef: 1200 });
+  await S.boot(page, { booked: false, oktNa: true, leef: 1200 });
   const voorLeeg = await page.evaluate(() => salKrapKaart() === '');
   await page.evaluate((LEEF) => openKrapRek(LEEF), LEEF);
   await page.click('[data-totvastpost]');
@@ -77,7 +77,7 @@ test('b. na de keuze toont de pop-up het nieuwe tekort; past alles, dan verdwijn
 
 test('b-inert. "de cache niet legen" is per constructie inert (de sleutel draagt _dataGen en SET.vastDatum)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, { booked: false, leef: 1200 });
+  await S.boot(page, { booked: false, oktNa: true, leef: 1200 });
   /* dezelfde stroom als b, maar deze test bestaat om te tonen dat window._rekV=null weghalen uit vastDatumZet niets verandert:
      de pop-up herrekent via de sleutel. Verwacht GROEN, ook met die sabotage. */
   await page.evaluate((LEEF) => openKrapRek(LEEF), LEEF);
@@ -89,7 +89,7 @@ test('b-inert. "de cache niet legen" is per constructie inert (de sleutel draagt
 
 test('c. saldo − vaste lasten − potjes − contant = de stand dag voor je salaris, in centen gelijk aan TUSSENDOOR', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, { booked: false, leef: 350 });
+  await S.boot(page, { booked: false, oktNa: true, leef: 350 });
   const r = await page.evaluate((LEEF) => {
     const D = totSalarisData(LEEF); if (!D) return null;
     /* TUSSENDOOR: dezelfde reeks met r.uitDag over de lopende periode (blok 23) */

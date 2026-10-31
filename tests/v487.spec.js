@@ -22,7 +22,7 @@ const meet = (page, vd) => page.evaluate(({ LEEF, vd }) => {
 
 test('a. "Na mijn salaris" pakt het eerste salaris op of na de gewone betaaldag (24 nov), dus 25 nov buiten de periode, stand +300', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, {});
+  await S.boot(page, { oktNa: true });   // v503: oktober betaald na het salaris, anders blijft de termijn van 27 okt verwacht
   const wk = await page.evaluate(() => woningForecast().key);
   const def = await meet(page, {});
   const nasal = await meet(page, { [wk]: { keuze: 'nasal' } });

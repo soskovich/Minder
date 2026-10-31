@@ -148,7 +148,8 @@ genoemde versietag.)*
   werd de termijn van 1 nov in de periode van 24 dec niet eens gemaakt. Alleen de forward-reeks: het voorstel van een periode (`tmW`,
   `voorstelPer`) houdt zijn eigen termijnen. (3) Het gevolg van verplaatsen zegt "blijft vol <maand>" als de vol-maand gelijk blijft
   (`data-pvvol`), en te ruim begroot in Kiezen zegt "Ne keer" (zoals herhaalt zich, v501). Spec `v503.spec.js` (16 tests); `grip-kiezen-v391`
-  10 gemigreerd.
+  10 gemigreerd, en `v483` a/b/b-inert, `v487` a en `v490` d dragen `oktNa` (de oktoberhuur op 25/27 okt geboekt): hun fixture liet oktober
+  open, en met "Na mijn salaris" bleef die termijn dan terecht verwacht.
 - **v502: TOEWIJZING VERPLAATSEN TUSSEN DOELEN, "OP SCHEMA" IN MAANDEN, EN DE OPZIJ-TEGEL PER PERIODE** (`v502`, gevraagd door de
   gebruiker, mockup "Plan doelen" scherm 1 t/m 6; gebouwd naar de beschrijving, het mockupbestand staat niet in de repo). (1) EEN BRON:
   de toewijzing per doel staat waar hij al stond, `SET.nfToegewezen` (noodfonds) en `SET.goals[].gespaard` (doel), gelezen via `planMap()`
