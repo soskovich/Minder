@@ -44,7 +44,7 @@ test.describe('1 · buiten je potjes: alles tonen', () => {
     expect(r.inv.label).toEqual([159, 484]);
     expect(r.inv.zonder).toEqual([60]);
     expect(r.inv.g).toBe(703);
-    expect(r.z).toEqual(['buiten je potjes deze maand: €703 (3) ›', '703', '3', '643', '60']);
+    expect(r.z).toEqual(['buiten je potjes deze maand: €703 (3) · waarvan eenmalig €643 ›', '703', '3', '643', '60']);
     expect(r.i).toEqual(r.z);
     expect(r.sh).toBe(703);
     expect(r.e).toEqual({ kop: 'EENMALIG (DOOR JOU) · 2', bedrag: 643, n: 2, rijen: [159, 484] });
@@ -57,8 +57,8 @@ test.describe('1 · buiten je potjes: alles tonen', () => {
     const r = await page.evaluate(() => { go('ins'); const o = {};
       for (const s of ['var', 'vast']) { window._insSoort = s; renderIns(); const e = document.querySelector('#insMaand [data-buitenregel]'); o[s] = e ? e.innerText : null; }
       window._insSoort = 'alle'; renderIns(); return o; });
-    expect(r.var).toBe('buiten je potjes deze maand: €703 (3) ›');
-    expect(r.vast).toBe('buiten je potjes deze maand: €703 (3) ›');
+    expect(r.var).toBe('buiten je potjes deze maand: €703 (3) · waarvan eenmalig €643 ›');
+    expect(r.vast).toBe('buiten je potjes deze maand: €703 (3) · waarvan eenmalig €643 ›');
   });
 
   test('c. "Wat was dit?": een vraag voor de boeking zonder norm en zonder label, drie opties, niets voorgeselecteerd', async ({ page }) => {
