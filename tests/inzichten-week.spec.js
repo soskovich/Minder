@@ -95,7 +95,9 @@ test.describe('c · het weekbedrag', () => {
        ingehaald wordt (de overschrijding voor deze week over de resterende weken, hooguit 25% van de basis); onderbesteding schuift niet door */
     const n = await page.evaluate(() => { const m = thisYM(), pb = weekPotBudget(m), W = weekIndeling(m), E = daysElapsed(m), cur = W.find(w => E.elapsed >= w.van && E.elapsed <= w.tot), nW = W.filter(w => w.van >= cur.van).length;
       let som = 0; for (const k in pb) { if (!SET.potWekelijks[k]) continue; let voor = 0; for (const t of txOfMonth(m)) { if (insTxSoort(t) === 'potje' && catOf(t) === k && +t.date.slice(8, 10) < cur.van) voor += uitgaveNorm(t); }
-        const basis = pb[k] / E.dim * cur.dagen, over = Math.max(voor - pb[k] / E.dim * (cur.van - 1), 0); som += Math.max(Math.round(basis) - Math.round(Math.min(over / nW, basis * 0.25)), 0); }
+        /* v506 (punt 6): inhalen alleen boven het tempo van de maandkaart (insTempoVerschil > 0); onder of op tempo is het weekbedrag de basis */
+        const boven = insTempoVerschil() > 0;
+        const basis = pb[k] / E.dim * cur.dagen, over = Math.max(voor - pb[k] / E.dim * (cur.van - 1), 0); som += Math.max(Math.round(basis) - (boven ? Math.round(Math.min(over / nW, basis * 0.25)) : 0), 0); }
       return { som, tegel: +document.querySelector('#insWeek').dataset.weekbedrag }; });
     expect(n.tegel).toBe(n.som);
   });

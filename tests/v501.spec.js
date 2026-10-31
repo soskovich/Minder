@@ -125,10 +125,13 @@ test.describe('v501', () => {
     expect(r.sig, 'alles heeft een bestemming: geen signaal').toBe(null);
     /* met €2.000 boven de bestemmingen vuurt hij wel, en noemt de som */
     await S.boot(page, { debt: true, spaarSaldo: 6000 });
-    const r2 = await page.evaluate(() => { const ma = mentalAccountingSignal(); const n = scoreNotifs({ negeerSnooze: true }).find(x => String(x.key).startsWith('rente-')); return { stil: stilstaandDelen().stil, surplus: ma && ma.surplus, l1: n && n.l1, l2: n && n.l2 }; });
-    expect(r2.stil).toBe(2000); expect(r2.surplus).toBe(2000);
-    expect(r2.l1).toMatch(/^€2\.000 staat stil terwijl Auto Lease 10\.5% rente kost\./);
-    expect(r2.l2).toMatch(/^spaarsaldo €6\.000 − noodfonds €4\.000 − doelen €0 − reserveringen €0 · /);
+    const r2 = await page.evaluate(() => { const ma = mentalAccountingSignal(); const n = scoreNotifs({ negeerSnooze: true }).find(x => String(x.key).startsWith('rente-')); return { stil: stilstaandDelen().stil, inleg: stilstaandDelen().inleg, surplus: ma && ma.surplus, l1: n && n.l1, l2: n && n.l2 }; });
+    /* v506 (punt 3): wat er deze periode opzij ging en volgens Plan naar een doel gaat, telt als bestemd (hier de inleg van de periode) */
+    expect(r2.inleg, 'invoer: deze periode ging er inleg opzij die Plan naar een doel stuurt').toBeGreaterThan(0);
+    expect(r2.stil).toBe(2000 - r2.inleg); expect(r2.surplus).toBe(2000 - r2.inleg);
+    const e0 = v => '€' + v.toLocaleString('nl-NL').replace(/\u00a0/g, '');
+    expect(r2.l1).toContain(e0(2000 - r2.inleg) + ' staat stil terwijl Auto Lease 10.5% rente kost.');
+    expect(r2.l2).toContain('spaarsaldo €6.000 − noodfonds €4.000 − doelen €0 − plan-inleg deze periode ' + e0(r2.inleg) + ' − reserveringen €0 · ');   // v506 (punt 3): de plan-inleg die deze periode opzij ging staat in de som
   });
 
   test('f. de voorwaarden voor beleggen zijn een keuze per bezitting: nee geeft geen signaal, geen keuze een vraag, ja het signaal', async ({ page }) => {

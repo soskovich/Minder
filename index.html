@@ -3002,6 +3002,39 @@ function contantSchatting(tot){ tot=tot||vandaagYMD(); const H=contantStanden().
   let tempo=0, dagen=0; for(let d=rekDag(h.datum,1); d<=tot; d=rekDag(d,1)){ tempo+=contantDagTempo(d); dagen++; }
   const r2=x=>Math.round(x*100)/100;
   return {telling:+h.stand, datum:h.datum, tot, flows:r2(flows), dagen, tempo:r2(tempo), stand:r2(Math.max(+h.stand+flows-tempo,0))}; }
+/* v506 (punt 5): EEN OPNAME IS PAS UITGEGEVEN ALS HET GELD UIT JE ZAK IS (gevraagd door de gebruiker: "ik pin direct na mijn salaris en
+   houd vaak contant over"). Contant uitgegeven in een venster [van, tot] = opnames (+ contant ontvangen − storting) − (kas aan het eind −
+   kas aan het begin). De kas op een dag komt uit je tellingen en de bestaande schatting (contantSchatting: de laatste telling, plus wat
+   je sindsdien pinde of ontving, min het tempo van het potje); vóór je eerste telling is de kas 0 (v447). Zonder enige telling t/m het
+   eind geldt opname = uitgave, en dat zegt de bron ('opnames': "schatting · tel je contant"). Nooit onder nul. Het eind van een venster
+   in de toekomst is vandaag. Lezers: uitgegevenStand (uitgegeven, buiten budget, netto op Grip), catSpendMap (het potje Contant) en de
+   weektegel, alleen met een potje Contant (zonder potje is een opname 'intern' en boekt de telling al het verschil, v420). */
+let _cUitMemo={k:'', map:new Map()};
+function contantUitgegeven(van, tot){ van=String(van).slice(0,10); tot=String(tot).slice(0,10); const vd=vandaagYMD(); if(tot>vd) tot=vd;
+  const r0={van, tot, uitgegeven:0, flows:0, opn:0, begin:null, eind:null, bron:'leeg', opnTx:[]}; if(tot<van) return r0;
+  const mk=_dataGen+'|'+vd+'|'+voorbeeldSleutel()+'|'+TX.length; if(_cUitMemo.k!==mk) _cUitMemo={k:mk, map:new Map()}; const kk=van+'|'+tot;
+  if(_cUitMemo.map.has(kk)) return _cUitMemo.map.get(kk);
+  const r2=x=>Math.round(x*100)/100; let opn=0, ontv=0, stort=0; const opnTx=[];
+  for(const t of telbareTx()){ const d=String(t.date||'').slice(0,10); if(t.pending || d<van || d>tot) continue;
+    if(isOpnameTx(t)){ opn+=-t.amount; opnTx.push(t); } else if(t.amount>0 && contantStorting(t)) stort+=t.amount; }
+  for(const x of contantIns()) if(x.datum>=van && x.datum<=tot) ontv+=+x.bedrag||0;
+  const flows=opn+ontv-stort, H=contantStanden();
+  const kasOp=d=>{ if(!H.some(h=>h.datum<=d)) return null; const S=contantSchatting(d); return S?+S.stand:null; };
+  /* de kas aan het begin: de stand op de dag ervoor; is er dan nog nooit geteld maar wel in het venster, dan de eerste telling min wat er
+     tussen het begin en die telling in je portemonnee kwam (er is dan niets gemeten over die dagen, dus niets als uitgegeven verzonnen) */
+  const eind=kasOp(tot); let beginRuw=kasOp(rekDag(van,-1)), beginBron=beginRuw==null?null:'stand';
+  if(beginRuw==null){ const h1=H.find(h=>h.datum>=van && h.datum<=tot); if(h1){ let f=0; for(const t of opnTx) if(String(t.date).slice(0,10)<=h1.datum) f+=-t.amount;
+      for(const t of telbareTx()){ const d=String(t.date||'').slice(0,10); if(!t.pending && d>=van && d<=h1.datum && t.amount>0 && contantStorting(t)) f-=t.amount; }
+      for(const x of contantIns()) if(x.datum>=van && x.datum<=h1.datum) f+=+x.bedrag||0;
+      beginRuw=Math.max(+h1.stand-f,0); beginBron='eerste telling'; } }
+  const begin=beginRuw==null?0:beginRuw;
+  let uitgegeven, bron;
+  if(eind==null){ uitgegeven=Math.max(flows,0); bron='opnames'; }
+  else { uitgegeven=Math.max(begin+flows-eind,0); bron=H.some(h=>h.datum>=van && h.datum<=tot)?'telling':'schatting'; }
+  const r={van, tot, uitgegeven:r2(uitgegeven), flows:r2(flows), opn:r2(opn), ontv:r2(ontv), stort:r2(stort), begin:beginRuw==null?null:r2(beginRuw), beginBron, eind:eind==null?null:r2(eind), bron, opnTx};
+  _cUitMemo.map.set(kk, r); return r; }
+function contantUitgegevenMaand(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); return contantUitgegeven(m+'-01', m+'-'+String(dim).padStart(2,'0')); }
+function contantUitBronTekst(K){ return !K?'':(K.bron==='opnames'?'schatting · tel je contant':(K.bron==='schatting'?'opnames min wat je kas groeide (schatting)':'opnames min wat je kas groeide (telling)')); }
 /* v447: de salarisperiodes van de laatste n maanden (salPeriodeVan), oud naar nieuw; zonder salarisbron de kalendermaanden */
 function contantPerioden(n){ n=n||DIAG_SAL_MAANDEN+1; const cur=thisYM(), yms=[]; for(let i=n-1;i>=0;i--) yms.push(valtOpYmPlus(cur,-i));
   let SP=null; try{ SP=salPeriode(); }catch(_){}
@@ -3804,7 +3837,10 @@ function liquidityDaily(days){
 }
 // dagen verstreken in maand m (volledige maand voor verleden, t/m vandaag voor lopende maand)
 function daysElapsed(m){ const [y,mo]=m.split('-').map(Number); const dim=new Date(y,mo,0).getDate();
-  const now=new Date(); const todayYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  /* v506 (punt 1): in de voorbeeldweergave is "nu" de voorbeelddag, zoals vandaagYMD() en thisYM(). Tot v506 las dit de echte klok,
+     dus op "Bekijk als 26 nov" stond november als AFGEROND (elapsed=dim) en gaf maandDagenOver() 1: de hele rest van de maand viel
+     dan op elk van de vier resterende dagen (Leefgeld "Potjes via deze rekening −€4.504"). */
+  const vb=(typeof window!=='undefined')&&window._voorbeeldDag; const now=vb?new Date(vb+'T12:00:00'):new Date(); const todayYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   return {dim, elapsed: m===todayYM?Math.min(now.getDate(),dim):dim, today: m===todayYM?now.getDate():0}; }
 /* ============================================================
    RENDER
@@ -5563,8 +5599,18 @@ function noodbuffer(){ try{ return Math.max(+noodfondsModel().doel||0,0); }catch
 function stilstaandDelen(){ try{ const s=totalSaved(); if(s.missing) return null; const saldo=Math.round(s.sum);
     let nf=0, doelen=0; try{ const PM=planMap(); for(const p of Object.values(PM||{})){ if(!p) continue; const g=Math.max(Math.min(+p.gespaard||0, (+p.doel||0)>0?+p.doel:Infinity),0); if(p.type==='noodfonds') nf+=g; else if((+p.doel||0)>0) doelen+=g; } }catch(_){}
     let res=0; try{ const ra=resAccId(); if(ra && n26SavingsAccounts().includes(ra)) res=Math.max(resSaldo()||0,0); }catch(_){}
+    /* v506 (punt 3): DE PLAN-INLEG VAN DE PERIODE IS BESTEMD. Wat er volgens Plan deze periode naar het noodfonds of een doel gaat (de
+       inleg per rij van planStandEind(), dezelfde bron als "+EUR X deze maand" op Plan) staat al op je spaarrekening zodra je opzij
+       stortte, maar is nog niet toegewezen. Tot v506 heette die storting stilstaand (gemeten: EUR 1.766 = de opzij-storting, met het
+       signaal "staat stil terwijl Auto Lease 10.5% rente kost"). */
+    let inleg=0, planInleg=0, opzij=null; try{ const P=allocatePlan(), SE=planStandEind(P); for(const p of P){ if(!p || p.type==='aflossen') continue; planInleg+=Math.max(+((SE.per[p.id]||{}).inleg)||0,0); } }catch(_){}
+    /* bestemd is wat er van die inleg deze periode ook werkelijk opzij ging (opzijPeriode, de ene bron van opzij): vóór de storting staat het
+       geld er nog niet en valt er niets af te trekken */
+    try{ const O=opzijPeriode(); opzij=(O && O.netto!=null)?Math.max(+O.netto||0,0):null; }catch(_){}
     nf=Math.round(nf); doelen=Math.round(doelen); res=Math.round(res);
-    return {saldo, nf, doelen, res, stil:saldo-nf-doelen-res, som:`spaarsaldo ${euro0(saldo)} − noodfonds ${euro0(nf)} − doelen ${euro0(doelen)} − reserveringen ${euro0(res)}`}; }catch(_){ return null; } }
+    inleg=opzij==null?0:Math.max(Math.min(planInleg, opzij, saldo-nf-doelen-res),0);   // nooit meer dan wat nog geen bestemming heeft: een toewijzing die de storting al opnam telt niet twee keer
+    inleg=Math.round(inleg);
+    return {saldo, nf, doelen, inleg, planInleg:Math.round(planInleg), opzij, res, stil:saldo-nf-doelen-inleg-res, som:`spaarsaldo ${euro0(saldo)} − noodfonds ${euro0(nf)} − doelen ${euro0(doelen)} − plan-inleg deze periode ${euro0(inleg)} − reserveringen ${euro0(res)}`}; }catch(_){ return null; } }
 function stilstaandSurplus(){ const D=stilstaandDelen(); if(!D) return null; return Math.max(D.stil,0); }
 function duursteSchuld(){ const ds=(SET.debts||[]).filter(d=>(schuldRestNu(d)>0)&&(+d.rente>0)); if(!ds.length) return null; ds.sort((a,b)=>(+b.rente)-(+a.rente)); return ds[0]; }
 function mentalAccountingSignal(){
@@ -9304,7 +9350,8 @@ function potReeksTekst(x){ const t=reeksTekst(x, x.bedragen), v=x.vast||[];   //
 /* De bekende periodieke posten van een categorie: een interval boven een maand, of 4-wekelijks (v384). */
 /* v412: standaard alleen de posten die meetellen (postTelt()); `alles` ook een gestopte of verlopen post, voor de
    afgeronde maanden (potMaanden(): daar is hij wel betaald). */
-function periodiekePosten(k, alles){ let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && ((+s.intervalM||1)>1 || (s.cadans==='4w' && +s.afstand>0)) && (alles || postTelt(s.key))); }catch(_){} return R; }
+function periodiekePosten(k, alles){ return runMemo('periodiekePosten', k+'|'+(alles?1:0), ()=>periodiekePostenKern(k, alles)); }   // v506 (punt 4): per datastand, niet per eenheid per potje (gemeten 630x recurringSchedule per vier Grip-tabs)
+function periodiekePostenKern(k, alles){ let R=[]; try{ R=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && ((+s.intervalM||1)>1 || (s.cadans==='4w' && +s.afstand>0)) && (alles || postTelt(s.key))); }catch(_){} return R; }
 /* Wat de periodieke posten in maand mm afschreven buiten een gewone maand: een kwartaal- of jaarpost helemaal, een
    4-wekelijkse post alles boven de eerste termijn. */
 function potPeriodiek(k, mm, R){ R=R||periodiekePosten(k); const leeg={bedrag:0, posten:[]}; if(!R.length) return leeg;
@@ -9949,8 +9996,16 @@ function periodeVooruitKern(P){
     if(heelVast(c)){ fBet[c]=(fBet[c]||0)+v; continue; }
     if(piekInScope(t)){ uitCat[c]=(uitCat[c]||0)+v; (txCat[c]=txCat[c]||[]).push(t); } else if(isFixed(t) && !eenmaligLabel(t)) fBet[c]=(fBet[c]||0)+v; }
   /* de vaste lasten die NOG komen in de periode (rekVoorstel().vast: de termijnen met hun datum, de lopende periode in de era) */
-  const vastNog={}; try{ const Pv=rvBusy?null:rekVoorstel(); if(Pv && Pv.ok && Array.isArray(Pv.vast)) for(const x of Pv.vast){ const bedr=Math.round(+x.termijn||+x.bedrag||0); if(!(bedr>0)) continue; const c=x.cat||'';
-    for(const d of (x.data||[])){ const ds=String(d).slice(0,10); if(!(ds>vandaag && ds<=P.eind)) continue;
+  const vastNog={}; try{ const Pv=rvBusy?null:rekVoorstel(); const VL=(Pv && Pv.ok)?((Pv.SP && Pv.SP.cur && Pv.SP.cur.start===P.start && Array.isArray(Pv.vastCur))?Pv.vastCur:Pv.vast):null;   /* v506: de termijnen van DEZE periode, ook als het salaris al binnen is */
+    /* v506 (punt 2): een termijn van DEZE periode die al voorbij is maar niet geboekt (geen betaling van die post deze periode) telt als
+       nog te gaan, niet als weg. Zo is de verwachte som van de vaste lasten met en zonder voorbeeld-schakelaar gelijk: een gesimuleerde
+       termijn (vbVast) is die ene termijn betaald (fBet), zonder simulatie staat hij hier. Alleen de lopende periode (vastCur). */
+    const isCur=VL && Pv.vastCur===VL, perTx=isCur?eenheidTx({start:P.start, eind:vandaag}).filter(t=>t.amount<0):[], WPI=(()=>{ try{ return woningPaymentIds(); }catch(_){ return new Set(); } })();
+    const betaaldN=key=>perTx.filter(t=>t.vbVast===key || (String(key).indexOf('woning|')===0?(WPI.has(t.id) || (t.vbVast && String(t.vbVast)===key)):recurKey(t)===key)).length;
+    if(Array.isArray(VL)) for(const x of VL){ const bedr=Math.round(+x.termijn||+x.bedrag||0); if(!(bedr>0)) continue; const c=x.cat||'';
+    const ds0=(x.data||[]).map(d=>String(d).slice(0,10)), voorbij=isCur?ds0.filter(ds=>ds>=P.start && ds<=vandaag):[];
+    let open=Math.max(voorbij.length-(voorbij.length?betaaldN(x.key):0),0);
+    for(const ds of ds0){ const fut=ds>vandaag && ds<=P.eind, achter=!fut && open>0 && voorbij.includes(ds); if(!fut && !achter) continue; if(achter) open--;
       let telt=true; try{ telt=!x.key || verwachtInMaand(x.key, ds.slice(0,7)); }catch(_){}   // v369/v499: dezelfde lezer van SET.fixDueExcl en opzegTot als de maand-forecast
       if(telt) vastNog[c]=(vastNog[c]||0)+bedr; } } }catch(_){}
   /* de historie: per eenheid wat er in de snede van piekInScope uitging, omgerekend naar de dagen van deze periode; 'typisch' is het deel
@@ -10012,7 +10067,7 @@ function periodeVooruitKern(P){
   const band={min:uit+vast+Math.round(Math.min(...totP)), max:uit+vast+Math.round(Math.max(...totP)), maanden:H.map(u=>u.ym), labels:H.map(eenheidKort)};
   return {m:P.ym, el, dim, over, uit, vast, rest, restCat, contant:null, contantLater:null, projectie, budget, budgetNu:budget, wijz:0, maandBudget:null, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact,
     zonder:Math.round(zonderExact), zonderExact, zonderBreed:zonderExact, zonderStand:Z, zonderLos:0, zonderLosPosten:[], zonderRest:0, inleg:0, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null,
-    periode:P, label:P.label, basis, uitTotNu, nogVerwacht:projectieExact-uitTotNu, PB, voorlopig:rvBusy};
+    periode:P, label:P.label, basis, uitTotNu, nogVerwacht:projectieExact-uitTotNu, PB:PB?Object.assign({}, PB, {P:null}):null, voorlopig:rvBusy};   /* v506 (punt 4): zonder PB.P (rekVoorstel met functies als uitDagDelen/genW), anders kan runMemo de uitkomst niet klonen en rekent elke lezer maandVooruitKern opnieuw (gemeten: 17x per Zien in de era) */
 }
 function maandVooruit(){ if(window._rvBusy) return perfK('maandVooruitKern', maandVooruitKern);   // v499: binnen rekVoorstelRuw een voorlopige, niet-gememoiseerde uitkomst
   return runMemo('maandVooruit', '', ()=>perfK('maandVooruitKern', maandVooruitKern)); }
@@ -12583,7 +12638,8 @@ function salBron(){ let sl=null; try{ sl=salarisBetalingLaatst(nextYM(thisYM()))
   return {sl, key, naam, dagen, acc:sl.acc}; }
 /* de regel: jouw antwoord, anders de dag die het vaakst voorkomt bij betalingen op een werkdag (di-vr; een maandag kan een
    verschoven weekend zijn) */
-function salRegel(B){ B=B||salBron(); if(!B) return null; const E=kennisGet('salaris|'+B.key);
+function salRegel(B){ if(!B) return periodeMemo('salRegel', '', ()=>salRegelKern()); return salRegelKern(B); }
+function salRegelKern(B){ B=B||salBron(); if(!B) return null; const E=kennisGet('salaris|'+B.key);
   if(E && +E.dag>=1 && +E.dag<=31) return {dag:+E.dag, bron:E.bron||'jij', op:E.op||'', opgeslagen:true, naam:B.naam, key:B.key};
   const tel={}; for(const d of B.dagen){ const w=salWeekdag(d); if(w>=2 && w<=5) tel[+d.slice(8,10)]=(tel[+d.slice(8,10)]||0)+1; }
   const top=Object.entries(tel).sort((a,b)=>b[1]-a[1] || a[0]-b[0])[0];
@@ -12648,12 +12704,23 @@ function salPeriodeVan(ym){ const B=salBron(); if(!B) return null; const R=salRe
 const PERIODE_DELER=30.4;
 const PERIODE_CUTOVER='2026-11-01';
 /* de startdatum van de eerste salarisperiode (de era-grens), of null zonder salarisregel */
-function periodeVanaf(){ try{ const R=salRegel(); if(!R) return null; let ym=PERIODE_CUTOVER.slice(0,7);
+/* v506 (punt 4): DE PERIODE-AS EEN KEER PER DATASTAND. salRegel, periodeVanaf, periodeVan en historiePerioden zijn pure functies van de
+   boekingen, de kennis (salarisregel) en de dag; ze werden per render duizenden keren opnieuw uitgerekend (gemeten in de era: periodeVan
+   ~590 ms per vier Grip-tabs, via potEenheden → periodeHistorie). De memo hangt aan _dataGen, de dag en de voorbeeldstand; de aanroeper
+   krijgt een kopie, zodat niemand de memo kan bederven. */
+let _periodeMemo={k:'', map:new Map()};
+function periodeMemo(naam, arg, fn){ const k=_dataGen+'|'+vandaagYMD()+'|'+voorbeeldSleutel()+'|'+(typeof SET!=='undefined' && SET.kennis?Object.keys(SET.kennis).length:0);
+  if(_periodeMemo.k!==k) _periodeMemo={k, map:new Map()}; const kk=naam+'|'+arg, M=_periodeMemo.map;
+  if(M.has(kk)){ const v=M.get(kk); return (v && typeof v==='object')?structuredClone(v):v; }
+  const r=fn(); M.set(kk, (r && typeof r==='object')?structuredClone(r):r); return r; }
+function periodeVanaf(){ return periodeMemo('periodeVanaf', '', periodeVanafKern); }
+function periodeVanafKern(){ try{ const R=salRegel(); if(!R) return null; let ym=PERIODE_CUTOVER.slice(0,7);
   for(let i=0;i<4;i++){ const e=salarisVerwacht(ym, R); if(e && e.datum>=PERIODE_CUTOVER) return e.datum; ym=nextYM(ym); }
   return null; }catch(_){ return null; } }
 /* de eenheid waarin datum d valt: een kalendermaand vóór de era (de maand die de era-grens bevat is kort, 1 .. era-1), een
    salarisperiode erna. EEN BRON; alle schermen die per periode rekenen lezen deze functie. */
-function periodeVan(d){ d=String(d||vandaagYMD()).slice(0,10); const pv=periodeVanaf(), R=salRegel();
+function periodeVan(d){ d=String(d||vandaagYMD()).slice(0,10); return periodeMemo('periodeVan', d, ()=>periodeVanKern(d)); }
+function periodeVanKern(d){ const pv=periodeVanaf(), R=salRegel();
   if(pv && R && d>=pv){
     let ym=d.slice(0,7);
     for(const q of [prevYM(ym), ym, nextYM(ym)]){ const a=salarisVerwacht(q, R), b=salarisVerwacht(nextYM(q), R); if(a && b && d>=a.datum && d<b.datum){ ym=q; break; } }
@@ -12724,9 +12791,10 @@ function periodeBudget(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return nul
      budgetVoorPeriode.split, de vaste lasten in die categorie uit P.vast)), zodat ook een niet-SEPA last (de woning in Huur) bij vast
      telt. potjes is de REST (totaal − vast − Contant), dus de herindeling verschuift geld tussen de potten zonder het totaal te raken
      (test c/d, in centen). */
-  const vasteLasten=(P.vast||[]).filter(x=>!((+base[x.cat]||0)>0));
+  const PVL=(P.SP && P.SP.cur && P.SP.cur.start===start && Array.isArray(P.vastCur))?P.vastCur:(P.vast||[]);   // v506: de vaste lasten van de periode van het moment
+  const vasteLasten=PVL.filter(x=>!((+base[x.cat]||0)>0));
   const vlSom=vasteLasten.reduce((a,x)=>a+Math.round(+x.bedrag||0),0);
-  const vastPerCat={}; for(const x of (P.vast||[])){ const c=x.cat||''; vastPerCat[c]=(vastPerCat[c]||0)+(+x.bedrag||0); }
+  const vastPerCat={}; for(const x of PVL){ const c=x.cat||''; vastPerCat[c]=(vastPerCat[c]||0)+(+x.bedrag||0); }
   const vastDeel={}; for(const k in base){ if(k===CONTANT_CAT) continue; const b=+base[k]||0; if(!(b>0)) continue;
     const vd=Math.min(b, Math.max((BP.split[k]?BP.split[k].vast:0)||0, vastPerCat[k]||0)); if(vd>0) vastDeel[k]=Math.round(vd); }
   const contant=BP.contant, totaal=BP.totaal+vlSom;
@@ -12774,7 +12842,8 @@ function huidigVenster(){ const d=vandaagYMD(), P=periodeVan(d);
 /* de historie-eenheden van oud naar nieuw (beslissing 5): de kalendermaanden t/m de korte november (1–23), een scheiding, daarna de
    salarisperiodes. Niets wordt omgerekend; november blijft een (korte) maand en wordt nooit als periode herrekend. EEN bron voor
    "Over de maanden" en de Terugblik. */
-function historiePerioden(tot){ tot=String(tot||vandaagYMD()).slice(0,10); const pv=periodeVanaf(), R=salRegel();
+function historiePerioden(tot){ tot=String(tot||vandaagYMD()).slice(0,10); return periodeMemo('historiePerioden', tot, ()=>historiePeriodenKern(tot)); }
+function historiePeriodenKern(tot){ const pv=periodeVanaf(), R=salRegel();
   const mnds=[...new Set(TX.map(t=>t.date.slice(0,7)))].sort(); if(!mnds.length) return [];
   const out=[], eraYm=pv?pv.slice(0,7):null, totYm=tot.slice(0,7);
   let ym=mnds[0], guard=0;
@@ -12859,7 +12928,8 @@ function rekOnttrekkingen(BR, van, tot){ const per={}, lijst=[]; const gebruikt=
   for(const ym of ms){ const r=D?D.R.find(x=>x.ym===ym):null; for(const t of ((r&&r.ontt)||[])){ const d=t.date.slice(0,10); if(d<van || d>tot) continue;
       const acc=rekOntvanger(t, BR, gebruikt)||'onbekend', v=Math.abs(+t.amount||0); per[acc]=(per[acc]||0)+v; lijst.push({acc, date:d, bedrag:v, t}); } }
   return {per, lijst}; }
-function rekVoorstelSleutel(){ return vandaagYMD()+'|'+_dataGen+'|'+JSON.stringify(SET.salVerdeling||null)+'|'+JSON.stringify(SET.vastDatum||null); }
+function voorbeeldSleutel(){ return (typeof window!=='undefined' && window._voorbeeld)?('vb:'+window._voorbeeldDag+':'+(window._voorbeeldSalaris?1:0)):''; }   // v506 (punt 4): de voorbeeldstand hoort in elke memo-sleutel
+function rekVoorstelSleutel(){ return vandaagYMD()+'|'+_dataGen+'|'+voorbeeldSleutel()+'|'+JSON.stringify(SET.salVerdeling||null)+'|'+JSON.stringify(SET.vastDatum||null); }
 /* v481: BETAALDATUM VAN EEN VASTE LAST ZONDER VASTE AFSCHRIJVING (Tikkie/iDEAL of geen SEPA-schema, zoals de woning). Je kiest per
    post: "Na mijn salaris" (nasal: de betaling valt net na je salaris, dus buiten de lopende periode), "Op een vaste dag" (de
    standaard, de dag uit je kennislaag) of "Alleen deze keer later" (eenmalig: nasal voor één periode, daarna weer de vaste dag).
@@ -12989,8 +13059,10 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      dus de juiste aftrek is alles wat er die maand al ging. v482 nam de LATERE van de periodestart en de 1e: bij een periode die in de
      maand zelf begon (salaris op de 24e) telde dan alleen vanaf de 24e, en viel bijna de hele maandverwachting in de laatste dagen van
      de maand (gemeten op het toestel: 29/30/31 okt elk ~EUR 207). Zo deed v481 het: de maandverwachting min al uitgegeven die maand. */
-  { const vdg=vandaagYMD(), cs=cur+'-01'; for(const t of TX){ if(t.pending || !set.has(t.acc) || paar.has(t.id) || !piekInScope(t) || eenmaligBevestigd(t)) continue;
-      const d=t.date.slice(0,10); if(d<cs || d>vdg) continue; const v=uitgaveNorm(t); if(!(v>0.005)) continue; const c=catOf(t); (alPer[c]=alPer[c]||{})[t.acc]=((alPer[c]||{})[t.acc]||0)+v; } }
+  /* v506 (punt 1): de aftrek staat NA maandVooruit(), want in de era is de verwachting die van de PERIODE en telt de aftrek vanaf de
+     periodestart (zie alPerVul hieronder). Buiten de era blijft het de kalendermaand (v485). */
+  const alPerVul=cs=>{ const vdg=vandaagYMD(); for(const t of TX){ if(t.pending || !set.has(t.acc) || paar.has(t.id) || !piekInScope(t) || eenmaligBevestigd(t)) continue;
+      const d=t.date.slice(0,10); if(d<cs || d>vdg) continue; const v=uitgaveNorm(t); if(!(v>0.005)) continue; const c=catOf(t); (alPer[c]=alPer[c]||{})[t.acc]=((alPer[c]||{})[t.acc]||0)+v; } };
   const ritmeVan=(c,acc)=>{ const r=(ritmeD[c]||{})[acc]||{n:0, som:0, maanden:new Set(), dagen:[]}, wm=Math.max(af.length,1), mp=r.maanden.size;
     return {soort:mp<wm/2?'zelden':(r.n/wm>4?'vaak':'soms'), ud:r.dagen.length?Math.round(mediaan(r.dagen.slice())):null, n:r.n, maandenN:mp, gem:r.n?r.som/r.n:0}; };
   const terugval=set.has(salAcc)?salAcc:(Object.entries(totRek).sort((a,b)=>b[1]-a[1])[0]||[BR[0]])[0];
@@ -13086,6 +13158,18 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     for(const x of (V.potjes||[])){ if(x.k===CONTANT_CAT) continue;   // v447: het potje Contant staat in kas (te pinnen), niet nog eens bij de potjes
       const e=Math.max((+x.eindR||0)-eenmaligInCat(x.k, cur), 0); if(e>0.005) potExp.push({k:x.k, naam:x.naam, maand:e, bedrag:e*sch, rest:Math.max(+x.rest||0,0), typisch:Math.max(+x.typisch||0,0), maanden:(x.maanden||[]).slice(), zonder:false}); }
     for(const z of ((V.zonderStand||{}).rijen||[])){ if(!z.telt || z.k===CONTANT_CAT) continue; const e=Math.max(z.geboekt+z.verwacht-eenmaligInCat(z.k, cur), 0); if(e>0.005) potExp.push({k:z.k, naam:z.naam, maand:e, bedrag:e*sch, rest:Math.max(+z.verwacht||0,0), typisch:Math.max(mediaan((z.bedragen||[]).slice()),0), maanden:(z.bedragen||[]).slice(), zonder:true}); } }
+  /* v506 (punt 1): EEN VENSTER VOOR ELKE REKENING. In de era is de verwachting van een potje die van de LOPENDE PERIODE (V.periode),
+     dus de aftrek telt vanaf de periodestart en de rest gaat gelijk over de dagen van morgen t/m de dag voor het salaris (SP.cur.eind),
+     het venster van de vaste lasten. Tot v506 ging die periodeverwachting over de resterende dagen van de KALENDERMAAND en kwam
+     december er met het typische niveau nog eens bovenop. Ligt je laatste boeking vóór vandaag (een import uit het verleden, of het
+     voorbeeld), dan zijn de dagen tussen die boeking en vandaag niet gemeten: hun deel van de verwachting (verwachting/dagen x die dagen)
+     telt niet als "nog te gaan" en staat in de sheet als ontbrekend (rvGat), niet stil meegeteld. */
+  const eraW=!!(V && V.periode && SP.cur && SP.cur.start<=vandaag && vandaag<=SP.cur.eind);
+  alPerVul(eraW?SP.cur.start:cur+'-01');
+  const dataTot=(()=>{ try{ return importTotYmd(); }catch(_){ return null; } })();
+  const gapVan=eraW && dataTot && dataTot<vandaag ? [rekDag(dataTot,1), SP.cur.start].sort().slice(-1)[0] : null;
+  const gapDagen=gapVan && gapVan<=vandaag ? salDagenTussen(gapVan, vandaag)+1 : 0;
+  const venW=eraW?Math.max(salDagenTussen(vandaag, SP.cur.eind),1):0, curDagen=eraW?(SP.cur.dagen||salDagenTussen(SP.cur.start, SP.cur.eind)+1):0;
   /* (1d) contant: de mediaan van 6 afgeronde maanden (blok 20, CONTANT OPGENOMEN), naar rato van de opnames per rekening */
   /* v441 (1c): contant over hetzelfde venster als het aandeel (af), niet meer over 6 vaste maanden */
   const D=fase3Sal(), R6=D?D.R.slice(0,-1).filter(r=>af.includes(r.ym)):[], kasMaand=R6.map(r=>Math.round((+r.opnSom||0)*100)/100), kasMed=mediaan(kasMaand);
@@ -13133,9 +13217,9 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
        aandeel, wat er deze periode al van deze rekening in dit potje ging (alPeriode) en nog verwacht = verwachting voor de
        periode × aandeel − al deze periode (minimaal 0). Een reserveringsuitgave zit al niet in de telling (uitgaveNorm, punt 4). */
     const pd=potExp.map(p=>{ const A=aandeel(p.k), f=A[acc]||0; if(!(f>0)) return null; const R=ritmeVan(p.k, acc);
-      const periodExp=p.bedrag*f, alP=((alPer[p.k]||{})[acc])||0;
+      const periodExp=p.bedrag*f, alP=((alPer[p.k]||{})[acc])||0, gapExp=eraW?periodExp/Math.max(curDagen,1)*gapDagen:0;   // v506: het niet-gemeten deel telt niet als nog te gaan
       return {k:p.k, naam:p.naam, zonder:p.zonder, maand:p.maand, totaal:p.bedrag, aandeel:f, bedrag:periodExp, rest:p.rest*f,
-        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typischVol:(p.typisch||0), typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP, 0),
+        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typischVol:(p.typisch||0), typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP-gapExp, 0), gapExp,
         afMaanden:af.slice(), grossAf:af.map(ym=>Math.round(((((naPer[p.k]||{})[acc]||{})[ym])||0)+((((eenmPer[p.k]||{})[acc]||{})[ym])||0))), eenmAf:af.map(ym=>Math.round((((eenmPer[p.k]||{})[acc]||{})[ym])||0))}; }).filter(Boolean);
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
@@ -13180,7 +13264,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const potMaand=vaakPost+somsPost.reduce((a,x)=>a+x.bedrag,0), pMaand=potMaand+kM, alleTerm={}, termAlle=[];
     for(const x of vastAlle.filter(x=>x.acc===acc)){ const ds=x.genW?x.genW(rekDag(vandaag,1), horizon):rekTermijnen(x.s, x.last, rekDag(vandaag,1), horizon), og=ds.orig||{}; for(const d of ds){ alleTerm[d]=(alleTerm[d]||0)+x.termijn; termAlle.push({date:d, bedrag:x.termijn, naam:x.naam, key:x.key, nonSepa:!!x.nonSepa, betaaldatum:og[d]||d, achter:!!og[d]}); } }
     const uitDagDelen=d=>{ if(d<=vandaag) return {vast:0, pot:0, kas:0}; const ym=d.slice(0,7), dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(), dd=+d.slice(8,10);
-      const pot=ym===cur?(vaakCur/Math.max(dagenNa,1)+somsOp(dd, somsCur)):(vaakPost/dim+somsOp(dd, somsPost));
+      const pot=(eraW && d<=SP.cur.eind)?(vaakCur/venW+somsOp(dd, somsCur)):(eraW || ym!==cur)?(vaakPost/dim+somsOp(dd, somsPost)):(vaakCur/Math.max(dagenNa,1)+somsOp(dd, somsCur));   // v506: in de era EEN venster (morgen t/m SP.cur.eind)
       const kas=(kasNaSal && d<=SP.cur.eind)?0:(kasRestNu/kasDagenOver);
       return {vast:alleTerm[d]||0, pot, kas}; };
     const uitDag=d=>{ const u=uitDagDelen(d); return u.vast+u.pot+u.kas; };
@@ -13190,8 +13274,9 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
        per constructie de potjesregel (T.pot), zodat de per-potje regels in de sheet in centen optellen tot dat getal. Dit leest
        alleen vaak/soms uit en verandert geen enkel getal in de daling zelf. */
     { const pm={}; for(let d=rekDag(vandaag,1); d<=SP.cur.eind; d=rekDag(d,1)){ const ym=d.slice(0,7), dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(), dd=+d.slice(8,10);
-        for(const p of vaak) pm[p.k]=(pm[p.k]||0)+(ym===cur?p.nogVerwacht/Math.max(dagenNa,1):p.typisch/dim);
-        for(const x of (ym===cur?somsCur:somsPost)) if(dd===x.ud) pm[x.k]=(pm[x.k]||0)+x.bedrag; }
+        const inW=eraW?true:ym===cur;   // v506: in de era is elke dag tot SP.cur.eind het venster van de periode
+        for(const p of vaak) pm[p.k]=(pm[p.k]||0)+(inW?p.nogVerwacht/(eraW?venW:Math.max(dagenNa,1)):p.typisch/dim);
+        for(const x of (inW?somsCur:somsPost)) if(dd===x.ud) pm[x.k]=(pm[x.k]||0)+x.bedrag; }
       for(const p of pdDal) p.periode=pm[p.k]||0; }
     const saldo=accBalance(acc);
     /* (3) overboeken rekent alleen op de dag van de werkelijke storting, met het dan bekende saldo; daarvoor het verwachte saldo op de
@@ -13206,7 +13291,13 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   const som=actief.reduce((a,r)=>a+r.laten,0), opzij=salaris-som-reserveringen;
   const totVast=vast.reduce((a,x)=>a+x.bedrag,0), totPot=potExp.reduce((a,x)=>a+x.bedrag,0);
   rvSpan('rv:slot', _rvT); _rvT=performance.now();
-  return {ok:true, salaris, salAcc, salDatum:d0, nu, SP, per0, start, eind, dagen, dimStart, schaal, plan, rek:actief, rekAlle:rek, vast, vastAlle, vastBuiten, vastNiet, potExp, kas, kasP, kasMed, kasBud, kasStand, kasStandKey, kasStandBron, kasStandDatum, kasSchat, kasBron, kasMaand, kasAandeel, kasPatroon, opnPer, paar, som, opzij, reserveringen, resRijen:RES.rijen, resOk:RES.ok, resStand:RES.stand, resAcc:RES.acc, totVast, totPot,
+  /* v506 (punt 2): DE VASTE LASTEN VAN DE LOPENDE PERIODE (SP.cur), los van per0. Zodra het salaris binnen is wijst per0 al naar de
+     VOLGENDE periode (het voorstel gaat over het volgende salaris), en dan lazen de forecast van de lopende periode (periodeVooruitKern),
+     periodeBudget en de voorbeeld-injectie de termijnen van die volgende periode: in "Bekijk als 26 nov" met het salaris erbij vielen
+     daardoor alle vaste lasten van 24 nov – 23 dec weg (de schakelaar maakte de periode mooier). Dezelfde generator als termAlle. */
+  const vastCur=[]; try{ if(SP.cur && SP.cur.start && SP.cur.eind) for(const x of vastAlle){ const ds=x.genW?x.genW(SP.cur.start, SP.cur.eind):rekTermijnen(x.s, x.last, SP.cur.start, SP.cur.eind); if(!ds || !ds.length) continue;
+      vastCur.push(Object.assign({}, x, {data:Array.from(ds), orig:ds.orig||{}, n:ds.length, bedrag:x.termijn*ds.length})); } }catch(_){}
+  return {ok:true, vastCur, venster:eraW?{van:rekDag(vandaag,1), tot:SP.cur.eind, dagen:venW}:null, gat:gapDagen?{van:gapVan, tot:vandaag, dagen:gapDagen, dataTot}:null, salaris, salAcc, salDatum:d0, nu, SP, per0, start, eind, dagen, dimStart, schaal, plan, rek:actief, rekAlle:rek, vast, vastAlle, vastBuiten, vastNiet, potExp, kas, kasP, kasMed, kasBud, kasStand, kasStandKey, kasStandBron, kasStandDatum, kasSchat, kasBron, kasMaand, kasAandeel, kasPatroon, opnPer, paar, som, opzij, reserveringen, resRijen:RES.rijen, resOk:RES.ok, resStand:RES.stand, resAcc:RES.acc, totVast, totPot,
     totVerwacht:actief.reduce((a,r)=>a+r.verwacht,0), BR, af, af6, potMaand:cur}; }
 function rekTermijnen(s, last, start, eind){ const out=[]; if(!s || !last) return out;
   if(s.cadans==='4w'){ let stap=VAST_4W_DAGEN; try{ stap=vierStap(s).stap; }catch(_){} let d=last; for(let i=0;i<40;i++){ d=rekDag(d, stap); if(d>eind) break; if(d>=start) out.push(d); } return out; }
@@ -13570,7 +13661,7 @@ function totSalarisData(acc){ const SP=salPeriode(); if(!SP || SP.stil || SP.laa
      saldo nu − alles wat er NA de salarisdag nog op deze rekening gebeurde (ELKE boeking, ook intern); dat getal is per constructie
      ongevoelig voor wat er na de salarisdag nog beweegt. */
   let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null){ let na=0; for(const t of TX){ if(t.pending || t.acc!==acc) continue; const d=t.date.slice(0,10); if(d>PV.werkelijk && d<=vandaag) na+=t.amount; } naSal=Math.round(sb-na); } } }catch(_){}
-  return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, vastNaSal, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal, herkomst:saldoHerkomst(acc), sim:(()=>{ const S=voorbeeldSaldoDelen(acc); return {salVerd:S.salVerd, vast:S.vast, ruw:saldo-S.salVerd-S.vast}; })()}; }
+  return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, vastNaSal, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal, herkomst:saldoHerkomst(acc), venster:P.venster||null, gat:(()=>{ /* v506: de dagen tussen het saldo van deze rekening en het venster staan niet in het saldo en tellen niet mee */ let sd=null; try{ sd=accBalanceDatum(acc); }catch(_){} if(!sd){ try{ sd=importTotYmd(); }catch(_){} } sd=sd?String(sd).slice(0,10):null; if(!sd || sd>=vandaag) return null; return {van:rekDag(sd,1), tot:vandaag}; })(), sim:(()=>{ const S=voorbeeldSaldoDelen(acc); return {salVerd:S.salVerd, vast:S.vast, ruw:saldo-S.salVerd-S.vast}; })()}; }
 function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salverdeling'); return; } window._totsal=acc; window._totsalPot=false; window._totsalKeuze=''; renderTotSalaris(); showSheetBg(); }
 function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   if(!D){ $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris"><div style="font-weight:800">Tot je salaris</div><div class="small" style="margin-top:6px">Dit is nu niet te rekenen.</div></div>`; return; }
@@ -13598,7 +13689,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   const potDal=(D.potDelen||[]).filter(p=>p.ritme!=='zelden');
   const somZelden=(D.potZelden||[]).reduce((a,z)=>a+(+z.gemiddeld||0),0);
   const zeldenTekort=(D.eind>=0 && D.eind-somZelden<-0.5)?` · dan kom je ${e(Math.round(somZelden-D.eind))} tekort`:'';
-  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" style="padding:3px 0;border-top:1px solid var(--line)"><div><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> · ${Math.round(p.aandeel*100)}% · ${esc(ritLbl[p.ritme]||p.ritme)}</div><div style="color:var(--mut2)">typisch ${e(Math.round(p.typischVol!=null?p.typischVol:p.typisch))} · daarna ${e(Math.round(p.typisch))}/mnd via deze rekening · ${potReeks(p)}</div><div style="color:var(--mut2)">al deze maand ${e(p.alPeriode)} · nog deze maand ${e(Math.round(p.nogVerwacht))} · deze periode ${e(Math.round(p.periode||0))}</div></div>`).join(''):rij('geen potjes via deze rekening','')}
+  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" style="padding:3px 0;border-top:1px solid var(--line)"><div><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> · ${Math.round(p.aandeel*100)}% · ${esc(ritLbl[p.ritme]||p.ritme)}</div><div style="color:var(--mut2)">typisch ${e(Math.round(p.typischVol!=null?p.typischVol:p.typisch))} · daarna ${e(Math.round(p.typisch))}/mnd via deze rekening · ${potReeks(p)}</div><div style="color:var(--mut2)">${D.venster?`al deze periode ${e(p.alPeriode)} · tot je salaris ${e(Math.round(p.periode||0))}`:`al deze maand ${e(p.alPeriode)} · nog deze maand ${e(Math.round(p.nogVerwacht))} · deze periode ${e(Math.round(p.periode||0))}`}</div></div>`).join(''):rij('geen potjes via deze rekening','')}
     ${(D.potZelden||[]).length?`<div class="small" data-totzelden style="padding:4px 0;color:var(--mut2);border-top:1px solid var(--line)">Kan komen, niet meegerekend: ${D.potZelden.map(z=>`${esc(z.naam)} gemiddeld ${e(z.gemiddeld)}`).join(' · ')}${zeldenTekort}</div>`:''}</div>`:'';
   const waarom=`${D.afspraak!=null?`Je sprak af ${e(D.afspraak)} te laten staan.`:'Nog geen verdeling afgesproken.'}${D.naSal!=null?` Na je salaris stond er ${e(D.naSal)}.`:''}`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris" data-totsalaris="${esc(acc)}">
@@ -13616,10 +13707,11 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
           + (Math.abs(sm.vast)>=0.5?rij('+ gesimuleerde vaste lasten tot vandaag', sg(sm.vast), `data-totsimvast="${Math.round(sm.vast*100)}"`):''); })()}
       <div class="small" style="font-weight:700;margin-top:4px;color:var(--mut2)">Vaste lasten</div>${vastRij}
       ${naSalRij?`<div class="small" data-totnasalkop style="font-weight:700;margin-top:6px;color:var(--mut2)">Na je salaris</div>${naSalRij}`:''}
-      <div class="row" data-totpot data-totpotcent="${Math.round((D.potExact||0)*100)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
+      <div class="row" data-totpot data-totpotcent="${Math.round((D.potExact||0)*100)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening${D.venster?` <span data-totvenster="${esc(D.venster.van)}|${esc(D.venster.tot)}" style="color:var(--mut2)">· ${esc(dagKort(D.venster.van))} – ${esc(dagKort(D.venster.tot))}</span>`:''} ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
       ${rij('Contant', `−${e(D.kas)}`, 'data-totkas')}
       <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:3px">${rij('<b>Stand dag voor je salaris</b>', `<b style="${D.eind<0?'color:var(--red)':''}">${e(D.eind)}</b>`, 'data-toteind')}</div>
     </div>
+    ${D.gat?`<div class="small" data-totgat="${esc(D.gat.van)}|${esc(D.gat.tot)}" style="margin-top:8px;color:var(--mut2);line-height:1.45">Uitgaven ${esc(dagKort(D.gat.van))} – ${esc(dagKort(D.gat.tot))} staan niet in je saldo en tellen hier niet mee.</div>`:''}
     <div class="small" data-totwaarom style="margin-top:8px;color:var(--mut2);line-height:1.45">${esc(waarom)}</div>
     <div class="small" data-totvolgend role="button" style="margin:10px 0 4px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();openSalVerdeling('salverdeling')">Volgend salaris: zo verdeel je ›</div></div>`; }
 /* v481 (punt 3): de drie keuzes voor de betaaldatum van een niet-SEPA vaste last, niets voorgeselecteerd */
@@ -22856,6 +22948,7 @@ function coachRules(m,sig){
 const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
 function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
+  if(t.vbVast) return true;   // v506: een gesimuleerde termijn (voorbeeld) is die vaste last, betaald
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
   const c=CATS[catOf(t)]; if(!c || c.type!=='expense') return false;
   if(woningPaymentIds().has(t.id)) return true;   // v440: een betaling aan je woning is een vaste last, geen variabele uitgave
@@ -23010,7 +23103,9 @@ function catSpendMapRuw(m){ return catSpendMap(m, true); }   // v473: zonder de 
    of in app-code) nog niet via save() een _dataGen-bump kreeg. De zware herhaling zit in zijn lezers (recurringSchedule, maandVooruit),
    en die cachet runMemo nu wel; catSpendMap zelf leest de al gememoiseerde txOfMonth/telbareTx, dus een eigen cache levert weinig op en
    zou juist een stille, verouderde waarde kunnen geven (v490). */
-function catSpendMap(m, ruw){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+function catSpendMap(m, ruw){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); }
+  try{ if(contantPotje()){ const K=contantUitgegevenMaand(m||thisYM()); if(CONTANT_CAT in by || K.uitgegeven>0) by[CONTANT_CAT]=K.uitgegeven; } }catch(_){}   // v506 (punt 5): het potje Contant is opnames min wat je kas groeide
+  for(const k in by){ if(by[k]<=0) delete by[k]; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
   if(!ruw){ try{ const R=reisStand(m, Object.assign({}, by)); if(R.af>0){ by[R.pot]=Math.round((by[R.pot]-R.af)*100)/100; if(by[R.pot]<=0) delete by[R.pot]; } }catch(_){} }   // v473: de reiskostenvergoeding gaat af van haar potje (reisStand()), niet onder nul
   return by; }
 
@@ -25996,7 +26091,7 @@ function insUitgegevenKop(U){ if(!U) return '';
 /* contant in de maand waarin het potje ontstaat: een deel van uitgegeven, buiten je budget van deze maand (v456) */
 function insContantLaterRegel(U){ if(!U || !(U.r.kasNieuw>0)) return '';
   let vm=''; try{ vm=ymFull(valtOpYmPlus(String(U.o.m||thisYM()),1)).split(' ')[0]; }catch(_){}
-  return `<div class="small" data-inscontantlater="${U.r.kasNieuw}" style="color:var(--mut2);margin-top:6px">contant ${euro0(U.r.kasNieuw)} · nieuw potje, telt vanaf 1 ${esc(vm)} in je budget</div>`; }
+  return `<div class="small" data-inscontantlater="${U.r.kasNieuw}" style="color:var(--mut2);margin-top:6px">contant ${euro0(U.r.kasNieuw)} · nieuw potje, telt vanaf 1 ${esc(vm)} in je budget</div>${U.kas?`<div class="small" data-inscontantbron="${esc(U.kas.bron)}" style="color:var(--mut2)">opnames ${euro0(Math.round(U.kas.opn))}${U.kas.eind!=null?(()=>{ const dk=Math.round(U.kas.eind-(U.kas.begin||0)); return dk>=0?` − kas erbij ${euro0(dk)}`:` + uit je kas ${euro0(-dk)}`; })():''} · ${esc(contantUitBronTekst(U.kas))}</div>`:''}`; }
 function insGroepen(S){ S=S||insMaandStand();
   const vU=Math.round(S.vast), pU=Math.round(S.potjes+S.zonder);
   let BG=null; try{ BG=budgetPerGroep(maandVooruit()); }catch(_){}
@@ -26056,12 +26151,17 @@ function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
   const cLaterVan={}; const cLater=ym=>{ if(!(ym in cLaterVan)){ let v=false; try{ v=contantNieuwIn(ym); }catch(_){} cLaterVan[ym]=v; } return cLaterVan[ym]; };
   const Bvan={}; const Bm=ym=>Bvan[ym]||(Bvan[ym]=maandPotjes(ym).B||{});
   let reis=0; for(const t of txs){ try{ reis+=reisDeel(t)||0; }catch(_){} }
+  const kasF=(()=>{ try{ return contantPotje(); }catch(_){ return false; } })();   // v506 (punt 5): met een potje Contant komt contant uit contantUitgegeven, niet uit de opnames
   for(const t of txs){ const ym=String(t.date).slice(0,7), B=Bm(ym), k=catOf(t); let v, g;
+    if(kasF && k===CONTANT_CAT) continue;
     /* buiten je potjes: dezelfde toets en hetzelfde bedrag als buitenMaand() (de regel en de sheet), zodat die regel een deel van dit totaal is */
     if(CATS[k] && CATS[k].type==='expense' && geenNormTx(t)){ g='buiten'; v=-t.amount; if(eenmaligLabel(t)) c.eenmalig+=v; }
     else { if(!isUitgave(t, B)) continue; v=uitgaveNorm(t); }
     if(!g) g=(k===CONTANT_CAT && cLater(ym))?'kasNieuw':insVastTx(t)?'vast':((+B[k]||0)>0?'potjes':'zonder');
     c[g]+=v; tx[g].push(t); const key=g==='vast'?'~vast':k; per[key]=(per[key]||0)+v; if(g!=='vast') groep[k]=g; }
+  let kas=null; if(kasF){ try{ let van, tot; if(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); van=m+'-01'; tot=m+'-'+String(o.totDag!=null?Math.min(+o.totDag,dim):dim).padStart(2,'0'); } else { van=String(o.start).slice(0,10); tot=String(o.eind).slice(0,10); }
+      kas=contantUitgegeven(van, tot); const ymG=(kas.tot<kas.van?van:kas.tot).slice(0,7), BG=Bm(ymG);
+      if(kas.uitgegeven>0 || kas.opnTx.length){ const g=cLater(ymG)?'kasNieuw':((+BG[CONTANT_CAT]||0)>0?'potjes':'zonder'); c[g]+=kas.uitgegeven; for(const t of kas.opnTx) tx[g].push(t); per[CONTANT_CAT]=(per[CONTANT_CAT]||0)+kas.uitgegeven; groep[CONTANT_CAT]=g; kas.groep=g; } }catch(_){ kas=null; } }
   /* de reiskostenvergoeding: af van haar potje (tot wat daar uitging), in het deel waar dat potje in valt */
   let reisAf=0; try{ const C=salSplitCfg(); const pot=C&&C.reisPot; if(reis>0 && pot){ const g=groep[pot]||(potHeelVast(pot)?'vast':null), key=g==='vast'?'~vast':pot;
     if(g){ const uitVoor=Math.max(g==='vast'?tx.vast.filter(t=>catOf(t)===pot).reduce((a,t)=>a+uitgaveNorm(t),0):(per[pot]||0), 0); reisAf=Math.min(reis, uitVoor);
@@ -26070,7 +26170,7 @@ function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
   const totaal=r2(c.vast+c.potjes+c.zonder+c.buiten+c.kasNieuw);
   /* de afgeronde delen tellen op tot het afgeronde totaal (brugAfronden: de grootste-rest-methode) */
   const R=brugAfronden(['vast','potjes','zonder','buiten','kasNieuw'].map(k=>({k, v:c[k]})), Math.round(totaal));
-  return {o, cent:c, r:R, totaal, totaalR:Math.round(totaal), eenmaligR:Math.round(c.eenmalig), reisAf:r2(reisAf), per, tx}; }
+  return {o, cent:c, r:R, totaal, totaalR:Math.round(totaal), eenmaligR:Math.round(c.eenmalig), reisAf:r2(reisAf), per, tx, kas}; }
 /* het label van het venster: "oktober", of "24 nov – 23 dec" */
 function uitgegevenLabel(o){ if(o.m) return ymFull(o.m).split(' ')[0]; return `${dagKort(o.start)} – ${dagKort(o.eind)}`; }
 /* v505 (punt 3): wat er deze maand (of periode) BUITEN het budget uitging en dus niet in "verwacht" zit: buiten je potjes (eenmalig en
@@ -26185,7 +26285,7 @@ function weekRekensom(M){
    uitgerekend en verandert daarna niet: een boeking van vorige week die pas op dinsdag binnenkomt verschuift de week
    ERNA, niet deze. De sleutel is je keuze (welke potjes wekelijks zijn, met hun bedrag): verander je die zelf, dan
    rekent de week opnieuw. */
-function weekSleutel(){ const B=SET.budgets||{}; return 'v505|'+wekKandidaten().filter(k=>potWekelijks(k)===true).map(k=>k+':'+Math.round(+B[k]||0)).join(','); }
+function weekSleutel(){ const B=SET.budgets||{}; return 'v506|'+wekKandidaten().filter(k=>potWekelijks(k)===true).map(k=>k+':'+Math.round(+B[k]||0)).join(','); }
 /* v436: DE WEEK PER POTJE (gevraagd door de gebruiker). Per wekelijks potje: wat er van zijn variabele deel (weekPotBudget) aan het
    begin van de week over is, gedeeld door de dagen die er in de maand nog over zijn, maal de dagen van deze week. Uitgegeven deze
    week is wat er in die categorie variabel uitging (insTxSoort 'potje'), met de boekingen erbij. Het weekbedrag per potje staat vast
@@ -26208,8 +26308,11 @@ function weekPotjes(M){
   const m=thisYM(), E=daysElapsed(m), W=weekIndeling(m), cur=W.find(w=>E.elapsed>=w.van && E.elapsed<=w.tot)||null; if(!cur) return null;
   const pb=weekPotBudget(m), ks=Object.keys(pb).filter(k=>M?potWekelijks(k,M)!==false:potWekelijks(k)===true), over=E.dim-cur.van+1;
   const voor={}, uit={}, tx={}; for(const k of ks){ voor[k]=0; uit[k]=0; tx[k]=[]; }
-  for(const t of txOfMonth(m)){ if(insTxSoort(t)!=='potje') continue; const k=catOf(t); if(!(k in voor)) continue; const d=+String(t.date).slice(8,10), v=uitgaveNorm(t);
+  const kasF=(()=>{ try{ return contantPotje() && (CONTANT_CAT in voor); }catch(_){ return false; } })();
+  for(const t of txOfMonth(m)){ if(insTxSoort(t)!=='potje') continue; const k=catOf(t); if(!(k in voor)) continue; if(kasF && k===CONTANT_CAT) continue; const d=+String(t.date).slice(8,10), v=uitgaveNorm(t);
     if(d<cur.van) voor[k]+=v; else if(d<=cur.tot){ uit[k]+=v; tx[k].push(t); } }
+  /* v506 (punt 6): contant in de week volgens punt 5 (opnames min wat je kas groeide), niet de opname als volle uitgave */
+  if(kasF){ const dd=n=>m+'-'+String(n).padStart(2,'0'); if(cur.van>1) voor[CONTANT_CAT]=contantUitgegeven(dd(1), dd(cur.van-1)).uitgegeven; const KW=contantUitgegeven(dd(cur.van), dd(cur.tot)); uit[CONTANT_CAT]=KW.uitgegeven; tx[CONTANT_CAT]=KW.opnTx.slice(); }
   const wekenOver=W.filter(w=>w.van>=cur.van).length;   // v505: deze week meegeteld
   const potjes=ks.map(k=>{ const R=weekBasisRegel(pb[k], E.dim, cur.van-1, cur.dagen, voor[k], wekenOver);
     return {k, naam:CATS[k].name, budget:Math.round(pb[k]), voor:Math.round(voor[k]), bedrag:R.bedrag, basis:R.basis, inhalen:R.inhalen, ruimte:R.ruimte, nogInTeHalen:R.nogInTeHalen, uit:Math.round(uit[k]*100)/100, tx:tx[k].sort((a,b)=>b.date.localeCompare(a.date))}; });
@@ -26223,7 +26326,15 @@ function weekNu(vastzetten){
   if(!vast && vastzetten){ SET.weekStand={start, sleutel:sl, bedragen:Object.fromEntries(P.potjes.map(x=>[x.k, x.bedrag])), inhalen:Object.fromEntries(P.potjes.map(x=>[x.k, x.inhalen]))}; try{ save(); }catch(_){} }
   return weekTotaal(Object.assign({}, P, {start})); }
 /* de som over de wekelijkse potjes (pre-era en era): weekbedrag, basis, inhalen, ruimte en wat nog in te halen is */
-function weekTotaal(P){ for(const x of P.potjes) x.nog=Math.round((x.bedrag-x.uit)*100)/100;
+/* v506 (punt 6): HET TEMPO VAN DE MAAND OF PERIODE (dezelfde bron als de maandkaart: "EUR X onder/boven tempo") bepaalt wat de
+   weektegel zegt: boven tempo staat er wat je inhaalt, onder of op tempo de ruimte. Nooit allebei: gemeten stond "nog EUR 85 in te
+   halen · ruimte deze maand EUR 751" op een kaart die "EUR 738 onder tempo" zei. Onder tempo is het weekbedrag dan de basis (er wordt
+   niets ingehaald); zonder tempo (geen potjesdeel) blijft het per potje zoals v505. */
+function insTempoVerschil(){ try{ const PS=periodeStandNu(); if(PS) return PS.potDeel>0?Math.round(PS.uit-PS.potTempo):null; }catch(_){}
+  try{ const S=insMaandStand(); return S.potDeel>0?Math.round(S.potjes+S.zonder)-S.potTempo:null; }catch(_){ return null; } }
+function weekTotaal(P){ let dt=null; try{ dt=insTempoVerschil(); }catch(_){} P.tempoVerschil=dt;
+  if(dt!=null){ for(const x of P.potjes){ if(dt>0){ x.ruimte=0; } else { x.inhalen=0; x.nogInTeHalen=0; x.bedrag=x.basis; } } }
+  for(const x of P.potjes) x.nog=Math.round((x.bedrag-x.uit)*100)/100;
   const s=k=>P.potjes.reduce((a,x)=>a+(+x[k]||0),0), uit=Math.round(s('uit')*100)/100, bedrag=s('bedrag');
   return Object.assign(P, {bedrag, basis:s('basis'), inhalen:s('inhalen'), ruimte:s('ruimte'), nogInTeHalen:s('nogInTeHalen'), uit, nog:Math.round((bedrag-uit)*100)/100, erover:P.potjes.filter(x=>x.nog<0)});
 }
@@ -26253,8 +26364,10 @@ function insWeekTegelP(){
   const W=weekIndelingDat(P.start, P.eind), cur=W.find(w=>vd>=w.van && vd<=w.tot)||null;
   if(!cur) return {P, W, cur:null, potjes:[], bedrag:0, uit:0, nog:0, erover:[], dagenTeGaan:0, ks};
   const voor={}, uit={}, tx={}; for(const k of ks){ voor[k]=0; uit[k]=0; tx[k]=[]; }
-  for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start || d>P.eind) continue; if(insTxSoort(t)!=='potje') continue; const k=catOf(t); if(!(k in voor)) continue; const v=uitgaveNorm(t);
+  const kasF=(()=>{ try{ return contantPotje() && (CONTANT_CAT in voor); }catch(_){ return false; } })();
+  for(const t of TX){ const d=t.date.slice(0,10); if(d<P.start || d>P.eind) continue; if(insTxSoort(t)!=='potje') continue; const k=catOf(t); if(!(k in voor)) continue; if(kasF && k===CONTANT_CAT) continue; const v=uitgaveNorm(t);
     if(d<cur.van) voor[k]+=v; else if(d<=cur.tot){ uit[k]+=v; tx[k].push(t); } }
+  if(kasF){ if(cur.van>P.start) voor[CONTANT_CAT]=contantUitgegeven(P.start, rekDag(cur.van,-1)).uitgegeven; const KW=contantUitgegeven(cur.van, cur.tot); uit[CONTANT_CAT]=KW.uitgegeven; tx[CONTANT_CAT]=KW.opnTx.slice(); }   // v506 (punt 6): contant volgens punt 5
   const overDagen=Math.max(salDagenTussen(cur.van, P.eind)+1, 1), wekenOver=W.filter(w=>w.van>=cur.van).length, dagenVoor=salDagenTussen(P.start, cur.van);
   const potjes=ks.map(k=>{ const R=weekBasisRegel(BP.perDag[k], P.dagen, dagenVoor, cur.dagen, voor[k], wekenOver);   // v505: vaste basis, alleen inhalen
     return {k, naam:CATS[k].name, budget:Math.round(BP.perDag[k]), voor:Math.round(voor[k]), bedrag:R.bedrag, basis:R.basis, inhalen:R.inhalen, ruimte:R.ruimte, nogInTeHalen:R.nogInTeHalen, uit:Math.round(uit[k]*100)/100, tx:tx[k].sort((a,b)=>b.date.localeCompare(a.date))}; });
@@ -35477,8 +35590,8 @@ let _runMemoGlobal={gen:-1, dag:'', map:new Map()};
 function runMemoStore(){ const g=_dataGen, d=vandaagYMD(); if(_runMemoGlobal.gen!==g || _runMemoGlobal.dag!==d) _runMemoGlobal={gen:g, dag:d, map:new Map()}; return _runMemoGlobal.map; }
 function runMemoVergeten(){ _runMemoGlobal={gen:-1, dag:'', map:new Map()}; }   /* v490: leegt alleen de render-memo (niet de txOfMonth/telbareTx-caches); test-haak, zoals telbaarVergeten() */
 function runMemo(naam, arg, fn){ const R=window._ctrlRun; const store=(R && R.memo)?R.memo:runMemoStore();
-  const k=naam+'|'+_dataGen+'|'+vandaagYMD()+'|'+arg; if(store.has(k)){ if(R) R.treffers=(R.treffers||0)+1; return structuredClone(store.get(k)); }
-  const r=fn(); try{ store.set(k, structuredClone(r)); }catch(_){} return r; }
+  const k=naam+'|'+_dataGen+'|'+vandaagYMD()+'|'+voorbeeldSleutel()+'|'+arg; if(store.has(k)){ if(R) R.treffers=(R.treffers||0)+1; return structuredClone(store.get(k)); }
+  const r=fn(); try{ store.set(k, structuredClone(r)); }catch(_){ try{ if(typeof PERF!=='undefined' && PERF.on){ const n='memo niet bewaard: '+naam; PERF.n[n]=(PERF.n[n]||0)+1; PERF.ms[n]=PERF.ms[n]||0; } }catch(__){} } return r; }   /* v506: een uitkomst die niet te klonen is valt zichtbaar uit de memo (SNELHEID) */
 function diagRun(){ return !!(window._ctrlRun && window._ctrlRun.alleenControles); }
 function ctrlSek(blok, L){ let t=performance.now(); return naam=>{ const n=performance.now(); const R=window._ctrlRun; if(R) R.secties.push({blok, naam, ms:n-t, tot:L.length}); t=n; }; }
 function ctrlStap(R, naam, fn, U){ const t=performance.now(), n0=U?U.length:0; try{ return fn(); } finally { const ms=performance.now()-t; R.stappen.push({naam, ms}); if(U) for(let i=n0;i<U.length;i++) if(U[i].ms==null){ U[i].ms=Math.round(ms); U[i].sectie=naam; } } }
@@ -36107,9 +36220,13 @@ function voorbeeldSalarisInjecteer(){ voorbeeldSalarisWeg(); const dag=window._v
   }catch(_){}
   /* de vaste lasten op hun datum in de periode tot de gekozen dag (rekVoorstel().vast draagt de termijnen per post met hun datums) */
   try{ const P=rekVoorstel(), start=(SP&&SP.cur)?SP.cur.start:dag, acc=salAcc||(Array.isArray(OWN)?OWN[0]:null);
-    if(P && P.ok && Array.isArray(P.vast) && acc){ for(const x of P.vast){ const bedr=Math.round(+x.bedrag||+x.termijn||0); if(!(bedr>0)) continue;
+    /* v506 (punt 2): de termijnen van de LOPENDE periode (vastCur, niet per0: met het salaris erbij wijst per0 naar de volgende), elk als
+       EEN betaalde termijn van zijn eigen bedrag op zijn eigen rekening (x.termijn, x.acc). Tot v506 stond hier x.bedrag (de som van alle
+       termijnen in de periode) op de rekening van het salaris. De boeking draagt vbVast: isFixed() ziet hem als die vaste last. */
+    const VL=Array.isArray(P&&P.vastCur)?P.vastCur:(P&&P.vast);
+    if(P && P.ok && Array.isArray(VL) && acc){ for(const x of VL){ const bedr=Math.round(+x.termijn||+x.bedrag||0); if(!(bedr>0)) continue;
       for(const d of (x.data||[])){ const ds=String(d).slice(0,10); if(ds<start || ds>dag) continue;
-        const t={id:'vb:vl:'+(x.key||x.naam||'x')+':'+ds, date:ds, amount:-bedr, acc, name:x.naam||'Vaste last', desc:'VOORBEELD vaste last', typ:'', ref:'', src:'voorbeeld', accName:'', refNums:[]}; categorize(t); t.id='vb:vl:'+(x.key||x.naam||'x')+':'+ds; if(x.cat && CATS[x.cat]) OVR[t.id]=x.cat; TX.push(t); ids.push(t.id); } } }
+        const t={id:'vb:vl:'+(x.key||x.naam||'x')+':'+ds, date:ds, amount:-bedr, acc:x.acc||acc, name:x.naam||'Vaste last', desc:'VOORBEELD vaste last', typ:'', ref:'', src:'voorbeeld', accName:'', refNums:[], vbVast:x.key||true}; categorize(t); t.id='vb:vl:'+(x.key||x.naam||'x')+':'+ds; if(x.cat && CATS[x.cat]) OVR[t.id]=x.cat; TX.push(t); ids.push(t.id); } } }
   }catch(_){}
   window._voorbeeldTx=ids; try{ runMemoVergeten(); buildAccMeta(); }catch(_){} _dataGen++;
 }
