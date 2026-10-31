@@ -87,7 +87,7 @@ test('v498 e: de schakelaar zet het verwachte salaris, terug naar vandaag wist h
   const r = await page.evaluate(() => {
     voorbeeldStart('2026-11-24');
     voorbeeldSalarisZet(true);
-    const inVb = TX.filter(t => t.date === '2026-11-24' && t.amount > 0 && String(t.src) === 'voorbeeld');
+    const inVb = TX.filter(t => t.date === '2026-11-24' && t.amount > 0 && String(t.src) === 'voorbeeld' && String(t.id).startsWith('vb:sal:'));   // v504: naast het salaris staan ook de bijschrijvingen van je verdeling (vb:vd:)
     const vbCount = TX.filter(t => String(t.src) === 'voorbeeld').length;
     voorbeeldStop();
     const naCount = TX.filter(t => String(t.src) === 'voorbeeld').length;
