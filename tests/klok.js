@@ -30,12 +30,14 @@ const UIT = process.env.ECHTE_KLOK === '1';
 if (!UIT && !global.__minderKlok) {
   const Echt = Date;
   const off = standaardDatum(Echt).getTime() - Echt.now();
+  /* v508: de offset staat op global.__minderKlok.off, zodat tests/periode-wereld.js een fixture op een andere dag kan opbouwen
+     (metNodeDag) en daarna terugzet. */
   class KlokDate extends Echt {
-    constructor(...a) { if (a.length === 0) super(Echt.now() + off); else super(...a); }
-    static now() { return Echt.now() + off; }
+    constructor(...a) { if (a.length === 0) super(Echt.now() + global.__minderKlok.off); else super(...a); }
+    static now() { return Echt.now() + global.__minderKlok.off; }
   }
-  global.Date = KlokDate;
   global.__minderKlok = { off, Echt };
+  global.Date = KlokDate;
 }
 
 /* PLAYWRIGHT ZELF LEEST Date.now() IN NODE om zijn paginaklok over een navigatie heen te dragen. Met de Node-klok verschoven

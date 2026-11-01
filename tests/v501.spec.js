@@ -112,7 +112,8 @@ test.describe('v501', () => {
       const k = gripCyclus().kies.find(x => x.id === 'vastpost:' + sp.key); return { sp: { status: sp.status, naam: sp.naam, verschil: sp.verschil, mV: sp.mV, mN: sp.mN }, hcApart: !!hc, kies: k ? k.naam : null, vv: SET.vastVervangt, stijging: G.stijging, totVoor: G.totVoor, totNa: G.totNa }; });
     expect(na.sp).toEqual({ status: 'vervangt', naam: expect.stringMatching(/^Sportschool Oost → SportCity$/i), verschil: 40, mV: 40, mN: 80 });
     expect(na.hcApart, 'de oude post staat niet meer apart als gestopt').toBe(false);
-    expect(na.kies).toMatch(/^Sportschool Oost → SportCity · verschil \+€40\/mnd · accepteren of nakijken$/i);
+    /* v508 (punt 5): vastleggen sluit het punt af, net als accepteren: de rij staat niet meer onder Te kiezen */
+    expect(na.kies).toBe(null);
     expect(Object.values(na.vv)[0].van).toBe(voor.hcKey);
     expect(na.totNa - na.totVoor).toBe(na.stijging);   // de sommen blijven sluiten: de oude post telt via mV van de vervangt-rij
   });
