@@ -314,7 +314,7 @@ test.describe('een boeking zonder bank houdt haar categorie', () => {
     await page.evaluate(() => { contantTellen(); document.querySelector('#contInput').value = '30'; contantOpslaan(); });
     await page.reload();
     await page.waitForFunction(() => typeof catOf === 'function');
-    expect(await page.evaluate(() => TX.filter((t) => t.name === 'Contant besteed').map((t) => [catOf(t), t.amount]))).toEqual([['contant', -20]]);
+    expect(await page.evaluate(() => TX.filter((t) => String(t.bankRef || '').indexOf('contant|') === 0).map((t) => [catOf(t), t.amount]))).toEqual([['contant', -20]]);   // v509: de telling heet nu "Kastelling · ..."; herken hem aan zijn bankRef
   });
   test('een boeking met een rekening en die vorm wordt niet zo gelezen', async ({ page }) => {
     await boot(page);

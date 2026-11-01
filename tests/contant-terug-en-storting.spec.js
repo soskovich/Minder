@@ -57,7 +57,7 @@ async function boot(page, o) {
       categorize(t); TX.push(t); TX.sort((a, b) => a.date.localeCompare(b.date));
       applyOwnAccounts(); buildAccMeta(); save(); return t.id;
     };
-    window.contantBesteed = () => TX.filter((t) => t.name === 'Contant besteed').map((t) => t.amount);
+    window.contantBesteed = () => TX.filter((t) => String(t.bankRef || '').indexOf('contant|') === 0).map((t) => t.amount);   // v509: de telling-boeking heet nu "Kastelling · ..."; herken hem aan zijn bankRef, niet aan de naam
   });
 }
 // de sheet via de echte route: lening openen, de knop, het gevolg, bevestigen
