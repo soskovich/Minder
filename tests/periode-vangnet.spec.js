@@ -36,7 +36,7 @@ const lees = (page) => page.evaluate(({ LEEF }) => {
   gripKiesTab('terugblik'); const terugTxt = document.getElementById('gripInhoud').innerText;
   go('dash'); const dashTxt = document.getElementById('s-dash').innerText;
   o.teksten = { insTxt, zienTxt, kiesTxt, terugTxt, dashTxt };
-  o.opzijDoel = opzijPeriode().doel;
+  { const O = opzijPeriode(); o.opzijDoel = O.doel; o.opzijAfspraak = O.afspraak; o.opzijOvergang = !!O.overgang; }
   const D = totSalarisData(LEEF);
   o.tot = D && { saldo: D.saldoExact, vast: D.vastExact, pot: D.potExact, kas: D.kasExact, eind: D.eindExact, venster: D.venster };
   if (D) { openTotSalaris(LEEF); const el = document.getElementById('totSalaris'); o.totTxt = el ? el.innerText : ''; closeSheet(); }
@@ -71,7 +71,8 @@ for (const dag of S.DAGEN) {
       expect(r.balk).toBeLessThanOrEqual(100.5);
       expect(r.overloop).toBeLessThanOrEqual(1);
       /* Kiezen: de afspraak van je verdeling is het doel van opzij */
-      expect(r.opzijDoel).toBe(1766);
+      /* v508 (punt 1/2): november (1–23) is de overgangsmaand, zonder doel; de afspraak blijft bewaard */
+      if (ERA(dag)) expect(r.opzijDoel).toBe(1766); else { expect(r.opzijOvergang).toBe(true); expect(r.opzijDoel).toBe(null); expect(r.opzijAfspraak).toBe(1766); }
       /* Tot je volgende salaris: saldo - vaste lasten - potjes - contant is de stand op de dag voor je salaris */
       expect(r.tot).not.toBeNull();
       expect(Math.round((r.tot.saldo - r.tot.vast - r.tot.pot - r.tot.kas) * 100)).toBe(Math.round(r.tot.eind * 100));
