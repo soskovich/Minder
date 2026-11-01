@@ -307,7 +307,9 @@ test.describe('een boeking zonder bank houdt haar categorie', () => {
   test('een "Contant besteed" van voor v343 staat na de boot op Contant en niet op Overig', async ({ page }) => {
     const dag = CUR + '-02';
     await boot(page, { extra: [{ id: 'cash_' + dag, date: dag, amount: -20, acc: '', name: 'Contant besteed', desc: 'CONTANT TELLING ' + dag, typ: '', ref: '', src: 'contant', accName: '', refNums: [], bankRef: 'contant|' + dag, ruleCat: 'overig', autoCat: 'overig' }] });
-    expect(await page.evaluate(() => catOf(TX.find((t) => t.name === 'Contant besteed')))).toBe('contant');
+    // v509b: de naam volgt de soort, dus herken de telling aan haar bankRef en eis de nieuwe naam erbij
+    const r = await page.evaluate((d) => { const t = TX.find((x) => x.bankRef === 'contant|' + d); return t && [catOf(t), t.name]; }, dag);
+    expect(r).toEqual(['contant', 'Kastelling · uitgegeven']);
   });
   test('een nieuwe telling draagt haar categorie zelf, ook na een herstart', async ({ page }) => {
     await boot(page);

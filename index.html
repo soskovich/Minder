@@ -1882,7 +1882,7 @@ function txId(t, acc){
 const NAAM_KAS_AUTO=['Contant besteed','Kastelling · uitgegeven','Kastelling · nog in je zak'];
 function naamVanSoort(t, cat){ if(!t) return;
   const nm=String(t.name||'').trim();
-  if(t.src==='contant' && !t.acc && (!nm || NAAM_KAS_AUTO.includes(nm))){ t.name=t.amount>0?'Kastelling · nog in je zak':'Kastelling · uitgegeven'; return; }
+  if(t.src===CONTANT_CAT && !t.acc && (!nm || NAAM_KAS_AUTO.includes(nm))){ t.name=t.amount>0?'Kastelling · nog in je zak':'Kastelling · uitgegeven'; return; }
   if(cat==='rente' && (!nm || nm==='Transactie')) t.name='Rente'; }
 function categorize(t){
   const U=t.desc.toUpperCase();
