@@ -194,7 +194,8 @@ test('k. de Kiezen-kaart toont "over deze periode", Opslaan staat uit tot alles 
   await page.evaluate(() => { go('maand'); if (typeof gripKiesTab === 'function') gripKiesTab('kiezen'); renderMaand(); });
   const k = page.locator('#gripWatOver');
   await expect(k).toContainText('Bestemming voor wat over is');
-  await expect(k).toContainText('€500 over deze periode');
+  /* v508 (punt 2): "wat over is" is een stand op de dag voor je salaris, geen venster */
+  await expect(k.locator('[data-watoverregel]')).toContainText(/^€500 over op .+ · eindsaldo boven je buffer/);
   await expect(page.locator('#gripWatOver [data-watopslaan]')).toBeDisabled();   // niets voorgeselecteerd
   await page.locator('#gripWatOver [data-watveld="sparen"]').fill('500');
   await expect(page.locator('#gripWatOver [data-watopslaan]')).toBeEnabled();

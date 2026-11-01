@@ -162,13 +162,16 @@ test('v499 h: Kiezen noemt periodes en november (1–23)', async ({ page }) => {
     renderMaand(); gripKiesTab('kiezen');
     const t = document.getElementById('gripInhoud').innerText, mee = document.querySelector('[data-meegemeten]');
     const w = document.querySelector('[data-watoverregel]');
-    return { t, mee: mee ? mee.getAttribute('data-meeeenheid') : null, wat: w ? w.innerText : null };
+    const H = periodeHistorie(eraEenheidNu(), 12), u = H.find((x) => x.korteMaand), T = u ? gripTerugblik(u.ym, u) : null;
+    return { t, mee: mee ? mee.getAttribute('data-meeeenheid') : null, wat: w ? w.innerText : null, novN: T ? T.n : null, novSd: T ? T.items.find((x) => x.id === 'spaardoel').s : null };
   });
   expect(r.t).toMatch(/Mee uit vorige periode/);
   expect(r.t).toMatch(/Al gekozen deze periode/);
   expect(r.t).not.toMatch(/Mee uit vorige maand|Al gekozen deze maand/);
-  expect(r.mee).toBe('november (1–23)');
-  if (r.wat != null) expect(r.wat).toMatch(/over vorige periode \(/);
+  /* v508 (punt 1): november (1–23) heeft geen spaardoel en dus niets om te beoordelen; de laatst gemeten eenheid is oktober */
+  expect(r.novSd).toBe('overgang'); expect(r.novN).toBe(0);
+  expect(r.mee).toBe('oktober');
+  if (r.wat != null) expect(r.wat).toMatch(/over op .+ · eindsaldo boven je buffer/);
 });
 
 // i. Zien: één opzij-bedrag uit de verdeling van de periode; het voorstel gaat over 24 nov en noemt zijn afwijking met een reden.
