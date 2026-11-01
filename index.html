@@ -3004,9 +3004,9 @@ function contantSchatting(tot){ tot=tot||vandaagYMD(); const H=contantStanden().
   return {telling:+h.stand, datum:h.datum, tot, flows:r2(flows), dagen, tempo:r2(tempo), stand:r2(Math.max(+h.stand+flows-tempo,0))}; }
 /* v506 (punt 5): EEN OPNAME IS PAS UITGEGEVEN ALS HET GELD UIT JE ZAK IS (gevraagd door de gebruiker: "ik pin direct na mijn salaris en
    houd vaak contant over"). Contant uitgegeven in een venster [van, tot] = opnames (+ contant ontvangen − storting) − (kas aan het eind −
-   kas aan het begin). De kas op een dag komt uit je tellingen en de bestaande schatting (contantSchatting: de laatste telling, plus wat
-   je sindsdien pinde of ontving, min het tempo van het potje); vóór je eerste telling is de kas 0 (v447). Zonder enige telling t/m het
-   eind geldt opname = uitgave, en dat zegt de bron ('opnames': "schatting · tel je contant"). Nooit onder nul. Het eind van een venster
+   kas aan het begin). De kas is gemeten: de laatste telling plus wat je sindsdien pinde, ontving of
+   stortte, zonder tempo; na de laatste telling in het venster is een opname een uitgave. Zonder telling in het
+   venster geldt opname = uitgave, en dat zegt de bron ('opnames': "schatting · tel je contant"). Niet op nul geklemd (v449). Het eind van een venster
    in de toekomst is vandaag. Lezers: uitgegevenStand (uitgegeven, buiten budget, netto op Grip), catSpendMap (het potje Contant) en de
    weektegel, alleen met een potje Contant (zonder potje is een opname 'intern' en boekt de telling al het verschil, v420). */
 let _cUitMemo={k:'', map:new Map()};
@@ -3019,19 +3019,27 @@ function contantUitgegeven(van, tot){ van=String(van).slice(0,10); tot=String(to
     if(isOpnameTx(t)){ opn+=-t.amount; opnTx.push(t); } else if(t.amount>0 && contantStorting(t)) stort+=t.amount; }
   for(const x of contantIns()) if(x.datum>=van && x.datum<=tot) ontv+=+x.bedrag||0;
   const flows=opn+ontv-stort, H=contantStanden();
-  const kasOp=d=>{ if(!H.some(h=>h.datum<=d)) return null; const S=contantSchatting(d); return S?+S.stand:null; };
-  /* de kas aan het begin: de stand op de dag ervoor; is er dan nog nooit geteld maar wel in het venster, dan de eerste telling min wat er
-     tussen het begin en die telling in je portemonnee kwam (er is dan niets gemeten over die dagen, dus niets als uitgegeven verzonnen) */
-  const eind=kasOp(tot); let beginRuw=kasOp(rekDag(van,-1)), beginBron=beginRuw==null?null:'stand';
-  if(beginRuw==null){ const h1=H.find(h=>h.datum>=van && h.datum<=tot); if(h1){ let f=0; for(const t of opnTx) if(String(t.date).slice(0,10)<=h1.datum) f+=-t.amount;
-      for(const t of telbareTx()){ const d=String(t.date||'').slice(0,10); if(!t.pending && d>=van && d<=h1.datum && t.amount>0 && contantStorting(t)) f-=t.amount; }
-      for(const x of contantIns()) if(x.datum>=van && x.datum<=h1.datum) f+=+x.bedrag||0;
-      beginRuw=Math.max(+h1.stand-f,0); beginBron='eerste telling'; } }
+  /* de kas is GEMETEN en nooit geschat: de laatste telling plus wat je sindsdien pinde, ontving of stortte (geen tempo, dat is een
+     verwachting en geen uitgave). Is er in het venster geen telling, dan is een opname een uitgave (bron 'opnames'). */
+  const flowsTot=(van0, d)=>{ let f=0; for(const t of opnTx) { const td=String(t.date).slice(0,10); if(td>van0 && td<=d) f+=-t.amount; }
+      for(const t of telbareTx()){ const td=String(t.date||'').slice(0,10); if(!t.pending && td>van0 && td<=d && t.amount>0 && contantStorting(t)) f-=t.amount; }
+      for(const x of contantIns()) if(x.datum>van0 && x.datum<=d) f+=+x.bedrag||0; return f; };
+  const tW=H.filter(h=>h.datum>=van && h.datum<=tot).pop()||null;
+  const hV=H.filter(h=>h.datum<van).pop()||null;
+  let beginRuw=null, beginBron=null;
+  if(hV){ /* de stand op de dag voor het venster: de telling ervoor plus wat er tussen die telling en het venster in je portemonnee kwam */
+    let f=0; for(const t of telbareTx()){ const td=String(t.date||'').slice(0,10); if(t.pending || td<=hV.datum || td>=van) continue; if(isOpnameTx(t)) f+=-t.amount; else if(t.amount>0 && contantStorting(t)) f-=t.amount; }
+    for(const x of contantIns()) if(x.datum>hV.datum && x.datum<van) f+=+x.bedrag||0;
+    beginRuw=Math.max(+hV.stand+f,0); beginBron='stand'; }
+  else if(tW){ /* nog nooit geteld voor het venster: de eerste telling erin min wat er tussen het begin en die telling binnenkwam */
+    const h1=H.find(h=>h.datum>=van && h.datum<=tot); beginRuw=Math.max(+h1.stand-flowsTot(rekDag(van,-1), h1.datum),0); beginBron='eerste telling'; }
   const begin=beginRuw==null?0:beginRuw;
   let uitgegeven, bron;
-  if(eind==null){ uitgegeven=Math.max(flows,0); bron='opnames'; }
-  else { uitgegeven=Math.max(begin+flows-eind,0); bron=H.some(h=>h.datum>=van && h.datum<=tot)?'telling':'schatting'; }
-  const r={van, tot, uitgegeven:r2(uitgegeven), flows:r2(flows), opn:r2(opn), ontv:r2(ontv), stort:r2(stort), begin:beginRuw==null?null:r2(beginRuw), beginBron, eind:eind==null?null:r2(eind), bron, opnTx};
+  /* opnames min wat je kas groeide; na de laatste telling is een opname een uitgave. NIET op nul geklemd: groeide je kas meer dan je
+     pinde, dan kwam er geld uit een eerdere periode bij (v448/v449), en dat is een meting. */
+  if(!tW){ uitgegeven=flows; bron='opnames'; }
+  else { uitgegeven=begin+flows-(+tW.stand); bron='telling'; }
+  const r={van, tot, uitgegeven:r2(uitgegeven), flows:r2(flows), opn:r2(opn), ontv:r2(ontv), stort:r2(stort), begin:beginRuw==null?null:r2(beginRuw), beginBron, eind:tW?r2(+tW.stand):null, bron, opnTx};
   _cUitMemo.map.set(kk, r); return r; }
 function contantUitgegevenMaand(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); return contantUitgegeven(m+'-01', m+'-'+String(dim).padStart(2,'0')); }
 function contantUitBronTekst(K){ return !K?'':(K.bron==='opnames'?'schatting · tel je contant':(K.bron==='schatting'?'opnames min wat je kas groeide (schatting)':'opnames min wat je kas groeide (telling)')); }
@@ -23104,7 +23112,7 @@ function catSpendMapRuw(m){ return catSpendMap(m, true); }   // v473: zonder de 
    en die cachet runMemo nu wel; catSpendMap zelf leest de al gememoiseerde txOfMonth/telbareTx, dus een eigen cache levert weinig op en
    zou juist een stille, verouderde waarde kunnen geven (v490). */
 function catSpendMap(m, ruw){ const by={}, B=maandPotjes(m||thisYM()).B; for(const t of txOfMonth(m)){ if(isUitgave(t, B) && !eenmaligLabel(t)) by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); }
-  try{ if(contantPotje()){ const K=contantUitgegevenMaand(m||thisYM()); if(CONTANT_CAT in by || K.uitgegeven>0) by[CONTANT_CAT]=K.uitgegeven; } }catch(_){}   // v506 (punt 5): het potje Contant is opnames min wat je kas groeide
+  try{ if(contantPotje() && !contantNieuwIn(m||thisYM())){ const K=contantUitgegevenMaand(m||thisYM()); if(CONTANT_CAT in by || K.uitgegeven!==0) by[CONTANT_CAT]=K.uitgegeven; } }catch(_){}   // v506 (punt 5): het potje Contant is opnames min wat je kas groeide
   for(const k in by){ if(by[k]<=0) delete by[k]; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
   if(!ruw){ try{ const R=reisStand(m, Object.assign({}, by)); if(R.af>0){ by[R.pot]=Math.round((by[R.pot]-R.af)*100)/100; if(by[R.pot]<=0) delete by[R.pot]; } }catch(_){} }   // v473: de reiskostenvergoeding gaat af van haar potje (reisStand()), niet onder nul
   return by; }

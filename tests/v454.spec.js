@@ -116,11 +116,15 @@ test.describe('2 · contant zonder telling', () => {
   test('f. een negatieve rest: de forecast van het potje is de uitkomst van contantMaanden, niet op nul geklemd', async ({ page }) => {
     await S4.boot(page, { negRest: true });
     const r = await page.evaluate(() => { const V = maandVooruit(), c = V.potjes.find(x => x.k === CONTANT_CAT), C = contantMaandNu();
-      return { ug: C.uitgegeven, bron: C.bron, uitkomst: C.uitkomst, uit: V.contant && V.contant.uit, eind: c.eindR, regel: diagSalarisVerdeling().find(l => /CONTROLE Contant/.test(l)) || '' }; });
+      return { ug: C.uitgegeven, bron: C.bron, uitkomst: C.uitkomst, uit: V.contant && V.contant.uit, cat: catSpendMap(thisYM())[CONTANT_CAT], eind: c.eindR, regel: diagSalarisVerdeling().find(l => /CONTROLE Contant/.test(l)) || '' }; });
     /* de invoer draagt het geval: telling 400 hoger dan begin 100 + opnames 200, dus tot de telling -100, en de rest is negatief */
     expect(r.bron).toBe('telling');
     expect(r.ug).toBe(-100);
-    expect(r.uitkomst - r.uit).toBeLessThan(-1);
+    /* v506 (punt 5): wat er in het potje Contant al uit is, is opnames min wat je kas groeide (200 - (400 - 100) = -100) en niet meer de
+       opname van 200. De rest is daarmee niet meer negatief (de uitkomst min -100 is het tempo na de telling); wat vastligt is dat het
+       potje op de uitkomst van contantMaanden eindigt, en dat de categorie geen opname van 200 meer telt: -100 netto is geen uitgave
+       (catSpendMap telt netto onder nul niet, v269). */
+    expect(r.cat || 0).toBe(0);
     expect(r.eind).toBeCloseTo(r.uitkomst, 2);
     expect(r.regel).toMatch(/→ klopt/);
   });
