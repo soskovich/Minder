@@ -2,7 +2,7 @@
    1. de lopende maand telt mee voor te krap (geen wijziging; vastgelegd).
    2. bijstellen, te ruime potjes bijstellen en het potje-formulier lezen potNodig() als ondergrens (potOndergrens()).
    3. blok 19 toont hoe "nodig" is opgebouwd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const { kaalUit } = require('./bron-kaal');
 

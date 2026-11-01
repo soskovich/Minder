@@ -23,7 +23,7 @@
  *   6. EEN BOEKING IN EEN ANDERE CATEGORIE op dezelfde dag, zodat de som per categorie toetsbaar is.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const A = '100110012848184840';

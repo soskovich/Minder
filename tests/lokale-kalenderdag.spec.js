@@ -7,7 +7,7 @@
 // niet de plek: `new Date(<iets>).toISOString()` valt net zo goed als `new Date().toISOString()`.
 //
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron, kaalUit } = require('./bron-kaal');

@@ -6,7 +6,7 @@
    C4 herzien, zonder potje (reservering), te ruim verlagen en het potje-formulier sluiten met een toast "ongedaan maken". */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 
 /* De stand van het toestel van de gebruiker, nagebouwd (GECONSTRUEERD): Online shopping EUR 95, gewone maand EUR 84, en een

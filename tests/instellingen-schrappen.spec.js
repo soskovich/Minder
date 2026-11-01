@@ -3,7 +3,7 @@
 // belooft alleen iets wat bestaat, een mapping bestaat alleen als er een aanroeper is, en er staat
 // nergens een verzonnen cijfer.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 // v374: zes subpagina's in plaats van negen uitklapblokken.

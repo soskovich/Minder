@@ -14,7 +14,7 @@
 // blok aan toe en eist dat het in de uitvoer staat, want dat is de eigenschap die we willen
 // vasthouden en niet het aantal van vijf.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

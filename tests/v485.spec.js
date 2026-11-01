@@ -10,7 +10,7 @@
       portemonnee eraf (dan telt de krap meer dan het voorstel).
    d. Een betaaldatum-keuze op een SEPA-sleutel (van vóór v483, toen de keuze op keys[0] landde) wordt bij het laden verwijderd; een
       woning-sleutel blijft. Sabotage: laten staan. GECONSTRUEERD, niet gemeten. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v485-stand');
 const { LEEF } = S;
 const B = require('./bron-kaal');

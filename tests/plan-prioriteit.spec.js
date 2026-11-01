@@ -1,7 +1,7 @@
 // Vooruitblik (v64): prioriteit-gerangschikte doelen met waterfall-allocatie,
 // en het optionele dure-schuld-advies bij een nieuw doel.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 // spaarruimte in de fixture: savingMode 'amount', savingAmount 300 -> monthlySavingTarget() = 300

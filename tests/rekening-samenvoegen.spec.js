@@ -3,7 +3,7 @@
 // tweede exemplaar, met dezelfde boekingen en een dubbel geteld saldo. identification_hash is
 // precies voor het matchen over sessies heen bedoeld. Plus: samenvoegen voor wat er al dubbel staat.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

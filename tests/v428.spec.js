@@ -3,7 +3,7 @@
    staan bij Signalen, de handelingen in Kiezen, en niets gaat verloren (blok 21). Op v421-stand (10 oktober 2026,
    GECONSTRUEERD: de boekingen van het toestel staan alleen daar) met een lening aan Pam (EUR 300, nog open) en een benoemde
    eenmalige uitgave in september. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 async function boot(page) {
   await page.setViewportSize({ width: 390, height: 844 });

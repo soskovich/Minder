@@ -4,7 +4,7 @@
    - een overboeking "From Main to Buffer" die de bank als uitgave levert (OVR overig): een eigen overboeking, dus intern;
    - Vakantie & reizen zonder potje en Uit eten met een losse uitgave: tellen overal gelijk.
    GECONSTRUEERD EN NIET GEMETEN: de stand van het toestel staat alleen daar. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 async function boot(page) {

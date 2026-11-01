@@ -2,7 +2,7 @@
 // lijn of balk. Is het antwoord geen, dan verdwijnt de vorm en komt er een getal met delta voor
 // terug, niet een kleinere versie van dezelfde vorm.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDag } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');

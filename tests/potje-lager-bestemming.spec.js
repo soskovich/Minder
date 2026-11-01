@@ -4,7 +4,7 @@
    bestemSchrijf()): eerst "EUR X per maand komt vrij vanaf <maand>", dan de bestemming (een potje dat niet
    past, sparen, maandbudget verlagen, ook verdeeld), niets voorgekozen, en Vastzetten pas als alles een plek
    heeft. Verhogen is ongewijzigd. Fixture: deze-maand-stand.js (6 oktober; Vices en Boodschappen passen niet). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 
 const OPT = { set: { nfToegewezenMigrated: true, nfToegewezen: 3000, goals: [{ id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, streefdatum: '2027-12' }] } };

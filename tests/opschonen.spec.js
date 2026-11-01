@@ -1,7 +1,7 @@
 /* v365: HOME, GRIP, LOGBOEK, INZICHTEN EN PLAN OPGESCHOOND (mockup "opschonen").
    Elk getal op een plek: Nog te ontvangen staat op Home, Nog te sparen op Plan en contant in het saldo op Home.
    De afsluiting telt alleen afsluittaken. Terugzetten na een opname uit je spaargeld is een keuze. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const I = require('./inzichten-stand');
 const P = require('./opschonen-stand');
 

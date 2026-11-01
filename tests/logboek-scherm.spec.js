@@ -1,6 +1,6 @@
 /* v331: HET LOGBOEK ALS EIGEN SCHERM, EEN REGEL OF DE VRAAG OP GRIP, DE HERHAALDE UITZONDERING, EN
    JE UITZONDERINGEN OVER DRIE MAANDEN. De fixture is september van het toestel (logboek-scherm.fixture.js). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot, R, U, SEPTEMBER, AUG, SEP, OKT, JUL } = require('./logboek-scherm.fixture');
 
 /* v340: Grip draagt geen logboekkaart meer. De open vraag staat bovenaan het logboek (en in de pop-up

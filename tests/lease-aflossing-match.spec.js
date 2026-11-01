@@ -2,7 +2,7 @@
 // (€537) werd op bedrag gematcht aan een terugkerende INTERNE overboeking van ~€537 i.p.v. aan de
 // echte Hiltermann-termijn (€537,33), waardoor Vermogen amber "loopt als interne overboeking" toonde.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 const PER = 537, TERMIJN = 537.33, INTERN = 537;

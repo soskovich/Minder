@@ -4,7 +4,7 @@
    b. Grip roept salTekortData en rekVoorstel hooguit één keer aan.      Sabotage: per kaart opnieuw rekenen (de salTekortData-memo uit).
    c. Een getal ververst na een sync (en de cache levert de ware waarde). Sabotage: de catSpendMap-cache nooit verversen.
    d. Na een keuze (betaaldatum) ververst het getal.                    Sabotage: de rekVoorstel-cache niet legen bij een keuze. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 /* markeer de vorige maand afgesloten, zodat de afsluit-pop-up niet vóór de krap-pop-up komt (dan toetst de boot-staart de krap-weg) */

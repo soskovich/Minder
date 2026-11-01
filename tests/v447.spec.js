@@ -8,7 +8,7 @@
    4. Moment 2: "Hoeveel contant heb je nog?" met Weet ik niet en Later; het antwoord is de stand eind en begin.
    5. Boven het tempo een signaal in Zien met het label nieuw of herhaalt zich.
    6. Blok 20 OPBOUW: budget + Contant = budget vanaf 1 november, los van de keuze over het potje Huur. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S432 = require('./v432-stand');
 
 const opname = (LEEF, id, d, a) => ({ id, date: d, amount: a, acc: LEEF, name: 'Geldmaat Centrum', desc: 'GEA, BETAALPAS GELDMAAT CENTRUM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });

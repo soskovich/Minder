@@ -7,7 +7,7 @@
 // afspraaklus kijkt.
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { regelTegels, openRegelUI } = require('./beslis-sheet');
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');

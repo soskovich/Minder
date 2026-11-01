@@ -4,7 +4,10 @@
 // bijsturen (budgetnaleving, variabele-lasten-druk), het maandscherm wat structureel is (spaarquote,
 // vaste-lasten-druk). De restsaldo-quote is vervallen en alleen budgetnaleving heeft nog een band.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 // Fixture, met de hand doorgerekend:
@@ -295,7 +298,7 @@ test.describe('b · historische reeksen', () => {
 
   /* v208: de terugval van het budget op je inkomen-limiet is ongewijzigd, maar hij is niet meer op
      een tegel te lezen. De bron blijft toetsbaar, en de hero op Inzichten noemt hem in woorden. */
-  test('zonder potjes valt het budget terug op de inkomen-limiet', async ({ page }) => {
+  test('zonder potjes valt het budget terug op de inkomen-limiet · voor de salarisperiode', async ({ page }) => {
     await openIns(page, tweak((set) => { set.budgets = {}; set.budgetsNext = {}; }));
     expect(await page.evaluate((m) => insKpis(m).budget.src, CUR)).toBe('limiet');
     const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });

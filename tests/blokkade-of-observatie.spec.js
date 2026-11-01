@@ -10,7 +10,7 @@
 // Verder: de coach-ingang stond vier blokken onder de kaart die een beslissing belooft, en drie van
 // de vier structurele signalen hadden geen korte naam, zodat hun hele l1 als regelnaam diende.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { beslisIngangen, beslisKeys } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();

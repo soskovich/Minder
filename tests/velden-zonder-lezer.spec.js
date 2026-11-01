@@ -7,7 +7,7 @@
 // niet meer, en een bestaande waarde in SET raakt de projectie niet (er is bewust geen migratie,
 // dus zo'n waarde kan er nog staan tot je die bezitting bewerkt).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

@@ -2,7 +2,7 @@
    balk onderaan staan (.sheet-voet, position:sticky), met de achtergrond van de sheet en een lijn erboven. De inhoud
    scrollt erachter en de laatste regel staat aan het eind boven de balk. Een knop die uit staat zegt in de balk
    waarom (data-voetreden). De balk verandert de hoogte van de sheet niet. Gemeten op 360x640, leeg en ingevuld. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const rb = require('./ruim-bijstel-stand');
 /* v387: Verzekeringen op EUR 324 is sinds de regelkring niet meer te ruim (december vraagt DELA erbij), dus de sheet
    draait hier op Verzekeringen EUR 700, zoals grip-ruim-bijstel. */

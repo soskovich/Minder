@@ -6,7 +6,7 @@
    met een zichtbare scheiding. Opzij heeft een bron: de verdeling van de periode (SET.salVerdeling.opzij); het voorstel noemt zijn
    afwijking met een reden. Fixture v499-stand: 26 nov 2026, salaris van 24 nov nog niet binnen, boekingen in nov 1–23 en in de
    lopende periode; voor de periode-rij een tweede stand op 26 dec. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v499-stand');
 const V489 = require('./v489-stand');
 

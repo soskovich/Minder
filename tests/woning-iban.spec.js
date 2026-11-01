@@ -1,7 +1,7 @@
 /* v440 item 6 punt 3/4: de woning is Nathaniel Cathalina (NL77ABNA0599037806), gematcht op IBAN met de naam als terugval.
    Zowel de huur-Tikkie (aanvrager-IBAN uit de omschrijving) als de latere gewone overboeking naar diezelfde IBAN valt onder
    de woning. Ml Macnack is de vorige woning (gestopt). Een huurbetaling wordt nooit een lening of uitgeleend. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111';
 

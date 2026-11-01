@@ -5,7 +5,7 @@
 //
 // De spaarquote blijft, ongewijzigd. Die telt sinds v161 je hele vermogensopbouw - spaarrekening,
 // reserveringen en beleggingsinleg - en dat cijfer verandert wel met wat je doet.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 /* v232: de tegel staat op Vermogen en toont daar de laatste afgeronde maand (M1 in deze fixture);

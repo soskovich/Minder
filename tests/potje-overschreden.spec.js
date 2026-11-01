@@ -20,7 +20,7 @@
 // ruimte gaf het onbestede deel terug zonder naar de resterende dagen te kijken, en dat gaf op de
 // laatste dag van de maand een projectie die in een dag niet past. Zie sectie a.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { open } = require('./budget-fixture');
 /* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
    maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft

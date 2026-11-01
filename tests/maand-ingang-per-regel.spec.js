@@ -9,7 +9,7 @@
 // herbruikbaar - hij opent 'horizon' en niet 'maand', leest doelTempo() in plaats van de maandregel
 // en is één zin voor het hele plan - dus alleen de vorm is overgenomen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 

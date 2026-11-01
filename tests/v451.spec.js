@@ -5,7 +5,7 @@
       rekening welke soorten de bank aanbiedt en welke Minder gebruikt.
    5. Heeft een PSD2-transactie een eigen id van de bank (transaction_id of entry_reference)? Alleen meten: blok 8
       telt het per rekening, plus hoe vaak twee regels met DEZELFDE Minder-id een ANDERE bank-id dragen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');

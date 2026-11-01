@@ -7,7 +7,7 @@
    3. Blok 23: zonder telling op moment 2 de laatste telling als schatting, gemarkeerd; je antwoord vervangt hem.
    4. Opbouw november: een bedrag (budgetVanaf), met het verschil met het budget van nu per potje.
    5. Blok 20 punt 4/5/6: de lopende maand opzij uit opzijPeriode, rest en percentage "loopt nog". */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v448-stand');
 
 const b20 = (page) => page.evaluate(() => diagSalarisVerdeling().join('\n'));

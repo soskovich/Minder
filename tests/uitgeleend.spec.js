@@ -1,7 +1,7 @@
 // v77: doorstroomposten — uitgeleend/geleend/borg tellen niet als uitgave of inkomen,
 // maar als vordering of schuld in je netto vermogen. Terugbetaling verlaagt de post.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, MAIN } = require('./budget-fixture');
 
 // een afschrijving van €300 aan een particulier: precies het geval "dit was geen uitgave"

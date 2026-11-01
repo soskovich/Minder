@@ -6,7 +6,7 @@
 // drempel en met zijn eigen tekst. De verwachte waarden staan nu letterlijk in de test, want de
 // tweede bron waar ze tegen afgezet konden worden is weg.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

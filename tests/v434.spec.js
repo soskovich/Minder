@@ -6,7 +6,7 @@
    4. Blok 22: elk signaal in Zien heeft een symptoom in Begrijpen, geen afgehandeld signaal in de open lijst, geen
       weggevallen symptoom in Zien.
    Op v421-stand (10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel staan alleen daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 async function boot(page) {
   await page.setViewportSize({ width: 390, height: 844 });

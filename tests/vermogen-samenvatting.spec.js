@@ -1,6 +1,6 @@
 // v95: Vermogen opent met één regel gewone taal — dezelfde getallen als de kaart eronder,
 // geen nieuw model. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function tweak(fn) {

@@ -3,7 +3,7 @@
 // v74: persoonlijker coach — doel-first opening op je plan-#1, onderwerpenmenu,
 // en een coach-wissel die ook de toon verandert (ook zonder AI-laag).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function tweak(fn) {

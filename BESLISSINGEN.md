@@ -1121,3 +1121,11 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Contant in zijn eerste maand is uitgegeven, en buiten het budget van die maand.** v456 haalde het aan beide kanten van de budgetvergelijking weg; in het totaal uitgegeven staat het als eigen regel met naam, zodat Verschuivingen september (waar het een potje was) en oktober met dezelfde definitie vergelijkt.
 - **Het weekbedrag haalt in maar schuift niet door.** De oude regel verdeelde elke onderbesteding over de resterende weken, dus de laatste week werd groot. Het plafond van 25% houdt een overschrijding stuurbaar; wat er dan overblijft staat als "nog in te halen" in plaats van stil te verdwijnen.
 - **Een balk die iets vast bovenaan zet, meet zijn hoogte na het tekenen.** Een vaste padding zou bij een andere breedte of een andere tekst opnieuw iets bedekken.
+
+## v507 · de testklok vast, en een vangnet voor de periode
+- **Een suite die de kalender leest, toetst de dag waarop je hem draait.** Gemeten: dezelfde commit 0 rood op 31 okt en 47 op 1 nov. De klok staat daarom centraal vast, in Node en in de pagina, en een spec die een andere dag nodig heeft zegt dat zelf.
+- **Een vaste klok toetst een wereld; de andere wereld krijgt een eigen vangnet.** De standaard (31 okt) is de wereld van voor de salarisperiode; de periode zelf draait op zes vaste dagen met de getallen van de gebruiker. Zonder dat vangnet zou de vaste klok het probleem verbergen in plaats van oplossen.
+- **Playwright leest zelf `Date.now()` in Node.** Valkuil (gemeten): met de verschoven Node-Date liep de paginaklok na de eerste `goto` weer op de echte tijd. Elke klok-aanroep zet de echte Date even terug.
+- **De standaard loopt door, een pin is bevroren.** Een bevroren standaard brak een onderdrukking op `Date.now()` (diagnose-scherm). Doorlopend is hoe de specs zonder pin altijd hebben gedraaid.
+- **Twee getallen onder een woord op een scherm (v91/v104), ook in de periode.** De Grip-kop en de tegel zeggen allebei "netto"; in de periode rekende de regel uitgegeven min tempo en de tegel verwacht min budget. Ze lezen nu `gripMeterBudget()`.
+- **Een snede per eenheid hoort aan dezelfde memo als de snede per maand.** `eenheidTx()` is de periode-tegenhanger van `txOfMonth()` en had de memo van v311 niet; dat is precies wat de lat van v445 tegenhoudt.

@@ -8,7 +8,7 @@
 // Fixture: grip-kring-stand (10 okt 2026). Huur 700, zelf 400, dus vrij 300; Uit eten & café eindigt +67 boven, dus
 // het splitblok vuurt (N.vrij > d.boven) met e1 67 en e2 233. De twee bedragen verschillen, anders is "het eerste
 // bedrag" niet van "het tweede" te onderscheiden.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const splitsheet = async (page) => {

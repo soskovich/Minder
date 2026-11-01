@@ -1,7 +1,7 @@
 // v91: de geld-begrippen zijn overal hetzelfde en de drie kernbegrippen leggen zichzelf uit
 // via de bestaande micro-uitleg (jrg/JARGON, v58). Puur copy; geen cijfer verandert.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 async function boot(page, scherm) {

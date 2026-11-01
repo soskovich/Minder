@@ -4,7 +4,7 @@
    datum, de Budget-tegel op Grip rekent in de era, Kiezen leest de regel, en een daling heet "gedaald".
    De fixture boot op 26 nov ZONDER novembersalaris (novSalaris:false), zodat november geen boekingen heeft en de app dus
    terug zou vallen op de vorige periode / de laatste maand met data als de era-logica ontbreekt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 // a. Eén huidige periode: kop, opzij, tempo en budget volgen 24 nov–23 dec, met de melding "salaris nog niet binnen".

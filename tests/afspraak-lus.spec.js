@@ -2,7 +2,7 @@
 // maand. Kritiek: er wordt nooit geraden. Alleen een afspraak met een categorie is objectief te
 // toetsen; al het andere vraagt de app je zelf, en dat is het hoofdpad, geen uitzondering.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

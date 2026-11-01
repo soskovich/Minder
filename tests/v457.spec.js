@@ -8,7 +8,7 @@
    3. per partij na 3x Ja zonder Nee herstelt Minder zelf (soort 1), zichtbaar in "Wat Minder van jou weet" en de log, per geval terug
       te draaien (dat telt als Nee);
    4. het meetblok (alleen lezen) en de controle in blok 20. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806';

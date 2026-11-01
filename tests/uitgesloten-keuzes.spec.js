@@ -1,7 +1,7 @@
 // v329: drie keuzes per uitgesloten incasso op Grip, zonder voorselectie.
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 /* v413: de vraag per post met de vlag uit reservering (groep a) kan de regel onder "nog N" duwen; dan staat hij in de

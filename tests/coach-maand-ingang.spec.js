@@ -3,7 +3,7 @@
 // terugziet. Anders dan 'lek' en 'horizon' mag dit onderwerp wél een afspraak wegschrijven.
 // Kritiek: de oude afspraak verdwijnt pas op het moment dat de nieuwe er staat.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 const { beslisIngangen, beslisKeys , openRegelUI, gripOp } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 

@@ -15,7 +15,7 @@
    v387: DE KAART IS WEG (Grip als regelkring). dezeMaandBrug() en dezeMaandZin() bestaan nog: de zin staat op Begrijpen en
    de rest-stap voedt de sheet "Ruimte in andere potjes". Deze spec toetst die twee als functie; wat er op het scherm staat
    is de bridge van Zien (gripZienBrug(), grip-kring.spec.js), en die leest dezelfde maandVooruit(). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 const { kaalUit } = require('./bron-kaal');
 

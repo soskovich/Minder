@@ -1,7 +1,7 @@
 /* v422: DE HOLDING ALS SALARISBRON, GEEN STILLE OMZETTING VAN EEN GESTOPTE POST, EEN TIKKIE IS EEN UITGAVE, EN DE PREVIEW VAN
    "DIT IS MIJN HOLDING" PER BOEKING (besluiten van de gebruiker op v421). Op v421-stand (10 oktober 2026, GECONSTRUEERD: de
    boekingen van het toestel staan alleen daar; mei 5637,28 en augustus 4007,21 vallen buiten de marge van 10%). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return L.slice(i, j < 0 ? undefined : j); };

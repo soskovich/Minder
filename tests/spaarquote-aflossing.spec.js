@@ -2,7 +2,7 @@
    v334: Auto Lease, EUR 12.756 met 10,5 procent op 1 september, een gekoppelde betaling van EUR 537,33
    op 14 september (rente 111,62, aflossing 425,71), en DUO met EUR 399,72 per maand. De klok staat op
    4 oktober, zodat september de maand van de tegel op Vermogen is (vermogenSpaarquoteMaand()). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 
 const LEASE_DESC = 'SEPA INCASSO ONTVANGSTEN HILTERMANN L CONTRACT 4471 TERMIJN';

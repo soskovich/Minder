@@ -1,7 +1,7 @@
 /* v503: onderhoudsronde. (1) een nieuwe vaste last draagt het bedrag uit zijn herkende reeks en de datum van zijn eerste boeking, en
    de sheet heeft drie keuzes; (2) de huur op "Na mijn salaris" blijft verwacht tot hij geboekt is; (3) twee labels.
    Op tests/v503-stand.js (SportCity, 26 nov), tests/v487-stand.js (de huur, salaris 24 nov) en tests/v502-stand.js (Plan). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v503-stand');
 const H = require('./v487-stand');
 const V = require('./v502-stand');

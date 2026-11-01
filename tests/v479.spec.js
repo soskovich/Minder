@@ -5,7 +5,7 @@
    (+EUR 100, salTekortBewaar) wist bekeken, dus de pop-up komt terug. PUNT 4: koos je "Niets meer uit je spaargeld"
    (v482: de keuze 'grens' in Kiezen, gripKeuze pid 'spaargeld'), dan stelt de pop-up geen spaargeld voor. Op v432-stand (16 okt 2026), met een Akkoord in september
    zodat de controlemomenten gelden (salTekortActief). GECONSTRUEERD, niet gemeten. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF } = S;
 const boot = async (page, o) => { await page.setViewportSize({ width: 390, height: 844 }); await S.boot(page, o); };

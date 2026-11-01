@@ -5,7 +5,7 @@
 // "vanaf volgende maand" alleen volgende maand. Twee ingangen naar dezelfde sheet was dubbelzinnig:
 // je wist niet welk van de twee getallen je aan het lezen was. Bewerken blijft openPotje/setBudget.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const SHEET = '#sheetBg.show';

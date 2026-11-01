@@ -14,7 +14,7 @@
    e. Op 26 nov is opzij alleen wat sinds 24 nov opzij ging (de lopende periode), niet de vorige. Sabotage: de vorige periode lezen.
    f. Afsluiten vraagt eerst om de korte november (1–23), en daarna (na 23 dec) om de eerste periode. Sabotage: november als hele
       maand labelen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 test('a. voorbeeld 26 nov: Inzichten en Grip tonen de periode, geen kalendermaand als budgetperiode', async ({ page }) => {

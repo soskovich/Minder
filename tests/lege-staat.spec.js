@@ -3,7 +3,7 @@
 // gepusht, renderEmpty() vulde een handmatige lijst schermen waar s-maand en s-fire niet in
 // stonden, en go() rendeerde daarna alsnog over die lege staat heen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();

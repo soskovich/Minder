@@ -6,7 +6,7 @@
 // toont de laatste AFGERONDE maand, met de maand in het label: een halve maand is geen tempo. Het
 // detail opent op diezelfde maand. Verplaatsen is nooit kopiëren: een test leest beide schermen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

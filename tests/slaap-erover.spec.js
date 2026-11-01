@@ -4,7 +4,7 @@
 // uitkomst zien. Parkeren gebruikt de bestaande entry {type:'beslis', uitkomst:'geparkeerd'}, dus
 // coParkDue()/coParkReturn() brengen hem terug via het bestaande signaal park-<ts>. "Toch nu zien"
 // schrijft niets, anders zou die aankoop morgen terugkomen terwijl je hem al hebt afgerond.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 // boodschappen: potje 800, deze maand 300 uitgegeven, dus 500 ruimte. Drempel default 100.

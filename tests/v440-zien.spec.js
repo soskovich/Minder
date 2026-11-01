@@ -2,7 +2,7 @@
    (= V.budget tegen V.projectie) en opzij (doel uit Kiezen tegen gedaan deze periode, opzijPeriode). De woning zit in de vaste
    lasten en duwt vast boven budget; de sub noemt hem als die nieuw is. Vervangt de salarisbalk op Zien (v428).
    GETALLEN VAN DE FIXTURE. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';
 

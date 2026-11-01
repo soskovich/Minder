@@ -26,7 +26,7 @@
  *    per constructie niet.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 const fs = require('fs');
 

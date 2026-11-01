@@ -30,7 +30,10 @@
 // 74 en niet 65. Met vandaag erbij zou Inzichten "8 dagen" zeggen waar Home op dezelfde dag "7
 // dagen" zegt, en dat is een tweede waarheid op de noemer. Het open punt staat in CLAUDE.md.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { pinDag, vasteDatum, DAGEN_OVER, openDag } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
@@ -133,7 +136,7 @@ const potjesPost = (page) => page.evaluate(() => {
 });
 
 test.describe('a · de gemelde toestand', () => {
-  test('het restant is €520 en de dagregel deelt dat door de resterende dagen', async ({ page }) => {
+  test('het restant is €520 en de dagregel deelt dat door de resterende dagen · voor de salarisperiode', async ({ page }) => {
     await boot(page);
     const r = await potjesPost(page);
     // eerst vaststellen dat dit werkelijk de gemelde toestand is
@@ -285,7 +288,7 @@ test.describe('e · het restant staat boven de vouw', () => {
   const MET_SIGNAAL = { extraTx: (add) => add('x4', CUR, '16', -500, 'Zalando', 'BEA, BETAALPAS ZALANDO') };
 
   for (const [w, h] of [[360, 640], [390, 844]]) {
-    test(`op ${w}x${h} staat de rij "in potjes" binnen het eerste scherm`, async ({ page }) => {
+    test(`op ${w}x${h} staat de rij "in potjes" binnen het eerste scherm · voor de salarisperiode`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await boot(page, MET_SIGNAAL);
       const r = await page.evaluate(() => {
@@ -303,7 +306,7 @@ test.describe('e · het restant staat boven de vouw', () => {
   /* v382: hier stond dat het achtervoegsel van de tegel (dagbedrag of tempo-krapte) er ook bij een overschreden potje
      stond. De tegel en zijn achtervoegsel zijn weg; wat overblijft is dat het restant er staat zolang er iets in je
      potjes zit, ook met een potje eroverheen, en dat de sheet dan zegt wat het geld is. */
-  test('het restant staat er ook bij een overschreden potje, zolang er nog iets in zit', async ({ page }) => {
+  test('het restant staat er ook bij een overschreden potje, zolang er nog iets in zit · voor de salarisperiode', async ({ page }) => {
     await boot(page, MET_SIGNAAL);
     const r = await potjesPost(page);
     expect(r.VP.over).toBe(false);          // in totaal nog binnen, één potje eroverheen

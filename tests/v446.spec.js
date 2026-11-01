@@ -3,7 +3,7 @@
    de storting geen contant op die rekening, ook ZONDER patroon van 3 maanden, en staat "contant: verwacht na je salaris" erbij met de
    bron. Voor de gebruiker een keer gezaaid als door jou op 17-10 (bij de salarisbron SKF). GECONSTRUEERDE fixture (v432-stand, 19 okt),
    met de Geldmaat-opname van juli weggehaald: dan heeft Leefgeld 2 maanden met een opname, dus geen patroon, en wel contant (mediaan 100). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S432 = require('./v432-stand');
 
 async function boot(page) {

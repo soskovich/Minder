@@ -7,7 +7,7 @@
 // GETALLEN VAN DE FIXTURE, NIET VAN HET TOESTEL (3375 / 2815 zijn van het toestel en staan hier nergens).
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const grip = async (page, w = 390) => { await page.setViewportSize({ width: w, height: 844 }); await K.boot(page); await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); }); };

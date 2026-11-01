@@ -6,7 +6,7 @@
    markering van voor deze stap krijgt dat een keer, met de dag van de rechtzetting. (2) De te-ruim-sheet droeg nog "Reserveringen en
    beleggen komen in v441.", een belofte van een ronde die al voorbij is; die regel is weg, en daarmee past de sheet weer op 390x844
    (grip-eigen-budget B). GECONSTRUEERDE fixtures. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S432 = require('./v432-stand');
 const K = require('./grip-kring-stand');
 const CATH = 'NL77ABNA0599037806';

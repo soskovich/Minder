@@ -10,7 +10,7 @@
    957 en veilig te besteden 1.113 (gemeten bij het bouwen; zie standkaart-sluit.fixture.js). */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { bootStand } = require('./standkaart-sluit.fixture');
 const { kaalUit } = require('./bron-kaal');
 

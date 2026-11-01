@@ -2,7 +2,7 @@
    deze maand Shurgard geaccepteerd (+77 in Huur) en Verzekeringen herzien (-37), drie categorieen zonder potje (Zorg EUR 159 eenmalig,
    Vakantie EUR 220, Goede doelen EUR 15) en een verwachte bonus van EUR 2.500. GECONSTRUEERD EN NIET GEMETEN: de gegevens van het
    toestel staan alleen daar (zie v438-stand.js). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v438-stand');
 const boot = async (page, o) => { await page.setViewportSize({ width: 390, height: 844 }); await S.boot(page, o); };
 const blok20 = page => page.evaluate(async () => (await diagTekst()).split('\n'));

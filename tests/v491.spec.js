@@ -5,7 +5,7 @@
       Sabotage: een potje overslaan in de lijst -> de som klopt niet meer.
    c. "Na je salaris stond er" verandert niet door een overboeking naar een eigen rekening na de salarisdag.
       Sabotage: saldo nu + afgegaan gebruiken (rekAfgegaan slaat de interne overboeking over). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 /* shopping: maandtotaal EUR 46, 46% via MAIN (EUR 21,16) en 54% via LEEF (EUR 24,84); sport: EUR 60, 50/50.

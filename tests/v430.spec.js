@@ -2,7 +2,7 @@
    gestegen, inkomen gestegen en "na je salaris", "Klopte de oorzaak?" en de verhouding met je salaris toe. Op de stand van v428
    (v421-stand, 10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel staan alleen daar) en, voor de betaalrekening (R8),
    grip-kring-stand met twee opnames uit je spaargeld. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const V = require('./v428-boot');
 const K = require('./grip-kring-stand');
 const { MAIN } = require('./v421-stand');

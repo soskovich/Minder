@@ -12,7 +12,7 @@
  * DE GETALLEN ZIJN GEMETEN OP DEZE FIXTURE: essCrisis is EUR 1.140 (huur 900 plus boodschappen,
  * verlaagd met de crisispercentages), en elk blok meet die invoer voordat het de uitkomst toetst.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';

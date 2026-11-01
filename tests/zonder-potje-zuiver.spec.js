@@ -4,7 +4,7 @@
    - Goede doelen: juli en augustus netto uitgaven, met een terugboeking na dag 10, dus een NEGATIEVE verwachting: op 0.
    - Persoonlijke overboeking: elke maand, en EUR 150 in oktober: telt nergens in zonder potje.
    GECONSTRUEERD EN NIET GEMETEN: de stand van het toestel staat alleen daar. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 async function boot(page) {

@@ -1,7 +1,7 @@
 // v73: meldingen logischer — saldo-alarm zonder volledige saldi, categorie-neutrale nudge,
 // save-risk met chronic-ack en ontdubbeld met tempo.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { open } = require('./budget-fixture');
 
 const MAIN = 'NL01MAIN0000001111', TWEEDE = 'NL02SIDE0000002222';

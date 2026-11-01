@@ -4,7 +4,7 @@
 // hij losstaat van je plan, de dagmarkering in de balk in plaats van ernaast, en een opsomming die
 // niet met 'en' plakt.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 

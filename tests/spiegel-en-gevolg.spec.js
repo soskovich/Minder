@@ -5,7 +5,7 @@
 // Een gevolg wordt nooit verzonnen om de vorm compleet te maken: heeft een signaal geen tik die uit
 // de data volgt, dan zegt de regel dat het een observatie is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 /* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
    na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */

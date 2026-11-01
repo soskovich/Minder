@@ -1,7 +1,7 @@
 // v97: het Privé-thema haalt WCAG AA voor tekst-tokens op zowel de pagina- als de kaartachtergrond.
 // Alleen Privé is bijgesteld; standaard en Aurora blijven wat ze waren.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 async function boot(page) {

@@ -2,7 +2,7 @@
    1. Grip "Na je salaris": de regel noemt de bedragen waarover hij de mediaan neemt; blok 20 splitst elke storting.
    2. De hint bij de bovengrens telt geen maand met een eenmalige ontvangst.
    3. Instellingen › Inkomen: de schakelaar werkt na het intikken van je vaste salaris (de tik ging verloren). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';

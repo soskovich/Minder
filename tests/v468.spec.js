@@ -3,7 +3,7 @@
    noemt datum, bedrag, beide omschrijvingen en bank-ids, wat er verder verschilt en welke kant in je gegevens staat. Er verandert geen id.
    Punt 3: een gesloten rekening telt niet in totalBalance() of veilig te besteden, en blok 8 zegt dat nu ook. Punt 4: de boot roept
    psd2Refresh(true, true) aan zonder eigen voorcheck. GECONSTRUEERDE fixture (de vorm van v467). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalBron } = require('./bron-kaal');
 const fs = require('fs');

@@ -4,7 +4,7 @@
 // alleen aannames. Dat laatste is het punt van de ronde: een projectie die op een erkend verzonnen
 // getal rust, moet dat zeggen waar de projectie staat, niet alleen bij het veld.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function metReis(reis) {

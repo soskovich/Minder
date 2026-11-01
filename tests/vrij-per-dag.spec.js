@@ -2,7 +2,7 @@
 // gedeeld door de resterende dagen. De ruimte komt uit safeToSpend(); er wordt niets opnieuw
 // afgeleid. Geen instelling, geen norm, dus geen kleur, geen doel en geen melding.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v498: de dag staat vast (dim - 7). Test b eist het MEERVOUD van het dagwoord ("nog N dagen") en viel op
    30 oktober 2026, de op-een-na-laatste dag: dan is het restant 1 en zegt de app terecht "nog 1 dag".
    Dat is de as van v299; de maand blijft de echte maand, dus CUR/MS hieronder kloppen nog. */

@@ -3,7 +3,7 @@
 // go('maand'), #s-maand en minder_view zijn ongewijzigd (dezelfde afweging als v179 bij Plan). De
 // maandkiezer is van Grip af: Grip leest altijd de lopende maand, en de kiezer blijft van Inzichten.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, M1 } = require('./budget-fixture');
 
 const SCHERMEN = ['dash', 'ins', 'vooruit', 'maand'];

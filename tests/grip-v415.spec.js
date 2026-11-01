@@ -6,7 +6,7 @@
    3 eenmalig: de sheet begint met "Klopt, eenmalig", die het signaal voor die boeking sluit.
    4 een te ruim potje blijft een grijze stap "niet gebruikt" en een feitregel, ook na "laten staan".
    5 een samengevoegde stap onder EUR 10 schuift bij de dichtstbijzijnde stap aan dezelfde kant. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const K = require('./grip-kring-stand');
 const { bootStand } = require('./standkaart-sluit.fixture');

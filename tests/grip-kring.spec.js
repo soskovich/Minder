@@ -1,6 +1,6 @@
 /* v387: GRIP ALS REGELKRING, deel 1 (structuur, meters en Zien). Op de nagebouwde stand van het toestel
    (grip-kring-stand.js, 10 oktober 2026): Huur EUR 700 op vast met Shurgard EUR 71 vier-wekelijks. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const G = require('./grip-kring-stand');
 const OPN = [['2026-10-06', 300], ['2026-10-09', 200]];
 async function grip(page, o) { await G.boot(page, Object.assign({ opnames: OPN }, o || {})); await page.evaluate(() => go('maand')); }

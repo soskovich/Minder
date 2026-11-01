@@ -6,7 +6,7 @@
    B5 potNodig() heeft een startmaand; bijstellen en het formulier geven hun ingangsmaand mee.
    B7 "(weinig historie)" bij minder dan drie afgeronde maanden.
    B8 de ondergrens noemt altijd een maand en een jaar. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const { kaalUit } = require('./bron-kaal');
 

@@ -4,7 +4,7 @@
 // een derde segment "Vast/variabel" dat naar hetzelfde bestaande mechanisme leidt
 // (openFixedVarDrill -> fixFlipAsk -> fixFlip), maar begrensd tot de maand van de drill.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const SHEET = '#sheetBg.show';

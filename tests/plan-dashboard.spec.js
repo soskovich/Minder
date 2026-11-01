@@ -1,7 +1,7 @@
 /* v380 (deel 2): Plan is een dashboard. Bovenaan de kop met het geld tegen de doelen, wat er deze maand opzij gaat en
    wanneer alles vol is; een schakelaar Lijst / Tijdlijn; per doel een rijvorm zonder rekensom; de rekensom in een
    detailsheet; de instellingen achter "verdeling ⚙". Fixture: de stand van het toestel (plan-toestel-stand.js). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const T = require('./plan-toestel-stand');
 const tekst = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); return e ? e.innerText.replace(/\s+/g, ' ').trim() : null; }, sel);
 

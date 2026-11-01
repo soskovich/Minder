@@ -12,7 +12,7 @@
  * aanroep zich in de andere soort verstoppen. Nu is er EEN implementatie met drie ingangen
  * (`kaalBron`, `kaalUit`, `KAAL_JS`), en deze spec houdt vast dat niemand er een vierde naast zet.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');

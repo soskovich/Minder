@@ -8,7 +8,7 @@
    - het logboek draagt vier records met een ANDERE uitkomst, waarvan er een op nul staat voor de
      ene lat en op 150 voor de andere. Met samenvallende latten is 'hij leest het oorspronkelijke
      potje' niet van 'hij leest het bijgestelde potje' te onderscheiden. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDatum, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');

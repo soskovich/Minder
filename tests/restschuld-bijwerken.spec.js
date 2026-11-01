@@ -3,7 +3,7 @@
 // groene regel "aflossing lijkt in je uitgaven te zitten" las alsof de stand was bijgewerkt.
 // Deze spec bewaakt de twee helften van de fix: eerlijker woorden, en een lichte bijwerk-sheet
 // die alleen `rest` aanraakt. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 const TERMIJN = 537.33;                 // de echte Hiltermann-incasso

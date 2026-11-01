@@ -5,7 +5,7 @@
 // boete van EUR 299 eenmalig volgende maand, inleg EUR 2.200, twee doelen) met een vol noodfonds,
 // zodat de doelinleg vanaf nu meetelt en elk jaar dezelfde vorm heeft.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

@@ -2,7 +2,7 @@
    N REGELS", EN BUITEN VAST EN POTJES PER SOORT (besluiten van de gebruiker op v422). Op v421-stand (10 oktober 2026,
    GECONSTRUEERD: de boekingen van het toestel staan alleen daar) met twee leningen zoals de gebruiker ze meldde:
    A. Buiten 45 | terug 0 | open 0, en Ma 405,99 | terug 400 | open 0. Beide van voor v423, dus zonder log. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return L.slice(i, j < 0 ? undefined : j); };

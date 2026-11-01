@@ -3,7 +3,7 @@
    een boeking die in twee lijsten staat onder LET OP. 4: een sync met saldo maar zonder transacties (rate limit) is geen vergelijkingspunt
    en geen geslaagde sync; Diagnose zegt "bank weigerde: te veel aanvragen vandaag". 5: voor een nieuwe koppeling de waarschuwing per
    rekening die wegvalt. 6: wintertijd vanaf 25-10 03:00. GECONSTRUEERDE fixture (die van v464). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';

@@ -1,7 +1,7 @@
 /* v433: REPARATIE v432 NA BLOK 23 VAN HET TOESTEL. De Plan-inleg is het budget uit blok 20 punt 7, een onttrekking is die van
    blok 20 punt 4, de buffer rekent over dezelfde uitgaven als "verwacht" en is hoogstens 20% daarvan, en de prestatietest
    neemt de mediaan van vijf metingen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const S = require('./v432-stand');

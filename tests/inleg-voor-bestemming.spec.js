@@ -8,7 +8,7 @@
 // haalt reserveringen en doelen eraf omdat dat geld NIET mag compounderen; a.per gaat naar een
 // belegging en hoort juist wél te compounderen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 

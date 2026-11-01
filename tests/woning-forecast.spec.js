@@ -2,7 +2,7 @@
    naar dezelfde IBAN) is een vaste last (isFixed), geen variabele uitgave. De huur telt EEN keer per maand: wat betaald is
    plus wat nog verwacht wordt is het kennis-bedrag (EUR 300), nooit allebei (geen dubbeltelling met de verwachte vaste last).
    categorize() herschrijft t.id bij de boot, dus zoek boekingen op naam, niet op de gezaaide id. GETALLEN VAN DE FIXTURE. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111';
 

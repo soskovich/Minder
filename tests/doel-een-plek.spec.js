@@ -1,6 +1,6 @@
 /* v373: EEN PLEK VOOR HET BEDRAG PER DOEL. De verdeelmodus is uit de doel-editor; een oud doel op vast of percentage gaat
    bij de overgang naar "zelf verdeeld" met wat elk doel die maand kreeg, zodat er per doel niets verandert. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const P = require('./opschonen-stand');
 
 const VOLG = ['noodfonds', 'iw', 'kk'];

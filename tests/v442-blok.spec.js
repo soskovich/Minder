@@ -1,7 +1,7 @@
 /* v442 sectie 6: blok 20 en 23. Nieuwe regels en controles: de INHALEN/terug-te-zetten-regel (sectie 2e), de opbouw van het
    budget vanaf 1 nov (sectie 3), de controle budget-per-groep (sectie 5), de controle opzij-label-geen-kalendermaand (sectie 1),
    en in blok 23 de controle dat elke vaste last met een termijn erin staat (de woning en Sport City). GECONSTRUEERDE fixture. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF } = S;
 const CATH_IBAN = 'NL77ABNA0599037806';

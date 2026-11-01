@@ -1,6 +1,6 @@
 /* v476: "Inkomen per maand" is een berekende waarde: vast salaris (SET.salSplit.vast) + overig vast (SET.overigVast).
    De overzetting van SET.income gebeurt een keer bij het laden (SET.inkomen476). GECONSTRUEERD. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 

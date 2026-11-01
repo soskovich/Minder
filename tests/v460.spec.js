@@ -4,7 +4,7 @@
    een melding; een correctie die na een nieuwe versie niet meer nodig is gaat uit ("opgelost in de code"); blok 26 bewaakt toevalsgevallen
    (bekend toeval alleen geteld, een nieuw geval per geval en in Wacht op de bouwer); B8 verklaard; het log. GECONSTRUEERDE fixture (die
    van v457/v458), met een tweede rekening (ABN) voor de aansluiting. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806';

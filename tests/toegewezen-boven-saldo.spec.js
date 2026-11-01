@@ -6,7 +6,7 @@
 // Gemeten geval: noodfonds op 3.050 toegewezen bij 2.500 op de rekening, en niets dat er iets over
 // zei, want spaarVrij() klemt het tekort weg op nul.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

@@ -4,7 +4,7 @@
 // vorm de regel van planSub volgt (tot drie waarden een zin, vanaf vier de minitabel), en dat er
 // geen opbouw staat waar hij het bedrag alleen zou herhalen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

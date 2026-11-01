@@ -4,7 +4,7 @@
 // wordt ruim honderd regels boven de guard gepusht. Deze spec meet dat aan de accolades van het
 // blok, zodat de tekst en de code niet opnieuw uiteen kunnen lopen.
 // v228: 'inflatie' is vervallen, dus het zijn er nu drie. De meting blijft dezelfde.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 const BINNEN_GUARD = ['savrules', 'meevaller', 'overstreak'];

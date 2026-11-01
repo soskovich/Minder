@@ -8,7 +8,7 @@
 // meer uitgeeft. De vier stappen zijn die uit de audit: niets extra, +200, +500 en +900 (over het
 // potje heen, precies de stand waar potjeRest van tak wisselt).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v308: DE DAG STAAT VAST. De tempo-som klemt sinds v308 op de resterende dagen, en op de laatste
    dag van de maand is hij nul: dan staat de regel onder de tegel in geen enkele stap, en is de eis
    dat hij de bron draagt nergens getoetst. Dezelfde pin als de zes potjes-tests van v306. */

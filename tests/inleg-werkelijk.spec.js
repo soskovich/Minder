@@ -9,7 +9,7 @@
       "Nog te sparen" op Inzichten, die hem via safeToSpend().savedThisMonth leest;
    c) "Verdeel volgens je plan" verdeelt het vrije spaargeld met planVerdeelMaand(), dezelfde functie
       als allocatePlan() en planVooruit(), met het vrije bedrag als cap. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');

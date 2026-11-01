@@ -2,7 +2,7 @@
    tekort; het telt op over de periodes en gaat omlaag door (b) netto boven het doel in een latere periode en (c) een
    "terugzetten"-bestemming (watOver/onregBestemming inhalen). Nooit dubbel aflossen. GECONSTRUEERDE fixture (de echte periodes
    staan op het toestel): doel €300, augustus −€500 (tekort), september +€500 (€200 boven het doel). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';
 

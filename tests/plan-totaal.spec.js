@@ -17,7 +17,7 @@
 // "Nog te gaan" rekent sinds v380 vanaf de verwachte stand eind deze maand (planStandEind(), keuze D) en staat als
 // data-nogtegaan op de kop. Deze spec houdt dezelfde eigenschappen vast op dezelfde fixture.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDatum } = require('./vaste-dag');
 

@@ -6,7 +6,7 @@
 // kolom) bestaat niet meer. Wat overblijft is de vrij-regel, en die is nu het enige mechanisme dat
 // je handmatige toewijzingen bijstuurt - dus juist deze invariant telt zwaarder dan eerst.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

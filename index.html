@@ -9968,7 +9968,13 @@ function potVarMaanden(m){
 function eenheidKort(u){ if(!u) return ''; const k=x=>new Date(String(x).slice(0,10)+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
   if(u.soort==='periode') return k(u.start)+'–'+k(u.eind);
   const mn=MNAMES[+String(u.ym).slice(5,7)-1]||u.ym; return u.korteMaand?`${mn} 1–${+String(u.eind).slice(8,10)}`:mn; }
-function eenheidTx(u){ const out=[], a=String(u.start).slice(0,10), b=String(u.eind).slice(0,10); for(const t of telbareTx()){ const d=t.date.slice(0,10); if(d>=a && d<=b) out.push(t); } return out; }
+/* v507: DE SNEDE PER EENHEID HANGT AAN DE MAAND-MEMO VAN v311. In de era vraagt een render van Grip deze snede honderden keren
+   (GEMETEN op toestel-omvang, 23 nov: 434 aanroepen, elk een kopie van telbareTx() en een pass over TX); dat is precies de "lezer per
+   eenheid" die de lat van v445 tegenhoudt. De aanroep van txOfMonth() maakt _txm vers voor deze datastand (de ENE gen-toets en de ENE
+   vergeet-functie, telbaarVergeten()); de sleutel 'E|start|eind' botst nooit met een maandsleutel. De volgorde blijft die van TX. */
+function eenheidTx(u){ const a=String(u.start).slice(0,10), b=String(u.eind).slice(0,10); txOfMonth(a.slice(0,7)); const k='E|'+a+'|'+b;
+  if(!_txm[k]){ const out=[]; for(const t of telbareTx()){ const d=t.date.slice(0,10); if(d>=a && d<=b) out.push(t); } _txm[k]=out; }
+  return _txm[k].slice(); }
 /* de laatste n afgeronde eenheden VOOR periode P (oud → nieuw), uit historiePerioden (de ene bron van de historie-as, v494) */
 function periodeHistorie(P, n){ n=n||VOORUIT_MAANDEN; let H=[]; try{ H=historiePerioden(P.start); }catch(_){ return []; }
   return H.filter(u=>u && u.soort!=='scheiding' && String(u.eind)<String(P.start) && eenheidTx(u).length).slice(-n); }
@@ -25967,7 +25973,14 @@ function gripZienPeriodeKaart(PS){
   const opzijTxt = !O||!O.ok ? '' : (!O.meetbaar||O.netto==null) ? '<span class="small" style="color:var(--mut2)">onbekend</span>'
     : `<span class="small" style="font-weight:700;color:${O.netto<0?'var(--red)':'var(--green)'}">${O.netto<0?'−'+euro0(-O.netto):euro0(O.netto)}</span>`;
   const onb=periodeOnbevestigd();   // v496 (punt 3): ook de Grip-kop toont "nog niet bevestigd" met een stip
+  /* v507: DE NETTO IN DE KOP IS DE NETTO VAN DE BUDGET-TEGEL (gripMeterBudget, verwacht + buiten budget - budget van de periode), zoals
+     buiten de era (v505). GEMETEN in het vangnet op 24 nov: de tegel zei netto -EUR 686 en de kop droeg geen netto, terwijl de regel
+     "netto" eronder uitgegeven min tempo plus buiten rekende: twee getallen onder een woord op een scherm (v91/v104). Het tempo blijft
+     staan, met zijn eigen woord. */
+  let MBn=null; try{ const MB=gripMeterBudget(); if(MB && !MB.onbekend && MB.netto!=null) MBn=MB.netto; }catch(_){}
+  const nTxt=d=>d===0?'op budget':`${euro0(Math.abs(d))} ${d>0?'boven':'onder'}`;
   return `<div class="card" id="gripZienStand" data-zienstand="periode" data-zienperiode="${esc(P.label)}" data-zienuit="${PS.uit}" data-zienbudget="${PS.potDeel}" data-zienvast="${PS.vast}" data-ziencontant="${PS.contant}" data-zienel="${el}" data-ziendagen="${dagen}">
+    ${MBn!=null?`<div class="row" style="justify-content:flex-end;margin:0 0 2px"><span class="small" data-zienkopnetto="${MBn}" style="font-weight:800;white-space:nowrap;color:${MBn>0?'var(--red)':MBn<0?'var(--green)':'var(--txt)'}">netto ${nTxt(MBn)}</span></div>`:''}
     <div class="hlabel" style="margin:0">Hoe sta je ervoor · ${esc(P.label)}${onb?` <span data-zienonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>
     <div class="small muted" style="margin:2px 0 6px">dag ${el} van ${dagen} · salaris ${esc(dagKort(P.start))}</div>
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px"><span style="white-space:nowrap"><b style="font-size:var(--fs-lg)" data-zienperiodegetal>${euro0(PS.uit)}</b> <span class="muted" data-zienperiodegetal>van ${euro0(PS.potDeel)} potjes</span></span>${tempoTxt?`<span class="small" data-zientempotxt style="white-space:nowrap;font-weight:700;color:${dt>0?'var(--amber)':'var(--green)'}">${tempoTxt}</span>`:''}</div>
@@ -25976,7 +25989,7 @@ function gripZienPeriodeKaart(PS){
     ${rij('Potjes', PS.potDeel, 'variabel')}
     ${rij('Contant', PS.contant, 'vast per periode')}
     ${O&&O.ok?`<div class="row" data-zienopzij data-doel="${O.doel!=null?O.doel:''}" data-gedaan="${O.netto!=null?O.netto:''}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);border-top:1px solid var(--line);padding-top:6px;margin-top:4px"><span class="muted">opzij</span><span>${opzijTxt} <span class="small muted" data-zienopzijlabel>${O.doel!=null?'opzij volgens je verdeling '+euro0(O.doel):''}</span></span></div>`:''}
-    ${(function(){ const BB=buitenBudget({start:P.start, eind:P.eind}); if(!BB.bedrag) return ''; const nd=dt+BB.bedrag;   /* v505 (punt 3): ook per periode */
+    ${(function(){ const BB=buitenBudget({start:P.start, eind:P.eind}); if(!BB.bedrag) return ''; const nd=MBn!=null?MBn:dt+BB.bedrag;   /* v505 (punt 3): ook per periode; v507: dezelfde netto als de kop en de tegel */
       return `<div class="row" data-zienperiodebuiten="${BB.bedrag}" data-zienperiodenetto="${nd}" style="justify-content:space-between;gap:8px;font-size:var(--fs-sm);margin-top:4px"><span class="muted">buiten budget ${euro0(BB.bedrag)}</span><b style="color:${nd>0?'var(--amber)':'var(--green)'}">netto ${nd===0?'op tempo':`${euro0(Math.abs(nd))} ${nd>0?'boven':'onder'} tempo`}</b></div>`; })()}
     <div class="small" style="color:var(--mut2);margin-top:4px">tempo gaat alleen over het variabele deel van je potjes</div></div>`;
 }
@@ -26040,7 +26053,9 @@ function insMaandKaart(P, soort){
     const GR=insGroepen(S);
     const dln=[{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}], ng=[{k:'nogpot', v:GR.pot.nog}];
     const legU=[{k:'vast', v:GR.vast.uit},{k:'potjes', v:S.potjes},{k:'zonder', v:S.zonder}], legN=[{k:'nogvast', v:GR.vast.nog},{k:'nogpot', v:GR.pot.nog, fc:GR.fc}];   // fc: de sheet in zijn forecast-vorm
-    const somNog=puit+Math.max(S.nogPot,0), schaal=Math.max(pbud, somNog, 1); let x=0;
+    /* v507: de schaal telt HETZELFDE "nog in potjes" als het segment (GR.pot.nog, de forecast-rest van v443), niet S.nogPot. GEMETEN op
+       1 nov (vorm-en-ritme g): segment 2052 tegen een schaal uit S.nogPot, dus een balk van 197% en 277px horizontale overloop op 360px. */
+    const somNog=puit+Math.max(GR.pot.nog,0), schaal=Math.max(pbud, somNog, 1); let x=0;
     const segs=[...dln, ...ng].map(d=>{ const w=Math.max(d.v,0)/schaal*100; const h=`<i data-insseg="${d.k}" data-v="${d.v}" style="left:${x.toFixed(2)}%;width:${w.toFixed(2)}%;background:${INS_SEG[d.k]}"></i>`; x+=w; return h; }).join('');
     const tp=Math.min(Math.max(pt/schaal*100,0),100), pct=S.dim>0?Math.round(S.el/S.dim*100):0;
     const streep=pbud>0?`<em data-instempo="${pt}" style="left:${tp.toFixed(2)}%"></em>`:'';

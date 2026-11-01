@@ -4,7 +4,7 @@
 // gat (doelTempo), anders het verschil tussen bereikjaar en streefjaar (reisModel). Geen van beide
 // beschikbaar betekent geen ingang. En net als bij 'lek': nooit een maandafspraak vanaf hier.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const overMaanden = (n) => {

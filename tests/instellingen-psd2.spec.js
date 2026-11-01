@@ -2,7 +2,7 @@
 // Zes subpagina's, een statusbalk alleen bij een melding, PSD2-saldo's alleen-lezen, gesloten rekeningen buiten je
 // saldo en binnen je historie, een saldo op Home dat gelijk is aan de rekeningenlijst, de bestedingslimiet met budget
 // en ruimte, een import die de dagen overslaat die de bank al dekt, geen CommandCenter meer, en de vervalregel op Home.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, CUR, M1, MAIN, SAV } = require('./budget-fixture');
 const { pinDatum } = require('./vaste-dag');
 const { kaalBron } = require('./bron-kaal');
@@ -40,6 +40,9 @@ function fixture({ expDagen = 3, dubbel = false } = {}) {
     [SPACE]: { uid: 'u3', iban: SPACE, label: 'Space', bank: 'N26', exp: plus(DAG, 80) + 'T00:00:00Z' },
   };
   set.manualBal = Object.assign({}, set.manualBal, { [OLD]: 250 });   // MAIN 4000 blijft opgeslagen, maar telt niet
+  /* v507 (oordeel c): deze fixture zet vaste oktoberdatums (9 okt) naast een seed() die vanaf VANDAAG rekent, en de verwachting
+     "tot 9 okt" klopt alleen zolang de seed in oktober valt. GEMETEN op de echte klok van 1 nov: "tot 5 nov". De seed leest sinds
+     v507 de standaarddag van tests/klok.js (31 okt), dus de twee kanten staan in dezelfde maand. */
   const meta = { [MAIN]: { balance: 3800, date: '2026-10-09' }, [ABN]: { balance: 120, date: '2026-10-09' } };
   p.minder_tx = JSON.stringify(tx);
   p.minder_set = JSON.stringify(set);

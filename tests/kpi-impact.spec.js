@@ -4,7 +4,7 @@
 // v161: de basis komt uit kpiBasis(), niet uit kpiAfstand().basis — er is nog maar één cijfer met
 // een band, dus een afstand is er meestal niet, terwijl de noemer er altijd is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
 
 async function boot(page, maand) {

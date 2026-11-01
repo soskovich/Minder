@@ -5,7 +5,7 @@
 // Nu is elke voortgang in het plan een TOEGEWEZEN bedrag. De gemeten buffer blijft waar hij
 // thuishoort: bufferMaanden() en de bufferregel op Maand lezen onverkort spaarSaldo().
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';

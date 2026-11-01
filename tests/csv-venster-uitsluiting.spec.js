@@ -21,7 +21,7 @@
  *    te onderscheiden van een som over alle uitgesloten boekingen.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const CM = 'N26 Main', PM = '100110012555096222';
 const CZ = 'N26 Zakgeld', PZ = '100110012848184840';

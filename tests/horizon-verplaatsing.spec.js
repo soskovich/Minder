@@ -4,7 +4,7 @@
 // De regel die deze spec bewaakt: een verplaatst element staat daarna op PRECIES EEN scherm, en een
 // maandregel op Maand laat je niet van scherm wisselen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

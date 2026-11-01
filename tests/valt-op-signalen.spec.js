@@ -12,7 +12,10 @@
 // De service worker staat globaal uit via playwright.config.js.
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
@@ -162,7 +165,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
   /* v340: Grip toont de signalen als regels onder 'Let op', in dezelfde volgorde als Inzichten, en een
      tik opent de kaart van DAT signaal in een sheet. De vorm "eerste kaart open, tweede dicht" is
      vervallen met de kaarten op het scherm. */
-  test('dezelfde twee in dezelfde volgorde, als regels onder Let op', async ({ page }) => {
+  test('dezelfde twee in dezelfde volgorde, als regels onder Let op · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     const rijen = page.locator('#gripTeKiezen [data-letop="sig"]');
@@ -179,7 +182,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
 
   /* v359: 'de rij op Inzichten opent de kaart van dat signaal' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 
-  test('de open kaart draagt het bedrag, de dagen, de historie en drie handelingen', async ({ page }) => {
+  test('de open kaart draagt het bedrag, de dagen, de historie en drie handelingen · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     const t = await page.locator('.valtop-open').innerText();
@@ -190,7 +193,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
       .toEqual(['Bijstellen', 'Grens zetten', 'Bekijken']);
   });
 
-  test('geen patroonregels en geen derde signaal op Grip', async ({ page }) => {
+  test('geen patroonregels en geen derde signaal op Grip · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); });
     await expect(page.locator('#s-maand .valtop-patroon')).toHaveCount(0);
@@ -202,7 +205,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
     await expect(page.locator('#s-logboek #valtOpLog')).toContainText('niet getoond');
   });
 
-  test('de historie komt uit de log en wordt niet herberekend', async ({ page }) => {
+  test('de historie komt uit de log en wordt niet herberekend · voor de salarisperiode', async ({ page }) => {
     const vorig = {};
     vorig[`${M1}|boodschappen`] = { id: `${M1}|boodschappen`, maand: M1, categorie: 'Boodschappen', potjeId: 'boodschappen',
       potje_bij_detectie: 200, over_bij_detectie: 60, gedetecteerd_op: `${M1}-20`, getoond: true,
@@ -214,7 +217,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
     expect(src).not.toMatch(/catSpendMap|effectiveBudgets/);
   });
 
-  test('de lek-ingang leeft verder als chevron in de kop', async ({ page }) => {
+  test('de lek-ingang leeft verder als chevron in de kop · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     const chev = page.locator('.valtop-open [onclick*="coStart"]');
@@ -228,7 +231,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
 });
 
 test.describe('de drie handelingen', () => {
-  test('potje bijstellen: voorstel boven de stand, deze maand, en vastgelegd', async ({ page }) => {
+  test('potje bijstellen: voorstel boven de stand, deze maand, en vastgelegd · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
@@ -250,7 +253,7 @@ test.describe('de drie handelingen', () => {
     expect(r.actie_op).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  test('een handmatig lager bedrag mag, en de vastlegging laat dat zien', async ({ page }) => {
+  test('een handmatig lager bedrag mag, en de vastlegging laat dat zien · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
@@ -264,7 +267,7 @@ test.describe('de drie handelingen', () => {
     expect(await page.evaluate(() => catSpendMap(thisYM()).boodschappen)).toBeGreaterThan(220);
   });
 
-  test('een actie laat het signaal van beide schermen vallen, ook na herladen, en de derde schuift door', async ({ page }) => {
+  test('een actie laat het signaal van beide schermen vallen, ook na herladen, en de derde schuift door · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
@@ -278,7 +281,7 @@ test.describe('de drie handelingen', () => {
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);
   });
 
-  test('grens zetten legt de stand vast en laat het signaal vallen', async ({ page }) => {
+  test('grens zetten legt de stand vast en laat het signaal vallen · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
@@ -290,7 +293,7 @@ test.describe('de drie handelingen', () => {
     expect(await sigKeys(page)).not.toContain('boodschappen');
   });
 
-  test('een boeking na de grens levert een melding, de bekende boeking niet', async ({ page }) => {
+  test('een boeking na de grens levert een melding, de bekende boeking niet · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
@@ -306,7 +309,7 @@ test.describe('de drie handelingen', () => {
     expect(n[0]).toContain('na je grens');
   });
 
-  test('transacties bekijken is geen actie: het signaal blijft staan', async ({ page }) => {
+  test('transacties bekijken is geen actie: het signaal blijft staan · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(2).click();
@@ -361,7 +364,7 @@ test.describe('de vastlegging', () => {
 
   /* Een grens is een andere keuze dan een bijstelling: een potjewijziging erna mag hem niet
      overschrijven, anders telt de log de verkeerde handeling. */
-  test('een grens blijft staan als je daarna het potje wijzigt', async ({ page }) => {
+  test('een grens blijft staan als je daarna het potje wijzigt · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
@@ -379,7 +382,7 @@ test.describe('de vastlegging', () => {
     expect(await page.evaluate(() => SET.budgets.boodschappen)).toBe(200);
   });
 
-  test('de telling op Grip loopt mee', async ({ page }) => {
+  test('de telling op Grip loopt mee · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => go('logboek'));   // v331: de telling staat in het logboek
     const blok = page.locator('#s-logboek #valtOpLog');
@@ -395,7 +398,7 @@ test.describe('de vastlegging', () => {
     await expect(blok).not.toContainText('streak');
   });
 
-  test('de opslag hangt onder SET en overleeft een herstart', async ({ page }) => {
+  test('de opslag hangt onder SET en overleeft een herstart · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
@@ -479,7 +482,7 @@ test.describe('de maandafsluiting', () => {
 
 test.describe('layout', () => {
   for (const w of [360, 390]) {
-    test(`geen horizontale overflow op ${w}px, op beide schermen`, async ({ page }) => {
+    test(`geen horizontale overflow op ${w}px, op beide schermen · voor de salarisperiode`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
       await boot(page, DRIE);
       for (const scherm of ['ins', 'maand']) {
@@ -501,7 +504,7 @@ test.describe('layout', () => {
     });
   }
 
-  test('de sheet past ook, en het veld is een heel bedrag', async ({ page }) => {
+  test('de sheet past ook, en het veld is een heel bedrag · voor de salarisperiode', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await boot(page, DRIE);
     await kaart(page);
@@ -569,7 +572,7 @@ test.describe('de lek-regel op Inzichten', () => {
     await expect(page.locator('[data-letop="lek"]')).toHaveCount(0);
   });
 
-  test('een lek met een overschrijding in dezelfde categorie: ingang op Grip, geen lek-regel', async ({ page }) => {
+  test('een lek met een overschrijding in dezelfde categorie: ingang op Grip, geen lek-regel · voor de salarisperiode', async ({ page }) => {
     await boot(page, {
       tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' }],
       set: { budgets: { boodschappen: 200 } },
@@ -599,7 +602,7 @@ test.describe('de lek-regel op Inzichten', () => {
    actie geldt. De eigenschap die deze twee tests vasthouden is onveranderd en strenger te lezen:
    een editor-wijziging raakt het bedrag van de Grip-route niet. */
 test.describe('terugtypen na de knop op Grip', () => {
-  test('de log houdt het bedrag van de Grip-route vast', async ({ page }) => {
+  test('de log houdt het bedrag van de Grip-route vast · voor de salarisperiode', async ({ page }) => {
     await boot(page, DRIE);
     await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
@@ -647,7 +650,7 @@ test.describe('bijstellen is een verdeling', () => {
   };
   const totaal = (page) => page.evaluate(() => Math.round(totalBudget()));
 
-  test('volledige dekking uit een potje: het maandtotaal blijft gelijk', async ({ page }) => {
+  test('volledige dekking uit een potje: het maandtotaal blijft gelijk · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     expect(await totaal(page)).toBe(550);
     await open(page);
@@ -667,7 +670,7 @@ test.describe('bijstellen is een verdeling', () => {
     expect(Object.keys(await logVan(page))).toEqual([`${CUR}|sport`]);
   });
 
-  test('zonder dekking kun je niet opslaan, en het verschil staat in de sheet', async ({ page }) => {
+  test('zonder dekking kun je niet opslaan, en het verschil staat in de sheet · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     await page.locator('#valtOpBedrag').fill('96');
@@ -680,7 +683,7 @@ test.describe('bijstellen is een verdeling', () => {
     expect((await logVan(page))[`${CUR}|sport`].actie).toBe(null);
   });
 
-  test('een potje met te weinig ruimte wordt geklemd, en er kan een tweede bij', async ({ page }) => {
+  test('een potje met te weinig ruimte wordt geklemd, en er kan een tweede bij · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     await page.locator('#valtOpBedrag').fill('150');          // 100 te dekken
@@ -696,7 +699,7 @@ test.describe('bijstellen is een verdeling', () => {
     expect(r.dekking.map((x) => [x.potjeId, x.potje_na])).toEqual([['boodschappen', 340], ['uiteten', 60]]);
   });
 
-  test('een potje kan niet onder zijn huidige stand', async ({ page }) => {
+  test('een potje kan niet onder zijn huidige stand · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     await page.locator('#valtOpBedrag').fill('150');
@@ -720,7 +723,7 @@ test.describe('bijstellen is een verdeling', () => {
     await expect(page.locator('.valtop-open .valtop-hand button')).toHaveCount(3);
   });
 
-  test('de maandwissel draait allebei de kanten terug', async ({ page }) => {
+  test('de maandwissel draait allebei de kanten terug · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     await page.locator('#valtOpBedrag').fill('96');
@@ -733,7 +736,7 @@ test.describe('bijstellen is een verdeling', () => {
     expect(await totaal(page)).toBe(550);
   });
 
-  test('de log leest beide kanten en de telling telt een keer', async ({ page }) => {
+  test('de log leest beide kanten en de telling telt een keer · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     await page.locator('#valtOpBedrag').fill('96');
@@ -752,7 +755,7 @@ test.describe('bijstellen is een verdeling', () => {
       return d.innerText; })).not.toContain('uit ');
   });
 
-  test('een verlaging van je eigen potje vraagt geen dekking', async ({ page }) => {
+  test('een verlaging van je eigen potje vraagt geen dekking · voor de salarisperiode', async ({ page }) => {
     await boot(page, VERDEEL);
     await open(page);
     // v235 blijft: een lager bedrag mag, en dat laat het totaal juist dalen

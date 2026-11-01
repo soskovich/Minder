@@ -34,7 +34,7 @@
 // De zes bestaande grendel-fixtures hebben allemaal een buffer die meer nodig heeft dan één maand
 // inleg, dus er blijft daar nooit iets over en ze meten dit geval niet.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const fs = require('fs');
 const path = require('path');

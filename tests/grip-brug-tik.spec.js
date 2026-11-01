@@ -4,7 +4,7 @@
    variabele potjes, dus de rest-tests dragen er vier.
    v387: DE BRIDGE STAAT OP ZIEN (gripZienBrug()). De rest en de vaste lasten zijn daar samen "overig"; een tik op overig
    opent een sheet met de delen (gripOverig), en daaruit "Andere variabele potjes" de sheet van de rest (gripRest). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 
 /* v428: DE BRUG STAAT IN BEGRIJPEN, in groepen (gripGroepBrug). Een tik op de brug opent de sheet per groep (#gripGroepen);

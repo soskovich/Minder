@@ -5,7 +5,7 @@
    4 verlopen posten met een laatste betaling ouder dan zes maanden staan samen in een regel met een lijst erachter. */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const { bootStand } = require('./standkaart-sluit.fixture');
 

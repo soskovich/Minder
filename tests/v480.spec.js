@@ -5,7 +5,7 @@
       opzij EUR X zijn · verdeling aanpassen ›".
    c. De woning via Tikkie/iDEAL (geen SEPA-schema) plus een potje Huur op vast telt EEN keer in vast verwacht (de woning folt via
       woningForecast.betaald/nog in het potje). GECONSTRUEERD, niet gemeten. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const W = require('./v480-woning-stand');
 

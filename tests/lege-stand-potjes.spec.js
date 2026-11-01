@@ -8,7 +8,10 @@
  * tegelijk beweren dat er gemeten is wat je gebruikte (v59/v73/v173). Die gelijkheid staat als
  * assertie vast, want zonder haar is "het is het budget" niet van "het is het restant" te scheiden.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { pinDag, vasteDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
@@ -62,7 +65,7 @@ test.describe('a - de invoer draagt het geval', () => {
      restant in je potjes, want dat zou een meting claimen. De reden en de stap om bij te werken staan in de sheet
      achter de kaart (openInsTegel('uitgegeven')). De kaart toont in deze stand GEEN potjesbedrag meer; de
      assertie van v359 op "In je potjes" met het budget is daarmee weg (de tegels bestaan niet meer). */
-  test('zonder boekingen van deze maand: onbekend, geen restant, en de reden in de sheet', async ({ page }) => {
+  test('zonder boekingen van deze maand: onbekend, geen restant, en de reden in de sheet · voor de salarisperiode', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => { go('ins'); renderIns();
       const k = document.querySelector('#insMaand');

@@ -1,7 +1,7 @@
 // v388: GRIP ALS REGELKRING, DEEL 2. Begrijpen (patronen als oorzaak, klopt/niet met een reden die meeweegt), Kiezen
 // (een rij per patroon, voortgang, uitgevoerde meldingen, volgorde, moment, een stap die blijft liggen), de keuze-sheet
 // (opties met ≈, bridge vóór en ná, meetlat) en Terugblik (✓ ½ ✗, geschoven apart, spaardoel ½ vanaf 80%, score).
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const OPNAMES = [['2026-10-06', 300], ['2026-10-09', 400]];

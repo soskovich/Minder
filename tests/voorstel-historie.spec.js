@@ -4,7 +4,7 @@
 // 'volgende maand'-laag over die setCatBudget() wel gebruikt. Het voorstel is nu een wijziging als
 // elke andere: bestaand potje -> SET.budgetsNext, alleen een nieuw potje start meteen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { open, seed, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 // zelfde fixture, maar met een aangepaste potjes-set per test

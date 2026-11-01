@@ -2,7 +2,7 @@
    maand nog terugzetdelen komen. De rijen tellen op tot "Deze maand opzij" in de kop, want beide lezen dezelfde termen
    uit planStandEind(). Fixture: de stand van het toestel (Noodfonds EUR 362 inleg + EUR 688 terug, EUR 100 later;
    Inrichting EUR 1.838 inleg). De opbouw blijft in de detailsheet. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const T = require('./plan-toestel-stand');
 
 const rijen = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => {

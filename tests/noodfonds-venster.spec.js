@@ -3,7 +3,7 @@
 // plaats van mediaan) drukte een halve maand het doel omlaag en liep het binnen de maand vanzelf
 // op. Nu tellen alleen afgeronde maanden mee, zoals de rest van de codebase al deed.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { open, CUR, M1, M2, MAIN, SAV } = require('./budget-fixture');
 
 // eigen fixture: een verzekering (NF_PERIODIEK -> gemiddelde) maakt het effect meetbaar

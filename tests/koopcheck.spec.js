@@ -5,7 +5,7 @@
 // via openBuy() en braken dus op hetzelfde punt. Deze spec legt vast dat elk van de drie tot een
 // zichtbare uitkomst leidt, dat er dan ook echt iets in SET.coachLog landt, en dat een geparkeerde
 // aankoop terugkeert.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 // boodschappen: potje 800, deze maand 300 uitgegeven, dus 500 ruimte

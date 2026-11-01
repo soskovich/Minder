@@ -3,7 +3,7 @@
    van de reserveringen vraagt EUR 131 per maand tot november (EUR 37 in de pot tegen een boete van
    EUR 299 in november), en Abonnementen stopt vanaf november. De afspraken ontstaan via de echte
    routes: de knop in de dekkingssheet en het stoppen van het potje. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot, RES } = require('./bezit-koppeling.fixture');
 
 const SEP = '2026-09';

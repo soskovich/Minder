@@ -2,7 +2,7 @@
    overschot gaat als correctie terug naar de vorige periode (uitgegeven daar − overschot, nooit onder nul); deze periode is 0 tot de
    telling, plus het tempo daarna. Kan de vorige periode het niet dragen, dan blijft de rest gemeld. GECONSTRUEERDE fixture
    (v448-stand); de getallen van het toestel (24-08 t/m 23-09 EUR 700 -> EUR 380) bouwt optie vorigOpn na: EUR 300 + EUR 400 = 700. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v448-stand');
 
 const b20 = (page) => page.evaluate(() => diagSalarisVerdeling().join('\n'));

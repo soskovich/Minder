@@ -3,7 +3,7 @@
 // mee met elke import terwijl je spaarsaldo en een spaardoel als "kosten koper" stil bleven staan.
 // Je kunt het doel nu zelf vastzetten. Default blijft de schatting: nietsdoen verandert niets.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2 } = require('./budget-fixture');
 
 async function boot(page) {

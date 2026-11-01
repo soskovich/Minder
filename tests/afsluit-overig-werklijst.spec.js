@@ -2,7 +2,7 @@
    Overig, en daar kun je een boeking niet hercategoriseren. Nu opent hij precies de boekingen die hij telt;
    een tik opent de bestaande transactie-sheet, "Overig klopt" telt als eigen keuze, en een eerdere eigen
    keuze voor dezelfde tegenpartij staat bovenaan als voorstel. Er wordt niets vanzelf omgezet. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 
 const M = '2026-09';

@@ -12,7 +12,7 @@
 // HARDE GRENS op de som van de vaste maandbedragen: meer verdelen dan je spaarinleg kun je niet
 // opslaan. Dezelfde stap van spiegel naar grens als bij het bijstellen van een potje (v238).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

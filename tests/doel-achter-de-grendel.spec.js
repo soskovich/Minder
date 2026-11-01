@@ -14,7 +14,7 @@
 // niet, maar knelt wél: dat is het ergste dat deze functie kan opleveren, en het mag niet stil uit
 // de tellingen op Grip vallen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

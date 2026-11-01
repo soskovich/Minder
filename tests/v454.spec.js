@@ -7,7 +7,7 @@
       Blok 20 POTJE CONTANT: per periode telling, schatting of opnames. Op v454-stand (GECONSTRUEERD, november 2026).
    3. Laserbehandeling: de termijn april 2027 blijft staan.
    4. Blok 25: je eigen naam in een van de twee boekingen is genoeg. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const S4 = require('./v454-stand');
 

@@ -18,7 +18,7 @@
  * werkt is pas te zien NA een maandwissel, en die wissel is de enige kans om die maand vast te
  * leggen. Zonder uitlezing gaat een stille fout voor altijd verloren (v296/v298).
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { open, seed, CUR, M1, M2 } = require('./budget-fixture.js');

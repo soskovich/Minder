@@ -6,7 +6,7 @@
    wordt niet automatisch herkend.
    Plus blok 19 (de boekingen achter "zonder potje") en de fade onder een lange sheet.
    Fixture grip-kring-stand (10 okt 2026). GETALLEN VAN DE FIXTURE, NIET VAN HET TOESTEL. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const grip = async page => { await page.setViewportSize({ width: 390, height: 844 }); await K.boot(page); };

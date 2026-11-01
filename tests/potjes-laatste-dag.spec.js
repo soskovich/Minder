@@ -14,7 +14,10 @@
  * op het toestel staan weet ik niet, alleen de drie bedragen uit de regel.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const fs = require('fs');
 const path = require('path');
 /* DE LAATSTE DAG IS `dim - 0`, en die is uit een genoemde datum niet te halen zonder ook de maand
@@ -109,7 +112,7 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
     expect(r.kaartTekst).not.toMatch(/tekort/);
   });
 
-  test('de stand blijft staan met zijn dagbedrag, want die klopten', async ({ page }) => {
+  test('de stand blijft staan met zijn dagbedrag, want die klopten · voor de salarisperiode', async ({ page }) => {
     await boot(page, 0);
     const r = await meet(page);
     /* v382: de stand staat als rij "in potjes" in de legenda van de maandkaart, met het restant uit

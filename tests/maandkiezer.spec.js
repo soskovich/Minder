@@ -5,7 +5,10 @@
 // worden bij een afgesloten maand niet getoond. Ze met de huidige waarde onder een historische kop
 // zetten zou suggereren dat je buffer toen op dat niveau stond.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 // v177: de app legt de LOKALE dag vast (vandaagYMD), niet de UTC-dag. Tussen middernacht
@@ -200,7 +203,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     expect(ins).not.toMatch(/tempo/i);
   });
 
-  test('wat over het nu gaat verdwijnt', async ({ page }) => {
+  test('wat over het nu gaat verdwijnt · voor de salarisperiode', async ({ page }) => {
     await boot(page);
     // v382: de lopende maand draagt in de maandkaart "Nog te gaan" (vaste lasten en wat er in je potjes zit) en een
     // tempo; een afgesloten maand draagt alleen wat er uitkwam

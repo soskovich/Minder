@@ -19,7 +19,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag } = require('./vaste-dag');
 
 /* v310: DE TELDAG HANGT AAN DE KLOK, DUS DEZE SPEC PINT ZIJN DAG.

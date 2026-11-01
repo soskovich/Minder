@@ -3,7 +3,7 @@
    Het geval van de gebruiker: EUR 420 ingevuld op 25 september, EUR 100 inleg op 29 september naar
    Peaks (Kayani). Ingevuld op 25 september wordt dat EUR 520; ingevuld op 30 september blijft het
    EUR 420. Zie bezit-koppeling.fixture.js voor de rest van de stand. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 
 const KAYANI = (op, extra) => ({ id: 'kayani', naam: 'Peaks (Kayani)', waarde: 420, grow: true, rend: 5, per: 50,

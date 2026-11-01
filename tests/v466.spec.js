@@ -1,7 +1,7 @@
 /* v466 (gevraagd door de gebruiker, antwoord op v465): de syncgrens per bank. Hooguit een automatische sync per 6 uur per bank, na een
    weigering (rate limit) die dag geen automatische sync meer bij die bank, zelf vernieuwen kan altijd (met een melding als de bank
    eerder vandaag weigerde), en de boot volgt dezelfde grens. GECONSTRUEERDE fixture (die van v465). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';

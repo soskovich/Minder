@@ -1,6 +1,6 @@
 /* v432: VOORSTEL PER BETAALREKENING. Hoeveel laat je op elke betaalrekening staan tot je volgende salaris, en wat zet je opzij.
    Minder verplaatst geen geld; het bewijs komt uit de rekening waar elke boeking echt van afging. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF, SPAAR } = S;
 const add = (page, rows) => page.evaluate(rows => { for (const [acc, d, a, n, ds, cat] of rows) { const t = { id: 'v432' + acc.slice(-4) + d + n + a, date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; } save(); }, rows);

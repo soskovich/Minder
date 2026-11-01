@@ -5,7 +5,7 @@
 // belandt en niet in de compoundende, dat er geen euro ontstaat of verdwijnt, en dat er in de
 // vul-fase niets dubbel af gaat.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

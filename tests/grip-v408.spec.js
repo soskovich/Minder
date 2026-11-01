@@ -2,7 +2,7 @@
    PATRONEN, STIJGENDE TREND, EN DE BRUG ZONDER TWEE KEER "OVERIG". Op grip-v408-stand (10 oktober 2026). */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v408-stand');
 
 const letop = page => page.evaluate(() => gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), [])

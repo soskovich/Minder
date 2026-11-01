@@ -4,7 +4,7 @@
    - Met een verhoging stijgt het totaal, en de app toont eerst het gevolg voor veilig te besteden en Plan.
    - Een gearchiveerd potje verdwijnt uit het budget, en september (bewaard in budgetHist) blijft gelijk.
    - Niets is voorgekozen, en openen of kiezen schrijft niets. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand.js');
 
 const BUD = { huur: 750, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500 };

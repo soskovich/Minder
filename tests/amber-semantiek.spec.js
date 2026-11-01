@@ -1,7 +1,7 @@
 // v93: amber is voor échte aandacht (over budget, tekort, waarschuwing). Informatieve statussen
 // — "sneller dan de maand", "boven je inkomen-limiet" — leunen op het label, niet op de kleur.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const AMBER = /var\(--amber\)|#fbbf24|#f5b544/;

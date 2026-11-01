@@ -3,7 +3,7 @@
 // (krijgt mijn saldo een dip), dus een los pad: recurringSchedule() en liquidityDaily() worden hier
 // niet aangeroepen. Verplichtingen voer je zelf in; niets wordt uit transacties gedetecteerd.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

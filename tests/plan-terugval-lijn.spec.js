@@ -14,7 +14,7 @@
    DE MINIMUMBREEDTE STAAT IN DE SEGMENTEN EN NIET IN DE CSS VAN EEN VAN DE TWEE LEZERS (blok d).
    `.plan-tak i` had `min-width:3px` en het balksegment niet, en de balk was bovendien flex: gemeten
    werd hetzelfde segment 2,98px in de balk en 3px in de tak. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');

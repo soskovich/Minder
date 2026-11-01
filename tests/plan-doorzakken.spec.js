@@ -1,7 +1,7 @@
 // v98: overgebleven spaarruimte blijft niet liggen maar zakt door naar het eerstvolgende
 // lopende doel (echte waterval), plus uitleg bij "wacht op capaciteit".
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 const CAP = 500;   // savingMode 'amount' -> monthlySavingTarget()

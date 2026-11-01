@@ -3,7 +3,7 @@
    rekening van de externe betaling krijgt) en legt het vast in de kennislaag (soort vast, door jou). GECONSTRUEERDE fixture: een
    kaartbetaling (BEA) van EUR 45 per maand aan Sport City op de Salarisrekening, dus NIET auto-herkend — alleen de seed maakt het
    vast. (Op het toestel staat de echte Sport City; dit pint de logica.) */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 const S = require('./v432-stand');
 const { MAIN } = S;

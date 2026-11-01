@@ -1,7 +1,7 @@
 /* v410: DE BESLISSINGEN NA v409. Op grip-v409-stand (10 oktober 2026). */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const { kaalUit } = require('./bron-kaal');
 

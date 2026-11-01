@@ -1,7 +1,7 @@
 // v75: design-systeem — NL-getalnotatie + tabular figures, getemperde kleuren, één-laags kaarten,
 // spacing/radius-ritme, rustige grafieken, consistente knoppen/navbar, nieuwe coach-avatar.
 // Puur visueel: deze spec bewaakt de tokens en de opmaak, niet de berekeningen.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 async function boot(page, scherm) {

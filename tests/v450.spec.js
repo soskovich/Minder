@@ -5,7 +5,7 @@
    2. Een bron: de tellingboekingen van voor de grens tellen met een potje niet in de categorie; contant per maand uit dezelfde
       berekening als per periode (met de correctie van v449), en de controle maand = periode sluit.
    3. Blok 23: zonder telling op moment 2 is de schatting de laatste telling min het tempo sinds die telling, minimaal 0. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v448-stand');
 
 const b20 = (page) => page.evaluate(() => diagSalarisVerdeling().join('\n'));

@@ -5,7 +5,7 @@
    in plaats van "nog verwacht" uit safeToSpend en de Plan-inleg. (5) Blok 23 TUSSENDOOR splitst de verwachte daling tot de storting
    in vast, potjes en contant met het dagbedrag per soort; zonder opname deze maand en met het patroon pinnen na je salaris wordt er
    voor de storting geen contant verwacht ("contant: verwacht na je salaris"). GECONSTRUEERDE fixtures (v432-stand, 19 okt). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron } = require('./bron-kaal');

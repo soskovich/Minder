@@ -2,7 +2,7 @@
    staat in blok 8 wat de bank teruggaf (nummer, naam, soort) en wat de app ervan maakte, en per rekening op een oudere sessie of hij erbij
    zat. Zat hij er niet bij (niet onder zijn nummer, hash of naam), dan zegt de Home-kaart "N26 gaf deze rekening niet mee bij de laatste
    koppeling" in plaats van "Opnieuw koppelen". GECONSTRUEERDE fixture (de vorm van v464). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586';

@@ -3,7 +3,7 @@
 // voetregel. De eerste en de derde kwamen letterlijk uit dezelfde bron; de tweede is een ander
 // getal dat er alleen gelijk aan lijkt zolang bezittingen, schulden en uitgeleend geld leeg zijn.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();

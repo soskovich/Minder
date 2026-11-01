@@ -2,7 +2,8 @@
 // Kern: teal droeg op Home en Inzichten meerdere betekenissen tegelijk, en er stonden vier
 // vouw-plekken met drie verschillende idiomen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();
@@ -323,6 +324,20 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
 });
 
 test.describe('g · layout', () => {
+  /* v507: GEMETEN op de echte klok van 1 nov: Inzichten liep 277px over op 360px, want het segment "nog in potjes" kwam uit de
+     forecast (insGroepen) en de schaal van de balk uit S.nogPot. Op de eerste dag van een maand ligt de forecast-rest ver boven het
+     restant van de potjes (hier 2052 tegen 945). Deze test pint die dag, zodat het geval niet meer van de kalender afhangt. */
+  test('op de eerste dag van de maand past de balk van de maandkaart in zijn breedte (v507)', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await pinDatum(page, '2026-10-01');
+    await boot(page, seed({}, { maandgrens: true }));
+    const r = await page.evaluate(() => { go('ins'); const S = insMaandStand(), GR = insGroepen(S);
+      const som = [...document.querySelectorAll('#insMaand [data-insseg]')].reduce((a, e) => a + parseFloat(e.style.width || '0'), 0);
+      return { nogPot: S.nogPot, grNog: GR.pot.nog, som, over: document.body.scrollWidth - document.body.clientWidth }; });
+    expect(r.grNog, 'invoer: de forecast-rest ligt boven het restant van de potjes').toBeGreaterThan(r.nogPot);
+    expect(r.som).toBeLessThanOrEqual(100.5);
+    expect(r.over).toBeLessThanOrEqual(1);
+  });
   for (const w of [360, 390]) {
     test(`Home, Inzichten en Plan passen op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });

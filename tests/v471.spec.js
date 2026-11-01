@@ -2,7 +2,7 @@
    de gewone transactie-aanroep (alleen meten) en het overslaan van de pending-aanroep na 10 keer 0 regels met een controle per week, de
    volgorde transacties, saldo, pending, en de koppeling zonder pending-aanroep, (3) de PSU-headers uit /aspsps in blok 8.
    GECONSTRUEERDE fixture (die van v466). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';

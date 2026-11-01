@@ -1,7 +1,7 @@
 /* v439: INZICHTEN EN HOME OPGESCHOOND (gezien op het toestel, 17 okt). Op Inzichten zijn "Forecast eind oktober" en "wijzigingen deze
    maand" weg uit de maandkaart, en staat op die plek "Verwacht saldo eind oktober" met de verwachte bonus. Op Home zijn "waarvan vrij te
    besteden" en "Verwacht eind oktober" weg. Op v438-stand (GECONSTRUEERD, zie daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v438-stand');
 const boot = async (page, o, w) => { await page.setViewportSize({ width: w || 390, height: 844 }); await S.boot(page, o); };
 

@@ -3,7 +3,7 @@
    1. het maandbudget ligt vast per maand; 2. Deze week per potje, de keuze een keer; 3. patronen als label bij de signalen;
    4. tekort-waarschuwingen alleen na Akkoord, in een kaart; 5. de salariskaart tegen het vastgelegde budget.
    GECONSTRUEERD EN NIET GEMETEN: de boekingen en logs van het toestel staan alleen daar. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v436-stand');
 const I = require('./inzichten-stand');
 const { pinDatum } = require('./vaste-dag');

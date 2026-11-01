@@ -4,7 +4,7 @@
 // B. spaarSaldo() viel zonder aangewezen spaarrekening terug op je totale banksaldo. Dat cijfer
 //    voedde de bufferregel op Maand en daarmee beleggenKlaar(): een groen licht op een geraden bedrag.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 // v177: de app legt de LOKALE dag vast (vandaagYMD), niet de UTC-dag. Tussen middernacht
 // en 02:00 zomertijd verschillen die, en dan toonde "Gelezen op" de dag ervoor.

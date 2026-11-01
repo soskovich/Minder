@@ -3,7 +3,7 @@
 // uitgaf) en een noemer-effect (X0·(1/B1−1/B0), wat je inkomen of budget deed). Zonder die
 // tweedeling zou een gedaald inkomen lezen als "je gaf meer uit", en dat is niet waar.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 async function boot(page, payload) {

@@ -1,6 +1,6 @@
 // v360: "Wordt een reservering" verlaagt het potje met wat de post PER MAAND vraagt, vanaf een maand die je kiest,
 // en DELA telt daarna niet dubbel: niet in je potje en je reservering tegelijk, en niet in nog te betalen.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { bootStand } = require('./standkaart-sluit.fixture');
 const rb = require('./ruim-bijstel-stand');
 /* v387: Verzekeringen op EUR 324 is sinds de regelkring niet meer te ruim (december vraagt DELA erbij), dus de sheet

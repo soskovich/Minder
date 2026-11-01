@@ -9,7 +9,7 @@
 // houdt een gebruiker: 'rente'. Deze spec meet met echte data waarop beide signalen zouden hebben
 // gevuurd, niet met een gepatchte functie.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, LIMIET, POTJES } = require('./budget-fixture');
 
 const now = new Date();

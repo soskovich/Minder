@@ -4,7 +4,7 @@
 // budgetstand, niet bij een vooruitblik over maanden. Inzichten is nu de enige lezer.
 // Een verplaatsing: nogDezeMaandBody() en nogDezeMaandCard() zijn niet aangeraakt.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();

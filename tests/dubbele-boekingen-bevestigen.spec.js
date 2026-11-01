@@ -40,7 +40,7 @@
  *      niet mee en hoort hier dus niet aangeboden te worden; zonder dat geval doet die guard niets.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const PSD = '100110012848184840';          // N26 Zakgeld, psd2

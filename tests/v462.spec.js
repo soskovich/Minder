@@ -5,7 +5,7 @@
    actueel, toestemming binnen 14 dagen). B6: de regel onder het saldo, de sheet Je cijfers met "Toon zonder correctie", en de groep Cijfers
    in de bel (alleen een vraag boven de drempel, een rekening die niet actueel is, een getal dat na een update bewoog). Geen keuze na een
    correctie (B9 vervalt). GECONSTRUEERDE fixture (die van v461). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';

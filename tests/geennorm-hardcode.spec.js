@@ -19,7 +19,7 @@
 // boeking die ín die categorie landt. Dat is geen beslissing óver geenNorm-categorieën, dat is de
 // bron van de post zelf, en een categorie-loze versie ervan bestaat niet.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron } = require('./bron-kaal');

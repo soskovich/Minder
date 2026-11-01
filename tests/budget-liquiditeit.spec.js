@@ -7,7 +7,10 @@
 // live functies en de gerenderde DOM. De fixture staat in budget-fixture.js en is bewust
 // kalender-onafhankelijk. Alleen varDue (tempo x resterende dagen) beweegt met de datum;
 // daarvoor toetsen we invarianten in plaats van vaste getallen.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const F = require('./budget-fixture.js');
 const { open, seed, CUR, LIMIET, POTJES, SPEND_CUR, FIXDUE, VARPLAN, SALDO, SPAAR_SALDO, SAVE_REMAINING, SAFE } = F;
 /* v308: DE DAG STAAT VAST voor de test die de twee modellen naast elkaar zet. De tempo-som klemt
@@ -107,7 +110,7 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     expect(L.varDue).not.toBe(r.plan);                     // twee modellen, bewust niet gelijkgetrokken
   });
 
-  test('de labels benoemen welk model je ziet', async ({ page }) => {
+  test('de labels benoemen welk model je ziet · voor de salarisperiode', async ({ page }) => {
     await open(page);
     // v164: renderLiquidityKPI(), vooruitOpbouw() en vooruitDeep() waren al onbereikbaar en zijn
     // opgeruimd. Het label leeft nog in nogDezeMaandBody(), dus daar bewaken we het.

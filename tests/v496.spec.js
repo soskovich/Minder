@@ -13,7 +13,7 @@
    e. Het budget in de sheet is in centen gelijk aan budgetVoorPeriode() plus de vaste lasten in de periode die niet in een potje
       zitten; het vaste deel van een gesplitst potje (de lease in Vervoer) staat er één keer in. Sabotage: het vaste deel dubbel tellen.
    f. In de voorbeeldweergave schrijft Vastleggen niets (SET en localStorage ongewijzigd). Sabotage: de voorbeeld-guard eruit. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 test('a. salaris op de regeldatum: de sheet toont budget + verdeling, Vastleggen legt beide vast', async ({ page }) => {

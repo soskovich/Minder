@@ -4,7 +4,7 @@
 // geschreven, dus aan het begin staat er nog het scherm waar je vandaan komt. Eén waarde in
 // module-state, geen tweede navigatiegeschiedenis: na een herstart is er geen herkomst.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 const actief = (page) => page.evaluate(() =>

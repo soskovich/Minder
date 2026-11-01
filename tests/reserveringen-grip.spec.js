@@ -4,7 +4,7 @@
 //     lege lijst heeft een grijze tegel "instellen" op Grip.
 // (2) Pot EUR 299 en een boete van EUR 299 in november zei "gedekt tot en met november" EN "EUR 299 per
 //     maand nodig". Gedekt is nu gedekt, zonder maandbedrag, en de tegel zegt "gedekt t/m november".
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();

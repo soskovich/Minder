@@ -1,7 +1,7 @@
 /* v421: HOLDING ALS PARTIJKEUZE, SALARIS PER MAAND, OPGEZEGD LOOPT AF, OKTOBER MET VERWACHT, DE VERSCHUIVING VERKLAARD,
    CONTANT PER MAAND EN DE REKENING PER KANT (besluiten van de gebruiker op v420). Op v421-stand (10 oktober 2026,
    GECONSTRUEERD: de boekingen van het toestel staan alleen daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return L.slice(i, j < 0 ? undefined : j); };

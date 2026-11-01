@@ -60,7 +60,7 @@
  *   14. EEN INTERNE VORM DIE ERUIT MOET. Zonder dat doet de uitgaven-poort van sectie 4 niets.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { sectieVan } = require('./bron-sectie');
 
 const A = '521200806';

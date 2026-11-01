@@ -8,7 +8,7 @@
 // De fixture draagt de vorm van het toestel: inleg 2.200, Kosten Koper 10.000 over tien maanden en
 // Inrichting 3.000 over zes, een boete van 299 volgende maand, noodfonds vol.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { kaalUit } = require('./bron-kaal');
 const now = new Date();

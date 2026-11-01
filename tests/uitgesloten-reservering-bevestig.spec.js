@@ -3,7 +3,7 @@
 // post per maand vraagt. Parkeergelden komt elke maand, dus dat is hier zijn hele bedrag (EUR 19).
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 const VELDEN = () => JSON.stringify([SET.fixDueExcl, resLijst(), SET.budgets, SET.budgetsNext||{}, SET.potMetaNext||{}]);

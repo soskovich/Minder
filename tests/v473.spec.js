@@ -1,7 +1,7 @@
 /* v473: de salarisstorting gesplitst in salaris, reiskostenvergoeding en eenmalig. GECONSTRUEERD (de getallen van het toestel staan niet
    in deze repo): vast salaris EUR 5.216, een vergoeding van EUR 277 in mei t/m september (bovengrens EUR 300, potje Vervoer), en op
    26 okt EUR 7.693 = 5.216 + 277 + 2.200 met een verwachte bonus van EUR 2.500 in oktober. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';

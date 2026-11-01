@@ -14,7 +14,7 @@
 // niet het gemiddelde van de drie werkelijke dagbedragen. Het derde testgeval hieronder is het
 // beslissende argument voor die keuze.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
    na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */
 const { pinDag } = require('./vaste-dag');

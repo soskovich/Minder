@@ -10,7 +10,7 @@
    het oordeel staat als kleur op de tegel (tekort rood, let op amber), en de oorzaak en het bedrag
    staan in de sheet erachter. Wat deze spec vasthoudt blijft: een gat dat van beslissing naar
    aandacht schuift houdt dezelfde vorm en dezelfde oorzaak, en alleen de kleur en het bedrag wisselen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', RES = 'NL01RESV0000007586';

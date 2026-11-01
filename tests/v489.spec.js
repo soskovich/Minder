@@ -3,7 +3,7 @@
    b. Geen meldingstekst bevat een patroon als 'pot:' of 'cat:'.                     Sabotage: de sleutel tonen (meldGetalNaam terug).
    c. Na een update staat er niets onder "Cijfers" in de bel, terwijl Je cijfers de veranderingen wel toont. Sabotage: de cijfermeldingen terugzetten.
    d. Een tik op een betaalrekening in Saldo nu opent de sheet, ook als hij past.    Sabotage: alleen bij een krappe rekening. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 test('a. het oude incassosignaal komt niet meer in de bel (de fixture zou het wel laten vuren)', async ({ page }) => {

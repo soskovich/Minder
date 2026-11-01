@@ -9,7 +9,7 @@
    GECONSTRUEERD op v480-woning-stand (woning Nathaniel Cathalina EUR 300 via Tikkie/iDEAL, booked:false zodat de oktober-termijn nog
    verwacht wordt; zonder IBAN in de kennis folt de woning op de salarisrekening MAIN, de terugval van v432), met een Akkoord in
    september zodat de controlemomenten gelden (salTekortActief). De betaaldatum-mechaniek staat los van welke rekening de woning draagt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const W = require('./v480-woning-stand');
 const { MAIN, SPAAR, LEEF } = W;
 

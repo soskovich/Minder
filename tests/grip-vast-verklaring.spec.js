@@ -3,7 +3,7 @@
    staat en wat verwacht wordt, gesorteerd op het absolute verschil, en regels zonder verschil staan samen onder
    "N vaste lasten volgens budget". Fixture: deze-maand-stand.js met Huur op vast, potje EUR 700 en een betaling van
    EUR 137 deze maand. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 
 const BUD = { huur: 700, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500 };

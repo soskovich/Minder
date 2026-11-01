@@ -1,6 +1,6 @@
 // Thema's (v83): Privé (licht & editorial) en Neo-Dark Aurora (donker & glas), live te wisselen.
 // Puur visueel: dit toetst de tokens, de wissel en dat de hele app meegaat — geen rekenlogica.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 async function boot(page, scherm) {

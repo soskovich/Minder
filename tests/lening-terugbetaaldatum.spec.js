@@ -1,7 +1,7 @@
 // v87: een uitgeleend bedrag krijgt een terugbetaaldatum, een paar dagen vooraf een rustige
 // herinnering, en één tik zet een betaalverzoek klaar via de deel-functie van het toestel.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const iso = (dagen) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + dagen); return d.toISOString().slice(0, 10); };

@@ -4,7 +4,7 @@
    - Ernst Management Holding (de holding van v421-stand), Health Club (gestopt, v421-stand);
    - drie leningen: Pam EUR 250 open, Ma EUR 405,99 en A. Buiten EUR 45 (zoals v423);
    en verder CJIB Verkeersboetes EUR 150 (laag a), Transavia EUR 150, Apotheek De Brug EUR 120 en Rijksoverheid EUR 210 (de antwoorden per partij). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return i < 0 ? [] : L.slice(i, j < 0 ? undefined : j); };

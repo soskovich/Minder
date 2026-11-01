@@ -4,7 +4,7 @@
 // de statusbalk staan in instellingen-psd2.spec.js. Wat hier blijft zijn de invarianten die de herindeling
 // overleven: de AI-coach staat bij de coach en een keer, de avatar-sheet is de enige editor voor toon en avatar,
 // je naam staat bij de coach, er komt geen regel-editor, en er is een rekeningenlijst.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function metSet(v) {

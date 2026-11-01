@@ -1,7 +1,7 @@
 /* v367: VRIJ GELD OP HOME, UITSCHIETERS OP INZICHTEN, DEZE MAAND ALLEEN DEZE MAAND, SPAARDOELEN ALS RIJEN.
    Home, Inzichten en Grip op de stand van 7 oktober 2026 (tests/inzichten-stand.js), Plan op de stand van
    9 oktober (tests/opschonen-stand.js). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const I = require('./inzichten-stand');
 const O = require('./opschonen-stand');
 

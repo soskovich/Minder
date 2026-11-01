@@ -15,7 +15,7 @@
 // uitkomst met een eigen maandoptelling narekenen zou de code onder test aan BEIDE kanten van de
 // vergelijking zetten (meetles a). Veertien labels per gepinde dag, uitgeschreven.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const fs = require('fs');
 const path = require('path');

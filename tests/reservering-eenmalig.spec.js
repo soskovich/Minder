@@ -14,7 +14,7 @@
    EN "N POSTEN" TELT DEZELFDE VERZAMELING ALS DE RIJEN (blok d). `D.aantal` is de LIJST en `inVenster`
    de posten met een voorkomen binnen de horizon; de kop las de eerste boven rijen die uit de tweede
    komen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', RES = 'NL01RESV0000007586';

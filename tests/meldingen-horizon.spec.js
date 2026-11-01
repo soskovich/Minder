@@ -2,7 +2,7 @@
 // wat er gebeurt als je iets een week negeert. Vier horizonnen, aan de bron gezet, en elk signaal
 // verschijnt op precies één plek.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();

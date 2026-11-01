@@ -3,7 +3,7 @@
 // rekent uit wat je per maand nodig hebt en hoeveel dat scheelt met wat er nu heen gaat.
 // doelTempo() is puur; doelTempoLine() zet er de zin omheen, in de spiegel-gevolg-keuze-vorm.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

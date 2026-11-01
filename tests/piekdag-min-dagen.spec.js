@@ -6,7 +6,7 @@
    dragen elke dag EUR 10, zodat de referentie per weekdag zijn aantal dagen volgt.
    DEZELFDE BOEKINGEN OP EEN LATERE DAG: de verdeling verandert niet, alleen de dagteller, en dat is
    het geval dat "de poort is de dagteller" scheidt van "de verdeling is anders". */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN='NL01MAIN0000001111';

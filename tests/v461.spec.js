@@ -4,7 +4,7 @@
    (soort 1) en draait de soort-2-controles daarna (fase B). 2. Een maandsom-verschil dat precies een boeking is, is een kleine vraag
    (soort 3), geen "wacht op de bouwer". 3. Een keuze over een potje (herzien, Let op, patroon) hangt aan de forecast van DAT potje; alleen
    een keuze over het geheel hangt aan onder budget. GECONSTRUEERDE fixture (die van v460). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806';

@@ -8,7 +8,7 @@
    4. De opname-keuze heet "uit doelen", het andere bedrag "uit vrij spaargeld".
    De stand is GECONSTRUEERD naar de getallen van het toestel (opnames, keuzes, saldo 3.869,20 aan het begin van de
    maand, 3.638 toegewezen); de boekingen zelf staan alleen op het toestel. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const O = require('./opschonen-stand');
 
 const OPN = [['05', 131], ['06', 100], ['09', 428], ['09', 210], ['10', 150]];

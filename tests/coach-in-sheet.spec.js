@@ -5,7 +5,7 @@
 // later ook vanaf Inzichten, de vooruitblik en het maandscherm op te roepen is. Refactor: het
 // gesprek zelf gedraagt zich exact hetzelfde, alleen de plek verandert.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function tweak(fn) {

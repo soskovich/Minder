@@ -15,7 +15,7 @@
       €574). De rij toont "€537 vast + €563 per dag". Sabotage: het hele potje schalen (het vaste deel niet apart houden).
    e. Contant staat in de lijst als vaste rij ("€400 vast per periode"), niet als keuze tussen per dag / per keer.
       Sabotage: Contant als gewone kandidaat met de per dag/per keer-knoppen tonen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 const zetPotje = () => { SET.budgets = Object.assign({}, SET.budgets, { boodschappen: 390, contant: 400 }); SET.potWekelijks = Object.assign({}, SET.potWekelijks, { boodschappen: true }); SET.mode = 'expert'; _dataGen++; try { runMemoVergeten(); } catch (_) {} };

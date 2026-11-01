@@ -8,7 +8,7 @@
    De stand van het toestel (opnames 231 met keuze, 407 en 150 zonder geld met keuze, en 231 uit vrij spaargeld, op
    een saldo van EUR 3.869,20 aan het begin van de maand tegen EUR 3.638 toegewezen) is GECONSTRUEERD en niet gemeten:
    de boekingen staan alleen op het toestel. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const O = require('./opschonen-stand');
 const T = require('./plan-toestel-stand');
 

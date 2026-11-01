@@ -3,7 +3,7 @@
 // maand bij iedereen in de eerste week: dan levert de kalender het oordeel in plaats van je gedrag.
 // tempoProjectie() extrapoleert alleen het variabele deel; vaste lasten tellen als waarneming mee.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 const { kaalBron } = require('./bron-kaal');
 

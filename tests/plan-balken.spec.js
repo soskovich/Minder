@@ -20,7 +20,7 @@
 // GEEN TIJDAS, en sinds v248 ook geen schaal meer: planVatHoogten(), VAT_MIN, VAT_BUDGET en de
 // markering "niet op schaal" zijn vervallen met de vaten waar ze bij hoorden.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

@@ -5,7 +5,7 @@
    per boeking een klein "eenmalig ›" naar de boeking.
    Op v485-stand: Boodschappen op Leefgeld, typisch 350 (jul/aug/sep elk 350). Eén augustusboeking (50) eenmalig → aug 300, mediaan
    van [350,300,350] = 333. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v485-stand');
 const { LEEF, MAIN } = S;
 

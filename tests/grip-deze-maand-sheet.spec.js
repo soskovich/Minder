@@ -3,7 +3,7 @@
    stond op 360px half buiten de kaart en zei niets wat de uitkomst boven de bridge niet al zei, en de
    waterval in de sheet (uitgegeven, vast nog, per potje) was een tweede weergave van de bridge op de
    kaart. De sheet houdt de band als EEN regel bovenaan en "Wat je deze maand kunt doen". */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 const { boot: bootBrug } = require('./deze-maand-stand');
 const { LOG } = require('./grip-stand');

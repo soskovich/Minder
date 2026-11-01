@@ -2,7 +2,7 @@
 // en verzint geen bedrag: bezittingen zijn handmatige invoer en uit de stromen valt de waarde niet
 // te reconstrueren. Alleen vaststellen, met een tik naar de invoer.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

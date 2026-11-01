@@ -3,7 +3,7 @@
    context eronder, "telt niet mee in het tempo", met de woning (woningForecast) als eigen regel, "(nieuw)" in zijn eerste
    maand. De woning wordt een keer geteld: hij staat op zijn eigen regel en is uit de generieke vaste-lasten afgetrokken.
    categorize() herschrijft t.id bij de boot; zoek boekingen op naam. GETALLEN VAN DE FIXTURE. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111';
 

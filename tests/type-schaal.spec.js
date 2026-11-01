@@ -1,6 +1,6 @@
 // v96: de vijf meest gebruikte tekstgroottes lopen via type-tokens. Puur consolidatie:
 // dezelfde pixels, één bron. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 const TOKENS = { '--fs-xs': '11px', '--fs-sm': '12.5px', '--fs-md': '14px', '--fs-lg': '17px', '--fs-xl': '22px' };

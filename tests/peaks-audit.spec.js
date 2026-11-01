@@ -2,7 +2,7 @@
 // bankkost; elk ander bedrag naar Peaks is inleg en hoort niet als uitgave te tellen. Bij twijfel
 // gaat een post naar 'onduidelijk', nooit naar 'inleg'.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

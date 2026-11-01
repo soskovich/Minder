@@ -2,7 +2,7 @@
 // Dezelfde verdeling, twee plekken. De kaart op de pagina is weg; de drill-down blijft de enige
 // plek waar de vraag "waar ging mijn geld heen" wordt beantwoord (v114/v115).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');
 

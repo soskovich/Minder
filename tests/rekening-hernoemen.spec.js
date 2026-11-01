@@ -3,7 +3,7 @@
 // passen". Nu is er een hernoem-sheet, gesleuteld op **account-id** en niet op last4: die laatste
 // is bij een rekening zonder IBAN voor elk N26-CSV-potje '26', dus met één naam zou je vier potjes
 // tegelijk hernoemen. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

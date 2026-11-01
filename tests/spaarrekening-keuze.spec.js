@@ -6,7 +6,7 @@
 // sprong terug en de stortingen naar dat potje telden nergens mee, ook niet in savedNet en dus niet
 // in de spaarquote. Nu een keuze per rekening-id, drietraps zoals de inklap-vlaggen (v20/v90).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

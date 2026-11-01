@@ -1,7 +1,7 @@
 // Bespaartips (v81): elke tip draagt context (het getal erachter), een concrete actie,
 // het bedrag per maand én per jaar, en — waar het te rekenen valt — het effect op je doel.
 // Geen budget-/doelrekenlogica geraakt; dit toetst de tip-inhoud en de drie kanalen.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, MAIN } = require('./budget-fixture');
 
 // veel kleine aankopen + een piekdag, zodat tip_small en tip_peak vuren

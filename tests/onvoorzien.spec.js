@@ -6,7 +6,7 @@
 // big-signaal. safeToSpend is saldo-gedreven en telt hem niet dubbel; baselineSpend neemt de mediaan
 // van de onderste helft en vangt een uitschieter al af.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 const MAIN = 'NL01MAIN0000001111';

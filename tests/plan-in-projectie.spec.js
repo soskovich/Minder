@@ -8,7 +8,7 @@
 // De fixture is die van lijn-en-band: inleg 2.200 naar de spaarrekening, Kosten Koper 10.000 over tien
 // maanden, Inrichting 3.000 over zes, een boete van 299 volgende maand, een jaarpremie, noodfonds vol.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalUit } = require('./bron-kaal');
 const { withOpzij } = require('./opzij-inject');
 const now = new Date();

@@ -1,6 +1,6 @@
 /* v504: de voorbeeldweergave simuleert ook je verdeling, een saldo uit het verleden zegt dat, en een onbetaalde termijn verdwijnt niet
    stil. Fixture v504-stand (echte dag 31 okt, saldi van 31 okt, verdeling 150 / 1.600 / 1.700 / opzij 1.766). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v504-stand');
 const ACC = { MAIN: S.MAIN, BET: S.BET, LEEF: S.LEEF, SPAAR: S.SPAAR };
 

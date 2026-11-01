@@ -6,7 +6,7 @@
 // staat. Is dat leeg, dan blijft de stand staan. Geen terugval op het globale tarief; dat geldt
 // nog uitsluitend voor nieuwe inleg, waarvan de bestemming nog niet bepaald is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

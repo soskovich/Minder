@@ -2,7 +2,7 @@
    de dag van je opnames, overboeken alleen op de dag van de storting, en twee controlemomenten per periode plus een waarschuwing
    tussendoor. Op v432-stand (salaris EUR 5.216 op de 24e, Salarisrekening en Leefgeld, 16 okt 2026) en v421-stand (SKF).
    GECONSTRUEERD EN NIET GEMETEN: de boekingen van het toestel staan alleen daar. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF, SPAAR } = S;
 const add = (page, rows) => page.evaluate(rows => { for (const [acc, d, a, n, ds, cat] of rows) { const t = { id: 'v435' + acc.slice(-4) + d + n + a, date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; } TX.sort((a, b) => a.date.localeCompare(b.date)); window._rekV = null; save(); }, rows);

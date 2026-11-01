@@ -22,7 +22,7 @@
  *    code draagt, want die moet `onbekend` blijven in plaats van een naam te krijgen die niet gemeten is.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const WEES = 'psd2_874633c7';            // 2 boekingen, beide ook op DOEL
 const DOEL = '100110012351717586';       // de opvolger, id uit ibanNum()

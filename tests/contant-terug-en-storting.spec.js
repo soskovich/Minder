@@ -7,7 +7,7 @@
 //
 // HET GEVAL VAN DE GEBRUIKER: Ma €400 contant terug. Netto vermogen gelijk, contant +€400. Daarna €400
 // gestort: contant terug op de oude stand, geen inkomen, en bij de volgende telling geen "Contant besteed".
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 
 const now = vasteDatum();

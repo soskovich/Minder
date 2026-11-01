@@ -5,7 +5,7 @@
    daling (wel als "kan komen"-regel). Een uitgave uit een reservering telt niet ook als potje. Contant: de krap-berekening
    en het voorstel lezen dezelfde regel (potje Contant − portemonnee, min 0). De spaargeldkeuze komt uit Kiezen (grens), niet
    uit SET.salGeenSpaar. GECONSTRUEERD op v432-stand (16 okt 2026), met een Akkoord in september zodat de krap-pop-up vuurt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF } = S;
 const AKK = { salVerdeling: { op: '2026-09-24', ym: '2026-09', salYM: '2026-09', rek: { [MAIN]: 1200, [LEEF]: 850 }, opzij: 3166, plan: 280, salaris: 5216, salAcc: MAIN, start: '2026-09-24', eind: '2026-10-25', dagen: 32 } };

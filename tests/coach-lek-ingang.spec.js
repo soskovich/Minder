@@ -14,7 +14,10 @@
 // De service worker staat globaal uit via playwright.config.js.
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { seed, open, CUR, MAIN } = require('./budget-fixture');
 
 // een impuls zonder potje: geen categorie-budget, niet terugkerend, ruim boven de 25-euro-drempel.
@@ -73,7 +76,7 @@ test.describe('a · de ingang op Grip', () => {
      opgeheven: Inzichten constateert, Grip draagt de keuze. De ingang is nu een chevron in de kop
      van de open kaart. Wat deze tests bewaken verschuift mee: de bevinding met bedrag en naam
      staat in die kaart, en de ingang is geen neutrale knop naar de coach. */
-  test('a1 · de chevron staat in de kop van de open kaart, en nergens anders', async ({ page }) => {
+  test('a1 · de chevron staat in de kop van de open kaart, en nergens anders · voor de salarisperiode', async ({ page }) => {
     await ins(page);
     await expect(chevron(page)).toHaveCount(1);
     await expect(page.locator('#s-maand .valtop-open')).toHaveCount(0);   // v340: niet meer los op Grip
@@ -85,7 +88,7 @@ test.describe('a · de ingang op Grip', () => {
     await expect(page.locator('#gripLetOpSheet .valtop-open .valtop-hand button')).toHaveCount(3);
   });
 
-  test('a2 · de kaart eromheen draagt de bevinding met bedrag en naam', async ({ page }) => {
+  test('a2 · de kaart eromheen draagt de bevinding met bedrag en naam · voor de salarisperiode', async ({ page }) => {
     await ins(page);
     const t = await page.locator('#gripLetOpSheet .valtop-open').innerText();
     expect(t).toMatch(/boodschappen/i);
@@ -130,7 +133,7 @@ test.describe('a · de ingang op Grip', () => {
 });
 
 test.describe('b · het gesprek begint bij het cijfer', () => {
-  test('opent met de bevinding, niet met een groet', async ({ page }) => {
+  test('opent met de bevinding, niet met een groet · voor de salarisperiode', async ({ page }) => {
     await ins(page);
     await chevron(page).click();
     await wachtKeuze(page);
@@ -261,7 +264,7 @@ test.describe('d · onderbreken', () => {
 
 test.describe('e · layout', () => {
   for (const w of [360, 390]) {
-    test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
+    test(`geen horizontale overflow op ${w}px · voor de salarisperiode`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await ins(page);
       await chevron(page).click();

@@ -6,7 +6,7 @@
    3. Blok 8: geen "bestaat niet" meer, maar wat SET.psd2Diag per rekening bewaart, met de foutstatus.
    4. Contant: maandVooruit() leest de forecast van het potje Contant uit contantMaanden(), met de controle in blok 20.
    5. Een blok dat alleen leest: heen en terug op dezelfde rekening met je eigen naam, per maand aantal en som. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const S8 = require('./v448-stand');
 

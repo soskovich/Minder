@@ -3,7 +3,7 @@
    boeking geen enkel kenmerk ("niets te vergelijken"), en bij meer boekingen stond zo'n kenmerk als
    "(1x)" tussen de terugkerende, zonder dag, en kon de grens van twaalf hem afknippen. Een nieuwe
    incasso was daardoor pas na de tweede afschrijving te zien. Fixture: bezit-koppeling.fixture.js. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 
 const blok = (page) => page.evaluate(() => diagBezitKoppeling());

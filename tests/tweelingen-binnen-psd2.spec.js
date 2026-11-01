@@ -35,7 +35,7 @@
  *     meer dan een reden op een regel en is de scheider niet te beoordelen.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const CSV = 'N26 Zakgeld';
 const PSD = '100110012848184840';

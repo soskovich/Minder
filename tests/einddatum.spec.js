@@ -1,6 +1,6 @@
 // Vooruitblik (v80): de spaardoel-hero is weg en elk doel met een looptijd noemt zijn einddatum.
 // Alleen weergave — de looptijd zelf komt onveranderd uit allocatePlan()/renderGoals().
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 function tweak(fn) {

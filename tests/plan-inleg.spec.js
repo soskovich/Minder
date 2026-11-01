@@ -9,7 +9,7 @@
    3. Na Plan, Reservering of Beleggen een actieregel in Kiezen tot de overboeking met het nieuwe totaal is gezien.
    Fixture grip-kring-stand (10 okt 2026): budget 3325, verwacht 1711; Huur 700 (71 nodig), Uit eten +67 boven.
    GETALLEN VAN DE FIXTURE, NIET VAN HET TOESTEL. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 const RES = 'NL01RESV0000003333';
 

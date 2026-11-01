@@ -5,7 +5,7 @@
    - Aab Inz Tikkie +150 in augustus en oktober (een binnenkomende Tikkie) en Travelcard -125 in juli met +125 in augustus en
      oktober (een teruggave);
    - DUO EUR 150 (laag a, studieschuld) en 22-06 Renate Galdeij via Tikkie -200 met dezelfde dag +200 terug. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return i < 0 ? [] : L.slice(i, j < 0 ? undefined : j); };

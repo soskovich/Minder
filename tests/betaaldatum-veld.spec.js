@@ -24,7 +24,7 @@
  *  - een niet-kaartregel met "Terugkerend per 02.02.2026" erin, die niets mag krijgen.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');

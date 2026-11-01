@@ -6,7 +6,7 @@
    - Woonstichting Rijn EUR 850 per maand in Huur (woning, e) en Ml Macnack EUR 900 in Huur tot juni (de woning van de gebruiker);
    - 09-10 een opname van EUR 150 (g);
    - Gemeente Utrecht EUR 484 in Onvoorzien en een lening aan Pam (de antwoorden van de gebruiker, 5). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return i < 0 ? [] : L.slice(i, j < 0 ? undefined : j); };

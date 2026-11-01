@@ -4,7 +4,7 @@
    De klok staat op 4 oktober 2026, dus september is de maand van de afsluiting.
    v401: de HELE omschrijving "From <A> to <B>" wordt sindsdien automatisch herkend (eigen-overboeking-auto.spec.js), dus
    deze spec draagt de vorm die de bevestiging van v339 nog nodig heeft: "Overboeking van <A> naar <B>". */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot, MAIN } = require('./bezit-koppeling.fixture');
 
 const PA = {

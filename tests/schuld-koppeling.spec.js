@@ -3,7 +3,7 @@
    EUR 537,33 op 14 september (ONTVANGSTEN HILTERMANN L). Rente 12.756 x 10,5 / 100 / 12 = 111,62,
    aflossing 425,71, nieuwe stand 12.330,29. Duo: ingevuld EUR 547 per maand, gemeten EUR 399,72.
    De klok en de rest van de stand komen uit bezit-koppeling.fixture.js. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./bezit-koppeling.fixture');
 
 const LEASE_DESC = 'SEPA INCASSO ONTVANGSTEN HILTERMANN L CONTRACT 4471 TERMIJN';

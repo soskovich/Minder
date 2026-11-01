@@ -3,7 +3,7 @@
 // maanden op je horizon, want het samengestelde rendement over dat bedrag is het echte verlies.
 // reisModel() neemt daarvoor een optionele override; zonder argument is het gedrag ongewijzigd.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

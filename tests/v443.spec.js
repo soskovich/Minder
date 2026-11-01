@@ -6,7 +6,7 @@
    voor de nieuwe (de v425-entry van Macnack zonder 'gestopt'); nu wint de woning met een bedrag, en het potje Huur staat in blok 20
    tegen de verwachte huur plus Shurgard, met een keuze in Kiezen als het lager is. GECONSTRUEERDE fixtures; de toestelgetallen
    (open EUR 1.350, termijn 01-11 EUR 300, Laten staan ±EUR 1.800, EUR 371) verifieert de gebruiker met blok 20 en 23. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const S432 = require('./v432-stand');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';

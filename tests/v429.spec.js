@@ -2,7 +2,7 @@
    vraag, bevestigd, testweek). Geen gedragskeuze zonder oorzaak; Begrijpen verandert geen budget, het enige wat je daar doet is
    een oorzaakvraag beantwoorden. Op de stand van v428 (v421-stand, 10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel
    staan alleen daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const V = require('./v428-boot');
 const { MAIN } = require('./v421-stand');
 const tab = (page, t) => page.evaluate(t => { gripKiesTab(t); return document.querySelector('#gripInhoud').dataset.griptabinhoud; }, t);

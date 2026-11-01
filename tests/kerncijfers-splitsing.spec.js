@@ -2,7 +2,7 @@
 // Structureel (spaarquote, vaste-lastendruk) op het maandscherm, operationeel (budgetnaleving,
 // variabele-lastendruk) op Inzichten. De restsaldo-quote is vervallen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

@@ -4,7 +4,7 @@
    EERSTE verwachte salaris OP OF NA de gewone betaaldag van die termijn, plus 1 dag (VAST_NASAL_DAGEN=1). Voor 1 nov is dat 24 nov
    (nov-salaris), dus 25 nov, buiten de lopende periode (eind 23 nov) en de stand op 23 nov stijgt met EUR 300.
    VOOR (buggy v486): nasal → huur 29 okt, stand 23 nov = 800. NA: nasal → huur 25 nov, stand = 1100 (+300). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v487-stand');
 const { LEEF } = S;
 

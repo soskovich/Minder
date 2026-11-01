@@ -2,7 +2,7 @@
    is alleen naar of van een eigen IBAN of je eigen naam, een onttrekking is alleen van spaar of reserveringen naar een betaalrekening,
    en verwacht wordt een keer afgerond. Op grip-v409-stand (10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel staan alleen
    daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return L.slice(i, j < 0 ? undefined : j); };

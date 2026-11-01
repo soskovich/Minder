@@ -2,7 +2,7 @@
    De stand is die van het toestel op 9 oktober 2026 (opschonen-stand): Noodfonds EUR 3.638 van EUR 4.000, inleg
    EUR 2.200, en Inrichting als tweede op volgorde. Tot v370 zei Plan "vol nov 2026" bij een buffer die met de EUR 362
    van oktober vol is. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const P = require('./opschonen-stand');
 const ORDE = { planOrder: ['noodfonds', 'iw', 'kk'] };
 /* v380: de rij draagt geen rechterkolom met maandbedrag meer; de vol-datum staat in [data-rijvol] */

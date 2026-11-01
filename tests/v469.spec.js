@@ -5,7 +5,7 @@
    GECONSTRUEERD op plan-toestel-stand.js (stap 'nu': de terugzetkeuzes van oktober, EUR 788 nog terug naar het noodfonds). De stand van
    de melding: het noodfonds op zijn doel (EUR 4.000 toegewezen), Kosten Koper EUR 1.350, en een saldo dat de toewijzingen al dekt
    (EUR 5.350,20): het geld dat de keuze nog terug verwacht staat er al. De getallen van het toestel staan niet in deze repo. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const F = require('./plan-toestel-stand');
 
 async function melding(page, o) {

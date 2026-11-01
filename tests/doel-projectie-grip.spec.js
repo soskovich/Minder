@@ -12,7 +12,7 @@
    terwijl `ceil(15000/1980)` 8 zou zijn, en is `benodigd` 2.143 tegen een inleg van 1.980. Zonder
    dat verschil is "hij leest de projectie" niet van "hij leest het gat" te onderscheiden
    (meetles a). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 const { withOpzij } = require('./opzij-inject');

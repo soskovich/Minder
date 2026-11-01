@@ -6,7 +6,7 @@
 // zonder potje); bij B en C koos de gebruiker: B telt met zijn hele bedrag als nog vast, C is vast, ook op Grip.
 // Het orakel in deze spec is een eigen uitdrukking van de definitie, uit de boekingen en de verwachte posten zelf,
 // zodat de som niet alleen tegen dezelfde bron (maandSplitsing) wordt gelegd.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const VV = require('./vast-variabel-stand');
 
 const sg = (d) => ({ id: 'sg' + d, date: d, amount: -137, name: 'Shurgard', desc: 'SEPA INCASSO SHURGARD NEDERLAND HUUR OPSLAG' });

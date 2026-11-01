@@ -2,7 +2,7 @@
 // vanaf vier plekken opgeroepen, dus openen gaat via coStart() in plaats van go('act').
 // Coach-opening (v82): persoonlijke groet bij het openen, en vastgelegde gesprekken alleen
 // terughalen als ze nú ergens op slaan. Geen rekenlogica geraakt.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function tweak(fn) {

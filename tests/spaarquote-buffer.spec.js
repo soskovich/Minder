@@ -4,7 +4,7 @@
 // dan kwam het verschil uit je buffer — je zette geld opzij, maar je vermogen groeide er niet mee.
 // v161 trok de koppeling met de spaarquote in: dat cijfer meet hoeveel er opzij ging, niet waar
 // het vandaan kwam. spaarDekking() zelf blijft, en dit bestand toetst nog wat die functie zegt. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

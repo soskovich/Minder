@@ -3,7 +3,7 @@
    De vaste last staat op de rekening van de EXTERNE betaling, nooit een interne tussenstap. Per potje kun je "gaat niet via deze
    rekening" zetten; het aandeel herverdeelt. Een herkend abonnement (Sport City) telt als vaste last (gepland), niet als potje.
    Fixture v432-stand (MAIN = Salarisrekening, LEEF = Leefgeld sinds 2026-04), vandaag 2026-10-16. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF } = S;
 

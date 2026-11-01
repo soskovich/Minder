@@ -2,7 +2,7 @@
    rekent het voorstel een keer per datastand, contant is pas uitgegeven als het uit je zak is, en de weektegel zegt inhalen OF ruimte.
    Fixtures: v504-stand (echte dag 31 okt, saldi van 31 okt, voorbeeld 26 nov) met tien boodschappen per maand op Leefgeld (een
    "vaak"-potje), v454-stand (een potje Contant met tellingen) en inzichten-stand (de weektegel). GECONSTRUEERD, niet gemeten. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v504-stand');
 const K = require('./v454-stand');
 const I = require('./inzichten-stand');

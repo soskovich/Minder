@@ -1,7 +1,7 @@
 /* v403: EEN PERSOONLIJKE OVERBOEKING ZONDER POTJE TELT NIET ALS UITGAVE, OP GRIP EN OP INZICHTEN, uit een definitie
    (buitenUitgave). Stand: die van zonder-potje-zuiver (grip-kring-stand, 10 oktober 2026) met EUR 150 aan Tikkie Dirk op
    Persoonlijke overboeking in oktober. GECONSTRUEERD EN NIET GEMETEN. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 async function boot(page) {

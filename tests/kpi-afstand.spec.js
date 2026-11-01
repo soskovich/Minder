@@ -6,7 +6,7 @@
 // zonder norm, dus kpiBand() geeft daar null en er is per definitie geen afstand. Geen band is null,
 // niet nul: een verzonnen doel van 0% zou elk cijfer eeuwig 'boven je doel' laten lezen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
 
 async function boot(page, maand) {

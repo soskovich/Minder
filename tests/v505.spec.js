@@ -1,7 +1,7 @@
 /* v505: de voorbeeldbalk bedekt niets, een totaal "uitgegeven", "onder budget" telt buiten budget mee, en het weekbedrag heeft een vaste
    basis die alleen inhaalt. Fixture v504-stand (echte dag 31 okt) met erbij: een uitgave zonder potje met centen, een uitgave buiten je
    potjes (onvoorzien) en een eenmalig gelabelde uitgave. GECONSTRUEERD, niet gemeten: de getallen van het toestel staan alleen daar (blok 27). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v504-stand');
 
 async function boot(page, o) {

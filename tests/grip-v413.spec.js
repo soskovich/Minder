@@ -5,7 +5,7 @@
    4 een verlopen post verdwijnt niet vanzelf uit het schema, ook niet na 55 dagen: hij blijft "verlopen, niet
      meegeteld" in blok 19 en Let op tot jij kiest.
    5 de regels in Let op hebben geen lege plek: een naam en een dag. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 
 const letOp = (page) => page.evaluate(() => gripLetOpItems(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())), valtOpSignals(thisYM()), [])

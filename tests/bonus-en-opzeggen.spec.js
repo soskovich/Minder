@@ -5,7 +5,7 @@
       vanzelf gemarkeerd.
    B. OPZEGGEN MET EEN LAATSTE AFSCHRIJVING. verwachtInMaand() is de ene lezer; opgezegd per 8 november telt in
       oktober en november mee en in december niet, op elke plek. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const I = require('./inzichten-stand');

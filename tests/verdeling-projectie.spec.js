@@ -3,7 +3,7 @@
    die die spec vasthield blijven gelden voor de verdeling: een vast bedrag krijgt exact dat bedrag, nooit meer dan het doel
    nodig heeft, afgekapt op de inleg, en wat overblijft of vrijkomt zakt door op volgorde (zolang er geen vol-keuze is, of
    bij "het volgende doel"). De tests over de modi zelf (chips, percentage, de zachte hint op modi) zijn vervallen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 const { pinDag } = require('./vaste-dag');   // v495: de advies-terugval van planCapacity (zonder spaarinleg) hangt aan de dag; pin hem
 

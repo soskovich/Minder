@@ -2,7 +2,7 @@
    Een bank hangt bij een betaalverzoek de dienst achter de aanvrager ("Nathaniel Cathalina via SEPA iDEAL/Wero")
    en kapt hem soms af tot een losse "via". Een Tikkie-boeking en een gewone overboeking van dezelfde naam horen
    dezelfde categorie te krijgen, zodat een regel die je op de Tikkie zette ook de overboeking vangt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111';
 

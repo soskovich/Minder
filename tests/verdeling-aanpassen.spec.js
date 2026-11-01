@@ -1,7 +1,7 @@
 /* v371: DE VERDELING VAN JE INLEG: OP VOLGORDE OF ZELF, EN TERUGZETTEN DAT DOORSCHUIFT ALS DE BRON HET NIET DRAAGT.
    De stand van het toestel in de volgorde van de gebruiker (Noodfonds, Inrichting, Kosten Koper), met de EUR 231
    eruit gehaald en "alles deze maand" gekozen. Datums komen uit planVooruit()/etaDatum(), niet uit de test. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const P = require('./opschonen-stand');
 
 const VOLGORDE = { set: { planOrder: ['noodfonds', 'iw', 'kk'] } };

@@ -4,7 +4,7 @@
 // Home zei "+€1.450 veilig te besteden" terwijl Inzichten "-€931" toonde.
 // varPlanRemaining() is nu de enige bron. varDue blijft bestaan als prognose, alleen in de spiegel.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v308: DE DAG STAAT VAST. Sectie c eist dat de prognose en het plan uiteenlopen, en op de laatste
    dag van de maand zijn ze allebei nul: `potjeRest()` klemt sinds v308 op de resterende dagen, dus
    dan valt er niets te verschillen. Dezelfde as en dezelfde pin als de zes potjes-tests van v306.

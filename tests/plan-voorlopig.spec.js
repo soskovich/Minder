@@ -3,7 +3,7 @@
    vol-datum en geen "niet haalbaar", en de detailsheet toont "EUR X toegewezen zonder geld · nog niet gekozen" met de twee
    bestaande keuzes en hun gevolg, niets voorgekozen. Na de keuze is "voorlopig" weg. Fixture: plan-toestel-stand 'na150'
    (EUR 149,80 zonder geld op het Noodfonds, nog geen keuze), en een doel met een toewijzing boven het saldo. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const T = require('./plan-toestel-stand');
 const O = require('./opschonen-stand');
 const tekst = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); return e ? e.innerText.replace(/\s+/g, ' ').trim() : null; }, sel);

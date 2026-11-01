@@ -11,7 +11,7 @@
    4. Een entry in SET.psd2Diag van een verbinding die niet meer bestaat heet "vervangen" en telt niet mee in psd2DiagActief() en
       psd2Falend(); blok 8 zegt of entry_reference ergens gevuld is, en toont de bank-id-meting voluit.
    5. De benoem-vraag van v424 heeft ook "Hoort in een potje" (eerst het potje), met Vergeten terug naar de oude categorie. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S448 = require('./v448-stand');
 const S421 = require('./v421-stand');
 

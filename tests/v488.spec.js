@@ -3,7 +3,7 @@
    b. "potjes" onder Uitgegeven is aan te tikken en leidt via een potje naar de boekingen.
    c. De maandkeuze in het potjes-scherm toont de boekingen van de gekozen maand (juli).
    d. De som van de rijen in "Betaald · vast" is in centen gelijk aan het getal waarop je tikte (de legenda-waarde). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v488-stand');
 
 test('a. "vast" onder Uitgegeven opent "Betaald · vast", niet "Nog te betalen"', async ({ page }) => {

@@ -1,5 +1,5 @@
 // v360: een potje splitsen, de stand "schatting", en de schatting die zich bevestigt.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./ruim-bijstel-stand');
 
 /* De stand van de gebruiker (ruim-bijstel-stand.js, 6 oktober): Huur EUR 750 zonder betaling, maandbudget

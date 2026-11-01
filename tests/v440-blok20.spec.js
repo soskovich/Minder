@@ -4,7 +4,7 @@
    (2) "vaste lasten zonder potje" — een herkende vaste last (incasso, EUR 0 budget, zonderPotje in maandSplitsing) valt op;
        elke vaste last hoort een eigen potje te hebben. Een vaste last MET potje staat er niet. Beide regels zijn uitlezing
        (v244): ze schrijven niets. GETALLEN VAN DE FIXTURE, niet van het toestel. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';   // eindigt op 4323 -> spaarrekening

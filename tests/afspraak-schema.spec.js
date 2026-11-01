@@ -5,7 +5,7 @@
    beleggen staat in Let op en in de sheet achter de tegel Beleggen. */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const I = require('./inzichten-stand');
 
 /* De stand van het toestel zoals v365 hem uit de melding afleidde: drie afspraken over Huur op 8 oktober, in de

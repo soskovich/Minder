@@ -8,7 +8,10 @@
  * verandert door de memo niet, dus daarop meten zou de winst niet kunnen zien: wat de memo weghaalt
  * is hoe vaak de vier poorten per boeking worden uitgevoerd.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const fs = require('fs');
 const path = require('path');
 const { seed, open } = require('./budget-fixture');
@@ -79,7 +82,7 @@ test.describe('a - de poort wordt een keer per stand uitgerekend', () => {
     expect(r.tweede, 'de tweede aanroep evalueert geen enkele poort meer').toBe(0);
   });
 
-  test('een render evalueert de poorten een keer en niet een keer per aanroep', async ({ page }) => {
+  test('een render evalueert de poorten een keer en niet een keer per aanroep · voor de salarisperiode', async ({ page }) => {
     await pinDag(page); await open(page, groot());
     await armeerPoorten(page);
     const r = await page.evaluate(() => {

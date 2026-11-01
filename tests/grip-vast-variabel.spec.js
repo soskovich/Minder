@@ -8,7 +8,7 @@
 // v357: de vaste lasten staan weer in de bridge, als EEN stap "vaste lasten" (wat verwacht is tegen het budget),
 // en de regel eronder is vervallen; een tik op die stap opent dezelfde sheet. De kop is de uitkomst tegen het
 // budget, en de grootste afwijking bij de vaste lasten (Huur zonder betaling) staat in de zin.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./vast-variabel-stand');
 const Zes = require('./deze-maand-stand');
 

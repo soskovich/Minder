@@ -5,7 +5,7 @@
 // oktober. Nu: 4-wekelijks bij een mediane afstand van 26 tot 29 dagen (laatste plus afstand, een maand kan er twee hebben),
 // kalendermaandelijks bij 30 tot 32 (een per periode, een betaling hoort bij de periode met de dichtstbijzijnde verwachte dag),
 // en het bedrag is het laatste. De keuze 29/30 is van de gebruiker.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const VV = require('./vast-variabel-stand');
 
 const ink = (id, d, a, naam, desc) => ({ id, date: d, amount: a, name: naam, desc: 'SEPA INCASSO ' + desc });

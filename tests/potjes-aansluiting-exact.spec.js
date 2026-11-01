@@ -31,7 +31,7 @@
  * draagt elke rij nul, en dan meet de restant-kolom niets.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const CUR = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');

@@ -2,7 +2,7 @@
 // "Totaal saldo" op Home, en spaargeld elders telt daar niet bij op. Het telt alleen in de spaarcijfers
 // (spaarSaldo()), en daar OPGETELD bij het spaarsaldo uit de koppeling, niet in plaats ervan. Dat laatste legt het
 // gedrag vast dat de uitleg bij het veld noemt: staat het geld op een gekoppelde rekening, dan telt het dubbel.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, MAIN, SAV } = require('./budget-fixture');
 const { pinDatum } = require('./vaste-dag');
 

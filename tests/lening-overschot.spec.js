@@ -12,7 +12,7 @@
 //
 // HET GEVAL: €495 tegen €400 open als cadeau: contant +€495, netto vermogen +€95, maandinkomen
 // ongewijzigd. Als schuld: netto vermogen gelijk.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum } = require('./vaste-dag');
 
 const now = vasteDatum();

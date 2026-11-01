@@ -1,7 +1,7 @@
 // Home-hero in de onbekend-staat: zonder één bekend saldo mag "Veilig te besteden" geen hard bedrag tonen.
 // safeToSpend() rekent dan met saldo 0; dat getal groot neerzetten is even onwaar als "totaal saldo €0,00".
 // Bewust zelfstandig (eigen seed, geen gedeelde fixture) zodat deze spec los te draaien is.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 // De service worker staat globaal uit via playwright.config.js (anders herlaadt controllerchange midden in de test).
 

@@ -9,7 +9,7 @@
    `SET.budgets.boodschappen` is 400 en `SET.budgetsNext.boodschappen` staat al op 500. Zonder dat
    verschil is "volgend_voor is het potje van DEZE maand" niet te onderscheiden van "volgend_voor is
    de stand die er voor volgende maand al klaar stond" (meetles a). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { sigKaart } = require('./beslis-sheet');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');

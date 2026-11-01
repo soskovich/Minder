@@ -31,7 +31,7 @@
  *    en de getallen zijn met de hand na te rekenen.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { sectieVan } = require('./bron-sectie');

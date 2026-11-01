@@ -6,7 +6,7 @@
       zonder label met een CONTROLE tegen totals().buitenNorm. Op v421-stand (10 oktober 2026, GECONSTRUEERD) met de boekingen van v453/v454:
       Lausa 159 en Gemeente 484 dragen het label, Onvoorzien 60 niet.
    2. De inerte guards (kasTempo bron!=='schatting', uitschieters) blijven staan; dat staat in CLAUDE.md en wordt hier op de bron getoetst. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const S = require('./v421-stand');

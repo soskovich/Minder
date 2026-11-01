@@ -4,7 +4,7 @@
 // "Verbinding verlopen" toonde. De PSD2-koppeling blijft de hoofdroute; het bestandspad is de
 // tweede optie en hoeft alleen vindbaar te zijn.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 const DAG = 86400000;

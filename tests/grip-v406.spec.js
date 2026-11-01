@@ -1,7 +1,7 @@
 /* v406: LET OP, DE BRUG EN DE LABELS OP GRIP (bevindingen op het toestel). Op grip-v406-stand (10 oktober 2026). */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v406-stand');
 
 const letop = page => page.evaluate(() => gripLetOpItems([], [], []).map(x => ({ soort: x.soort, naam: x.naam, sub: x.sub, act: x.act, groep: x.groep || '', bedrag: x.bedrag, pijl: !x.geenPijl })));

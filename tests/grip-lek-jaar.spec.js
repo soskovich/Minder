@@ -1,7 +1,7 @@
 /* v359, keuze van de gebruiker: twee dingen die op Inzichten stonden en daar als handeling of als regel vervielen,
    staan nu op Grip. (1) Het jaarbedrag onder een overschrijding staat in de sheet van dat potje (v313: s.over maal
    twaalf, geen tempo). (2) De lek-regel staat onder Let op; die tests staan in valt-op-signalen.spec.js. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { sigKaart } = require('./beslis-sheet');
 const S = require('./inzichten-stand');
 

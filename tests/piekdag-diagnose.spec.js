@@ -25,7 +25,7 @@
  * nooit 2x het aandeel-dagbedrag. Precies daarom staan beide in de uitvoer.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -184,12 +184,12 @@ test.describe('2 - de weken zijn volle kalenderweken ma-zo in het verleden', () 
       const ma = new Date(w.ma + 'T00:00:00'), zo = new Date(w.zo + 'T00:00:00');
       expect(ma.getDay()).toBe(1);
       expect(zo.getDay()).toBe(0);
-      expect((zo - ma) / 86400000).toBe(6);
+      expect(Math.round((zo - ma) / 86400000)).toBe(6);   // v507: een week over de wintertijd (25 okt) is 6 dagen en een uur
       expect(w.zo < vandaag).toBe(true);
     }
     // aaneengesloten: elke volgende maandag is zeven dagen later
     for (let i = 1; i < W.length; i++) {
-      expect((new Date(W[i].ma + 'T00:00:00') - new Date(W[i - 1].ma + 'T00:00:00')) / 86400000).toBe(7);
+      expect(Math.round((new Date(W[i].ma + 'T00:00:00') - new Date(W[i - 1].ma + 'T00:00:00')) / 86400000)).toBe(7);
     }
   });
 

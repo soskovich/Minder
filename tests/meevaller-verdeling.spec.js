@@ -12,7 +12,7 @@
 // gehaald is (reserveringen, buffer, aankoopdoel). Netto, nooit bruto. Nooit automatisch verdelen.
 // Zwijgen zodra beleggenKlaar() onvolledig is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

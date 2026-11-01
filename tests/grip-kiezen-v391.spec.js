@@ -2,7 +2,7 @@
 // (7) Het bedrag op een patroonregel in Kiezen zegt wat het is ("€700 eruit", "€100/mnd ingelegd", "€67 erboven").
 // (9) Zonder klopt of niet in Begrijpen: "eerst bevestigen ›" naar dat patroon, en de keuze opent nog niet.
 // (10) Te ruim begroot komt vanaf de tweede maand bovenaan Kiezen terug als "<potje> herzien".
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const OPNAMES = [['2026-10-06', 300], ['2026-10-09', 400]];

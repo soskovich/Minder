@@ -9,7 +9,7 @@
    e. Een open app op 23 nov 23:59 die op 24 nov 00:01 zichtbaar wordt toont de nieuwe periode (sabotage: geen handler).
    f. In het voorbeeld verandert de dag niet door die handler (sabotage: handler ook in het voorbeeld).
    Fixture v500-stand.js (geconstrueerd, niet gemeten; de toestelgetallen staan alleen op het toestel). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v500-stand');
 const V489 = require('./v489-stand');
 const { pinDatum } = require('./vaste-dag');

@@ -15,7 +15,7 @@
 // buffer r.kritiek en niet de status, anders geeft een buffer van 1,1 maanden groen licht om te
 // beleggen (v154).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { regelTegels } = require('./beslis-sheet');
 
 const now = new Date();

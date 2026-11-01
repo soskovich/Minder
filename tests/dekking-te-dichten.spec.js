@@ -6,7 +6,7 @@
    met een gat is aandacht, met het bedrag per maand erbij. En de lopende maand telt mee: op
    3 oktober zijn er voor november twee maanden, dus EUR 131 per maand.
    DE KLOK STAAT OP 3 OKTOBER 2026, de dag van de melding. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', RES = 'NL01RESV0000007586';

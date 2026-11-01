@@ -33,7 +33,7 @@
  * kandidaat op een reden, en een groep van drie.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 /* v324: DE KLOK STAAT OP EEN GENOEMDE DAG, en dat is gemeten en niet voorzichtig. De fixture draagt
    een HARDGECODEERDE maand (2026-08) en blok 10 leest alleen de laatste DIAG_RECENT_DAGEN (60) dagen.

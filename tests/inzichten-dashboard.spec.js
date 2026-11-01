@@ -4,7 +4,7 @@
    eigenschappen vasthield (het filter, geen handeling op het scherm, sheets die niets schrijven, de patronen-bron, de
    soort-snede, de onbekend-stand, de overloop) is gebonden aan de maandkaart (#insMaand), de weektegel, de
    patroontegels en de verschuivingen. De nieuwe vorm zelf staat in inzichten-week.spec.js. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./inzichten-stand');
 
 async function open(page, o, vp) {

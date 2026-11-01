@@ -5,7 +5,7 @@
 // De keuze is: niets aan de berekening, wel zeggen dat het saldo achterloopt. Geen bedrag en geen
 // richting, want zodra daar een richting in staat gaat iemand rekenen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';

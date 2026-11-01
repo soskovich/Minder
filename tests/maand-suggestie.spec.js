@@ -8,7 +8,7 @@
 // je pot (D.tekort = benodigdeStand min werkelijkeStand, ondanks de veldnaam tekortPerMaand), bij
 // buffer het totale gat naar je richtbedrag, en alleen bij doel een maandbedrag.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const { beslisIngangen, beslisTekstAlles } = require('./beslis-sheet');   // v320: in de sheet
 

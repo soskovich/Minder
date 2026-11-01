@@ -2,7 +2,7 @@
    De stand van het toestel (opschonen-stand met een saldo van EUR 3.000,20): EUR 3.638 toegewezen aan het Noodfonds,
    EUR 231 op 5 oktober eruit gehaald. Een keuze over die EUR 231 dekt alleen haar eigen bedrag, dus er blijft
    EUR 406,80 toegewezen zonder geld, en dat staat er tot je verlaagt of terugzet. Niets gebeurt vanzelf. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const P = require('./opschonen-stand');
 
 const TOESTEL = { set: { manualBal: { [P.MAIN]: 3000, [P.SAV]: 3000.20 } } };

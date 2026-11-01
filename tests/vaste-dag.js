@@ -29,6 +29,18 @@
  */
 const DAGEN_OVER = 7;
 
+/* v507: DE STANDAARDDAG VAN DE SUITE. tests/klok.js zet hem in Node en in de pagina voor elke test;
+   een spec die een andere dag nodig heeft roept pinDag() of pinDatum() aan. 31 oktober 2026 is de dag
+   waarop de suite groen gemeten is, en de laatste dag voor de salarisperiode (era vanaf 1 nov). De
+   periode zelf heeft een eigen vangnet op zes vaste dagen (periode-vangnet.spec.js). */
+/* KLOK_DAG IS EEN METING EN GEEN INSTELLING: hij emuleert een suite die op die dag op de echte klok draait (Node en
+   pagina samen), zodat te zien is welke specs zonder vaste dag aan de kalender hangen. Een gewone run zet hem niet. */
+const STANDAARD_YMD = /^\d{4}-\d{2}-\d{2}$/.test(process.env.KLOK_DAG || '') ? process.env.KLOK_DAG : '2026-10-31';
+function standaardDatum(D = Date) {
+  const [j, m, d] = STANDAARD_YMD.split('-').map(Number);
+  return new D(j, m - 1, d, 12, 0, 0);
+}
+
 /* De 12:00 is geen detail: op middernacht zou een zomertijdsprong de dag kunnen verschuiven, en dat
    is dezelfde val als `toISOString()` in een test (v199/v280). */
 function vasteDatum(dagenOver = DAGEN_OVER, ref = new Date()) {
@@ -38,9 +50,15 @@ function vasteDatum(dagenOver = DAGEN_OVER, ref = new Date()) {
   return new Date(ref.getFullYear(), ref.getMonth(), dag, 12, 0, 0);
 }
 
+/* v507: een klok-aanroep met de echte Node-Date (tests/klok.js verschuift die; Playwright leest hem zelf). */
+async function zetKlok(page, d) {
+  const K = global.__minderKlok, nu = global.Date; if (K) global.Date = K.Echt;
+  try { await page.clock.setFixedTime(d.getTime()); } finally { global.Date = nu; }
+}
+
 async function pinDag(page, dagenOver = DAGEN_OVER) {
   const d = vasteDatum(dagenOver);
-  await page.clock.setFixedTime(d);
+  await zetKlok(page, d);
   return d;
 }
 
@@ -60,7 +78,7 @@ async function pinDatum(page, ymd) {
   const d = new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0);
   if (d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3])
     throw new Error('vaste-dag: ' + ymd + ' bestaat niet');
-  await page.clock.setFixedTime(d);
+  await zetKlok(page, d);
   return d;
 }
 
@@ -69,4 +87,4 @@ async function pinDatum(page, ymd) {
    zet hem daarom NA de vaste dag (`vasteDatum()` plus `na` dagen), en niet in het begin van de maand: op dag dim-7 is
    een post van de 3e drie weken te laat. Twee dagen na de vaste dag past in elke maand (dim-5). */
 function openDag(na = 2) { return String(vasteDatum().getDate() + na).padStart(2, '0'); }
-module.exports = { DAGEN_OVER, vasteDatum, pinDag, pinDatum, openDag };
+module.exports = { zetKlok, STANDAARD_YMD, standaardDatum, DAGEN_OVER, vasteDatum, pinDag, pinDatum, openDag };

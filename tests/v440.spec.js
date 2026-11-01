@@ -3,8 +3,8 @@
    tegen het doel uit Kiezen. Plan, de Doelen-meter en Zien lezen die ene functie; Inhalen is dezelfde bron als "toegewezen
    zonder geld" (spaarOver().zonder); planCapacity leest opzij -> advies -> comfortTot (de spaarinleg is uit de terugval); en de
    te-ruim-sheet heeft geen inleg-bestemmingen meer. GETALLEN VAN DE FIXTURE (budget-fixture), NIET VAN HET TOESTEL. */
-const { test, expect } = require('@playwright/test');
-const { seed, open, MAIN, SAV, CUR, M1 } = require('./budget-fixture');
+const { test, expect } = require('./klok');
+const { seed, open, MAIN, SAV, CUR, M1, M2 } = require('./budget-fixture');
 
 test.describe('1 · het vastgelegde budget is de som van de potjes', () => {
   test('geen aparte inleg, geen Plan-inleg op enig scherm, en totaal = som van de potjes', async ({ page }) => {
@@ -114,7 +114,8 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
      over de periodes (opzijInhalen()). De fixture draagt een grootboek-bedrag dat anders is dan wat er niet op je spaarrekening staat. */
   test('Terug te zetten leest planTerug() en niet het grootboek (v470)', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
-    tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    /* v507 (oordeel c): de onttrekking stond in M1, en op dag 1 t/m 4 van een maand ligt M1-12 nog in de LOPENDE salarisperiode (salaris op de 5e), die niet meetelt: gemeten op 1 nov 0 open. M2-12 ligt op elke dag in een afgesloten periode. */
+    tx.push({ id: 'onttr1', date: `${M2}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await open(page, p);
     const r = await page.evaluate(() => { go('vooruit'); const reg = document.getElementById('spaarPlanRegel');   // v472: de ene regel bovenaan Plan
@@ -127,7 +128,8 @@ test.describe('3 · Inhalen, capaciteit en de te-ruim-sheet', () => {
      draagt één INHALEN / TERUG TE ZETTEN-regel met het totaal open (geen A/B meer). */
   test('opzijInhalen is een grootboek over de periodes (open = onttrokken − afgelost), en blok 20 draagt één regel', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
-    tx.push({ id: 'onttr1', date: `${M1}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    /* v507 (oordeel c): de onttrekking stond in M1, en op dag 1 t/m 4 van een maand ligt M1-12 nog in de LOPENDE salarisperiode (salaris op de 5e), die niet meetelt: gemeten op 1 nov 0 open. M2-12 ligt op elke dag in een afgesloten periode. */
+    tx.push({ id: 'onttr1', date: `${M2}-12`, amount: -500, acc: SAV, name: 'Spaarpot', desc: 'VAN SPAREN', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await open(page, p);
     const r = await page.evaluate(() => { const I = opzijInhalen(), V = maandVooruit();

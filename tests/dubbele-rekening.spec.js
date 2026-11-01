@@ -3,7 +3,7 @@
 // bouwt een id als 'N26 <Account Name>', de koppeling uit de IBAN-cijfers — en dan telt
 // totalBalance() het saldo dubbel. Een correctheidsvraag, geen cosmetica.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

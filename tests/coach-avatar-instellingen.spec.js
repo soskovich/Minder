@@ -3,7 +3,7 @@
 // opent. Verhuizing, geen herontwerp: één sheet, twee ingangen, en wisselen tekent voortaan het
 // scherm dat je voor je hebt in plaats van alleen de Coach-tab.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 // v182: 'Coach-avatar & toon' is opgegaan in de regel Coach. De sheet en al zijn ingangen

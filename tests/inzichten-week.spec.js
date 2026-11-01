@@ -1,6 +1,6 @@
 // v382: Inzichten op een scherm, met het trap-tempo, de weektegel, patronen als tegels en de verschuivingen.
 // De stand is die van inzichten-stand.js (oktober 2026), met een vaste dag per test.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./inzichten-stand');
 
 const NIET = ['vakantie', 'abonnement', 'verzekering', 'sport'];

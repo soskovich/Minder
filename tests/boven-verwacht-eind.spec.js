@@ -4,7 +4,7 @@
 // is "herhaalt" met het verwachte bedrag; "herstelt" alleen als het naar verwachting NIET boven eindigt. Een potje dat 2+
 // maanden op rij boven is krijgt in Kiezen als eerste optie "<potje> herzien"; binnen het spaargeld-patroon (v430, R8) is
 // het potje een eigen symptoom.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 /* Boodschappen gewoonlijk €492 (350 uit de stand + €142 op de 20e), €129 op 5 oktober: tot vandaag achter op het gewone

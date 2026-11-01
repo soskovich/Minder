@@ -3,7 +3,7 @@
    Niet nu. Bij Andere verdeling rekent opzij automatisch mee (de som blijft het salaris) en staat het gevolg (laagste saldo
    per rekening) er live onder; de knoppen worden dan Deze kiezen / Terug naar advies. De keuze wordt het doel voor opzij
    (opzijPeriode) en de basis voor moment 1/2 (SET.salVerdeling). De verdeling per rekening en de huur-rekening komen in v441. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { LEEF } = S;
 const txt = (page, sel) => page.locator('#salVerdeling ' + sel).innerText();

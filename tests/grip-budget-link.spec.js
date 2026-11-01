@@ -3,7 +3,7 @@
    maand staat. De tik opent niet ook de sheet van de kop. Plan krijgt geen ingang. Fixture: deze-maand-stand.js.
    v387: de kaart Deze maand is weg; de link staat op Zien, rechts onder de bridge, en is nog steeds de enige.
    v428: de link verhuist naar Kiezen (Al gekozen deze maand), want alleen Kiezen verandert iets. Nog steeds de enige. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 
 const naarGrip = async (page) => { await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); }); await page.waitForSelector('#gripAlGekozen [data-budgetlink]'); };

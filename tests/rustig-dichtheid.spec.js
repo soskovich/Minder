@@ -1,7 +1,7 @@
 // v90: Rustig-modus start rustiger op Inzichten — hooguit 3 kerncijfers (met "toon alle …") en de
 // twaalf-maands grafiek ingeklapt. Een expliciete keuze van de gebruiker wint altijd van die default.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');
 

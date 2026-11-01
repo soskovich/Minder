@@ -1,7 +1,7 @@
 /* v502: Plan · toewijzing verplaatsen tussen doelen, "op schema" in maanden, en de opzij-tegel per periode. Op tests/v502-stand.js
    (26 nov 2026, de era; Noodfonds 4.000/4.000, Inrichting woning 0/5.000, Kosten Koper 2.000/15.000 streef jan 2028, spaarsaldo
    6.000, inleg 3.000). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const V = require('./v502-stand');
 
 const naarPlan = async page => { await page.evaluate(() => { closeSheet(); go('vooruit'); }); };

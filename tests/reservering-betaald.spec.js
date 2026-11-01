@@ -17,7 +17,7 @@
  *    dus een eigenschap van deze stand en niet een meting van het toestel.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 

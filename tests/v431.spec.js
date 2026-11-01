@@ -1,6 +1,6 @@
 /* v431: REPARATIE NA v430 OP HET TOESTEL (blok 20 en 22, 16 okt). Geen nieuwe functies. Op de stand van v428 (v421-stand, 10 oktober
    2026, GECONSTRUEERD) en, voor de betaalrekening, grip-kring-stand met twee opnames uit je spaargeld. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const V = require('./v428-boot');
 const K = require('./grip-kring-stand');
 const { MAIN } = require('./v421-stand');

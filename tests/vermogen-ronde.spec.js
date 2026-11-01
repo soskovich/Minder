@@ -1,6 +1,6 @@
 /* v350: de ronde Home, Vermogen en Vermogensreis. Elke test op de stand van tests/vermogen-stand.js
    (6 oktober 2026), tenzij hij een variant noemt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./vermogen-stand');
 const dm = require('./deze-maand-stand');
 

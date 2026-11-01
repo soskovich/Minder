@@ -14,7 +14,7 @@
 // DE PROGNOSE VERDWIJNT NIET, maar is geen aftrekking meer: hij staat als eigen regel onder de
 // lijst, en alleen als er een leeg potje is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
    maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
    voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.

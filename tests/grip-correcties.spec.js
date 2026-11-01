@@ -2,7 +2,7 @@
 // basis: gestort (min eruit) tegen verwacht (Plan opzij min eruit). (3) Zonder gemeten afgesloten maand geen "0 van 0".
 // (4) Een tab-✓ alleen na afronding. (5) Kiezen zonder afvinkregels, afspraken-regel en losse "Kies voor"-link. (6) De
 // Beleggen-meter noemt de voorwaarde die ontbreekt, en inleg die loopt geeft het patroon. (7) De patroonkaart als boom.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const OPNAMES = [['2026-10-06', 300], ['2026-10-09', 400]];

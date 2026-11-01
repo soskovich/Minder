@@ -3,7 +3,7 @@
    Laserbehandeling (EUR 159 per 6 maanden, EUR 27 per maand, partij Lausa Eriksson) die de volgende betaling van die partij herkent
    als uit de reservering betaald. Op v421-stand (10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel staan alleen daar),
    met de Tikkie aan Lausa Eriksson op 09-10 in het potje Zorg zoals op het toestel. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v421-stand');
 
 async function boot(page, zaai) {

@@ -6,7 +6,7 @@
 // Wat deze spec nog bewaakt: het cijfer wordt nog berekend (insKpis rekent alle vier), er is nog
 // steeds geen norm-laag, en de maandgrafiek houdt het absolute uitgaven-niveau.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 const INK = 3000;

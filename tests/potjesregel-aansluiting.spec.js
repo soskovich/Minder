@@ -10,7 +10,10 @@
 // bronnen komen als de sub eronder, dat de tweede regel varPlanRemaining noemt en er alleen staat
 // als er een gat is, en dat een tik altijd uitkomt op het bedrag waarop je tikte.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 /* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
    maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
    voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
@@ -146,7 +149,7 @@ const meet = (page) => page.evaluate(() => {
    die twee zijn nu hetzelfde getal. De aftrekking blijft een eigenschap van de bron (varPotjeStand) en staat hieronder
    naast het getal, zodat te zien is waar ze uiteenlopen. */
 test.describe('a · het getal is per potje budget min gebruikt, niet onder nul', () => {
-  test('de gemelde verhouding: het getal is de reservering per potje, niet de netto aftrekking', async ({ page }) => {
+  test('de gemelde verhouding: het getal is de reservering per potje, niet de netto aftrekking · voor de salarisperiode', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
     expect(r.er).toBe(true);
@@ -162,7 +165,7 @@ test.describe('a · het getal is per potje budget min gebruikt, niet onder nul',
     expect(r.gat).toBeLessThan(0);
   });
 
-  test('de kop van de kaart gaat over je potjes, niet over het hele budget (v440 sectie 8)', async ({ page }) => {
+  test('de kop van de kaart gaat over je potjes, niet over het hele budget (v440 sectie 8) · voor de salarisperiode', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
     const S = await page.evaluate(() => insMaandStand());
@@ -178,7 +181,7 @@ test.describe('a · het getal is per potje budget min gebruikt, niet onder nul',
     expect(r.kaartBudget).toBe(2930);           // totals().budget (het hele budget) blijft die waarde elders
   });
 
-  test('niets gebruikt: het hele potje staat er', async ({ page }) => {
+  test('niets gebruikt: het hele potje staat er · voor de salarisperiode', async ({ page }) => {
     await boot(page, { boekingen: [] });
     const r = await meet(page);
     expect(r.valEur).toBe(r.budget);
@@ -191,7 +194,7 @@ test.describe('b · de reservering is een andere vraag', () => {
   // v382: weg, "het achtervoegsel noemt het gat": het achtervoegsel met de tempo-krapte hoorde bij de tegel
   // "Nog in potjes" en staat niet meer op Inzichten. De identiteit erachter (restant plus gat is de tempo-som)
   // is een eigenschap van de bronnen en blijft hieronder staan.
-  test('op de GAT-stand is het restant plus het gat de tempo-som', async ({ page }) => {
+  test('op de GAT-stand is het restant plus het gat de tempo-som · voor de salarisperiode', async ({ page }) => {
     await boot(page, gat());
     const r = await meet(page);
     expect(r.gat).toBeGreaterThan(0);
@@ -199,7 +202,7 @@ test.describe('b · de reservering is een andere vraag', () => {
     expect(r.valEur).toBe(r.reserve);           // v383: het scherm draagt de reservering per potje
   });
 
-  test('geen enkel potje over zijn grens: de reservering is de aftrekking', async ({ page }) => {
+  test('geen enkel potje over zijn grens: de reservering is de aftrekking · voor de salarisperiode', async ({ page }) => {
     await boot(page, { boekingen: BINNEN });
     const r = await meet(page);
     expect(r.er).toBe(true);
@@ -215,7 +218,7 @@ test.describe('b · de reservering is een andere vraag', () => {
 test.describe('c · meer uitgegeven dan er in je potjes zat', () => {
   /* OVERAL: boodschappen en vervoer gaan samen EUR 500 over hun potjes, uit eten (EUR 400) is onaangeroerd. Netto is dat
      EUR 100 te veel (v250 zei "te veel uitgegeven"); per potje staat de EUR 400 van uit eten er nog (v383). */
-  test('netto te veel: de ruimte per potje blijft staan, en de sheet noemt per potje wat erboven ging, zonder minteken', async ({ page }) => {
+  test('netto te veel: de ruimte per potje blijft staan, en de sheet noemt per potje wat erboven ging, zonder minteken · voor de salarisperiode', async ({ page }) => {
     await boot(page, { boekingen: OVERAL });
     const r = await meet(page);
     expect(r.inPotjes).toBeLessThan(0);
@@ -259,7 +262,7 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
     return m ? +m[1].replace(/\./g, '') : null;
   });
 
-  test('een tik op de rij "in potjes" opent een sheet met hetzelfde bedrag', async ({ page }) => {
+  test('een tik op de rij "in potjes" opent een sheet met hetzelfde bedrag · voor de salarisperiode', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
     expect(r.rijTik).toBe(true);

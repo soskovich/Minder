@@ -1,7 +1,7 @@
 // v94: de "ongewoon"-vlag in de transactielijst heet nu "afwijkend bedrag", staat neutraal
 // en legt zichzelf uit. De detectie (txOutlier) is onveranderd.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, MAIN } = require('./budget-fixture');
 
 // De fixture heeft drie keer Albert Heijn (400 · 400 · 300), dus een eigen mediaan van 400.

@@ -6,7 +6,7 @@
       Sabotage: gripStapSinds niet-stil opslaan -> een boekhoud-save tijdens het tekenen bumpt _dataGen -> de rekencache vervalt.
    c. Bij een krappe rekening MEET en DRAAIT de pop-up-controle bij het opstarten (eigen actie in SNELHEID, los van de afsluit-pop-up).
       Sabotage: de controle overslaan in salKrapPopupMisschien -> de krap-actie meet niets ("niets gemeten"). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 /* SCH-zware stand: 25 maandelijkse SEPA-incasso's met unieke partijen (recurringSchedule ziet ze als 'fixed') over 21 maanden op

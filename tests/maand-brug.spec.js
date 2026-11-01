@@ -9,7 +9,7 @@
    sport -100) zijn gekozen zodat de vierde losse stap een potje eronder is en er een rest
    overblijft om uit te splitsen; de huur (een potje dat precies op zijn bedrag uitkwam) draagt
    geen stap. De klok staat op 4 oktober 2026, zodat september afgesloten is. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 

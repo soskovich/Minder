@@ -9,7 +9,7 @@
    DE DIP- EN PIEKGEVALLEN ZIJN GECONSTRUEERD en niet van het toestel (v274): ze toetsen de
    eigenschap die het korte venster moest houden, namelijk dat een losse uitschieter de norm niet
    verzet. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

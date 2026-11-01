@@ -9,7 +9,7 @@
    GECONSTRUEERD EN NIET GEMETEN: de stand van het toestel staat alleen daar. */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const KIND = [['2026-07-14', -120.40], ['2026-08-15', -95.15], ['2026-09-16', -110.30]];

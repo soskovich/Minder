@@ -3,7 +3,7 @@
 // splitFixedVar(), zodat de lijst per definitie optelt tot het getal erboven. Een lijst die iets
 // anders zegt dan het cijfer zou een nieuw vertrouwensprobleem zijn in plaats van een opgelost.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, MAIN, INKOMEN } = require('./budget-fixture');
 
 async function boot(page, payload) {

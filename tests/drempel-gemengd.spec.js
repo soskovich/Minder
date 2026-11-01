@@ -6,7 +6,7 @@
 // Fixture: grip-kring-stand (10 okt 2026). Vices eindigt EUR 5 boven EUR 20 (onder de drempel van EUR 10), Uit eten
 // EUR 67 boven (een uitschieter). Vervoer: vast 603, variabel 497 met drie maanden EUR 0 en verwacht eind EUR 99.
 // Verzekeringen: vast 164, variabel 171 met drie maanden EUR 0, maar DELA EUR 160 in december.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const K = require('./grip-kring-stand');
 
 const grip = async page => { await page.setViewportSize({ width: 390, height: 844 }); await K.boot(page); await page.evaluate(() => go('maand')); };

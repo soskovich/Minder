@@ -3,7 +3,7 @@
    en niet in de bel; bij elke knop wat hij doet; Weet ik niet maakt de controle verklaard; na een antwoord het effect en de regelvraag
    "Geldt dit voor alle <partij>?". Nieuwe vraag (a): een ontvangst van een rekening op jouw naam die Minder niet kent. Nieuwe vraag (b):
    eenmalig terwijl de partij eerder voorkwam. Terugblik: "eenmalig komt elke maand voor". B10: het koppelscherm. GECONSTRUEERDE fixture. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const ABN = '521200806', N26 = 'DE89370400440532013000';

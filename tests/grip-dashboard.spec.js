@@ -9,7 +9,7 @@
    over de regels, de vooruitblik, de pop-up en het logboek vasthoudt, blijft; wat alleen over de tegels ging is weg. */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot, seed, RES, MAIN } = require('./bezit-koppeling.fixture');
 const { pinDatum } = require('./vaste-dag');
 const { LOG } = require('./grip-stand');

@@ -21,7 +21,7 @@
  *  - dezelfde betaling met een HERSCHREVEN omschrijving, dus een andere `t.id` bij een gelijke tijd.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const OUD = 'psd2_94a07621';            // de wees: geen eigen IBAN, dus een nieuwe id bij een herkoppeling

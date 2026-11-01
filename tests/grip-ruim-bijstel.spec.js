@@ -4,7 +4,7 @@
    ingangen, en het vrije bedrag krijgt een bestemming voordat er iets wordt opgeslagen. De stand is die van de
    gebruiker (ruim-bijstel-stand.js): Verzekeringen EUR 335, gewoonlijk EUR 164, DELA EUR 160 per kwartaal met
    de volgende in december, Vices EUR 20 tegen gewoonlijk EUR 120, Huur EUR 750 zonder betaling, sparen EUR 2.200. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const RB = require('./ruim-bijstel-stand');
 /* v387: VERZEKERINGEN IS OP DE STAND VAN DE MELDING NIET MEER TE RUIM (EUR 324 nodig in december tegen EUR 335, test c).
    De sheet zelf blijft bestaan, dus de tests van de sheet draaien op dezelfde stand met Verzekeringen op EUR 700: dan is

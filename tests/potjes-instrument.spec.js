@@ -6,7 +6,10 @@
 // daarvoor zijn je potjes - die al je norm zijn, dus een doel op dat percentage zou een tweede norm
 // voor dezelfde vraag zijn. Dat percentage daalde bovendien zodra je vaste lasten stegen, zonder
 // dat je gedrag veranderde.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');
 
@@ -63,7 +66,7 @@ test.describe('a - Inzichten voor en na', () => {
     expect(await page.evaluate(() => !!document.querySelector('#s-ins #insFilter'))).toBe(true);
   });
 
-  test('de hero draagt de budgetstand onveranderd', async ({ page }) => {
+  test('de hero draagt de budgetstand onveranderd · voor de salarisperiode', async ({ page }) => {
     await open(page, seed());
     const t = await ins(page);
     expect(t).toMatch(/uitgegeven/i);
@@ -135,7 +138,7 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
 
   /* v359: 'de zin onder de balk noemt zijn eigen noemer, en de kop herhaalt hem niet' is vervallen: v359: de stand-kaart is de tegel Nog in potjes; dit staat in potjesregel-aansluiting.spec.js en inzichten-dashboard.spec.js */
 
-  test('zonder potjes staat de tegel er niet', async ({ page }) => {
+  test('zonder potjes staat de tegel er niet · voor de salarisperiode', async ({ page }) => {
     await open(page, zonderPotjes());
     expect(await potjesTegel(page)).toBeNull();
     const r = await page.evaluate(() => varPotjeStand(curMonth || months()[months().length - 1]));

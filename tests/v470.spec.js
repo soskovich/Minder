@@ -5,7 +5,7 @@
    percentage en geen "van je doel".
    GECONSTRUEERD op plan-toestel-stand.js (stap 'nu': een terugzetkeuze die nog EUR 788 naar het noodfonds verwacht). De getallen van het
    toestel (EUR 1.088 en EUR 1.350) staan niet in deze repo. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const F = require('./plan-toestel-stand');
 
 async function stand(page, o) {

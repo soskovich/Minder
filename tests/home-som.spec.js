@@ -2,7 +2,7 @@
    Het saldoblok is een tikplek, de uitleg over een oud saldo staat achter een i, Saldo nu telt op tot het totaal, en
    de eindstand van de maand komt uit EEN dagreeks (maandVerloop()), ook voor monthLiquidity().projected en de dagen
    van deze maand in liquidityDaily(). De stand is die van inzichten-stand.js (7 oktober 2026); GECONSTRUEERD. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const I = require('./inzichten-stand');
 const MAIN = I.MAIN, SPAAR = I.SPAAR;
 const OUD = { manualBalDatum: { [MAIN]: '2026-10-03' } };          // de nieuwste boeking op MAIN is van 6 oktober

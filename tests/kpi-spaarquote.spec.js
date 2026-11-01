@@ -4,7 +4,7 @@
 // bij, dus geen band en geen afstand. De brug bleef: spaarDekking() zegt nog steeds of je storting
 // gedekt was door je overschot, maar stelt het cijfer niet bij (v117 ingetrokken in v161).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { open, CUR, M1, M2, MAIN, SAV } = require('./budget-fixture');
 
 // inkomen 3000, uitgaven 2100, en per maand een storting naar de spaarrekening

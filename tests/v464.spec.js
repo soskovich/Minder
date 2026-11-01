@@ -4,7 +4,7 @@
    4: Zien zegt "volgens je verdeling". 5: de maandsom van april (LET OP tussen de maandregel en het verschil bij naam; een boeking een keer).
    6: een potje dat deze maand ontstond verschuift de forecast niet. 7: opgeslagen tijden in Nederlandse tijd. GECONSTRUEERDE fixture (die van
    v462). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806', SPACE = '7586', OUD = 'psd2_94a07621';

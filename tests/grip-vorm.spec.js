@@ -23,7 +23,7 @@
  * dat de rij afdrukt is 500 min 299, en met een fixture waarin die twee samenvallen meet de
  * assertie niets.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { sigKaart } = require('./beslis-sheet');
 const { regelTegels } = require('./beslis-sheet');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');

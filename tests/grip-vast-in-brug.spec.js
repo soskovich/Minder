@@ -8,7 +8,7 @@
    v387: DE KAART IS WEG; de bridge staat op Zien (gripZienBrug()) en daar zijn de vaste lasten een deel van "overig". Een
    tik op overig opent zijn delen (gripOverig), en "Vaste lasten" daarin de sheet vaste lasten. dezeMaandBrug() blijft de
    bron van de stap vaste lasten, en de zin (dezeMaandZin()) staat op Begrijpen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const Zes = require('./deze-maand-stand');
 const Toe = require('./vast-variabel-stand');
 const { kaalUit } = require('./bron-kaal');

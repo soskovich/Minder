@@ -15,7 +15,7 @@
 // Dit blok rekent dat per potje uit zodat het op de eigen gegevens te zien is. Het bouwt geen
 // correctie: welke van de twee getallen op die plek hoort is een aparte beslissing.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 /* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
    maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
    voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.

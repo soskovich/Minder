@@ -5,7 +5,7 @@
    incasso is UITGESLOTEN (Zilveren Kruis, 140), en een vaste last die het schema niet kent maar de
    terugval van vorige maand wel (een incasso die maar EEN keer eerder kwam), in een VARIABEL potje.
    Die tweede telt dan in "nog in je potjes" EN in "nog te betalen", de andere kant op. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN='NL01MAIN0000001111';

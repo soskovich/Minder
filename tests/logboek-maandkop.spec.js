@@ -8,7 +8,7 @@
    dus de kop van september is 194 + 84 + 40 = EUR 318, en 3 van de 5.
    DE RECORDS DRAGEN HUN AFSLUITING AL (`over_eind_maand`), dus `valtOpAfsluiten()` raakt ze niet
    en de uitkomst hangt niet aan boekingen die deze fixture niet draagt. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 

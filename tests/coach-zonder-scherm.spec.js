@@ -3,7 +3,7 @@
 // moet blijven: de vier ingangen, de instelbaarheid van toon en avatar, en dat er nergens nog een
 // verwijzing naar 'act' staat.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';

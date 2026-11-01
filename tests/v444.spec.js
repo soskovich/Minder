@@ -5,7 +5,7 @@
    blijft, want november heeft nog geen betaling. (2) Uitgaven zonder woning: elke woning in de maanden dat hij je woning was (Ml
    Macnack t/m aug 2026, Nathaniel Cathalina vanaf okt 2026), met een controle per maand in blok 20. GECONSTRUEERDE fixture op de stand
    van v432 (19 okt); de toestelgetallen (vast verwacht EUR 1.324, forecast EUR 2.831, EUR 264 onder budget) verifieert de gebruiker. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S432 = require('./v432-stand');
 const CATH = 'NL77ABNA0599037806';
 const MAC = { '2026-04': 850, '2026-05': 900, '2026-06': 750, '2026-07': 675, '2026-08': 675 };

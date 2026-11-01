@@ -29,7 +29,7 @@
  * ontbrekende meting en geen mislukking), een ONTKOPPELDE rekening met een oude entry, en twee
  * verschillende saldodata zodat de regel de OUDSTE moet noemen.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

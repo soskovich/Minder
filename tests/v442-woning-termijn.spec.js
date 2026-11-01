@@ -2,7 +2,7 @@
    De huur komt via een Tikkie/iDEAL en vormt geen herkend schema, dus hij stond niet in recurringSchedule → blok 23 toonde geen
    huur-termijn. rekVoorstel leest nu woningForecast (de ene bron) en zet hem als termijn op de rekening waar de externe betaling
    van afging (hier Leefgeld, niet de salarisrekening). GECONSTRUEERDE fixture; de echte getallen komen uit jouw blok 23. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v432-stand');
 const { MAIN, LEEF } = S;
 const CATH_IBAN = 'NL77ABNA0599037806';

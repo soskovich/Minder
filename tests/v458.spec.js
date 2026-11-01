@@ -7,7 +7,7 @@
       geval of het lijkt op een echte voorautorisatie met een afwijkende partij-sleutel (telt nu dubbel) of op toeval; niets gekoppeld;
    4. het zelf herstellen draait in de sync; het draait TOT DEEL B ook bij het opstarten (gemeld, vastgelegd voor deel B).
    GECONSTRUEERDE fixture: die van v457 (het Tango-geval van 21-10, drie oudere Tango-gevallen en de bijna-gevallen). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 
 const N26 = 'DE89370400440532013000', ABN = '521200806';

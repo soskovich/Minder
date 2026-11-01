@@ -12,7 +12,7 @@
  * savedNet() met allebei, en een eigen lus in safeToSpend() die alleen bijschrijvingen telde.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 

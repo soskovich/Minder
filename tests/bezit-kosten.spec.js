@@ -5,7 +5,7 @@
    Juli, augustus en september dragen elk ook een kostenpost van EUR 3, zodat te meten is of het gemeten
    gemiddelde kosten bevat (punt d). De omschrijvingen zijn GECONSTRUEERD: wat de echte omschrijving van
    de EUR 3 op het toestel draagt, staat alleen daar, en blok 16 toont het. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot, STICHTING_DESC } = require('./bezit-koppeling.fixture');
 
 /* 8800123 staat alleen in de kosten: een getal dat niet in elke omschrijving staat, zodat de regel dat

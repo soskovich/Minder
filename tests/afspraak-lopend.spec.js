@@ -7,7 +7,7 @@
 // schuift naar 'let op' via een tweede poort (r.afspraak, naast geaccepteerd uit v207), houdt zijn
 // waarde, en verliest suggestie en gespreksingang. Niet via r.opTempo: dat is een meting.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { regelTegels, openRegelUI } = require('./beslis-sheet');
 const { seed, open, CUR } = require('./budget-fixture');
 

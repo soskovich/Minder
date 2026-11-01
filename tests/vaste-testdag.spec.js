@@ -12,11 +12,11 @@
  * ER VERANDERT GEEN APP-GEDRAG. `index.html` is in deze ronde niet aangeraakt; wat verschuift is
  * alleen op welk moment een test de app bekijkt.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { seed, open } = require('./budget-fixture');
-const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
+const { pinDag, vasteDatum, DAGEN_OVER, STANDAARD_YMD } = require('./vaste-dag');
 const { kaalBron } = require('./bron-kaal');
 
 const dimVan = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
@@ -64,10 +64,11 @@ test.describe('b - de app ziet die dag ook echt', () => {
   /* DE PIN MOET VOOR `page.goto()` STAAN. Erna leest de boot nog de echte klok, en dan verschilt
      alleen wat je daarna uitrekent van wat de app bij het opstarten zag. Dit geval onderscheidt de
      twee, en zonder deze test zou een spec die de pin te laat zet er stil doorheen komen. */
+  /* v507: ZONDER PIN IS DE KLOK DE STANDAARDDAG van tests/klok.js en niet meer de systeemdatum. */
   test('na de boot gezet telt hij niet meer voor wat de boot zelf las', async ({ page }) => {
     await open(page, seed());
     const voor = await page.evaluate(() => vandaagYMD());
-    expect(voor.slice(8, 10)).toBe(String(new Date().getDate()).padStart(2, '0'));
+    expect(voor).toBe(STANDAARD_YMD);
   });
 });
 

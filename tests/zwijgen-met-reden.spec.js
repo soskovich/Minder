@@ -6,7 +6,7 @@
 //
 // De verbergen-instelling (SET.toonLegeRek) is hier NIET de oorzaak en raakt geen enkel cijfer;
 // deze spec legt dat allebei vast, zodat de diagnose niet opnieuw die kant op wijst.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 const { pinDag } = require('./vaste-dag');
 /* v299: de klok op een vaste dag, zodat het dagwoord niet met de kalender meebeweegt. Deze spec

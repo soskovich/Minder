@@ -19,7 +19,7 @@
 // nu maandInkomen(m); las de vlag alleen in totals(), dan zeggen monthAgg() en forecastModel()
 // iets anders over dezelfde maand (v104). baseIncome() houdt bewust zijn eigen lus, zie onderaan.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron } = require('./bron-kaal');

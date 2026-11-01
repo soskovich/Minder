@@ -18,7 +18,7 @@
  *  - varianten waarin psd2 het csv-venster niet dekt en waarin een maand niet aansluit.
  * De service worker staat globaal uit via playwright.config.js.
  */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const CSVZ = 'N26 Zakgeld';               // Space-naam uit de id: "Zakgeld"
 const CSVX = 'N26 Buffer Rust';           // de dwarsligger: bedragen en richting wijzen verschillend aan

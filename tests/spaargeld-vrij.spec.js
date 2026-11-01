@@ -1,7 +1,7 @@
 // v99: spaargeld boven je noodfonds-doel wordt zichtbaar en is in één tik toe te wijzen
 // v126: de regel is verhuisd van de noodfonds-plan-rij naar planniveau; de selector volgt mee.
 // aan het bovenste lopende spaardoel. De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 // nfMaanden 1 maakt het noodfonds-doel klein genoeg (1 x crisislast) dat het spaarsaldo

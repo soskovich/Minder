@@ -2,7 +2,7 @@
    C (variant X): wat na deze maand nog terugkomt is GEEN ruimte voor je inleg. De inleg van deze maand in de projectie is
    die van allocatePlan(), de terugzetdelen vullen het restant aan, en vol is pas als alles binnen is (december).
    D: een functie voor de verwachte stand eind deze maand (planStandEind()), en nog te gaan rekent vanaf het geld. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const T = require('./plan-toestel-stand');
 
 test.describe('a · de stand van het toestel na de drie keuzes', () => {

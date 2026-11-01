@@ -1,6 +1,6 @@
 /* v418 (gevraagd als v417b): BLOK 20, HET SALARIS OVER VAST, POTJES EN OPZIJ (gevraagd door de gebruiker). Alleen lezen. Op grip-v409-stand
    (10 oktober 2026, GECONSTRUEERD: de boekingen van het toestel staan alleen daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 const lees = page => page.evaluate(() => diagSalarisVerdeling());
 const sectie = (L, kop) => { const i = L.findIndex(r => r.startsWith(kop)); const j = L.findIndex((r, n) => n > i && r === ''); return L.slice(i, j < 0 ? undefined : j); };

@@ -3,7 +3,7 @@
    blok 20 punt 7 en MAANDBUDGET lezen die splitsing, en blok 20 heeft een controle "CONTROLE budget per groep ... klopt".
    Gemeld: potjes liep uiteen (Inzichten €1.816 · Zien €1.921 · blok 20 €1.903) omdat Inzichten het potjesdeel uit de forecast
    rekende (Bp − forecast-vast) in plaats van uit het budget. GETALLEN VAN DE FIXTURE. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDatum } = require('./vaste-dag');
 const { kaalUit } = require('./bron-kaal');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';

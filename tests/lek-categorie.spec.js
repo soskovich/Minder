@@ -4,7 +4,7 @@
    (6 oktober, Uit eten zonder potje). */
 /* v428: Let op bestaat niet meer; de handelingen staan in Kiezen onder Te kiezen (#gripTeKiezen, met data-letop), dus Grip
    opent hier op Kiezen. Alleen de plek is veranderd. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { boot } = require('./deze-maand-stand');
 
 /* v391: EEN SIGNAAL PER REGEL. De categorie staat op een eigen regel (data-letop="lekcat", tik: haar boekingen) en de

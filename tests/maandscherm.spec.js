@@ -4,7 +4,7 @@
 // uitkomsten samen en sorteert ze. Enige uitzondering, na akkoord: bufferMaanden(), een deling van
 // twee bestaande uitkomsten. Valt een bron weg, dan valt die regel weg zonder foutmelding.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

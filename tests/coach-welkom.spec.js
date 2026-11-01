@@ -3,7 +3,7 @@
 // v92: bij de allereerste coach-opening staat er één warme bubbel die laat zien wát de coach kan.
 // Daarna is de opening precies zoals hij was (groet -> menu).
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 function tweak(fn) {

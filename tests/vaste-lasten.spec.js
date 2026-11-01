@@ -7,7 +7,7 @@
 // iets wat niet was gebeurd. De coachtip 'Abonnementen nalopen' las een veld dat niet bestond en
 // vuurde nooit; hij leest nu de gedeelde lijst.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { pinDag, vasteDatum, openDag } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 

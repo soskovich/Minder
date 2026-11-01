@@ -3,7 +3,7 @@
 // een beslissing. Het heet daarom Plan, in de nav en in elke tekst die je leest.
 // De interne sleutel blijft 'vooruit': dat is opslag (minder_view) en navigatie-state, geen tekst.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open } = require('./budget-fixture');
 
 test.describe('a · de naam in de nav', () => {

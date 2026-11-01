@@ -3,7 +3,7 @@
 // v114: de rij "Maandbudget" opent eerst de read-only verdeling; de editor zit daar achter de
 // voetlink "Potjes en limiet instellen". De weg blijft dus in-context, hij is één tik langer.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const SHEET = '#sheetBg.show';

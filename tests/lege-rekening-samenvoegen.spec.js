@@ -4,7 +4,7 @@
 // niets voor. Plus de bug die er al zat: rekSamenvoeg() wiste de spaarvlag van de opgeheven id en
 // liet SET.resAcc naar een dode id wijzen, allebei zonder het te zeggen.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');

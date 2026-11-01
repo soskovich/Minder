@@ -12,7 +12,7 @@
       (hetzelfde model, r.uitDag). Sabotage: de vaste lasten uit de gegroepeerde/AFGERONDE per-post-regels lezen in plaats van exact;
       de SEPA-post draagt daarom EUR 99,40 (centen), zodat de som van de afgeronde regels van het exacte totaal afwijkt.
    GECONSTRUEERD op v483-stand (zie daar). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v483-stand');
 const { LEEF } = S;
 

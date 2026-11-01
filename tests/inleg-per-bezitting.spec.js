@@ -4,7 +4,7 @@
 // exact gelijk blijven. Verder: de klem is proportioneel en nooit op volgorde, hij wordt gemeld, en
 // a.rend / a.eenmalig / a.horizon / a.infl raken de projectie nog steeds niet.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

@@ -2,7 +2,7 @@
 // liet weg wat hem leesbaar maakt. De twee dingen die een getal leesbaar maken zijn de eenheid en
 // het referentiepunt; die mogen nooit sneuvelen om compact te blijven.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const MAIN = 'NL01MAIN0000001111';

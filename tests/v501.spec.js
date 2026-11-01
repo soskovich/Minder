@@ -14,7 +14,7 @@
    h. Na "gezien" is de verdelingkaart één regel, en pas twee salarissen op rij met > €100 afwijking zetten een keuze in Kiezen
       (sabotage: de knop doet niets).
    Fixture v501-stand.js (geconstrueerd, niet gemeten; de toestelgetallen staan alleen op het toestel). */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v501-stand');
 const { kaalUit } = require('./bron-kaal');
 const K = require('./grip-kring-stand');

@@ -24,7 +24,7 @@
 // andere paden kunnen nemen, dus staat die toestand hier als eigen geval, naast een buffer die
 // binnen één maand vol is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 const fs = require('fs');
 const path = require('path');

@@ -4,7 +4,7 @@
    zetten"): nog terug (planTerug()) en niet toegewezen, met de sheet "Je spaarrekening tegen je doelen"; onder EUR 0,50 geen regel.
    GECONSTRUEERD op plan-toestel-stand.js (stap 'nu', een terugzetkeuze die nog EUR 788 naar het noodfonds verwacht) met de getallen van de
    melding van 26-10: saldo EUR 5.350,20, toegewezen EUR 4.000 Noodfonds + EUR 1.350 Kosten Koper. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const F = require('./plan-toestel-stand');
 
 async function stand(page, o) {

@@ -6,7 +6,7 @@
 // stand van nu, geen reeks). Buffer heeft in maandRegelOpties() geen bedrag en houdt de toets van
 // v207. De zelfrapportage-tak blijft bestaan voor een afspraak zonder bedrag en zonder bron.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const plusM = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + n, 1);

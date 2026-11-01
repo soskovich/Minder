@@ -3,7 +3,7 @@
 // opleverde; er wordt niets opnieuw afgeleid. Zwijgen zodra een van de drie niet te beoordelen is:
 // een verkeerd groen licht kost geld dat binnen een jaar nodig is.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();

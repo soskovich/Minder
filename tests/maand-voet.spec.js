@@ -21,7 +21,7 @@
 // meer WAAR de voet hangt maar DAT hij er niet meer is, en dat is de 'beide schermen'-eis bij een
 // verhuizing. Wat de nieuwe kaart zelf moet doen staat in grip-vanaf-norm.spec.js.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();

@@ -12,7 +12,7 @@
       Sabotage: november omrekenen (niet meer als korte maand tonen).
    e. De soort van een potje verandert niet door het tonen van de lijst; alleen bevestigen schrijft.
       Sabotage: het voorstel direct toepassen bij het renderen. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./v489-stand');
 
 const zetBudget = () => { SET.budgets = { boodschappen: 390, kinderen: 85, contant: 400 }; SET.potWekelijks = { boodschappen: true, kinderen: false }; SET.budgetsNext = {}; SET.budgetPlan = {}; _dataGen++; };

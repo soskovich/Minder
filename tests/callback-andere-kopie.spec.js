@@ -2,7 +2,7 @@
 // Gemeld: vernieuwen gestart in de geïnstalleerde app, de bank stuurde terug naar Edge, en die kopie (met oude
 // gegevens) sloeg de nieuwe toestemming op. Een callback zonder lopende poging wisselt nu niets in en slaat niets
 // op, en zegt waar je hem wel opent. Een callback met een lopende poging werkt zoals voorheen.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, MAIN } = require('./budget-fixture');
 const { pinDatum } = require('./vaste-dag');
 

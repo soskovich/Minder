@@ -1,7 +1,7 @@
 // v86: (1) de "ongewoon"-vlag tempert bij herkende vaste lasten en meet tegen je eigen
 // winkel-historie, (2) een terugkerende auto-lease kan gekoppeld worden als financial lease.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 const LEASE = 389;   // maandtermijn Hilterman, elke maand hetzelfde

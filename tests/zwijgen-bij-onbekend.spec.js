@@ -2,7 +2,10 @@
 // model en dat stond al in de app: de onbekend-hero op Home. Geen stellige nul, wel de reden, wel
 // één volgende stap. Deze specs leggen per plek vast dat er gezwegen wordt in plaats van gerekend.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
+/* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
+   maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
+   november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
 const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
@@ -103,7 +106,7 @@ test.describe('1 · Vooruitblik zwijgt bij een onbekende bron', () => {
 });
 
 test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
-  test('zonder potjes noemt de hero de inkomen-limiet bij naam', async ({ page }) => {
+  test('zonder potjes noemt de hero de inkomen-limiet bij naam · voor de salarisperiode', async ({ page }) => {
     await boot(page, seed({ geenBudget: true }));
     const t = await scherm(page, 'ins');
     // v359: de tegel Uitgegeven noemt zijn noemer
@@ -114,7 +117,7 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
       .toEqual([2100, 2100, 0]);
   });
 
-  test('met potjes heet het gewoon je maandbudget', async ({ page }) => {
+  test('met potjes heet het gewoon je maandbudget · voor de salarisperiode', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
     // v382: de maandkaart heet "Maandbudget <maand>" en draagt "EUR X van EUR Y"
@@ -124,7 +127,7 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
 });
 
 test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
-  test('een import van vóór deze maand geeft onbekend, geen 0%', async ({ page }) => {
+  test('een import van vóór deze maand geeft onbekend, geen 0% · voor de salarisperiode', async ({ page }) => {
     await boot(page, seed({ oudeImport: true }));
     const t = await scherm(page, 'ins');
     /* v311: DEZE ASSERTIE PINDE DE WOORDORDE EN NIET DE EIGENSCHAP. Hij eiste letterlijk "onbekend
@@ -159,7 +162,7 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
     expect(r.cta.lab).toBeTruthy();
   });
 
-  test('verse data rekent gewoon door', async ({ page }) => {
+  test('verse data rekent gewoon door · voor de salarisperiode', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
     // v382: de maandkaart rekent: data-insmaand="nu" met EUR 800 uitgegeven
@@ -215,7 +218,7 @@ test.describe('7 · één keer melden dat er te weinig historie is', () => {
 });
 
 test.describe('r · regressie op een volledige dataset', () => {
-  test('niets zwijgt wat wel bekend is', async ({ page }) => {
+  test('niets zwijgt wat wel bekend is · voor de salarisperiode', async ({ page }) => {
     await boot(page, seed({ spaar: true }));
     const ins = await scherm(page, 'ins');
     // v382: de maandkaart draagt "EUR 800 van EUR Y" en rekent (data-insmaand="nu")

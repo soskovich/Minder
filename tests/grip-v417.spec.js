@@ -2,7 +2,7 @@
    (10 oktober 2026). Abonnementen: budget EUR 5, gewone maand EUR 20, Huurwoningen Premium EUR 31 in oktober. De gewone maand
    ligt al boven het budget, dus het is "boven budget" en niet "te krap". In de herzien-sheet telt het voorstel de post mee:
    potNodig(), met een regel "inclusief <post> EUR X in <maand>". Zonder periodieke post blijft het voorstel het gemiddelde. */
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const S = require('./grip-v409-stand');
 
 /* De stand van het toestel (GECONSTRUEERD): Spotify EUR 20 ook in juli en september, dus de gewone maand is EUR 20 tegen een

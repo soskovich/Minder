@@ -1,6 +1,6 @@
 // Transacties (v79): historische periode-keuze + de nieuwe filter-sheet.
 // Alleen weergave/selectie — de categorisering en de bedragen blijven van de app zelf.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 
 async function openTx(page, payload) {

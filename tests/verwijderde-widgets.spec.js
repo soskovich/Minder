@@ -1,7 +1,7 @@
 // v70: de potjes-widget is uit Coach en de komende-uitgaven-lijsten zijn uit Vooruitblik.
 // Deze spec bewaakt dat ze weg zijn én dat wat eromheen stond gewoon blijft werken.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 async function boot(page, scherm, payload) {

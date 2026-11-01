@@ -8,7 +8,7 @@
 // (dat is de bedoeling, niet de fout), dat de regel het verband legt zonder een nieuw getal te
 // verzinnen, en dat hij zwijgt waar hij niets toevoegt.
 // De service worker staat globaal uit via playwright.config.js.
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./klok');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
