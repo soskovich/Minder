@@ -1875,6 +1875,15 @@ function txId(t, acc){
   const a = (acc===undefined || acc===null) ? (t.acc||'') : (acc||'');
   return hash(a+t.date+t.amount.toFixed(2)+t.desc)+'_'+Math.round(Math.abs(t.amount)*100);
 }
+/* v509b: DE NAAM VOLGT DE SOORT, OOK VOOR BOEKINGEN VAN VOOR v509. Een kastelling (src contant) die nog "Contant besteed" heet (of
+   een v509-naam met het verkeerde teken) heet naar wat de telling zegt; een boeking op Rente die "Transactie" of niets heet, heet
+   "Rente". Alleen een naam die de app zelf gaf wordt vervangen: elke andere naam (van de bank, of van jou) wint. Bij elke boot, want
+   categorize() loopt over alle boekingen. */
+const NAAM_KAS_AUTO=['Contant besteed','Kastelling · uitgegeven','Kastelling · nog in je zak'];
+function naamVanSoort(t, cat){ if(!t) return;
+  const nm=String(t.name||'').trim();
+  if(t.src==='contant' && !t.acc && (!nm || NAAM_KAS_AUTO.includes(nm))){ t.name=t.amount>0?'Kastelling · nog in je zak':'Kastelling · uitgegeven'; return; }
+  if(cat==='rente' && (!nm || nm==='Transactie')) t.name='Rente'; }
 function categorize(t){
   const U=t.desc.toUpperCase();
   const Z=U.replace(/\s/g,'');   // spatieloos: vangt MT940-regelafbrekingen op (SAXO B ANK → SAXOBANK)
@@ -1913,6 +1922,7 @@ function categorize(t){
   }
   t.ruleCat=cat;
   t.autoCat=cat;   // wordt evt. overschreven door applyOwnAccounts()
+  naamVanSoort(t, (typeof OVR!=='undefined' && OVR && OVR[t.id]) || cat);
   /* v273: de betaaldatum als EIGEN veld naast t.date, en wissen zodra de poort niet meer geldt.
      Geen enkele app-functie leest dit; alleen het diagnosescherm. */
   const bm=betaalMoment(t);
@@ -4215,14 +4225,32 @@ function inkomenEenmalig(t){ if(!t || !(t.amount>0)) return 0; { const S=salSpli
   const o=onregelmatigBedrag(t); if(o>0) return o;
   try{ if(SET.irregularIncome && irrKandIds(String(t.date).slice(0,7)).has(t.id)) return t.amount; }catch(_){}
   return 0; }
+/* v509b: ALLEEN EEN SALARISBOEKING KAN HET SALARIS ZIJN (gemeten op het toestel, 1 nov: een rentebijschrijving van EUR 0,92 werd
+   het salaris, en Grip las "november (1–1)" met opzij −EUR 3.349). Een kandidaat staat op de categorie inkomen (de salariscategorie
+   van deze app) of draagt de partij van een bekende salarisstorting (salarisKeysBekend(): SET.salSplit.key en elke regel
+   SET.kennis['salaris|'+partij]). Rente, vergoedingen en elke andere income-categorie vallen erbuiten. VANGRAIL: is de grootste van een
+   maand kleiner dan de helft van de mediaan van de grootste per maand in de drie maanden ervoor (SAL_MIN_DEEL), dan is die maand
+   geen salarismaand en kijkt hij een maand terug. */
+const SAL_MIN_DEEL=0.5;
+function salarisKeysBekend(){ const S=new Set(); try{ const c=SET.salSplit; if(c && c.key) S.add(c.key); }catch(_){}
+  try{ for(const k of Object.keys(SET.kennis||{})) if(k.indexOf('salaris|')===0 && k.length>8) S.add(k.slice(8)); }catch(_){}
+  return S; }
+function salarisKandidaat(t, K){ if(!t || t.pending || !(t.amount>0)) return false; const c=catOf(t); if(!CATS[c] || CATS[c].type!=='income') return false;
+  if(c==='inkomen') return true; return (K||salarisKeysBekend()).has(recurKey(t)); }
 function salarisBetalingLaatst(ym){
-  const L=TX.filter(t=>!t.pending && t.amount>0 && t.date.slice(0,7)<ym && CATS[catOf(t)] && CATS[catOf(t)].type==='income'
+  const K=salarisKeysBekend();
+  const L=TX.filter(t=>t.date.slice(0,7)<ym && salarisKandidaat(t,K)
     && !(SET.onregelmatig && SET.onregelmatig[t.id]) && inkomenEenmalig(t)<t.amount-0.005);
   if(!L.length) return null;
-  const m=L.reduce((a,t)=>t.date.slice(0,7)>a?t.date.slice(0,7):a,'');
-  const top=L.filter(t=>t.date.slice(0,7)===m).sort((a,b)=>b.amount-a.amount)[0];
-  const k=recurKey(top); const bron=L.filter(t=>recurKey(t)===k).sort((a,b)=>b.date.localeCompare(a.date));
-  return bron[0]||top;
+  const top={}; for(const t of L){ const m=t.date.slice(0,7); if(!top[m] || t.amount>top[m].amount) top[m]=t; }
+  const ms=Object.keys(top).sort();
+  let kies=null;
+  for(let i=ms.length-1;i>=0;i--){ const ref=ms.slice(Math.max(i-3,0),i).map(m=>top[m].amount).sort((a,b)=>a-b);
+    if(ref.length){ const n=ref.length, med=n%2?ref[(n-1)/2]:(ref[n/2-1]+ref[n/2])/2; if(top[ms[i]].amount<med*SAL_MIN_DEEL) continue; }
+    kies=top[ms[i]]; break; }
+  if(!kies) return null;
+  const k=recurKey(kies); const bron=L.filter(t=>recurKey(t)===k).sort((a,b)=>b.date.localeCompare(a.date));
+  return bron[0]||kies;
 }
 /* ===== v473: DE SALARISSTORTING GESPLITST IN SALARIS, REISKOSTEN EN EENMALIG (besluit van de gebruiker, 26-10) =====
    Gemeld: de storting van 26-10 was EUR 7.693 in een transactie (EUR 5.216 salaris, EUR 277 reiskosten, EUR 2.200 bonus netto), en
