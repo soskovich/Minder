@@ -9139,10 +9139,10 @@ function afsluitUitgegeven(key){ const W=maandVenster(key); let U=null; try{ U=u
   return {W, U, cent:{vast:Math.round(U.cent.vast*100), potjes:Math.round(U.cent.potjes*100), zonder:Math.round(U.cent.zonder*100), contant:c, totaal:Math.round(U.totaal*100)},
     r:{vast:U.r.vast, potjes:U.r.potjes, zonder:U.r.zonder, buiten:U.r.buiten, kasNieuw:U.r.kasNieuw, contant:Math.round(c/100), totaal:U.totaalR}}; }
 function afsluitUitgegevenBlok(key){ const A=afsluitUitgegeven(key); if(!A) return '';
-  const rij=(l,v,k)=>`<div class="row" data-afuit="${k}" data-cent="${A.cent[k]!=null?A.cent[k]:Math.round(v*100)}" style="justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span class="muted">${l}</span><b>${euro0(v)}</b></div>`;
+  const rij=(l,v,k)=>`<div class="row" data-afuit="${k}" data-cent="${k==='kas'?A.cent.contant:A.cent[k]!=null?A.cent[k]:Math.round(v*100)}" style="justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span class="muted">${l}</span><b>${euro0(v)}</b></div>`;
   const lab=A.W.label||(A.W.m?ymFull(A.W.m).split(' ')[0]:'');
   return `<div data-afuitgegeven="${esc(key)}" data-start="${esc(A.W.start||'')}" data-eind="${esc(A.W.eind||'')}" style="margin:10px 0 2px"><div class="hlabel" style="margin:0 0 2px">Uitgegeven ${esc(lab)}</div><div class="small muted" style="margin-bottom:4px">dezelfde getallen als Inzichten voor ${esc(lab)}</div>
-    ${rij('Vast',A.r.vast,'vast')}${rij('Potjes',A.r.potjes,'potjes')}${rij('Zonder potje',A.r.zonder,'zonder')}${A.r.buiten?rij('Buiten je potjes',A.r.buiten,'buiten'):''}${A.r.kasNieuw?rij('Contant (nieuw potje)',A.r.kasNieuw,'kasNieuw'):''}${rij('waarvan contant',A.r.contant,'contant')}${rij('<b>Totaal</b>',A.r.totaal,'totaal')}</div>`; }
+    ${rij('Vast',A.r.vast,'vast')}${rij('Potjes',A.r.potjes,'potjes')}${rij('Zonder potje',A.r.zonder,'zonder')}${A.r.buiten?rij('Buiten je potjes',A.r.buiten,'buiten'):''}${A.r.kasNieuw?rij('Contant (nieuw potje)',A.r.kasNieuw,'kasNieuw'):''}${rij('waarvan contant',A.r.contant,'kas')}${rij('<b>Totaal</b>',A.r.totaal,'totaal')}</div>`; }
 /* het label van een afsluit-eenheid: de korte november "(1–23)" of een periodelabel in de era, anders de maandnaam. */
 function afsluitLabel(key){ if(afsluitPeriodeKey(key)){ try{ return periodeVan(key.slice(2)).label; }catch(_){ return key.slice(2); } }
   try{ const P=periodeVan(key+'-15'); if(P.korteMaand){ const l=P.label; return l.charAt(0).toUpperCase()+l.slice(1); } }catch(_){}

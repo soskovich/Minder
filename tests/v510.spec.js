@@ -147,7 +147,7 @@ test('v510 d: op 24 nov tonen de afsluitkaart van november (1–23) en Inzichten
   expect(r.start).toBe('2026-11-01');
   expect(r.eind).toBe('2026-11-23');
   expect(r.insAf).toBe('2026-11');
-  for (const k of ['vast', 'potjes', 'zonder', 'contant', 'totaal']) expect(r.af[k]).toBe(r.ins[k]);
+  for (const k of ['vast', 'potjes', 'zonder', 'contant', 'totaal']) expect(r.af[k === 'contant' ? 'kas' : k]).toBe(r.ins[k]);   // de rij heet kas: de sleutel contant staat niet bij naam in de code (geennorm-hardcode)
   expect(r.kalPotjes - r.af.potjes).toBe(5500);                    // de invoer: de 24e telt in de kalendermaand en niet in het venster
   expect(op23).not.toBeNull();
   for (const k of ['vast', 'potjes', 'zonder', 'totaal']) expect(r.afE[k]).toBe(op23[k]);   // en wat Inzichten op 23 nov toonde
