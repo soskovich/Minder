@@ -1,0 +1,710 @@
+{
+ "bron": "ef1baa8 (v510)",
+ "dag": "2026-11-02",
+ "voor": {
+  "maand": {
+   "2026-03": {
+    "inkomen": {
+     "alles": 521600,
+     "onregelmatig": 0,
+     "norm": 521600
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 521600,
+     "spend": 16000,
+     "spendNorm": 16000,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 653700,
+     "byCat": {
+      "holding": 250000,
+      "intern": 403700,
+      "inkomen": 521600,
+      "verzekering": -16000
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 16000,
+    "opzij": 400000,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 16000,
+      "potjes": 0,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 16000,
+      "potjes": 0,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 16000,
+     "totaalR": 16000,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "~vast": 16000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 0,
+      "flows": 0,
+      "opn": 0,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-04": {
+    "inkomen": {
+     "alles": 521600,
+     "onregelmatig": 0,
+     "norm": 521600
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 521600,
+     "spend": 28000,
+     "spendNorm": 28000,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 250000,
+     "byCat": {
+      "holding": 250000,
+      "boodschappen": -18000,
+      "contant": -10000,
+      "inkomen": 521600,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 28000,
+    "opzij": 0,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 0,
+      "potjes": 28000,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 0,
+      "potjes": 28000,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 28000,
+     "totaalR": 28000,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "boodschappen": 18000,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-05": {
+    "inkomen": {
+     "alles": 521600,
+     "onregelmatig": 0,
+     "norm": 521600
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 521600,
+     "spend": 45500,
+     "spendNorm": 45500,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 250000,
+     "byCat": {
+      "holding": 250000,
+      "boodschappen": -26000,
+      "contant": -10000,
+      "shopping": -9500,
+      "inkomen": 521600,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 45500,
+    "opzij": 0,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 9500,
+      "potjes": 36000,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 9500,
+      "potjes": 36000,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 45500,
+     "totaalR": 45500,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "boodschappen": 26000,
+      "~vast": 9500,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-06": {
+    "inkomen": {
+     "alles": 521600,
+     "onregelmatig": 0,
+     "norm": 521600
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 521600,
+     "spend": 134900,
+     "spendNorm": 134900,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 210000,
+     "byCat": {
+      "holding": 210000,
+      "bankkosten": -300,
+      "boodschappen": -22000,
+      "vervoer": -62200,
+      "sport": -5000,
+      "contant": -10000,
+      "belasting": -3000,
+      "verzekering": -32400,
+      "inkomen": 521600,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 134900,
+    "opzij": 0,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 100700,
+      "potjes": 34200,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 100700,
+      "potjes": 34200,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 134900,
+     "totaalR": 134900,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "bankkosten": 300,
+      "boodschappen": 22000,
+      "vervoer": 1900,
+      "~vast": 100700,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-07": {
+    "inkomen": {
+     "alles": 1043200,
+     "onregelmatig": 0,
+     "norm": 1043200
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 1043200,
+     "spend": 383100,
+     "spendNorm": 383100,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 250000,
+     "byCat": {
+      "huur": -30000,
+      "holding": 250000,
+      "bankkosten": -300,
+      "boodschappen": -35000,
+      "vervoer": -115900,
+      "sport": -5000,
+      "contant": -10000,
+      "uiteten": -7000,
+      "belasting": -3000,
+      "vices": -2500,
+      "verzekering": -16400,
+      "overig": -120000,
+      "shopping": -38000,
+      "inkomen": 1043200,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 383100,
+    "opzij": 0,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 288400,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 288400,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 383100,
+     "totaalR": 383100,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "~vast": 288400,
+      "bankkosten": 300,
+      "boodschappen": 35000,
+      "vervoer": 1900,
+      "uiteten": 7000,
+      "vices": 2500,
+      "shopping": 38000,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-08": {
+    "inkomen": {
+     "alles": 1043200,
+     "onregelmatig": 0,
+     "norm": 1043200
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 1043200,
+     "spend": 401190,
+     "spendNorm": 401190,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 280000,
+     "byCat": {
+      "huur": -38590,
+      "holding": 280000,
+      "bankkosten": -300,
+      "boodschappen": -35000,
+      "vervoer": -115900,
+      "sport": -5000,
+      "contant": -10000,
+      "uiteten": -7000,
+      "belasting": -3000,
+      "vices": -2500,
+      "shopping": -47500,
+      "verzekering": -16400,
+      "overig": -120000,
+      "inkomen": 1043200,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 401190,
+    "opzij": 0,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 306490,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 306500,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 401190,
+     "totaalR": 401200,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "~vast": 306490,
+      "bankkosten": 300,
+      "boodschappen": 35000,
+      "vervoer": 1900,
+      "uiteten": 7000,
+      "vices": 2500,
+      "shopping": 38000,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-09": {
+    "inkomen": {
+     "alles": 1043200,
+     "onregelmatig": 0,
+     "norm": 1043200
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 1043200,
+     "spend": 412826,
+     "spendNorm": 412826,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 250000,
+     "byCat": {
+      "huur": -43726,
+      "holding": 250000,
+      "bankkosten": -300,
+      "boodschappen": -35000,
+      "vervoer": -115900,
+      "intern": 0,
+      "sport": -5000,
+      "contant": -10000,
+      "uiteten": -7000,
+      "belasting": -3000,
+      "vices": -2500,
+      "verzekering": -32400,
+      "overig": -120000,
+      "shopping": -38000,
+      "inkomen": 1043200
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 412826,
+    "opzij": -105000,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 318126,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 318100,
+      "potjes": 94700,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 412826,
+     "totaalR": 412800,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "~vast": 318126,
+      "bankkosten": 300,
+      "boodschappen": 35000,
+      "vervoer": 1900,
+      "uiteten": 7000,
+      "vices": 2500,
+      "shopping": 38000,
+      "contant": 10000
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 10000,
+      "flows": 10000,
+      "opn": 10000,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-10": {
+    "inkomen": {
+     "alles": 521600,
+     "onregelmatig": 0,
+     "norm": 521600
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 521600,
+     "spend": 221200,
+     "spendNorm": 221200,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 250000,
+     "byCat": {
+      "vervoer": -63600,
+      "abonnement": -100,
+      "holding": 250000,
+      "boodschappen": -1600,
+      "shopping": -700,
+      "uiteten": -5200,
+      "intern": 0,
+      "overig": -150000,
+      "inkomen": 521600
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 221200,
+    "opzij": -45000,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 203700,
+      "potjes": 17500,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 203700,
+      "potjes": 17500,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 221200,
+     "totaalR": 221200,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {
+      "vervoer": 9900,
+      "abonnement": 100,
+      "boodschappen": 1600,
+      "shopping": 700,
+      "uiteten": 5200,
+      "~vast": 203700
+     },
+     "tx": {},
+     "kas": {
+      "uitgegeven": 0,
+      "flows": 0,
+      "opn": 0,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   },
+   "2026-11": {
+    "inkomen": {
+     "alles": 250000,
+     "onregelmatig": 0,
+     "norm": 250000
+    },
+    "totals": {
+     "income": 521600,
+     "incomeAlles": 521600,
+     "onregelmatig": 0,
+     "detectedIncome": 250000,
+     "spend": 0,
+     "spendNorm": 0,
+     "buitenNorm": 0,
+     "persoonlijk": 0,
+     "uitReservering": 0,
+     "uitResCat": {},
+     "internal": 0,
+     "byCat": {
+      "inkomen": 250000,
+      "intern": 0
+     },
+     "budget": 372500,
+     "limit": 365120,
+     "potTotal": 372500
+    },
+    "potjes": 0,
+    "opzij": 250000,
+    "uitgegeven": {
+     "o": {},
+     "cent": {
+      "vast": 0,
+      "potjes": 0,
+      "zonder": 0,
+      "buiten": 0,
+      "eenmalig": 0,
+      "kasNieuw": 0
+     },
+     "r": {
+      "vast": 0,
+      "potjes": 0,
+      "zonder": 0,
+      "buiten": 0,
+      "kasNieuw": 0
+     },
+     "totaal": 0,
+     "totaalR": 0,
+     "eenmaligR": 0,
+     "reisAf": 0,
+     "per": {},
+     "tx": {},
+     "kas": {
+      "uitgegeven": 0,
+      "flows": 0,
+      "opn": 0,
+      "ontv": 0,
+      "stort": 0
+     }
+    },
+    "budget": 372500
+   }
+  },
+  "home": {
+   "incBinnen": 250000,
+   "incNorm": 521600,
+   "incDue": 271600,
+   "fixDue": 227400,
+   "safe": -54000,
+   "totaal": 648600
+  },
+  "vooruit": {
+   "budget": 372500,
+   "projectie": 321200
+  },
+  "opzijPeriode": {
+   "netto": 250000,
+   "doel": null
+  },
+  "periode": {
+   "start": "2026-10-24",
+   "eind": "2026-11-23"
+  }
+ },
+ "controle": [
+  "  mei: 95 + 360 + 0 + 0 + 7261 = 7716 tegen 5216 + 0 + 0 + 2500 + 0 = 7716: klopt",
+  "  jun: 1007 + 342 + 0 + 0 + 5967 = 7316 tegen 5216 + 0 + 0 + 2100 + 0 = 7316: klopt",
+  "  jul: 2884 + 947 + 0 + 0 + 9101 = 12932 tegen 10432 + 0 + 0 + 2500 + 0 = 12932: klopt",
+  "  aug: 3065 + 947 + 0 + 0 + 9220 = 13232 tegen 10432 + 0 + 0 + 2800 + 0 = 13232: klopt",
+  "  sep: 3181 + 947 + 0 + -1050 + 9854 = 12932 tegen 10432 + 0 + 0 + 2500 + 0 = 12932: klopt",
+  "  okt: 2037 + 175 + 0 + -450 + 5954 = 7716 tegen 5216 + 0 + 0 + 2500 + 0 = 7716: klopt"
+ ],
+ "cats": [
+  "2026-03-01 2500 holding",
+  "2026-04-01 2500 holding",
+  "2026-05-01 2500 holding",
+  "2026-06-01 2500 holding",
+  "2026-06-15 -400 holding",
+  "2026-07-01 2500 holding",
+  "2026-08-01 2500 holding",
+  "2026-08-10 300 holding",
+  "2026-09-01 2500 holding",
+  "2026-10-01 2500 holding",
+  "2026-11-02 2500 inkomen"
+ ]
+}

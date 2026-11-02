@@ -884,9 +884,10 @@ const CATS={
   intern:{name:'Eigen rekening / overboeking',icon:ICON('swap'),color:'#64748b',type:'internal'},
   // doorstroomposten: geen uitgave, maar een vordering (uitgeleend) of schuld (geleend)
   uitgeleend:{name:'Uitgeleend',icon:ICON('coins'),color:'#7cb8e8',type:'internal'},
-  geleend:{name:'Geleend',icon:ICON('card'),color:'#d8a657',type:'internal'},
-  /* v420: geld van en naar je holding naast de vaste maandbetaling: geen inkomen en geen uitgave (holdingKeys()). */
-  holding:{name:'Holding',icon:ICON('swap'),color:'#8fa3b8',type:'internal'}
+  geleend:{name:'Geleend',icon:ICON('card'),color:'#d8a657',type:'internal'}
+  /* v510b: DE CATEGORIE HOLDING VERVALT (besluit van de gebruiker, 2 nov). Wat er tot v510b op Holding stond (type internal, geen inkomen
+     en geen uitgave) staat op Eigen rekening / overboeking (intern), ook type internal, dus er verandert geen getal. catOf() leest een
+     oude 'holding' als intern (een back-up of een ongedaan maken van voor v510b), holdingCatMigreer() zet OVR en SET.rules een keer om. */
 };
 // keyword-regels (eerste match telt), werken op de hele :86:-tekst in hoofdletters
 /* v420: de categorie waarin een opname landt. Een plek voor die sleutel (geennorm-hardcode.spec.js staat hem alleen hier toe):
@@ -997,7 +998,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(vastDatumOpruim485()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} let f=false; try{ f=inkomenMigreer476(); }catch(_){} if(a||b||c||d||e||f) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(vastDatumOpruim485()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} let f=false; try{ f=inkomenMigreer476(); }catch(_){} if(a||b||c||d||e||f) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} try{ if(holdingCatMigreer()){ localStorage.setItem('minder_ovr',JSON.stringify(OVR)); localStorage.setItem('minder_set',JSON.stringify(SET)); } }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -1319,8 +1320,10 @@ function applyOwnAccounts(){
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
-    /* v421: van je holding is de terugkerende maandbetaling inkomen en al het andere Holding: geen inkomen en geen uitgave */
-    if(HK.size && HK.has(recurKey(t))){ t.autoCat=HM[recurKey(t)].ids.has(t.id)?'inkomen':'holding'; continue; }
+    /* v421: van je holding is de terugkerende maandbetaling inkomen en al het andere geen inkomen en geen uitgave. v510b: dat andere
+       staat op Eigen rekening / overboeking (de categorie Holding vervalt), en vanaf de maand die jij koos (holdingGeenInkomenVanaf())
+       is ook de maandbetaling geen inkomen meer (holdingMaandbetaling() laat die maanden weg). */
+    if(HK.size && HK.has(recurKey(t))){ t.autoCat=HM[recurKey(t)].ids.has(t.id)?'inkomen':'intern'; continue; }
     if((CATS[rc]||{}).type==='income'){ t.autoCat=rc; continue; }   // v509: inkomen EN rente overleven de eigen-rekening-detectie
     if(t.amount<0 && KV[recurKey(t)] && !isTikkie(t)){ t.autoCat=KV[recurKey(t)]; continue; }   // v425
     if(t.amount<0 && isTikkie(t) && KT[tikkiePersoon(t).toLowerCase()]){ t.autoCat=KT[tikkiePersoon(t).toLowerCase()]; continue; }   // v425
@@ -1391,6 +1394,36 @@ function holdingNaam(k){ return ((SET.kennis||{})['holding|'+k]||{}).partij||k; 
    bijschrijving van die maand. Wat die boven de mediaan uitkomt is "extra in salaris" (blok 20) en blijft inkomen. In een maand
    waarin een andere bron je salaris is (een nieuwe werkgever), is geen enkele bijschrijving van de holding salaris. */
 function holdingMaandbetaling(key){
+  const M=holdingMaandbetalingKern(key), vanaf=holdingGeenInkomenVanaf(key); if(!vanaf) return M;
+  /* v510b: VANAF DE GEKOZEN MAAND IS GEEN ENKELE BIJSCHRIJVING VAN DE HOLDING NOG DE MAANDBETALING. De groep en de mediaan worden
+     gerekend zoals tot v510b (over alle bijschrijvingen), en daarna vallen de maanden vanaf `vanaf` eruit; zo blijft een maand van
+     daarvoor precies wat hij was, en veranderen afgesloten maanden en de inkomensnorm niet achteraf. */
+  const ids=new Set(), extra={}, buiten={};
+  for(const id of M.ids){ const t=TX.find(u=>u.id===id); if(t && String(t.date).slice(0,7)<vanaf) ids.add(id); }
+  for(const [m,x] of Object.entries(M.extra||{})) if(m<vanaf) extra[m]=x;
+  for(const m of Object.keys(M.buiten||{})) if(m<vanaf) buiten[m]=true;
+  return Object.assign({}, M, {ids, extra, buiten, vanaf}); }
+/* v510b: de maand vanaf welke je holding je geen maandinkomen meer betaalt, jouw antwoord op de vraag in "Kloppen mijn gegevens?". EEN
+   BRON: het staat bij de holding zelf in de kennis (SET.kennis['holding|'+key].geenInkomenVanaf, 'jjjj-mm'), dus "Niet meer mijn holding"
+   of Vergeten haalt hem mee weg. Leeg: nog niet gekozen, en dan rekent alles zoals tot v510b. */
+function holdingGeenInkomenVanaf(key){ const E=((typeof SET!=='undefined' && SET.kennis)||{})['holding|'+key]; const v=E && E.geenInkomenVanaf; return /^\d{4}-\d{2}$/.test(String(v||''))?String(v):''; }
+/* v510b: een boeking van de aangewezen holding-partij (of een die tot v510b met de hand op Holding stond, holdingCatMigreer()) die op
+   Eigen rekening / overboeking staat: geen inkomen, geen uitgave, geen salaris en geen eigen-rekening-vraag. Blok 20 telt hun netto
+   apart, zoals tot v510b de categorie Holding (een bron per getal: deze toets). Geen memo: holdingZet() rekent vóór de eerste save(), en
+   de kennis is klein. */
+function holdingSleutels(){ let k=new Set(); try{ k=holdingKeys(); }catch(_){} const ids=new Set((((typeof SET!=='undefined' && SET.holdingCatWeg)||{}).ids)||[]);
+  return {k, ids}; }
+function holdingPartij(t){ return !!t && holdingSleutels().k.has(recurKey(t)); }
+function holdingIntern(t){ if(!t || catOf(t)!=='intern') return false; const H=holdingSleutels(); return H.k.has(recurKey(t)) || H.ids.has(t.id); }
+/* v510b: DE MIGRATIE VAN DE CATEGORIE HOLDING, een keer bij het laden (en opnieuw als een back-up hem terugzet): een eigen keuze (OVR) of
+   een regel (SET.rules) op Holding gaat naar Eigen rekening / overboeking. Beide zijn type internal, dus geen getal verandert; de ids
+   van de omgezette eigen keuzes staan in SET.holdingCatWeg.ids, zodat blok 20 ze bij de holding blijft tellen. */
+function holdingCatMigreer(){ let n=0, r=0; const W=SET.holdingCatWeg=SET.holdingCatWeg||{ids:[]}; W.ids=Array.isArray(W.ids)?W.ids:[];
+  for(const [id,c] of Object.entries(OVR||{})) if(c==='holding'){ OVR[id]='intern'; if(!W.ids.includes(id)) W.ids.push(id); n++; }
+  for(const R of (SET.rules||[])) if(R && R.cat==='holding'){ R.cat='intern'; r++; }
+  for(const t of (TX||[])) if(t && t.autoCat==='holding') t.autoCat='intern';
+  if(!W.op || n || r){ W.op=W.op||vandaagYMD(); W.ovr=(+W.ovr||0)+n; W.regels=(+W.regels||0)+r; return true; } return false; }
+function holdingMaandbetalingKern(key){
   const cr=TX.filter(t=>!t.pending && t.amount>0 && recurKey(t)===key);
   let best=null;
   for(const c of cr){ const cl=cr.filter(u=>Math.abs(u.amount-c.amount)<=HOLDING_MARGE*c.amount);
@@ -1432,9 +1465,9 @@ function holdingBlok(t){
   const kk=esc(k).replace(/'/g,"\\'");
   if(!is) return `<div class="row" data-holdingrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openHoldingVraag('${t.id}')">
       <span class="small" style="flex:1">Dit is <b>mijn holding</b> (eigen bedrijf)<span style="display:block;color:var(--mut2)">de terugkerende maandbetaling is inkomen, de rest geen inkomen en geen uitgave</span></span><span style="color:var(--teal);font-weight:700">›</span></div>`;
-  const M=holdingMaandbetaling(k), n=TX.filter(u=>recurKey(u)===k && catOf(u)==='holding').length;
+  const M=holdingMaandbetaling(k), n=TX.filter(u=>recurKey(u)===k && holdingIntern(u)).length, vf=holdingGeenInkomenVanaf(k);   // v510b: geen categorie Holding meer
   return `<div class="row" data-holdingrij="aan" style="padding:10px 0;gap:8px;border-top:1px solid var(--line)">
-      <span class="small" style="flex:1">Je <b>holding</b><span style="display:block;color:var(--mut2)">${M.mediaan!=null?`maandbetaling ${euro(M.mediaan)} is inkomen · `:'geen terugkerende maandbetaling · '}${n} ${n===1?'boeking':'boekingen'} bij Holding</span></span>
+      <span class="small" style="flex:1">Je <b>holding</b><span style="display:block;color:var(--mut2)">${vf?`geen maandinkomen meer vanaf ${esc(ymFull(vf))} ${vf.slice(0,4)} · `:M.mediaan!=null?`maandbetaling ${euro(M.mediaan)} is inkomen · `:'geen terugkerende maandbetaling · '}${n} ${n===1?'boeking':'boekingen'} op Eigen rekening</span></span>
       <span class="small" data-holdingweg style="color:var(--mut2);cursor:pointer" onclick="holdingWeg('${kk}','${t.id}')">Niet meer mijn holding</span></div>`;
 }
 /* Eerst het gevolg, dan de knop. Openen schrijft niets. v422: per boeking welke eigen categorie (OVR) vervalt, met datum,
@@ -1450,7 +1483,7 @@ function openHoldingVraag(id){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="holdingSheet">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(nm)} is je holding</div>
     <div class="small" style="line-height:1.5;margin:6px 0 10px">${M.mediaan!=null?`De terugkerende maandbetaling (${euro(M.mediaan)}, in ${M.maanden} maanden) blijft inkomen.${exTxt}`:'Er is geen terugkerende maandbetaling gevonden (een bedrag in minstens 2 maanden), dus niets blijft inkomen.'}
-      ${naar.length} andere ${naar.length===1?'boeking gaat':'boekingen gaan'} naar Holding: ${euro(bij)} erbij en ${euro(af)} eraf. Geen inkomen en geen uitgave.${ovr.length?` Je eigen categorie op ${ovr.length} ${ovr.length===1?'boeking vervalt':'boekingen vervalt'}; terugdraaien zet ${ovr.length===1?'hem':'ze'} terug:`:''}</div>
+      ${naar.length} andere ${naar.length===1?'boeking gaat':'boekingen gaan'} naar Eigen rekening / overboeking: ${euro(bij)} erbij en ${euro(af)} eraf. Geen inkomen en geen uitgave.${ovr.length?` Je eigen categorie op ${ovr.length} ${ovr.length===1?'boeking vervalt':'boekingen vervalt'}; terugdraaien zet ${ovr.length===1?'hem':'ze'} terug:`:''}</div>
     ${ovr.length?`<div data-holdingovrlijst style="margin:-4px 0 10px">${ovr.map(ovrRij).join('')}</div>`:''}
     <div class="row" style="gap:8px"><button class="btn" data-holdingzet onclick="holdingZet('${id}')">Dit is mijn holding</button><button class="btn sec" onclick="openSheet('${id}')">Terug</button></div></div>`;
   showSheetBg();
@@ -1467,6 +1500,33 @@ function holdingWeg(k, id){
   for(const [tid, c] of Object.entries(E.ovrVoor||{})) if(!OVR[tid] && TX.some(u=>u.id===tid)) OVR[tid]=c;
   delete SET.kennis['holding|'+k]; applyOwnAccounts(); save(); try{ render(); }catch(_){} if(id) openSheet(id);
 }
+/* v510b punt 1: "JE HOLDING BETAALT JE GEEN MAANDINKOMEN MEER. VANAF WELKE MAAND?" (besluit van de gebruiker, 2 nov: sinds september in
+   loondienst, de holding betaalt geen maandinkomen meer; gemeten op het toestel: EUR 2.500 van 2 nov stond op Inkomen, Home zei "Nog te
+   ontvangen EUR 2.715"). Een vraag per aangewezen holding, EENMALIG: zodra je een maand kiest staat hij bij de holding in de kennis
+   (geenInkomenVanaf) en komt hij niet terug. Met de bijschrijvingen van de holding van de laatste HOLDING_VRAAG_MAANDEN maanden (datum,
+   bedrag, huidige categorie) en per maand een knop; niets voorgeselecteerd, alle knoppen btn sec. Zonder bijschrijving in die maanden
+   geen vraag. */
+const HOLDING_VRAAG_MAANDEN=6;
+function holdingVanafLijst(k){ let van=thisYM(); for(let i=1;i<HOLDING_VRAAG_MAANDEN;i++) van=prevYM(van);
+  return TX.filter(t=>!t.pending && t.amount>0 && recurKey(t)===k && String(t.date).slice(0,7)>=van).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0); }
+function holdingVanafVragen(){ const out=[]; let HK=new Set(); try{ HK=holdingKeys(); }catch(_){ return out; }
+  for(const k of HK){ if(holdingGeenInkomenVanaf(k)) continue; const L=holdingVanafLijst(k); if(!L.length) continue; const t=L[L.length-1];
+    out.push({soort:'holdingvanaf', qkey:'holdingvanaf|'+k, key:k, naam:holdingNaam(k), lijst:L, t, ids:L.map(u=>u.id), bedrag:t.amount, datum:t.date}); }
+  return out; }
+function holdingVanafRij(q){ const kk=esc(q.key).replace(/'/g,"\\'"), mnd=[...new Set(q.lijst.map(t=>String(t.date).slice(0,7)))].sort();
+  const rij=t=>`<div class="row small" data-holdingvanafboeking="${esc(t.id)}" style="gap:8px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dagKort(t.date))} ${String(t.date).slice(0,4)} \u00b7 ${esc((CATS[catOf(t)]||{}).name||catOf(t))}</span><span style="white-space:nowrap">${euro(t.amount)}</span></div>`;
+  const knop=m=>{ const na=q.lijst.filter(t=>String(t.date).slice(0,7)>=m), ink=na.filter(t=>(CATS[catOf(t)]||{}).type==='income');
+    return `<button class="btn sec" data-holdingvanaf="${esc(m)}" style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="holdingVanafZet('${kk}','${esc(m)}')"><b>Vanaf ${esc(ymFull(m))} ${m.slice(0,4)}</b><span class="small muted" style="display:block;font-weight:400">${na.length} ${na.length===1?'bijschrijving':'bijschrijvingen'} (${euro(na.reduce((a,t)=>a+t.amount,0))}) ${na.length===1?'wordt':'worden'} Eigen rekening${ink.length?`, waarvan ${euro(ink.reduce((a,t)=>a+t.amount,0))} nu op Inkomen staat`:''} \u00b7 ervoor blijft alles zoals het was</span></button>`; };
+  return `<div data-gegevensvraag="holdingvanaf" data-holding="${esc(q.key)}" style="padding:9px 0;border-top:1px solid var(--line)"><div style="font-weight:600">Je holding betaalt je geen maandinkomen meer. Vanaf welke maand?</div>
+    <div class="small muted" style="margin:2px 0 4px">${esc(q.naam)} \u00b7 bijschrijvingen van de laatste ${HOLDING_VRAAG_MAANDEN} maanden, met hun categorie nu</div>
+    <div data-holdingvanaflijst>${q.lijst.map(rij).join('')}</div>${mnd.map(knop).join('')}</div>`; }
+/* Het antwoord: geenInkomenVanaf bij de holding in de kennis, daarna rekent applyOwnAccounts() de boekingen opnieuw. Ongedaan maken zet
+   de kennis van de holding terug en rekent opnieuw. */
+function holdingVanafZet(k, ym){ if(!/^\d{4}-\d{2}$/.test(String(ym||''))) return; holdingKeys(); const E=(SET.kennis||{})['holding|'+k]; if(!E) return;
+  const voor=JSON.parse(JSON.stringify(E));
+  E.geenInkomenVanaf=ym; E.geenInkomenOp=vandaagYMD(); E.wat=`Je holding (eigen bedrijf) \u00b7 geen maandinkomen meer vanaf ${ymFull(ym)} ${ym.slice(0,4)}`;   // zichtbaar in Wat Minder van jou weet
+  applyOwnAccounts(); save(); try{ buildAccMeta(); }catch(_){}
+  keuzeKlaar(`${holdingNaam(k)}: geen maandinkomen meer vanaf ${ymFull(ym)} ${ym.slice(0,4)}`, ()=>{ SET.kennis=SET.kennis||{}; SET.kennis['holding|'+k]=voor; applyOwnAccounts(); save(); try{ buildAccMeta(); }catch(_){} try{ render(); }catch(_){} }); }
 /* v420: EIGEN REKENING / OVERBOEKING ALLEEN MET BEWIJS, dezelfde regel als blok 20 (v419). Een 'intern'-boeking op een
    betaalrekening zonder eigen of gekoppelde IBAN, zonder bevestigde of herkende rekeningnaam, zonder je eigen naam en zonder
    tegenkant op een andere eigen rekening (zelfde bedrag, hooguit 3 dagen) is een overboeking aan een ander: 'persoonlijk'.
@@ -1480,7 +1540,8 @@ function eigenOverboekingBewijs(C){
   let sav=new Set(); try{ sav=new Set(n26SavingsAccounts()); }catch(_){}
   let ra=''; try{ ra=resAccId()||''; }catch(_){}
   const ander=t=>t.autoCat==='persoonlijk' && t.ruleCat==='persoonlijk' && (()=>{ const U=String(t.desc||'').toUpperCase(); return ANDER_KW.some(w=>U.includes(w)); })();
-  const kand=TX.filter(t=>!t.pending && !OVR[t.id] && !t.kasTel && (t.autoCat==='intern' || ander(t)) && !sav.has(t.acc) && !(ra && t.acc===ra));   // v450: een tellingboeking (geen bank) is geen overboeking
+  let HK=new Set(); try{ HK=holdingKeys(); }catch(_){}   // v510b: een boeking van je holding staat op intern (de categorie Holding vervalt) en is geen overboeking aan een ander
+  const kand=TX.filter(t=>!t.pending && !OVR[t.id] && !t.kasTel && (t.autoCat==='intern' || ander(t)) && !sav.has(t.acc) && !(ra && t.acc===ra) && !HK.has(recurKey(t)));   // v450: een tellingboeking (geen bank) is geen overboeking
   const paar=new Set(), opB=new Map();
   for(const u of TX){ const k=Math.round(u.amount*100); (opB.get(k)||opB.set(k,[]).get(k)).push(u); }
   for(let dd=0; dd<=3; dd++) for(const t of kand){ if(paar.has(t.id)) continue;
@@ -1962,7 +2023,7 @@ function parseCSV(text){
   return {txns:out, balances:{}};
 }
 function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return Math.abs(h).toString(36);}
-function catOf(t){ return OVR[t.id]||t.autoCat; }
+function catOf(t){ const c=OVR[t.id]||t.autoCat; return c==='holding'?'intern':c; }   // v510b: de categorie Holding vervalt
 // === centrale netto-uitgave-definitie (terugstorting binnen een uitgavencategorie verrekend) ===
 // isExpenseTx: hoort deze transactie tot een uitgavencategorie? netSpend: netto uitgave over een lijst
 // (positief bedrag = terugstorting, verlaagt de som). Nog nergens aangeroepen; puur additief.
@@ -4235,11 +4296,15 @@ const SAL_MIN_DEEL=0.5;
 function salarisKeysBekend(){ const S=new Set(); try{ const c=SET.salSplit; if(c && c.key) S.add(c.key); }catch(_){}
   try{ for(const k of Object.keys(SET.kennis||{})) if(k.indexOf('salaris|')===0 && k.length>8) S.add(k.slice(8)); }catch(_){}
   return S; }
-function salarisKandidaat(t, K){ if(!t || t.pending || !(t.amount>0)) return false; const c=catOf(t); if(!CATS[c] || CATS[c].type!=='income') return false;
+/* v510b punt 4: EEN BOEKING VAN DE AANGEWEZEN HOLDING IS NOOIT HET SALARIS (gemeten op het toestel 2 nov: EUR 2.500 van de holding stond op
+   Inkomen en viel alleen door de vangrail niet als salaris). Ook niet in een maand van voor de keuze uit punt 1: de salarisperiode volgt
+   je werkgever, een maandbetaling van de holding blijft wel inkomen. */
+function salarisKandidaat(t, K, H){ if(!t || t.pending || !(t.amount>0)) return false; const c=catOf(t); if(!CATS[c] || CATS[c].type!=='income') return false;
+  if((H||holdingSleutels().k).has(recurKey(t))) return false;
   if(c==='inkomen') return true; return (K||salarisKeysBekend()).has(recurKey(t)); }
 function salarisBetalingLaatst(ym){
   const K=salarisKeysBekend();
-  const L=TX.filter(t=>t.date.slice(0,7)<ym && salarisKandidaat(t,K)
+  const H=holdingSleutels().k, L=TX.filter(t=>t.date.slice(0,7)<ym && salarisKandidaat(t,K,H)
     && !(SET.onregelmatig && SET.onregelmatig[t.id]) && inkomenEenmalig(t)<t.amount-0.005);
   if(!L.length) return null;
   const top={}; for(const t of L){ const m=t.date.slice(0,7); if(!top[m] || t.amount>top[m].amount) top[m]=t; }
@@ -12792,6 +12857,7 @@ function salDagenTussen(a, b){ return Math.round((new Date(String(b).slice(0,10)
 function salWeekdag(ymd){ return new Date(String(ymd).slice(0,10)+'T12:00:00').getDay(); }
 /* de bron van je salaris: de partij van salarisBetalingLaatst() (blok 20), met zijn betalingen, een per dag */
 function salBron(){ let sl=null; try{ sl=salarisBetalingLaatst(nextYM(thisYM())); }catch(_){} if(!sl) return null;
+  if(holdingPartij(sl)) return null;   // v510b punt 4: de holding is nooit je salarisbron (salarisKandidaat() laat hem al weg; dit is de tweede lezer)
   const key=recurKey(sl), dagen=[...new Set(TX.filter(t=>!t.pending && t.amount>0 && recurKey(t)===key && (CATS[catOf(t)]||{}).type==='income' && !(SET.onregelmatig&&SET.onregelmatig[t.id])).map(t=>t.date.slice(0,10)))].sort();
   let naam=String(txNaam(sl)||'').replace(/[\s.,;:\u00b7-]+$/,'').trim(); if(!naam) naam=titleCase(cleanMerch(sl.name||'')||sl.name||key);   // zonder losse leestekens, zoals inkomenBron() (v365)
   return {sl, key, naam, dagen, acc:sl.acc}; }
@@ -27796,7 +27862,11 @@ function setCat(id,k){
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
     const kw=((cleanMerch(t.name)||t.name)||'').toUpperCase().trim().slice(0,28);
     if(kw){ SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat:k}); delete OVR[id];
-      save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); terug(); return; }
+      save(); TX.forEach(categorize); applyOwnAccounts();
+      /* v510b punt 3: JOUW KEUZE PER BOEKING WINT. Zet iets anders dan de regel deze boeking op een andere categorie (je holding: de
+         maandbetaling is inkomen, applyOwnAccounts() kijkt niet naar de regel), dan blijft jouw keuze op deze boeking staan. */
+      if(t.autoCat!==k){ OVR[id]=k; save(); }
+      buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); terug(); return; }
   }
   if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render(); terug();
 }
@@ -28091,7 +28161,7 @@ function cijferTerug(k){ if(!vorautTerugKern(k)) return; save(); buildAccMeta();
    drie dagen. Blok 20 noemt zo'n boeking "zonder tegenkant in je gegevens" (gemeld: 02-07 +EUR 250 op ABN ··0806 van Vincent Ernst
    Sumter). */
 function eigenRekKandidaat(t){ if(!t || t.pending || !t.acc || !(t.amount>0)) return false; const c=catOf(t);
-  if(!CATS[c] || CATS[c].type!=='internal' || c==='holding' || c===LOAN_CAT.uit || c===LOAN_CAT.in) return false;
+  if(!CATS[c] || CATS[c].type!=='internal' || holdingIntern(t) || c===LOAN_CAT.uit || c===LOAN_CAT.in) return false;   // v510b: je holding (tot v510b de categorie Holding)
   if(kennisGet('eigenrek|'+t.id)) return false;
   const R=kennisGet('regel|eigenrek|'+benoemPartij(t).toLowerCase()); if(R && R.keuze==='altijd') return false;   // Ja, altijd: deze partij is een eigen rekening
   if(!eigenNaamIn(t)) return false;
@@ -29104,13 +29174,13 @@ function gegevensVragen(){ const out=[];
   for(const v of benoemVragen()) out.push(Object.assign({}, v, {soort:'benoem', laag:v.laag, qkey:'benoemtx|'+v.t.id, datum:v.t.date}));   // v424
   try{ out.push(...salAfwijkVragen()); }catch(_){}   // v435: salaris op een andere dag dan de regel
   /* v425: wat Minder alleen van jou kan weten */
-  const bron=[buitenVragen, kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen, eigenRekVragen, eigenRekSparenVragen, eenmaligTerugVragen, belegVwVragen, vvVragen, inlegVragen];   // v510 punt 1: inleg gemeten tegen ingevuld, en de start van een geplande inleg   // v463: twee nieuwe vragen; v501: de beleggen-voorwaarden per bezitting
+  const bron=[holdingVanafVragen, buitenVragen, kennisUitVragen, kennisInVragen, kennisVastVragen, kennisVervangerVragen, kennisWoningVragen, kennisTikkieVragen, kennisContantVragen, eigenRekVragen, eigenRekSparenVragen, eenmaligTerugVragen, belegVwVragen, vvVragen, inlegVragen];   // v510 punt 1: inleg gemeten tegen ingevuld, en de start van een geplande inleg   // v463: twee nieuwe vragen; v501: de beleggen-voorwaarden per bezitting
   for(const f of bron){ try{ out.push(...f()); }catch(_){} }
   /* v427: EEN BOEKING IS HOOGUIT EEN VRAAG. Een boeking waar je al iets over zei (een antwoord met die boeking erin) vraagt niets
      meer; een Tikkie krijgt de Tikkie-vraag en niet ook "wat was dit?"; en een bedrag dat dezelfde dag even groot terugkomt van
      dezelfde persoon (kennisTerugZelfdeDag()) vraagt niets, aan geen van beide kanten. */
   const gedekt=new Set(); for(const E of Object.values(SET.kennis||{})) if(E && E.tx) for(const id of (Array.isArray(E.tx)?E.tx:Object.keys(E.tx))) gedekt.add(id);
-  const voor=q=>(q.soort==='vastverw'||q.soort==='inlegstart')?-2:q.soort==='voraut'?-1:q.soort==='tikkie'?0:1, gezien=new Set(), o=[];   // v508: de vraag over een verwachte vaste last claimt zijn boeking eerst   // v457: de voorautorisatie eerst, hij claimt drie boekingen
+  const voor=q=>q.soort==='holdingvanaf'?-3:(q.soort==='vastverw'||q.soort==='inlegstart')?-2:q.soort==='voraut'?-1:q.soort==='tikkie'?0:1, gezien=new Set(), o=[];   // v508: de vraag over een verwachte vaste last claimt zijn boeking eerst   // v457: de voorautorisatie eerst, hij claimt drie boekingen
   for(const q of out.slice().sort((a,b)=>voor(a)-voor(b))){ const t=q.t; if(t && t.id){
       if(gezien.has(t.id) || kennisTerugZelfdeDag(t)) continue;
       if(gedekt.has(t.id) && !['lening','restant','poststop','eigenreksparen','eenmterug','belegvw'].includes(q.soort) && !(q.soort==='benoem' && q.laag==='a')) continue;
@@ -29894,6 +29964,7 @@ function openGegevensVragen(focus){
   const rij0=q=>{ if(q.soort==='benoem') return benoemVraagRij(q);   // v424
     if(q.soort==='vastverw') return vvVraagRij(q);   // v508 (punt 6)
     if(q.soort==='inlegafwijk' || q.soort==='inlegstart') return inlegVraagRij(q);   // v510 punt 1
+    if(q.soort==='holdingvanaf') return holdingVanafRij(q);   // v510b punt 1
     if(['eigenrek','eigenreksparen','eenmterug','belegvw'].includes(q.soort)) return fase3VraagRij(q);   // v463; v501 belegvw
     if(['uit','in','vastink','vast','vervanger','vervangerwie','woning','tikkie','opname','buiten','kwijt','voraut'].includes(q.soort)) return kennisVraagRij(q);   // v425, v456 kwijt, v457 voraut
     if(q.soort==='wissel') return `<div data-gegevensvraag="wissel" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openWisselVraag()"><div class="row" style="gap:8px"><span style="flex:1;min-width:0;font-weight:600">${q.n} ${q.n===1?'boeking staat':'boekingen staan'} op eigen rekening zonder bewijs</span><span style="color:var(--teal);font-weight:700">›</span></div><div class="small muted" style="margin-top:2px">zonder eigen IBAN, je eigen naam of een tegenkant zijn het overboekingen aan een ander · bekijk en bevestig</div></div>`;
@@ -34524,7 +34595,7 @@ const DIAG_SAL_MAANDEN=6;
 /* v421: de groep van een boeking zoals blok 20 hem telt (vast, potjes, zonder potje, buiten, inkomen of een eigen groep). */
 function diagGroep(t, B){ const c=catOf(t), m=CATS[c]||{};
   if(m.type==='income') return 'inkomen';
-  if(m.type!=='expense') return c==='holding'?'holding':(c===LOAN_CAT.uit||c===LOAN_CAT.in)?'uitgeleend':'intern (geen uitgave)';
+  if(m.type!=='expense') return holdingIntern(t)?'holding':(c===LOAN_CAT.uit||c===LOAN_CAT.in)?'uitgeleend':'intern (geen uitgave)';   // v510b: holdingIntern()
   if(geenNormTx(t) || !isUitgave(t,B)) return 'buiten vast en potjes';
   if(isFixed(t) || potHeelVast(c)) return 'vast';
   return ((+B[c]||0)>0 || (c===CONTANT_CAT && contantPotje())) ? 'potjes (variabel)' : 'zonder potje (variabel)'; }
@@ -34647,7 +34718,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
        contant, al het andere een persoonlijke overboeking. Beide staan onder 'buiten vast en potjes'. */
     const belIds=new Set((()=>{ try{ return beleggingsTx(ym); }catch(_){ return []; } })().map(t=>t.id));
     const X=new Set(tx.filter(t=>belIds.has(t.id) || (!sav.size && catOf(t)==='sparen' && t.amount<0)).map(t=>t.id));
-    const apart=t=>{ const c=catOf(t); return c==='holding' || c===LOAN_CAT.uit || c===LOAN_CAT.in; };   // v420: eigen groepen
+    const apart=t=>{ const c=catOf(t); return holdingIntern(t) || c===LOAN_CAT.uit || c===LOAN_CAT.in; };   // v420: eigen groepen; v510b: de holding staat op intern (holdingIntern(), tot v510b de categorie Holding)
     const intTx=tx.filter(t=>(CATS[catOf(t)]||{}).type==='internal' && !X.has(t.id) && !apart(t) && !(t.kasTel && !t.acc)), paar=new Map();   // v450: een tellingboeking van voor de grens is geen bankboeking
     for(let dd=0; dd<=3; dd++) for(const t of intTx){ if(paar.has(t.id)) continue;
       const u=intTx.find(u=>u!==t && !paar.has(u.id) && u.acc!==t.acc && Math.abs(u.amount+t.amount)<0.005 && Math.abs(new Date(u.date)-new Date(t.date))===dd*864e5);
@@ -34669,7 +34740,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
        netto apart. */
     const holdTx=[], leenTx=[]; let holdNet=0, leenNet=0;
     for(const t of tx){ const c=catOf(t);
-      if(c==='holding'){ holdNet+=t.amount; holdTx.push({t, v:t.amount}); }
+      if(holdingIntern(t)){ holdNet+=t.amount; holdTx.push({t, v:t.amount}); }   // v510b: een bron, dezelfde toets als apart()
       else if(c===LOAN_CAT.uit || c===LOAN_CAT.in){ leenNet+=t.amount; leenTx.push(t); } }
     /* v421: contant opgenomen in die maand, met de opnames erachter */
     const opn=tx.filter(t=>t.amount<0 && isOpnameTx(t)), opnSom=opn.reduce((a,t)=>a-t.amount,0);
@@ -35163,10 +35234,12 @@ function diagSalarisVerdeling(){
      staat hier, geen inkomen en geen uitgave, per maand netto met de boekingen erachter. */
   sek('4 opzij');
   if(!run){ const HK=holdingKeys();
-    L.push('', `HOLDING (v421)${HK.size?': '+[...HK].map(k=>holdingNaam(k)).join(', '):''}: geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
+    L.push('', `HOLDING (v421/v510b)${HK.size?': '+[...HK].map(k=>holdingNaam(k)).join(', '):''}: op Eigen rekening / overboeking (de categorie Holding vervalt, v510b), geen inkomen en geen uitgave, netto per maand (+ = naar jou)`);
+    { const W=SET.holdingCatWeg||{}; if(W.op) L.push(`  categorie Holding vervallen (v510b, ${W.op}): ${+W.ovr||0} eigen ${(+W.ovr||0)===1?'keuze':'keuzes'} en ${+W.regels||0} ${(+W.regels||0)===1?'regel':'regels'} omgezet naar Eigen rekening / overboeking; beide type internal, dus geen getal veranderd`); }
     if(!HK.size) L.push('  geen holding aangewezen: kies bij een boeking van je holding "Dit is mijn holding"');
-    else { for(const k of HK){ const M=holdingMaandbetaling(k);
-        L.push(`  terugkerende maandbetaling: ${M.mediaan!=null?`mediaan ${c2(M.mediaan)} in ${M.maanden} maanden, telt als inkomen (punt 1)`:'niet gevonden (geen bedrag in minstens 2 maanden), alles staat hier'}`);
+    else { for(const k of HK){ const M=holdingMaandbetaling(k), vf=holdingGeenInkomenVanaf(k);
+        L.push(`  terugkerende maandbetaling: ${M.mediaan!=null?`mediaan ${c2(M.mediaan)} in ${M.maanden} maanden, telt als inkomen (punt 1)${vf?` tot ${MN(vf)}`:''}`:'niet gevonden (geen bedrag in minstens 2 maanden), alles staat hier'}`);
+        L.push(`  geen maandinkomen meer vanaf (v510b, jouw keuze): ${vf?ymFull(vf)+' '+vf.slice(0,4)+' · vanaf die maand is elke bij- en afschrijving van de holding Eigen rekening / overboeking':'nog niet gekozen (vraag in Kloppen mijn gegevens?)'}`);
         /* v422: in een maand waarin de holding je salarisbron is telt de grootste bijschrijving als salaris als er geen in de marge
            viel; wat die boven de mediaan uitkomt is extra in salaris en blijft inkomen */
         if(M.mediaan!=null){ const ex=Object.values(M.extra||{}).sort((a,b)=>a.t.date<b.t.date?-1:1);
@@ -35203,7 +35276,7 @@ function diagSalarisVerdeling(){
     L.push(`  ${MN(r.ym)}${r===Rc?'*':''}: ${p(tot(r,'vast'))} | ${p(tot(r,'pot'))} | ${r===Rc?'loopt nog':p(tot(r,'opzij'))}${s>0?'':' (geen salaris)'}`); }
   /* de controle: links wat er gemeten naar vast, potjes, buiten en opzij ging plus wat er op je betaalrekeningen bleef, rechts
      wat er binnenkwam. Alleen de afgeronde maanden: verwacht is geen meting. */
-  L.push('', 'CONTROLE (afgeronde maanden): vast + potjes + buiten + netto opzij + netto op je betaalrekeningen = salaris + reiskosten + overige inkomsten + holding netto + uitgeleend netto (reiskosten: de vergoeding uit je salarisstorting, v473; geen inkomen, wel geld op je rekening)');
+  L.push('', 'CONTROLE (afgeronde maanden): vast + potjes + buiten + netto opzij + netto op je betaalrekeningen = salaris + reiskosten + overige inkomsten + holding netto + uitgeleend netto (reiskosten: de vergoeding uit je salarisstorting, v473; geen inkomen, wel geld op je rekening; holding netto: de boekingen van je holding op Eigen rekening / overboeking, v510b)');
   L.push('  (de rest uit punt 5 rekent alleen met het salaris; hier staat ernaast wat er gemeten op je betaalrekeningen bleef, de rekeningen buiten je spaar- en reserveringsrekening)');
   /* v421: BUITEN VAST EN POTJES KAN NIET NEGATIEF ZIJN (besluit van de gebruiker op v419). Is het dat toch, dan staat er een
      ontvangst in die bij een andere groep hoort: de boeking staat hier, bij de controle, met de groep die ontbreekt. */

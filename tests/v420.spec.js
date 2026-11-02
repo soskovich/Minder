@@ -19,9 +19,10 @@ test.describe('v420', () => {
       { date: '2026-08-03', amount: -5000, name: 'Ernst Management Holding' },
       { date: '2026-08-26', amount: 1500, name: 'Ernst Management Holding' }]);
     await page.evaluate(id => { holdingZet(id); }, b);
-    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), b)).toBe('holding');
-    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), a)).toBe('holding');   // geen bedrag in 2 maanden: geen maandbetaling
-    expect(await page.evaluate(() => (CATS.holding || {}).type)).toBe('internal');
+    /* v510b: de categorie Holding vervalt; wat er stond staat op Eigen rekening / overboeking (intern, ook type internal) */
+    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), b)).toBe('intern');
+    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), a)).toBe('intern');   // geen bedrag in 2 maanden: geen maandbetaling
+    expect(await page.evaluate(() => [(CATS.intern || {}).type, 'holding' in CATS])).toEqual(['internal', false]);
     const L = await lees(page), H = sectie(L, 'HOLDING');
     expect(H[0]).toContain('Ernst Management Holding');
     expect(H.find(x => x.startsWith('  netto:'))).toContain('jul 5000 · aug -3500');

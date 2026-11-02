@@ -43,7 +43,7 @@ test.describe('v426', () => {
     /* de holding heeft geen tweede opslag meer: de oude plek is weg, en de vlag leest SET.kennis */
     expect(await page.evaluate(() => [SET.holdingPartij || null, [...holdingKeys()]])).toEqual([null, ['ERNST MANAGEMENT HOL']]);
     const h5000 = await tid(page, '2026-07-31', 5000);
-    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), h5000)).toBe('holding');
+    expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), h5000)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening
     expect(await page.evaluate(id => { const E = SET.kennis['holding|ERNST MANAGEMENT HOL']; delete SET.kennis['holding|ERNST MANAGEMENT HOL']; applyOwnAccounts(); const c = catOf(TX.find(t => t.id === id)); SET.kennis['holding|ERNST MANAGEMENT HOL'] = E; applyOwnAccounts(); return c; }, h5000)).toBe('inkomen');
     /* een back-up met de oude plek gaat er een keer in op */
     expect(await page.evaluate(() => { delete SET.kennis['holding|ERNST MANAGEMENT HOL']; SET.holdingPartij = { 'ERNST MANAGEMENT HOL': { op: '2026-10-10', naam: 'Ernst Management Holding', ovrVoor: {} } };

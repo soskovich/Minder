@@ -18,9 +18,9 @@ test.describe('v422', () => {
     expect(await cat(page, '2026-05-24', 5637.28)).toBe('inkomen');
     expect(await cat(page, '2026-08-24', 4007.21)).toBe('inkomen');
     expect(await cat(page, '2026-07-24', 3463.86)).toBe('inkomen');
-    expect(await cat(page, '2026-07-31', 5000)).toBe('holding');   // groter, maar juli heeft een salaris in de marge
-    expect(await cat(page, '2026-08-26', 1500)).toBe('holding');
-    expect(await cat(page, '2026-09-07', 2491.71)).toBe('holding');   // september: SKF is de salarisbron
+    expect(await cat(page, '2026-07-31', 5000)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening   // groter, maar juli heeft een salaris in de marge
+    expect(await cat(page, '2026-08-26', 1500)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening
+    expect(await cat(page, '2026-09-07', 2491.71)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening   // september: SKF is de salarisbron
     const L = await lees(page), H = sectie(L, 'HOLDING');
     expect(H).toContain('  extra in salaris (v422, buiten de marge van 10%, de grootste bijschrijving van die maand): mei 24-05 5637.28 = mediaan 3463.86 + extra 2173.42, aug 24-08 4007.21 = mediaan 3463.86 + extra 543.35');
     expect(H).toContain('  maanden met een andere salarisbron (alle bijschrijvingen van de holding staan hier): sep');
@@ -38,7 +38,7 @@ test.describe('v422', () => {
     expect(sectie(await lees(page), 'HOLDING')).toContain('  extra in salaris (v422, buiten de marge van 10%, de grootste bijschrijving van die maand): geen');
     /* SKF betaalt in september alleen (een maand): toch de salarisbron, want hij is de bron van je laatste salarisbetaling */
     expect(await page.evaluate(() => TX.filter(t => recurKey(t) === 'SKF' && t.amount > 0).map(t => t.date.slice(0, 7)))).toEqual(['2026-09']);
-    expect(await cat(page, '2026-09-07', 2491.71)).toBe('holding');
+    expect(await cat(page, '2026-09-07', 2491.71)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening
     expect(await page.evaluate(() => holdingSalarisMaand('ERNST MANAGEMENT HOL', '2026-09', 2491.71))).toBe(false);
     expect(await page.evaluate(() => holdingSalarisMaand('ERNST MANAGEMENT HOL', '2026-07', 5000))).toBe(true);
     /* een bijschrijving die groter is dan wat de andere bron die maand betaalt houdt de holding als bron */

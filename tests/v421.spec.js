@@ -17,11 +17,11 @@ test.describe('v421', () => {
     const sheet = await page.evaluate(() => { const t = TX.find(t => t.date === '2026-07-31' && /ERNST/.test(t.desc)); openSheet(t.id);
       const r = document.querySelector('[data-holdingrij]'); r.click(); return document.querySelector('#holdingSheet').innerText; });
     expect(sheet).toContain('€3.463,86, in 4 maanden');   // v422: mei en augustus vallen buiten de marge en tellen als grootste bijschrijving
-    expect(sheet).toContain('8 andere boekingen gaan naar Holding');
+    expect(sheet).toContain('8 andere boekingen gaan naar Eigen rekening / overboeking');   // v510b: de categorie Holding vervalt
     expect(sheet).toContain('Je eigen categorie op 1 boeking vervalt');
     expect(await page.evaluate(() => [...holdingKeys()].length)).toBe(0);   // openen schrijft niets (v426: de holding staat in SET.kennis)
     await page.evaluate(() => document.querySelector('[data-holdingzet]').click());
-    for (const [d, a] of HOLD) expect(await cat(page, d, a)).toBe('holding');
+    for (const [d, a] of HOLD) expect(await cat(page, d, a)).toBe('intern');   // v510b: Holding vervalt, Eigen rekening
     expect(await page.evaluate(() => TX.filter(t => /ERNST/.test(t.desc) && t.amount > 3000 && t.amount < 3600).every(t => catOf(t) === 'inkomen'))).toBe(true);
     expect(await page.evaluate(() => document.querySelector('[data-holdingrij="aan"]').innerText)).toContain('maandbetaling €3.463,86 is inkomen');
     await page.evaluate(() => document.querySelector('[data-holdingweg]').click());
@@ -134,7 +134,7 @@ test.describe('v421', () => {
     expect(L[i + 4]).toBe('      verwacht totaal: v419 2774 -> nu 2774 (+0)');
     const rij = L.slice(i, i + 20);
     expect(rij.join('\n')).not.toContain('Tikkie');
-    expect(rij).toContain('        jul 31-07 5000.00 Ernst Management Holding: inkomen [Inkomen] -> holding [Holding]');
+    expect(rij).toContain('        jul 31-07 5000.00 Ernst Management Holding: inkomen [Inkomen] -> holding [Eigen rekening / overboeking]'   /* v510b: de groep heet nog holding, de categorie is Eigen rekening */);
     expect(await page.evaluate(() => window._setIt)).toBe(0);
     const na = await page.evaluate(() => ({ ls: localStorage.getItem('minder_set') + localStorage.getItem('minder_tx'), cats: TX.map(t => catOf(t)).join(), ovr: JSON.stringify(OVR) }));
     expect(na).toEqual(voor);
