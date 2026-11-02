@@ -83,7 +83,7 @@ test.describe('5 · Kiezen opgeschoond', () => {
 test.describe('6 · beleggen', () => {
   test('de meter noemt de voorwaarde die ontbreekt', async ({ page }) => {
     await grip(page, { set: PEAKS }); await inleg(page, '2026-09-29');
-    expect(await tekst(page, '[data-meter="beleggen"] [data-metermist]')).toBe('reserveringen nov open');
+    expect(await tekst(page, '[data-meter="beleggen"] [data-metermist]')).toBe('reserveringen nov 2026 open');  // v510 punt 2: maand + jaar
   });
   test('inleg die loopt maar deze maand nog niet geboekt is, geeft het patroon "Beleggen vóór fundament"', async ({ page }) => {
     await grip(page, { set: PEAKS }); await inleg(page, '2026-09-29');

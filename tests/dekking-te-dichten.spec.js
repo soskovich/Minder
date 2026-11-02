@@ -66,9 +66,9 @@ test.describe('a · EUR 37 en EUR 299 in november, op 3 oktober', () => {
     expect(r.DD.maanden).toBe(2);
     expect(r.DD.perMaand).toBe(131);
     expect(r.status).toBe('let op');
-    expect(r.eenheid).toContain('€131 per maand tot november');
+    expect(r.eenheid).toContain('€131 per maand tot nov 2026');  // v510 punt 2: maand + jaar
     expect(r.perMaandTot).toEqual({ bedrag: 131, maand: NOV });
-    expect(r.gevolg).toContain('Dat is €131 per maand tot november, deze maand meegeteld.');
+    expect(r.gevolg).toContain('Dat is €131 per maand tot november 2026, deze maand meegeteld.');
   });
   test('op het scherm: een amber tegel (aandacht) en geen rode (beslissing)', async ({ page }) => {
     await boot(page);
@@ -76,7 +76,7 @@ test.describe('a · EUR 37 en EUR 299 in november, op 3 oktober', () => {
     expect(r.kleur).toBe('amber');
     expect(r.sheet).toContain('Dekking reserveringen');
     // v324: het bedrag en zijn eenheid op twee regels, nu in de sheet achter de tegel
-    expect(r.sheet).toMatch(/€131\s+per maand tot november/);
+    expect(r.sheet).toMatch(/€131\s+per maand tot nov 2026/);
   });
 });
 
@@ -98,7 +98,7 @@ test.describe('c · elke latere post is aandacht, hoe groot het gat ook is', () 
     const r = await lees(page);
     expect(r.gat.tekort).toBe(29963);
     expect(r.status).toBe('let op');
-    expect(r.eenheid).toContain('€14.982 per maand tot november');
+    expect(r.eenheid).toContain('€14.982 per maand tot nov 2026');
   });
   test('een post ver weg deelt over alle maanden tot dan, deze meegeteld', async ({ page }) => {
     await boot(page, { maand: '2027-01' });

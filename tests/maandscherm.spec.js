@@ -343,7 +343,7 @@ test.describe('c2 · dekking van een eenmalige post (v131, herzien bij v317)', (
        DAARMEE ONBEREIKBAAR: een tekort valt in de lopende maand, en daar draagt elke post zijn hele
        bedrag in de eis, dus `graad` is er nooit null. De eis zelf (hierboven) staat nog. */
     expect(d.status).toBe('let op');
-    expect(d.eenheid).toMatch(/^in je pot · €10 per maand tot \w+$/);
+    expect(d.eenheid).toMatch(/^in je pot · €10 per maand tot \w+ \d{4}$/);
   });
 
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {

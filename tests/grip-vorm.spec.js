@@ -262,7 +262,7 @@ test('e: de tegels dragen hun maatstaf uit hun eigen bron', async ({ page }) => 
   expect(r.eenheden.buffer).not.toMatch(/je richt staat/);   // v322: het woord is afgemaakt
   expect(r.subs.dekking).toBe(`verwacht: €${POST} in ${new Intl.DateTimeFormat('nl-NL', { month: 'long', year: 'numeric' }).format(new Date(PLUS(2) + '-01'))}`);
   // v344: zonder gat zegt de tegel tot wanneer je gedekt bent, en niet wat de eerste post kost
-  expect(r.T.dekking).toBe(`gedekt t/m ${new Intl.DateTimeFormat('nl-NL', { month: 'long' }).format(new Date(r.gedektTot + '-01'))}`);
+  expect(r.T.dekking).toBe(`gedekt t/m ${['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][+r.gedektTot.slice(5, 7) - 1]} ${r.gedektTot.slice(0, 4)}`);  // v510 punt 2: maand + jaar
   expect(r.waarden.dekking).toBe(`€${POTSTAND}`);
   expect(r.eenheden.dekking).toBe(`in je pot · €${BLIJFT} blijft over`);
   expect(r.benodigdeStand).not.toBe(POST);

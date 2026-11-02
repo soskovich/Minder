@@ -65,7 +65,7 @@ test.describe('a · het gemelde geval onder Vraagt aandacht', () => {
     expect(k.rij).toBe(true);
     expect(k.naam).toBe('Dekking reserveringen');
     expect(k.oorzaak).toBe('Boetes cjib van €299 in november 2026');
-    expect(k.bedrag).toBe('€131 per maand tot november');
+    expect(k.bedrag).toBe('€131 per maand tot nov 2026');  // v510 punt 2: maand + jaar
     expect(k.onclick).toBe("closeSheet();openMaandBeslis('dekking')");   // v387: vanuit de sheet van de Beleggen-meter
   });
   test('de alinea staat niet op Grip maar in de sheet (verplaatsen is geen kopiëren)', async ({ page }) => {
@@ -76,10 +76,10 @@ test.describe('a · het gemelde geval onder Vraagt aandacht', () => {
     await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
     const sh = await page.locator('#sheet').innerText();
     expect(sh).toContain('Je pot dekt de eerstvolgende post nu al niet');
-    expect(sh).toContain('Dat is €131 per maand tot november, deze maand meegeteld.');
+    expect(sh).toContain('Dat is €131 per maand tot november 2026, deze maand meegeteld.');
     // het bedrag van de sheet is dat van de regel, uit dezelfde bron
     const sb = await page.locator('#sheet [data-sheetbedrag="dekking"]').innerText();
-    expect(sb.replace(/\s+/g, ' ').trim()).toBe('€131 per maand tot november');
+    expect(sb.replace(/\s+/g, ' ').trim()).toBe('€131 per maand tot nov 2026');  // v510 punt 2: maand + jaar
     // een aandacht-regel vraagt geen keuze, dus er is geen gespreksknop; de route naar de editor blijft
     expect(await page.locator('#sheet [data-beslisknop]').count()).toBe(0);
     expect(sh).toContain('Dekking reserveringen aanpassen');
@@ -100,7 +100,7 @@ test.describe('b · van beslissing naar aandacht behoudt de vorm', () => {
     expect(later.stip).not.toBe(nu.stip);             // rood tegen amber
     expect([nu.kleur, later.kleur]).toEqual(['rood', 'amber']);
     expect(nu.bedrag).toBe('€262 tekort');            // de stand bij een post in de lopende maand
-    expect(later.bedrag).toBe('€131 per maand tot november');
+    expect(later.bedrag).toBe('€131 per maand tot nov 2026');  // v510 punt 2: maand + jaar
   });
   test('een geaccepteerde beslissing schuift naar aandacht en houdt haar tegel en stand', async ({ page }) => {
     await boot(page, '2026-10');

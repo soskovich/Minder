@@ -13,6 +13,7 @@ const CUR = ym(now);
 const over = (n) => ym(new Date(now.getFullYear(), now.getMonth() + n, 1));
 const MFULL = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 const mnd = (n) => MFULL[new Date(now.getFullYear(), now.getMonth() + n, 1).getMonth()];
+const mndKort = (n) => { const d = new Date(now.getFullYear(), now.getMonth() + n, 1); return ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][d.getMonth()] + ' ' + d.getFullYear(); };
 const MAIN = 'NL01MAIN0000001111';
 const RES = 'NL01RESV0000002222';
 
@@ -139,7 +140,7 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     const rij = await page.evaluate(() => document.querySelector('[data-resnodig]').innerText.replace(/\s+/g, ' '));
     expect(rij).toBe('Nog nodig per maand niets tot de volgende post');
     const t = await tegel(page);
-    expect(t.tekst).toContain(`€299 gedekt t/m ${mnd(1)}`);   // v387: de regel in de sheet van de Beleggen-meter
+    expect(t.tekst).toContain(`€299 gedekt t/m ${mndKort(1)}`);  // v510 punt 2: maand + jaar   // v387: de regel in de sheet van de Beleggen-meter
     expect(t.tekst).not.toContain('nodig');
   });
 

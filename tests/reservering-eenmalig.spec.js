@@ -131,7 +131,7 @@ test.describe('b · Plan en Grip lezen dezelfde bron', () => {
     expect(r.zin).toContain('€299');
     expect(r.zin).toContain('€199');
     // v323: de eenheid draagt het gat per maand uit dezelfde dekking(12): 199 over oktober en november
-    expect(r.eenheid).toContain('€100 per maand tot november');
+    expect(r.eenheid).toContain('€100 per maand tot nov 2026');
   });
 
   test('zonder de reparatie zou Grip zwijgen waar Plan een tekort toont', async ({ page }) => {
