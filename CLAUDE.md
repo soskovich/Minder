@@ -146,7 +146,12 @@ genoemde versietag.)*
   `isFixed()` leest `vvKoppelSleutels()`; een voorbeeldboeking is nooit een gegevensvraag. (8) De rij van november (1–23) en een periode
   in "Verhouding met je salaris" lezen `uitgegevenStand()` (zoals de afsluitkaart); de overgangsmaand krijgt geen budgettegel, en "€X
   onder budget" staat zonder minteken. (9) `gegevensVraagKort()` kent elke soort (terugval: bedrag en partij, nooit de sleutel); de
-  kasvraag noemt "november (1–23)"; de tabel past zonder scroll (`euroK`, `verhoudingRijNaam()`). Spec `v511.spec.js` (9 tests).
+  kasvraag noemt "november (1–23)"; de tabel past zonder scroll (`euroK`, `verhoudingRijNaam()`). AANVULLING (Bekijk als 1 dec): (2b) een
+  keuze uit de vorige maand staat bij "Mee uit vorige periode" en nooit opnieuw bij Te kiezen (`oorzaakAfspraakVorige()`); (7b) een
+  verwachte vaste last (gesimuleerd, gekoppeld of als kandidaat) is nooit "nieuw +€X" in `vastGestegenData()`; (8b) een venster zonder
+  salaris (november 1–23) heeft geen rest ("–"); (10) het periodebudget wordt vastgelegd als de stand van de eerste dag
+  (`periodeBudgetOpStart()`: dag op de periodestart, alleen boekingen t/m die dag, met `_dataGen` en `telbaarVergeten()` eromheen,
+  want `telbareTx()` hangt aan `_dataGen`) en het salaris van de periode zit in de vingerafdruk. Spec `v511.spec.js` (10 tests).
 - **v510b: JE HOLDING IS GEEN INKOMEN MEER VANAF DE MAAND DIE JIJ KIEST, EN DE CATEGORIE HOLDING VERVALT** (`v510b`, spoed, gemeten op het
   toestel 2 nov: EUR 2.500 van de holding stond op Inkomen, Home "Nog te ontvangen EUR 2.715"). (1) `holdingVanafVragen()` in "Kloppen mijn
   gegevens?" (soort `holdingvanaf`, eenmalig, claimt zijn boekingen eerst): de bijschrijvingen van de laatste `HOLDING_VRAAG_MAANDEN` (6)

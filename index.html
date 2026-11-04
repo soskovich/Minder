@@ -12454,7 +12454,7 @@ function gripCyclus(SIG){
   const plek=(key, beantwoord)=>beantwoord?'beantwoord':al3.includes(key)?'vraag':vrij3>0?(vrij3--, 'vraag'):'later';
   let IV=null; if(N3){ const key=inkomenVraagKey(N3), E=kennisGet('oorzaak|'+key); IV={key, N:N3, antwoord:E?E.aard:null, op:E?E.op:null, stand:plek(key, !!E)}; }
   if(inkGekozen) gekozenO.push({id:'inkomen:verdeel', sym:'inkomen:na', bron:'inkomen', naam:`Verhoging verdelen · ${euro0(inkGekozen.bedrag)}/mnd`, reden:`naar Plan · gekozen op ${dagKort(inkGekozen.op)}`});
-  const OK=[]; for(const z of sym){ const X=OV.A[z.id]; if(!X) continue; for(const o of oorzaakKeuzes(X)){ if(te.some(y=>y.act===o.act) || OK.some(y=>y.id===o.id) || wacht.some(y=>y.id===o.id)) continue; if(o.wacht){ wacht.push(o); continue; } const Ag=oorzaakAfspraakDezeMaand(o.id); if(Ag) gekozenO.push(Ag.titel?Object.assign({}, o, {naam:Ag.titel, naamLive:o.naam}):o); else OK.push(o); } }   // v511 (punt 2): een keuze toont het bedrag van het moment van kiezen (de titel in de afspraak), niet het live herberekende
+  const OK=[]; for(const z of sym){ const X=OV.A[z.id]; if(!X) continue; for(const o of oorzaakKeuzes(X)){ if(te.some(y=>y.act===o.act) || OK.some(y=>y.id===o.id) || wacht.some(y=>y.id===o.id)) continue; if(o.wacht){ wacht.push(o); continue; } const Ag=oorzaakAfspraakDezeMaand(o.id); if(Ag) gekozenO.push(Ag.titel?Object.assign({}, o, {naam:Ag.titel, naamLive:o.naam}):o); else if(!oorzaakAfspraakVorige(o.id)) OK.push(o); } }   // v511 (punt 2): een keuze toont het bedrag van het moment van kiezen (de titel in de afspraak), niet het live herberekende
   const wachtSym=[...new Set(wacht.map(x=>x.sym))].map(id=>({sym:id, naam:(sym.find(z=>z.id===id)||{}).naam||id, kies:wacht.filter(x=>x.sym===id), X:OV.A[id]}));
   /* v460 (B3): een keuze die hangt aan een getal waar een open controle (soort 2) meer dan 10% van kan schelen, of het teken van kan
      omdraaien, wacht: een zin, geen bedrag en geen stip, en hij telt niet in "N keuzes staan open" */
@@ -13018,12 +13018,29 @@ function budgetVoorPeriode(P){ const ym=(P&&P.ym)||thisYM(), base=budgetVoorMaan
    de vingerafdruk (`fp`) is alleen jouw invoer, niet de dag en niet de boekingen. In de voorbeeldweergave staat de vastlegging alleen in
    het geheugen (SET wordt bij "terug" hersteld en save() schrijft niets). */
 const PB_VAST_MAX=6;
-function periodeBudgetFp(ym){ let base={}; try{ base=budgetVoorMaand(ym)||{}; }catch(_){}
-  return JSON.stringify([base, SET.potWekelijks||{}, SET.vastDatum||{}, SET.vastVerwacht||[]]); }
-function periodeBudget(P){ const pb=periodeBudgetKern(P); if(!pb) return pb;
+function periodeBudgetFp(ym, start){ let base={}; try{ base=budgetVoorMaand(ym)||{}; }catch(_){}
+  /* v511 (punt 10): of het salaris van deze periode binnen is hoort bij de vingerafdruk. Zonder dit legde de eerste render op 24 nov (voor
+     de sync, of in het voorbeeld voor de salarisschakelaar) een budget zonder salaris vast, en dat bleef staan. Met het salaris erbij wordt
+     hij een keer opnieuw vastgelegd, als de stand van de eerste dag (periodeBudgetOpStart), en daarna niet meer. */
+  let sal=false; if(start){ const tot=rekDag(start, 6); sal=TX.some(t=>!t.pending && t.amount>0 && String(t.date).slice(0,10)>=start && String(t.date).slice(0,10)<=tot && (CATS[catOf(t)]||{}).type==='income'); }
+  return JSON.stringify([base, SET.potWekelijks||{}, SET.vastDatum||{}, SET.vastVerwacht||[], sal]); }
+function periodeBudgetOpStart(start){ if(!start || start===vandaagYMD() && !TX.some(t=>String(t.date).slice(0,10)>start)) return null;
+  const wasTX=TX, wasDag=window._voorbeeldDag; let R=null;
+  /* _dataGen en de telbaar-memo mee: telbareTx() hangt aan _dataGen en zou anders de volle TX teruggeven (gemeten) */
+  const vers=()=>{ _dataGen++; try{ telbaarVergeten(); }catch(_){} try{ runMemoVergeten(); }catch(_){} window._rekV=null; };
+  try{ TX=TX.filter(t=>String(t.date).slice(0,10)<=start); window._voorbeeldDag=start; vers(); R=periodeBudgetKern(); }
+  catch(_){ R=null; }
+  finally{ TX=wasTX; window._voorbeeldDag=wasDag; vers(); }
+  return R; }
+function periodeBudget(P){ let pb=periodeBudgetKern(P); if(!pb) return pb;
   const vandaag=vandaagYMD(); if(!(pb.start && pb.eind && vandaag>=pb.start && vandaag<=pb.eind)) return pb;
-  const fp=periodeBudgetFp(pb.ym), V=(SET.periodeBudgetVast=SET.periodeBudgetVast||{}), r=V[pb.start];
+  const fp=periodeBudgetFp(pb.ym, pb.start), V=(SET.periodeBudgetVast=SET.periodeBudgetVast||{}), r=V[pb.start];
   if(r && r.fp===fp && r.pb){ const c=JSON.parse(JSON.stringify(r.pb)); c.P=pb.P; c.vastgelegd=r.op; return c; }
+  /* v511 (punt 10): DE VASTLEGGING IS DE STAND VAN DE EERSTE DAG VAN DE PERIODE, niet van de dag waarop hij toevallig gebeurt. Gemeten op
+     het toestel: vast €1.401 · potjes €1.680 op 24 nov en 1 dec, €1.396 · €1.685 op 26 nov (in de voorbeeldweergave staat de vastlegging
+     alleen in het geheugen, dus elke "Bekijk als" legde opnieuw vast, met de boekingen van die dag). periodeBudgetOpStart rekent de kern
+     met de dag op de periodestart en alleen de boekingen tot en met die dag. */
+  { const S0=periodeBudgetOpStart(pb.start); if(S0 && S0.start===pb.start){ S0.P=pb.P; pb=S0; } }
   const kopie=Object.assign({}, pb); delete kopie.P;
   V[pb.start]={fp, op:vandaag, pb:JSON.parse(JSON.stringify(kopie))};
   const ks=Object.keys(V).sort(); while(ks.length>PB_VAST_MAX) delete V[ks.shift()];
@@ -14246,9 +14263,11 @@ function vastGestegenData(){ const D=fase3Sal(); if(!D) return null; const A=D.R
   /* v501 punt 4: een nieuwe post die een gestopte VERVANGT (SET.vastVervangt[nieuw]={van, op}, jouw keuze) telt alleen zijn
      verschil met de oude: de oude post valt uit de lijst en uit de sommen (zijn bedrag staat als mV op de vervangt-rij), zodat de
      stijging per constructie nieuw − oud is en nooit "nieuw +€volle bedrag". Een verschil onder een halve euro geeft geen rij. */
+  const vvKandSleutels=new Set(); try{ for(const x of vvLijst()){ const c=vvKandidaat(x); if(c) vvKandSleutels.add(recurKey(c)); } }catch(_){}   // v511 (punt 7)
   const VV=SET.vastVervangt||{}, vervangen=new Set(Object.keys(VV).filter(k=>keys.includes(k)).map(k=>VV[k].van));
   for(const k of keys){ const t=eerste(k), vV=voor.map(r=>+r.posten[k]||0), vN=na.map(r=>+r.posten[k]||0), sch=SCH.find(x=>x.key===k)||null;
     if(vervangen.has(k)) continue;
+    if(String(k).indexOf('vverw|')===0 || vvBoeking(t) || vvKoppelSleutels().has(k) || vvKandSleutels.has(k)) continue;   // v511 (punt 7): een verwachte vaste last (SET.vastVerwacht) is geen "nieuwe vaste last"; een passende afschrijving komt alleen als de vraag "Is dit …?"
     const st=postStatus(k), doorJou=st.door==='jij' && st.status==='gestopt';
     const tV=laatsteIn(k, voor), tN=laatsteIn(k, na), tA=tN||tV;
     const mB=x=>x?Math.round(postMaandBedrag(sch, Math.abs(x.amount))):0;
@@ -14449,10 +14468,13 @@ function eenheidSalarisRij(u){ let sk=null; try{ const D=fase3Sal(); sk=D?D.salB
   andere=andereTx.reduce((a,t)=>a+t.amount-reisDeel(t),0);
   for(const t of salTx) andere+=inkomenEenmalig(t);   // het eenmalige deel van een salarisstorting hoort bij de andere inkomsten (v473)
   let OE=null; try{ OE=opzijEenheid(u); }catch(_){} const opzij=OE?OE.netto:0;   // v500 (punt 3): dezelfde bron als Afsluiten en de Terugblik
-  const rest=sal+andere-vast-pot-buiten-opzij, pc=v=>sal>0?Math.round(v/sal*100):null;
+  /* v511 (punt 8): EEN VENSTER ZONDER SALARIS HEEFT GEEN REST. rest = salaris + andere − vast, potjes, buiten en opzij; november (1–23) wordt
+     betaald uit het oktobersalaris, dus daar was hij andere inkomsten min de uitgaven min opzij (en een onttrekking, een negatieve opzij,
+     telde er positief in): gemeten op het toestel +€2.242 zonder salaris. De afsluitkaart kent geen rest; de rij zegt "–". */
+  const rest=(u.korteMaand && !(sal>0))?null:sal+andere-vast-pot-buiten-opzij, pc=v=>(sal>0 && v!=null)?Math.round(v/sal*100):null;
   let salNote=''; if(!(sal>0) && sk!=null){ let prev=null; for(const t of telbareTx()){ if(t.amount>0 && recurKey(t)===sk && t.date.slice(0,10)<String(u.start) && (!prev || t.date>prev)) prev=t.date.slice(0,10); }
     salNote=prev?`salaris van ${dagKort(prev)} valt in de vorige periode`:'geen salaris in deze periode'; }
-  return {ym:u.ym, U:u, uit:U?{vast:Math.round(U.cent.vast*100), potjes:Math.round(U.cent.potjes*100), zonder:Math.round(U.cent.zonder*100), contant:Math.round(((U.per||{})[CONTANT_CAT]||0)*100), totaal:Math.round(U.totaal*100)}:null, label:eenheidLabelVol(u), kort:eenheidKort(u), sal:Math.round(sal), vast:Math.round(vast), potjes:Math.round(pot), buiten:Math.round(buiten), opzij:Math.round(opzij), opzijE:OE, andere:Math.round(andere), rest:Math.round(rest), eenmalig:Math.round(een), salTx, salNote,
+  return {ym:u.ym, U:u, uit:U?{vast:Math.round(U.cent.vast*100), potjes:Math.round(U.cent.potjes*100), zonder:Math.round(U.cent.zonder*100), contant:Math.round(((U.per||{})[CONTANT_CAT]||0)*100), totaal:Math.round(U.totaal*100)}:null, label:eenheidLabelVol(u), kort:eenheidKort(u), sal:Math.round(sal), vast:Math.round(vast), potjes:Math.round(pot), buiten:Math.round(buiten), opzij:Math.round(opzij), opzijE:OE, andere:Math.round(andere), rest:rest==null?null:Math.round(rest), eenmalig:Math.round(een), salTx, salNote,
     pct:{vast:pc(vast), potjes:pc(pot), buiten:pc(buiten), opzij:pc(opzij), rest:pc(rest)}}; }
 function verhoudingSalarisData(){ const D=fase3Sal(); if(!D) return null; const A=D.R.slice(0,-1).slice(-6);
   const rij=r=>{ const SB=salarisBalk(D, r), sal=SB.salaris, d=k=>(SB.delen.find(x=>x.k===k)||{}).v||0;
@@ -14476,7 +14498,7 @@ function verhoudingSalarisHtml(){ let H=null; try{ H=verhoudingSalarisData(); }c
   const td='text-align:right;padding:4px 1px;vertical-align:top';
   return `<div class="card" id="gripVerhouding"><div class="hlabel" style="margin:0 0 6px">Verhouding met je salaris</div>
     <table class="small" data-verhouding style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--fs-xs)"><colgroup><col style="width:22%"><col style="width:15%">${kol.map(()=>'<col>').join('')}</colgroup><tr><th style="text-align:left">mnd</th><th style="text-align:right">salaris</th>${kol.map(([,l])=>`<th style="text-align:right">${l}</th>`).join('')}</tr>
-    ${H.R.map(r=>`<tr ${r.U&&r.U.soort==='periode'?`data-verhoudingperiode="${esc(r.U.start)}"`:`data-verhoudingmaand="${r.ym}"`}${r.U&&r.U.korteMaand?' data-kortemaand':''}${r.uit?` data-uitvast="${r.uit.vast}" data-uitpotjes="${r.uit.potjes}" data-uitzonder="${r.uit.zonder}" data-uitcontant="${r.uit.contant}" data-uittotaal="${r.uit.totaal}"`:''} style="border-top:1px solid var(--line)"><td data-verhoudingnaam style="padding:4px 1px;vertical-align:top;overflow-wrap:anywhere">${esc(verhoudingRijNaam(r))}${r.salNote?`<br><span data-salnote style="color:var(--mut2)">${esc(r.salNote)}</span>`:''}</td><td style="${td}">${euroK(r.sal)}${r.andere>0.5?`<br><span data-verhoudingandere="${r.andere}" style="color:var(--mut2)">+${euroK(r.andere)}</span>`:''}${r.eenmalig>0.5?`<br><span data-verhoudingeenmalig="${r.eenmalig}" style="color:var(--mut2)">eenm. ${euroK(r.eenmalig)}</span>`:''}</td>${kol.map(([k])=>`<td style="${td}"${k==='opzij'?` data-verhoudingopzij="${r.opzij}" title="${r.opzijE?esc(opzijEenheidTekst(r.opzijE)):''}"`:''}>${euroK(r[k])}<br><span style="color:var(--mut2)">${r.pct[k]==null?'-':r.pct[k]+'%'}</span></td>`).join('')}</tr>`).join('')}</table>
+    ${H.R.map(r=>`<tr ${r.U&&r.U.soort==='periode'?`data-verhoudingperiode="${esc(r.U.start)}"`:`data-verhoudingmaand="${r.ym}"`}${r.U&&r.U.korteMaand?' data-kortemaand':''}${r.uit?` data-uitvast="${r.uit.vast}" data-uitpotjes="${r.uit.potjes}" data-uitzonder="${r.uit.zonder}" data-uitcontant="${r.uit.contant}" data-uittotaal="${r.uit.totaal}"`:''} style="border-top:1px solid var(--line)"><td data-verhoudingnaam style="padding:4px 1px;vertical-align:top;overflow-wrap:anywhere">${esc(verhoudingRijNaam(r))}${r.salNote?`<br><span data-salnote style="color:var(--mut2)">${esc(r.salNote)}</span>`:''}</td><td style="${td}">${euroK(r.sal)}${r.andere>0.5?`<br><span data-verhoudingandere="${r.andere}" style="color:var(--mut2)">+${euroK(r.andere)}</span>`:''}${r.eenmalig>0.5?`<br><span data-verhoudingeenmalig="${r.eenmalig}" style="color:var(--mut2)">eenm. ${euroK(r.eenmalig)}</span>`:''}</td>${kol.map(([k])=>`<td style="${td}"${k==='opzij'?` data-verhoudingopzij="${r.opzij}" title="${r.opzijE?esc(opzijEenheidTekst(r.opzijE)):''}"`:''}${r[k]==null?' data-verhoudinggeen':''}>${r[k]==null?'–':euroK(r[k])}<br><span style="color:var(--mut2)">${r.pct[k]==null?'-':r.pct[k]+'%'}</span></td>`).join('')}</tr>`).join('')}</table>
     <div class="small" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs)">opzij = netto naar je spaarrekening (gestort − eruit) · rest = salaris + andere inkomsten − vast, potjes, buiten, opzij en reserveringen · eenmalig staat apart: het zit in potjes of buiten en telt niet als gedrag</div>
     ${H.lijn?`<div class="small" data-vastpctlijn style="margin-top:8px;font-weight:600">na je salarisverhoging ging je vast-% van ${H.lijn.van}% naar ${H.lijn.naar}%</div>`:''}</div>`; }
 /* v511 (punt 9): de naam van een rij: de korte november "nov (1–23)", een periode "24 nov–23 dec", anders de maand; nooit leeg */
@@ -14484,6 +14506,10 @@ function verhoudingRijNaam(r){ const mn=f3MN(r.ym)||String(r.ym||''); if(!r.U) r
   if(r.U.korteMaand) return `${mn} (1–${+String(r.U.eind).slice(8,10)})`;
   if(r.U.soort==='periode') return r.kort||eenheidKort(r.U)||mn; return mn; }
 /* een gedragsafspraak deze maand: dan staat de keuze onder Al gekozen */
+/* v511 (punt 2): een keuze uit de vorige maand of periode staat bij "Mee uit vorige periode" (de terugcheck), nooit opnieuw bij Te
+   kiezen. Gemeten op 1 dec: "Op je salarisdag eerst €825 opzij" bij Te kiezen naast de gekozen €955 bij Mee. */
+function oorzaakAfspraakVorige(id){ const m=thisYM(), pm=valtOpYmPlus(m,-1), p=String(id).split(':'); const key='oorz:'+p.slice(1,-1).join(':'), soort=p[p.length-1];
+  return afsprakenLijst().find(a=>a.soort==='gedrag' && a.key===key && a.oorzaak===soort && String(a.tot)===pm && !afspraakHerzienVan(a))||null; }
 function oorzaakAfspraakDezeMaand(id){ const m=thisYM(), p=String(id).split(':'); const key='oorz:'+p.slice(1,-1).join(':'), soort=p[p.length-1];
   return afsprakenLijst().find(a=>a.soort==='gedrag' && a.key===key && a.oorzaak===soort && String(a.van)<=m && String(a.tot)>=m && !afspraakHerzienVan(a))||null; }
 /* ===== ZIEN ===== */
@@ -29969,7 +29995,7 @@ function gegevensVraagKort(q){ const d=q.datum?' · '+dagKort(String(q.datum).sl
   const pt=x=>x?benoemPartij(x):'';
   Object.assign(T, {eenmterug:()=>`${euro(q.bedrag)} bij ${q.partij}: komt dit terug?`, vastverw:()=>`${euro(q.bedrag)}: is dit ${q.x&&q.x.naam||'je verwachte vaste last'}?`,
     eigenrek:()=>`${euro(q.t?q.t.amount:q.bedrag)} van een rekening op jouw naam: welke?`, eigenreksparen:()=>`${euro(q.t?q.t.amount:q.bedrag)} van je eigen rekening: is dit sparen?`,
-    belegvw:()=>`${q.asset&&q.asset.naam||'Bezitting'}: gelden de voorwaarden voor beleggen?`, inlegafwijk:()=>`${q.naam||(q.asset&&q.asset.naam)||'Inleg'}: ingevuld anders dan gemeten`,
+    belegvw:()=>`${q.asset&&q.asset.naam||'Bezitting'}: gelden de voorwaarden voor beleggen?`, inlegafwijk:()=>`${(q.asset&&q.asset.naam)||q.naam||'Inleg'}: je vulde ${euro0(+q.ingevuld||0)} in, gemeten ${euro0(+q.gemeten||0)}`,
     inlegstart:()=>`${q.naam||(q.asset&&q.asset.naam)||'Inleg'}: is de geplande inleg gestart?`, holdingvanaf:()=>`Je holding: vanaf welke maand geen inkomen meer?`,
     buiten:()=>`${euro(q.bedrag)} aan ${q.partij}: wat was dit?`, kwijt:()=>`${euro(q.bedrag)} van ${q.partij}: terugbetaling van de kwijtgescholden lening?`,
     voraut:()=>`Voorautorisatie bij ${q.K&&q.K.bij?pt(q.K.bij):'een pomp'}: tellen ze mee?`});
@@ -36665,14 +36691,15 @@ function voorbeeldSalarisInjecteer(){ voorbeeldSalarisWeg(); const dag=window._v
    voorbeelddag dezelfde lijst leest. */
 function voorbeeldVasteTermijnen(){ const k=TX.filter(t=>String(t.src)!=='voorbeeld').length+'|'+importTotYmd()+'|'+(SET.vastDatum?JSON.stringify(SET.vastDatum):'')+'|'+JSON.stringify(SET.vastVerwacht||[]); if(window._vbVT && window._vbVT.k===k) return window._vbVT.L;
   const was=window._voorbeeld, wasSal=window._voorbeeldTx, wasDag=window._voorbeeldDag, wasTX=TX; let L=null;
-  try{ TX=TX.filter(t=>String(t.src)!=='voorbeeld'); window._voorbeeld=false; window._voorbeeldTx=null; window._voorbeeldDag=null; try{ runMemoVergeten(); }catch(_){} window._rekV=null;
+  const vers=()=>{ _dataGen++; try{ telbaarVergeten(); }catch(_){} try{ runMemoVergeten(); }catch(_){} window._rekV=null; };   // telbareTx() hangt aan _dataGen
+  try{ TX=TX.filter(t=>String(t.src)!=='voorbeeld'); window._voorbeeld=false; window._voorbeeldTx=null; window._voorbeeldDag=null; vers();
     const P=rekVoorstel(); if(P && P.ok){ const per=new Map();
       for(const x of [].concat(Array.isArray(P.vastCur)?P.vastCur:[], Array.isArray(P.vast)?P.vast:[])){ const key=x.key||x.naam||'x';
         const e=per.get(key)||{key:x.key, naam:x.naam, termijn:x.termijn, bedrag:x.bedrag, acc:x.acc, cat:x.cat, data:new Set()};
         for(const d of (x.data||[])) e.data.add(String(d).slice(0,10)); per.set(key, e); }
       L=[...per.values()].map(e=>Object.assign(e, {data:[...e.data].sort()})); } }
   catch(_){ L=null; }
-  finally{ TX=wasTX; window._voorbeeld=was; window._voorbeeldTx=wasSal; window._voorbeeldDag=wasDag; try{ runMemoVergeten(); }catch(_){} window._rekV=null; }
+  finally{ TX=wasTX; window._voorbeeld=was; window._voorbeeldTx=wasSal; window._voorbeeldDag=wasDag; vers(); }
   window._vbVT={k, L}; return L; }
 /* v504: de overboekingen van je verdeling op de salarisdag. EEN bron (SET.salVerdeling); de spaarrekening voor opzij is de eerste
    actieve spaarrekening die niet de reserveringsrekening is. Zonder verdeling geen overboekingen (er wordt niets verzonnen). */

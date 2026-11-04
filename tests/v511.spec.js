@@ -6,10 +6,11 @@
 const { test, expect } = require('./klok');
 const S = require('./periode-stand');
 const { MAIN, SPAAR, LEEF, BET } = S;
-const DAGEN = ['2026-11-23', '2026-11-24', '2026-11-26'];
+const DAGEN = ['2026-11-23', '2026-11-24', '2026-11-26', '2026-12-01'];
 
 const boot = page => S.boot(page, '2026-11-04');
-const bekijk = (page, d) => page.evaluate(d => { if (window._voorbeeld) voorbeeldStop(); voorbeeldStart(d); voorbeeldSalarisZet(true); }, d);
+/* elke bekeken dag begint vers (zoals "Bekijk als" direct na het openen van de app): geen geheugen van een eerder bekeken dag */
+const bekijk = (page, d) => page.evaluate(d => { if (window._voorbeeld) voorbeeldStop(); window._vbVT = null; voorbeeldStart(d); voorbeeldSalarisZet(true); window._gripCyc = null; }, d);
 const add = (page, rij) => page.evaluate(rij => { for (const [acc, d, a, n, ds, cat] of rij) { const t = { id: 'v511' + acc.slice(-4) + d + n.replace(/\W/g, '') + Math.round(Math.abs(a) * 100), date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; }
   TX.sort((x, y) => x.date.localeCompare(y.date)); save(); try { buildAccMeta(); } catch (_) {} window._rekV = null; try { runMemoVergeten(); } catch (_) {} }, rij);
 
@@ -39,8 +40,14 @@ test('v511 b: "Op je salarisdag eerst €X opzij" toont het bedrag van het momen
   expect(live.live, 'invoer: het live herberekende bedrag is anders').not.toBe(gekozen.naam);
   expect(live.naam).toBe(gekozen.naam);
   for (const d of DAGEN) { await bekijk(page, d);
-    const r = await page.evaluate(() => { go('maand'); gripKiesTab('kiezen'); const el = [...document.querySelectorAll('#gripAlGekozen [data-kiesgekozen]')].find(e => /salarisdag/.test(e.innerText)); const n = el && el.querySelector('span[style*="font-weight:700"]'); return n ? n.innerText.trim() : null; });
-    expect(r, d).toBe(gekozen.naam); }
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('kiezen');
+      const tekst = sel => [...document.querySelectorAll(sel)].map(e => e.innerText).filter(t => /Op je salarisdag eerst/.test(t)).map(t => (t.match(/Op je salarisdag eerst €[\d.]+ opzij/) || [''])[0]);
+      return { te: tekst('#gripTeKiezen [data-kies]'), al: tekst('#gripAlGekozen [data-kiesgekozen]'), mee: tekst('#gripMee [data-kiesmee]'), alle: (document.getElementById('gripInhoud').innerText.match(/Op je salarisdag eerst €[\d.]+ opzij/g) || []) }; });
+    /* een gemaakte keuze staat op een plek: in november bij Al gekozen, op 1 dec bij Mee uit vorige periode; nooit bij Te kiezen */
+    expect(r.te, d + ': nooit bij Te kiezen').toEqual([]);
+    expect(r.al.length + r.mee.length, d + ': op precies een plek').toBeGreaterThan(0);
+    if (d < '2026-12-01') expect(r.al, d).toEqual([gekozen.naam]); else { expect(r.al, d).toEqual([]); expect(r.mee, d).toEqual([gekozen.naam]); }
+    for (const t of r.alle) expect(t, d + ': overal hetzelfde bedrag').toBe(gekozen.naam); }
 });
 
 // c. DE BONUS IS AL VERDEELD: het venster loopt van de binnenkomst tot vandaag, over de overgangsmaand en de nieuwe periode heen.
@@ -121,6 +128,10 @@ test('v511 g: de CJIB-termijn telt in vast, niet in Belasting & boetes, en geeft
   expect(r.t, 'invoer: de termijn van 26 nov staat er').toBe(true);
   expect(r.fixed).toBe(true); expect(r.pot).toBe(0); expect(r.sig).not.toContain('belasting'); expect(r.sym).toEqual([]);
   expect(r.vraag, 'een gesimuleerde termijn is geen vraag').toBe(0);
+  /* op 1 dec: de termijn van 26 nov is geen "nieuwe vaste last" in Te kiezen */
+  await bekijk(page, '2026-12-01');
+  const r1 = await page.evaluate(() => { const C = gripCyclus(); return { kies: C.kies.map(k => k.naam).filter(n => /cjib/i.test(n)), sym: C.sym.filter(s => s.k === 'belasting').length, pot: catSpendMap('2026-11').belasting || 0, vraag: gegevensVragen().filter(q => q.soort === 'vastverw').length }; });
+  expect(r1.kies).toEqual([]); expect(r1.sym).toBe(0); expect(r1.pot).toBe(0); expect(r1.vraag).toBe(0);
   /* een echte, gekoppelde afschrijving telt ook als vaste last */
   await page.evaluate(() => voorbeeldStop());
   await add(page, [[BET, '2026-11-03', -50, 'CJIB', 'SEPA CJIB BOETES 123', 'belasting']]);
@@ -132,12 +143,17 @@ test('v511 g: de CJIB-termijn telt in vast, niet in Belasting & boetes, en geeft
 // h. NOVEMBER (1–23): EEN BRON, GEEN BUDGETOORDEEL.
 test('v511 h: afsluitkaart en tabel tonen dezelfde getallen voor november (1–23); geen budgettegel', async ({ page }) => {
   await boot(page);
-  await add(page, [[LEEF, '2026-11-02', -63, 'Albert Heijn', 'BEA ALBERT HEIJN', 'boodschappen']]);
-  for (const d of ['2026-11-24', '2026-11-26']) { await bekijk(page, d);
+  /* invoer: de kastelling van +EUR 500 op 1 nov (meer contant dan verwacht, zoals op het toestel) en EUR 63 boodschappen; per boeking
+     geteld zet die telling potjes negatief, uitgegevenStand telt contant als opnames min de groei van je kas */
+  await add(page, [[LEEF, '2026-11-02', -63, 'Albert Heijn', 'BEA ALBERT HEIJN', 'boodschappen'], [LEEF, '2026-11-01', 500, 'Kastelling', 'Contant kastelling', 'contant']]);
+  await page.evaluate(() => { const t = TX.find(x => x.name === 'Kastelling'); t.src = 'contant'; t.acc = ''; save(); runMemoVergeten(); });
+  for (const d of ['2026-11-24', '2026-11-26', '2026-12-01']) { await bekijk(page, d);
     const r = await page.evaluate(() => { const H = verhoudingSalarisData(), rij = H.R.find(x => x.U && x.U.korteMaand), A = afsluitUitgegeven('2026-11');
-      return { rij: rij && { uit: rij.uit, vast: rij.vast, potjes: rij.potjes }, A: A && { cent: A.cent, r: A.r }, tegels: afsluitTegels('2026-11').map(t => [t.key, t.waarde, t.maat]) }; });
+      return { rij: rij && { uit: rij.uit, vast: rij.vast, potjes: rij.potjes, rest: rij.rest, sal: rij.sal }, A: A && { cent: A.cent, r: A.r }, tegels: afsluitTegels('2026-11').map(t => [t.key, t.waarde, t.maat]) }; });
     expect(r.rij, d + ': de rij van november (1–23)').not.toBeNull();
     expect(r.rij.uit).toEqual(r.A.cent);
+    expect(r.rij.sal, d + ': november (1–23) heeft geen salaris').toBe(0);
+    expect(r.rij.rest, d + ': dus geen rest').toBeNull();
     expect(r.rij.vast).toBe(r.A.r.vast); expect(r.rij.potjes).toBe(r.A.r.potjes + r.A.r.zonder);
     const tot = r.tegels.find(t => t[0] === 'totaal');
     expect(tot[2]).toBe('overgangsmaand · geen budget'); expect(tot[1]).not.toMatch(/−|-/);
@@ -150,9 +166,10 @@ test('v511 h: afsluitkaart en tabel tonen dezelfde getallen voor november (1–2
 test('v511 i: geen interne sleutel als titel, de kasvraag noemt november (1–23), de tabel past met een naam per rij', async ({ page }) => {
   await boot(page);
   const titels = await page.evaluate(() => { const T = [{ soort: 'eenmterug', bedrag: 50, partij: 'Kiosk', datum: '2026-08-16' }, { soort: 'vastverw', bedrag: 50, x: { naam: 'Boetes cjib' }, datum: '2026-11-26' },
-    { soort: 'eigenrek', bedrag: 100, datum: '2026-10-01' }, { soort: 'belegvw', asset: { naam: 'Saxo' } }, { soort: 'onbekendesoort', bedrag: 12 }];
+    { soort: 'eigenrek', bedrag: 100, datum: '2026-10-01' }, { soort: 'belegvw', asset: { naam: 'Saxo' } }, { soort: 'inlegafwijk', asset: { naam: 'Saxo' }, ingevuld: 50, gemeten: 100, datum: '2026-11-28' }, { soort: 'onbekendesoort', bedrag: 12 }];
     return T.concat(gegevensVragen()).map(q => [q.soort, gegevensVraagKort(q)]); });
   for (const [s, t] of titels) { expect(t, s).not.toBe(s); expect(t.startsWith(s + ' ·'), s + ': ' + t).toBe(false); }
+  expect(titels.find(x => x[0] === 'inlegafwijk')[1]).toBe('Saxo: je vulde €50 in, gemeten €100 · 28 nov');
   for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: 800 });
     await bekijk(page, '2026-11-23');
@@ -160,11 +177,25 @@ test('v511 i: geen interne sleutel als titel, de kasvraag noemt november (1–23
       return { label: c.querySelector('[data-kasvraaglabel]').innerText, binnen: b.right <= cr.right + 0.5 }; });
     expect(k, w + ': de kasvraag staat er').not.toBeNull();
     expect(k.label).toBe('einde van november (1–23)'); expect(k.binnen, w).toBe(true);
-    for (const d of ['2026-11-24', '2026-11-26']) { await bekijk(page, d);
+    for (const d of ['2026-11-24', '2026-11-26', '2026-12-01']) { await bekijk(page, d);
       const t = await page.evaluate(() => { go('maand'); gripKiesTab('terugblik'); const c = document.getElementById('gripVerhouding'); if (!c) return null; const tb = c.querySelector('table');
         return { breed: tb.getBoundingClientRect().right <= c.getBoundingClientRect().right + 0.5, sw: tb.scrollWidth, cw: tb.clientWidth, namen: [...tb.querySelectorAll('[data-verhoudingnaam]')].map(e => e.innerText.trim()), pagina: document.documentElement.scrollWidth <= window.innerWidth }; });
       expect(t, w + ' ' + d).not.toBeNull();
       expect(t.breed, w + ' ' + d).toBe(true); expect(t.sw).toBeLessThanOrEqual(t.cw + 1); expect(t.pagina).toBe(true);
       expect(t.namen.length).toBeGreaterThan(0); for (const n of t.namen) expect(n.length, w + ' ' + d).toBeGreaterThan(0); }
   }
+});
+
+// j. HET PERIODEBUDGET IS OP ELKE DAG HETZELFDE, OOK IN DE VOORBEELDWEERGAVE (elke bekeken dag legt vers vast).
+test('v511 j: het periodebudget is op 24 nov, 26 nov en 1 dec identiek in centen', async ({ page }) => {
+  await boot(page);
+  /* invoer: een vaste last met een termijn NA de periodestart die echt geboekt wordt met een ander bedrag dan verwacht (Shurgard 25 nov,
+     verwacht EUR 77 per maand, geboekt EUR 66): de stand van de dag zelf zou de indeling laten verschuiven */
+  const uit = [];
+  for (const d of ['2026-11-24', '2026-11-26', '2026-12-01']) { await bekijk(page, d);
+    if (d > '2026-11-25') await page.evaluate(() => { const t = { id: 'v511sh', date: '2026-11-25', amount: -66, acc: OWN[0], name: 'Shurgard Nl', desc: 'SEPA Incasso Shurgard Nl', typ: '', ref: '', src: 'voorbeeld', accName: '', refNums: [] }; categorize(t); t.id = 'v511sh'; OVR[t.id] = 'huur'; TX.push(t); window._voorbeeldTx = (window._voorbeeldTx || []).concat([t.id]); delete (SET.periodeBudgetVast || {})['2026-11-24']; runMemoVergeten(); window._rekV = null; });
+    uit.push(await page.evaluate(() => { const pb = periodeBudget(); const c = v => Math.round(+v * 100);
+      return { start: pb.start, vast: c(pb.vast.totaal), potjes: c(pb.potjes.totaal), contant: c(pb.contant), totaal: c(pb.totaal) }; })); }
+  expect(uit[0].start).toBe('2026-11-24');
+  for (const u of uit) expect(u).toEqual(uit[0]);
 });
