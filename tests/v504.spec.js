@@ -16,7 +16,7 @@ test('v504 a: de verdeling staat op de salarisdag, en de stand tot je salaris te
   const r = await page.evaluate(({ BET, MAIN, LEEF, SPAAR }) => {
     const op24 = acc => TX.filter(t => String(t.src) === 'voorbeeld' && t.acc === acc && t.date === '2026-11-24' && String(t.id).startsWith('vb:vd:')).reduce((a, t) => a + t.amount, 0);
     const D = totSalarisData(BET);
-    return { bet: op24(BET), leef: op24(LEEF), spaar: op24(SPAAR), main: op24(MAIN), ruw: D.sim.ruw, sim: D.sim.salVerd, vast: D.vastExact, pot: D.potExact, kas: D.kasExact, eind: D.eindExact, eindDag: D.eindDag };
+    return { bet: op24(BET), leef: op24(LEEF), spaar: op24(SPAAR), main: op24(MAIN), ruw: D.sim.ruw, sim: D.sim.salVerd, simVast: D.sim.vast, vast: D.vastExact, pot: D.potExact, kas: D.kasExact, eind: D.eindExact, eindDag: D.eindDag };
   }, ACC);
   expect(r.bet).toBe(1600);
   expect(r.leef).toBe(1700);
@@ -25,7 +25,10 @@ test('v504 a: de verdeling staat op de salarisdag, en de stand tot je salaris te
   expect(r.ruw).toBe(799);
   expect(r.sim).toBe(1600);
   expect(r.eindDag).toBe('2026-12-23');
-  expect(Math.round(r.eind * 100)).toBe(Math.round((799 + 1600 - r.vast - r.pot - r.kas) * 100));
+  /* v511 (punt 1): het voorbeeld simuleert ook de vaste termijnen tussen je laatste import en de voorbeelddag (Hiltermann 12 nov op de
+     Betaalrekening, D.sim.vast), los van de schakelaar; de stand is saldo + simulatie − wat er tot je salaris nog gaat */
+  expect(Math.round(r.simVast)).toBe(-537);
+  expect(Math.round(r.eind * 100)).toBe(Math.round((799 + 1600 + r.simVast - r.vast - r.pot - r.kas) * 100));
   expect(Math.round(r.vast)).toBe(537);
 });
 

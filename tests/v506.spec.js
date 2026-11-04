@@ -68,7 +68,7 @@ test('v506 c: de schakelaar verandert de verwachte vaste lasten niet', async ({ 
   expect(r.sim, 'invoer: er is een gesimuleerde termijn tot de voorbeelddag').toBeGreaterThan(0);
   expect(r.aan.eind).toBe(r.uit.eind);
   expect(r.aan.proj).toBe(r.uit.proj);
-  expect(r.aan.uit).toBeGreaterThan(r.uit.uit);   // betaald schuift, de som niet
+  expect(r.aan.uit).toBe(r.uit.uit);   // v511 (punt 1): de vaste termijnen worden ook met de schakelaar uit gesimuleerd, dus betaald schuift niet mee
 });
 
 // d. Na een opzij-storting die volgens Plan naar het actieve doel gaat, is er geen stilstaand-signaal.

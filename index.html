@@ -4480,7 +4480,7 @@ function maandVerloop(L){
   if(inc>0){
     /* v511 (punt 5): eerst de REGEL (salVolgendeDatum, dezelfde functie als de periodestart en het moment in Kiezen); het schema en de
        laatste betaling volgen de werkelijke stortingsdag (26 okt) en gaven "je salaris op 26 nov" naast een periode die op 24 nov begint */
-    try{ const sv=salVolgendeDatum(ymdDag(vandaag)); if(sv && sv.slice(0,7)===ym){ incDag=+sv.slice(8,10); incBron='regel'; } }catch(_){}
+    try{ const pk=periodeVan(ymdDag(vandaag)); if(pk && pk.korteMaand){ const sv=salVolgendeDatum(ymdDag(vandaag)); if(sv && sv.slice(0,7)===ym){ incDag=+sv.slice(8,10); incBron='regel'; } } }catch(_){}   // alleen in de overgangsmaand; daarvoor en erna volgen schema en betaling de regel al
     if(incDag==null)
     try{ for(const r of recurringSchedule()){ if(r.type!=='income') continue; const nd=new Date(r.nextDate); nd.setHours(0,0,0,0);
       if(nd.getFullYear()===j && nd.getMonth()===mo && nd.getDate()>=vandaag && (incDag==null || nd.getDate()<incDag)) incDag=nd.getDate(); } }catch(_){}
@@ -13026,8 +13026,8 @@ function periodeBudgetFp(ym, start){ let base={}; try{ base=budgetVoorMaand(ym)|
   return JSON.stringify([base, SET.potWekelijks||{}, SET.vastDatum||{}, SET.vastVerwacht||[], sal]); }
 function periodeBudgetOpStart(start){ if(!start || start===vandaagYMD() && !TX.some(t=>String(t.date).slice(0,10)>start)) return null;
   const wasTX=TX, wasDag=window._voorbeeldDag; let R=null;
-  /* _dataGen en de telbaar-memo mee: telbareTx() hangt aan _dataGen en zou anders de volle TX teruggeven (gemeten) */
-  const vers=()=>{ _dataGen++; try{ telbaarVergeten(); }catch(_){} try{ runMemoVergeten(); }catch(_){} window._rekV=null; };
+  /* _dataGen mee: telbareTx() hangt aan _dataGen en zou anders de volle TX teruggeven (gemeten) */
+  const vers=()=>{ _dataGen++; try{ runMemoVergeten(); }catch(_){} window._rekV=null; };
   try{ TX=TX.filter(t=>String(t.date).slice(0,10)<=start); window._voorbeeldDag=start; vers(); R=periodeBudgetKern(); }
   catch(_){ R=null; }
   finally{ TX=wasTX; window._voorbeeldDag=wasDag; vers(); }
@@ -14493,12 +14493,12 @@ function verhoudingSalarisHtml(){ let H=null; try{ H=verhoudingSalarisData(); }c
   const kol=[['vast','vast'],['potjes','potjes'],['buiten','buiten'],['opzij','opzij'],['rest','rest']];
   /* v511 (punt 9): DE TABEL PAST OP 360 EN 390PX EN ELKE RIJ DRAAGT ZIJN NAAM. Tot v511 stond hij in een horizontale scroll (de
      rechterkolom viel weg op 24 nov) en kon de eerste cel leeg zijn (26 nov). Nu: de naam altijd (verhoudingRijNaam, met een
-     terugval op de maandnaam), de bedragen compact (euroK, de enige compacte vorm), opzij gestort − eruit in de title, en eenmalig als
+     terugval op de maandnaam), de bedragen compact (table-layout:fixed en afbreken binnen een cel), opzij gestort − eruit in de title, en eenmalig als
      kleine regel onder het salaris. Geen scroll, geen afgekapte kolom. */
-  const td='text-align:right;padding:4px 1px;vertical-align:top';
+  const td='text-align:right;padding:4px 1px;vertical-align:top;overflow-wrap:anywhere';
   return `<div class="card" id="gripVerhouding"><div class="hlabel" style="margin:0 0 6px">Verhouding met je salaris</div>
-    <table class="small" data-verhouding style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--fs-xs)"><colgroup><col style="width:22%"><col style="width:15%">${kol.map(()=>'<col>').join('')}</colgroup><tr><th style="text-align:left">mnd</th><th style="text-align:right">salaris</th>${kol.map(([,l])=>`<th style="text-align:right">${l}</th>`).join('')}</tr>
-    ${H.R.map(r=>`<tr ${r.U&&r.U.soort==='periode'?`data-verhoudingperiode="${esc(r.U.start)}"`:`data-verhoudingmaand="${r.ym}"`}${r.U&&r.U.korteMaand?' data-kortemaand':''}${r.uit?` data-uitvast="${r.uit.vast}" data-uitpotjes="${r.uit.potjes}" data-uitzonder="${r.uit.zonder}" data-uitcontant="${r.uit.contant}" data-uittotaal="${r.uit.totaal}"`:''} style="border-top:1px solid var(--line)"><td data-verhoudingnaam style="padding:4px 1px;vertical-align:top;overflow-wrap:anywhere">${esc(verhoudingRijNaam(r))}${r.salNote?`<br><span data-salnote style="color:var(--mut2)">${esc(r.salNote)}</span>`:''}</td><td style="${td}">${euroK(r.sal)}${r.andere>0.5?`<br><span data-verhoudingandere="${r.andere}" style="color:var(--mut2)">+${euroK(r.andere)}</span>`:''}${r.eenmalig>0.5?`<br><span data-verhoudingeenmalig="${r.eenmalig}" style="color:var(--mut2)">eenm. ${euroK(r.eenmalig)}</span>`:''}</td>${kol.map(([k])=>`<td style="${td}"${k==='opzij'?` data-verhoudingopzij="${r.opzij}" title="${r.opzijE?esc(opzijEenheidTekst(r.opzijE)):''}"`:''}${r[k]==null?' data-verhoudinggeen':''}>${r[k]==null?'–':euroK(r[k])}<br><span style="color:var(--mut2)">${r.pct[k]==null?'-':r.pct[k]+'%'}</span></td>`).join('')}</tr>`).join('')}</table>
+    <table class="small" data-verhouding style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--fs-xs);letter-spacing:-.01em"><colgroup><col style="width:17%"><col style="width:15%">${kol.map(()=>'<col>').join('')}</colgroup><tr><th style="text-align:left">mnd</th><th style="text-align:right">salaris</th>${kol.map(([,l])=>`<th style="text-align:right">${l}</th>`).join('')}</tr>
+    ${H.R.map(r=>`<tr ${r.U&&r.U.soort==='periode'?`data-verhoudingperiode="${esc(r.U.start)}"`:`data-verhoudingmaand="${r.ym}"`}${r.U&&r.U.korteMaand?' data-kortemaand':''}${r.uit?` data-uitvast="${r.uit.vast}" data-uitpotjes="${r.uit.potjes}" data-uitzonder="${r.uit.zonder}" data-uitcontant="${r.uit.contant}" data-uittotaal="${r.uit.totaal}"`:''} style="border-top:1px solid var(--line)"><td data-verhoudingnaam style="padding:4px 1px;vertical-align:top;overflow-wrap:anywhere">${esc(verhoudingRijNaam(r))}${r.salNote?`<br><span data-salnote style="color:var(--mut2)">${esc(r.salNote)}</span>`:''}</td><td style="${td}">${euro0(r.sal)}${r.andere>0.5?`<br><span data-verhoudingandere="${r.andere}" style="color:var(--mut2)">+${euro0(r.andere)}</span>`:''}${r.eenmalig>0.5?`<br><span data-verhoudingeenmalig="${r.eenmalig}" style="color:var(--mut2)">eenm. ${euro0(r.eenmalig)}</span>`:''}</td>${kol.map(([k])=>`<td style="${td}"${k==='opzij'?` data-verhoudingopzij="${r.opzij}" title="${r.opzijE?esc(opzijEenheidTekst(r.opzijE)):''}"`:''}${r[k]==null?' data-verhoudinggeen':''}>${r[k]==null?'–':euro0(r[k])}<br><span style="color:var(--mut2)">${r.pct[k]==null?'-':r.pct[k]+'%'}</span></td>`).join('')}</tr>`).join('')}</table>
     <div class="small" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs)">opzij = netto naar je spaarrekening (gestort − eruit) · rest = salaris + andere inkomsten − vast, potjes, buiten, opzij en reserveringen · eenmalig staat apart: het zit in potjes of buiten en telt niet als gedrag</div>
     ${H.lijn?`<div class="small" data-vastpctlijn style="margin-top:8px;font-weight:600">na je salarisverhoging ging je vast-% van ${H.lijn.van}% naar ${H.lijn.naar}%</div>`:''}</div>`; }
 /* v511 (punt 9): de naam van een rij: de korte november "nov (1–23)", een periode "24 nov–23 dec", anders de maand; nooit leeg */
@@ -15390,7 +15390,7 @@ function gripMomentDatum(){
   /* v511 (punt 5): VOOR de eerste periode (de overgangsmaand november 1–23) is het moment de VOLGENDE salarisdatum volgens de regel
      (salVolgendeDatum: de 24e, in het weekend de maandag erna), dezelfde functie als de periodestart. Tot v511 viel deze tak terug op de
      dag van de laatste werkelijke storting (26 okt, want 24 okt was een zaterdag) en zei hij op 23 nov "bij salaris (26 nov)". */
-  try{ const d=salVolgendeDatum(rekDag(vandaagYMD(),1)); if(d) return {soort:'salaris', d}; }catch(_){}
+  try{ const pk=periodeVan(vandaagYMD()); if(pk && pk.korteMaand){ const d=salVolgendeDatum(rekDag(vandaagYMD(),1)); if(d) return {soort:'salaris', d}; } }catch(_){}
   let dag=null; try{ const t=salarisBetalingLaatst(thisYM()); if(t) dag=gripDag(t.date); }catch(_){}
   if(!dag) return {soort:'salaris', d:null};
   const maak=ym=>{ const [y,mo]=ym.split('-').map(Number), dim=new Date(y,mo,0).getDate(); return ymdVan(shiftWeekendToMonday(new Date(y,mo-1,Math.min(dag,dim)))); };
@@ -15521,7 +15521,7 @@ function gripSpaardoel(ym, U){
      deels gehaald" (kalendermaand) en vanaf 24 nov "€2.131 van €1.766 · gehaald" (de eenheid met de verdeling van NU als lat). */
   const AF=((SET.maandAfsluiting||{})[ym]||{}).spaardoel;
   if(AF && (!U || (U.soort==='maand' && !U.korteMaand))) return Object.assign({vastgelegd:true}, AF);
-  if(U && !(U.soort==='maand' && !U.korteMaand)) return gripSpaardoelEenheid(U);   // v499: een eenheid uit de era (de lopende periode, de korte november, een afgeronde periode)
+  if(U && (!(U.soort==='maand' && !U.korteMaand) || gripOpzijVan(ym)==null)) return gripSpaardoelEenheid(U);   // zonder Plan-snapshot van die maand blijft het de eenheid   // v499: een eenheid uit de era (de lopende periode, de korte november, een afgeronde periode)
   const opzij=gripOpzijVan(ym); let net=null; try{ net=savedNet(ym); }catch(_){}
   if(!(opzij>0) || net==null) return {s:'onbekend', t:'niet gemeten: Plan opzij van die maand is niet bewaard'};
   const O=opzijEenheid(maandEenheid(ym))||{erin:Math.max(Math.round(net),0), uit:0, netto:Math.round(net)}, netto=O.netto, pct=netto/opzij, uit=O.uit, erin=O.erin;   // v500 (punt 3): een bron
@@ -36597,7 +36597,7 @@ function voorbeeldStart(datum){
   curMonth=null; window._insPer=null; window._insSoort=null;
   try{ runMemoVergeten(); }catch(_){}
   _dataGen++;
-  if(window._voorbeeldSalaris){ try{ voorbeeldSalarisInjecteer(); }catch(_){} }   // v498: herinjecteer voor de nieuwe dag als de schakelaar aan staat
+  try{ voorbeeldSalarisInjecteer(); }catch(_){}   // v511: de vaste termijnen altijd, het salaris alleen met de schakelaar aan   // v498: herinjecteer voor de nieuwe dag als de schakelaar aan staat
   try{ closeSheet(); }catch(_){}
   voorbeeldBalk();
   /* v499 (punt 0a): go() tekent alleen Grip (renderMaand) en het logboek opnieuw, niet Inzichten; met alleen go('ins') zag je de DOM
@@ -36660,7 +36660,7 @@ function voorbeeldSalarisInjecteer(){ voorbeeldSalarisWeg(); const dag=window._v
   const salAcc=(SET.salVerdeling&&SET.salVerdeling.salAcc) || (SP&&SP.B&&SP.B.acc) || (Array.isArray(OWN)?OWN[0]:null);
   /* de verwachte storting: op de regeldatum van de lopende periode (cur.verwacht), het vaste salaris, op de Salarisrekening, zolang hij
      nog niet werkelijk binnen is en de dag <= de gekozen dag */
-  try{ if(SP && salAcc && SP.cur && SP.cur.verwacht && SP.cur.verwacht<=dag && !SP.cur.binnen){
+  try{ if(window._voorbeeldSalaris && SP && salAcc && SP.cur && SP.cur.verwacht && SP.cur.verwacht<=dag && !SP.cur.binnen){
     let bedrag=0; try{ bedrag=Math.round(+inkVast()||0); }catch(_){} if(!(bedrag>0)){ try{ bedrag=Math.round(baseIncome()); }catch(_){} }
     if(bedrag>0){ const t={id:'vb:sal:'+SP.cur.verwacht, date:SP.cur.verwacht, amount:bedrag, acc:salAcc, name:(SP.B&&SP.B.naam)||'Werkgever', desc:'VOORBEELD verwacht salaris', typ:'', ref:'', src:'voorbeeld', accName:'', refNums:[]}; categorize(t); t.id='vb:sal:'+SP.cur.verwacht; TX.push(t); ids.push(t.id);
       /* v504 (punt 1): naast het salaris ook je VERDELING op de salarisdag, als overboekingen tussen eigen rekeningen (intern: geen
@@ -36691,7 +36691,7 @@ function voorbeeldSalarisInjecteer(){ voorbeeldSalarisWeg(); const dag=window._v
    voorbeelddag dezelfde lijst leest. */
 function voorbeeldVasteTermijnen(){ const k=TX.filter(t=>String(t.src)!=='voorbeeld').length+'|'+importTotYmd()+'|'+(SET.vastDatum?JSON.stringify(SET.vastDatum):'')+'|'+JSON.stringify(SET.vastVerwacht||[]); if(window._vbVT && window._vbVT.k===k) return window._vbVT.L;
   const was=window._voorbeeld, wasSal=window._voorbeeldTx, wasDag=window._voorbeeldDag, wasTX=TX; let L=null;
-  const vers=()=>{ _dataGen++; try{ telbaarVergeten(); }catch(_){} try{ runMemoVergeten(); }catch(_){} window._rekV=null; };   // telbareTx() hangt aan _dataGen
+  const vers=()=>{ _dataGen++; try{ runMemoVergeten(); }catch(_){} window._rekV=null; };   // telbareTx() hangt aan _dataGen
   try{ TX=TX.filter(t=>String(t.src)!=='voorbeeld'); window._voorbeeld=false; window._voorbeeldTx=null; window._voorbeeldDag=null; vers();
     const P=rekVoorstel(); if(P && P.ok){ const per=new Map();
       for(const x of [].concat(Array.isArray(P.vastCur)?P.vastCur:[], Array.isArray(P.vast)?P.vast:[])){ const key=x.key||x.naam||'x';
@@ -36726,7 +36726,7 @@ function voorbeeldSaldoDelen(acc){ const o={salVerd:0, vast:0}; if(!window._voor
 function saldoHerkomst(acc){ let d=null; try{ d=accBalanceDatum(acc); }catch(_){} if(!d){ try{ d=importTotYmd(); }catch(_){} }
   if(!d || String(d).slice(0,10)>=vandaagYMD()) return ''; return 'laatste import '+dagKort(String(d).slice(0,10)); }
 function voorbeeldSalarisZet(aan){ window._voorbeeldSalaris=!!aan; if(!window._voorbeeld){ return; }
-  if(aan) voorbeeldSalarisInjecteer(); else voorbeeldSalarisWeg();
+  voorbeeldSalarisInjecteer();   // v511 (punt 1): de vaste termijnen blijven, de schakelaar zet alleen salaris en verdeling aan of uit
   voorbeeldBalk(); try{ render(); }catch(_){} }
 /* de presets en een eigen datum in de Diagnose-sheet; alleen lezen, opent de voorbeeldweergave */
 function voorbeeldKies(){
