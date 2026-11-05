@@ -116,3 +116,22 @@ for (const variant of ['eerste telling', 'na een telling op 25 okt']) {
     expect(tab.corr).toContain('28 okt');
   });
 }
+
+/* ===== d. EENMALIG IN KIEZEN OOK OVER DE PERIODEGRENS ===== */
+test('v512 d: een eenmalig bedrag van 20 nov staat op 26 nov en 1 dec in de kaart en in Kiezen, of na "klopt, al verdeeld" in geen van beide', async ({ page }) => {
+  await boot(page);
+  await add(page, [[MAIN, '2026-11-20', 700, 'SKF', 'BONUS SKF NOVEMBER', 'inkomen']]);
+  const id = await page.evaluate(() => { const t = TX.find(x => x.name === 'SKF' && x.amount === 700); SET.onregelmatig = Object.assign({}, SET.onregelmatig, { [t.id]: 700 }); save(); runMemoVergeten(); return t.id; });
+  const beide = () => page.evaluate(id => { window._gripCyc = null; const div = document.createElement('div'); div.innerHTML = onregKaart();
+    const kaart = !!div.querySelector(`[data-onreg="${id}"]`), lijst = onregBinnen().some(b => b.id === id);
+    const kies = gripCyclus().kies.find(x => x.id === 'inkomen:eenmalig:' + id);
+    return { kaart, lijst, kies: !!kies, naam: kies && kies.naam }; }, id);
+  for (const d of ['2026-11-26', '2026-12-01']) { await bekijk(page, d); const r = await beide();
+    expect(r.lijst, d + ': invoer, het bedrag staat in onregBinnen').toBe(true);
+    expect(r.kaart, d + ': de kaart').toBe(true);
+    expect(r.kies, d + ': Kiezen').toBe(true);
+    expect(r.naam, d).toMatch(/^Eenmalig €700 /); }
+  await page.evaluate(id => { if (window._voorbeeld) voorbeeldStop(); eenmaligVerdeeldZet(id, true); }, id);
+  for (const d of ['2026-11-26', '2026-12-01']) { await bekijk(page, d); const r = await beide();
+    expect(r, d + ': na "klopt, al verdeeld" in geen van beide').toEqual({ kaart: false, lijst: false, kies: false, naam: undefined }); }
+});

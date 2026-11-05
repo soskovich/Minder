@@ -12422,13 +12422,17 @@ function gripCyclus(SIG){
   const inkGekozen=N3 && (SET.inkomenVerdeeld||{})[N3.ym];
   if(N3 && !inkGekozen) kies.push({id:'inkomen:verdeel', sym:'inkomen:na', bron:'inkomen', naam:'Verhoging verdelen', reden:`vast inkomen +${euro0(N3.d)} (+${N3.pct}%) vanaf ${f3MN(N3.ym)}${N3.geenNa?'':' · '+naJeSalarisTekst(N3)}`, act:'openVerhogingVerdelen()'});
   /* v473: eenmalig geld uit je salaris is een eigen keuze, los van de verhoging en zonder voorkeuze */
-  try{ { const L=salSplitStortingen(45).filter(S=>S.eenmalig>=SALSPLIT_MELD_MIN && String(S.datum).slice(0,7)===thisYM());
+  /* v512 (punt 4): DEZELFDE LIJST ALS DE KAART "binnen op ..." (onregBinnen) en dezelfde vlag "al verdeeld" (SET.eenmaligVerdeeld). Tot
+     v512 las Kiezen alleen de salarisstortingen van de lopende kalendermaand, dus een eenmalig bedrag van 20 nov viel er op 26 nov (een
+     nieuwe periode) of op 1 dec uit terwijl de kaart hem nog toonde. Per bedrag de splitsing van die storting als die er is (de reden). */
+  try{ { const L=onregBinnen().map(bon=>{ const t=TX.find(x=>x.id===bon.id); let S=null; try{ S=t?salSplitsing(t):null; }catch(_){}
+      return S?Object.assign({}, S, {eenmalig:bon.bedrag}):{id:bon.id, datum:bon.datum, eenmalig:bon.bedrag, vast:null, reis:0, naam:bon.naam}; });
     /* v501 (punt 3): EERST METEN. Ging er sinds de binnenkomst al meer naar opzij (spaarrekening, reserveringen, beleggen) dan je afspraak,
        dan is de vraag "lijkt al verdeeld · klopt / niet" en geen "verdelen"; pas na "klopt" verdwijnt de keuze (SET.eenmaligVerdeeld). */
     for(const S of L){ const A=(SET.eenmaligVerdeeld||{})[S.id]; if(A && A.klopt) continue; let EV=null; try{ EV=A?null:eenmaligAlVerdeeld(S); }catch(_){}
       const sq=esc(String(S.id)).replace(/'/g,"\\'");
       if(EV && EV.dekt) kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'', bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} lijkt ${EV.dekt==='heel'?'al verdeeld':`voor ${euro0(EV.boven)} al verdeeld`}`, reden:`${eenmaligVerdeeldTekst(EV)} · klopt / niet`, act:`openEenmaligVerdeeld('${sq}')`, EV, S});
-      else kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'',  bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} verdelen`, reden:`het deel van je salaris van ${dagKort(S.datum)} boven ${euro0(S.vast)}${S.reis>0?' en de reiskosten':''}${S.nietGesplitst?' · nog niet gesplitst':''}${EV?` · sinds ${dagKort(EV.van)} ${euro0(EV.naar)} naar opzij, je afspraak ${euro0(EV.afspraak)}`:''}`, act:`openMeevaller(${Math.round(S.eenmalig)},'salaris')`}); } } }catch(_){}
+      else kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'',  bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} verdelen`, reden:`${S.vast==null?`${S.naam||'inkomen'} van ${dagKort(S.datum)}`:`het deel van je salaris van ${dagKort(S.datum)} boven ${euro0(S.vast)}`}${S.reis>0?' en de reiskosten':''}${S.nietGesplitst?' · nog niet gesplitst':''}${EV?` · sinds ${dagKort(EV.van)} ${euro0(EV.naar)} naar opzij, je afspraak ${euro0(EV.afspraak)}`:''}`, act:`openMeevaller(${Math.round(S.eenmalig)},'salaris')`}); } } }catch(_){}
   /* v501 punt 8: de salarisverdeling komt pas in Kiezen na twee salarissen op rij met meer dan SALM2_HERZIEN afwijking per rekening */
   try{ const HZ=salM2Herzien(); if(HZ) kies.push({id:'salm2:herzien', sym:'', bron:'salaris', naam:'Zo verdeel je je salaris', reden:`twee salarissen op rij (${HZ.periodes.map(f3MN).join(', ')}) week ${HZ.rek.map(a=>aanslNaam(a)).join(' en ')} meer dan ${euro0(SALM2_HERZIEN)} af van je afspraak`, act:"openSalVerdeling('salverdeling')"}); }catch(_){}
   let H=[]; try{ H=gripTeRuimHerzien(); }catch(_){}
