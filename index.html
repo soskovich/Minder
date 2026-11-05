@@ -13063,8 +13063,17 @@ function periodeBudgetKern(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return
   const vasteLasten=PVL.filter(x=>!((+base[x.cat]||0)>0));
   const vlSom=vasteLasten.reduce((a,x)=>a+Math.round(+x.bedrag||0),0);
   const vastPerCat={}; for(const x of PVL){ const c=x.cat||''; vastPerCat[c]=(vastPerCat[c]||0)+(+x.bedrag||0); }
+  /* v512 (punt 2): EEN VASTE LAST STAAT IN BUDGET EN VERWACHTING IN DEZELFDE STAP. Gemeten (Bekijk als 24 en 26 nov): het vaste deel van
+     Vervoer kwam uit de SEPA-herkenning van de KALENDERMAAND (BP.split, potVastDelen: november, met de lease van 12 nov plus die van
+     12 dec, EUR 1.074), terwijl de verwachting (periodeVooruitKern) de termijnen van de PERIODE telt (EUR 537): vast -EUR 537 in de
+     brug en het variabele restje van Vervoer (EUR 26) "boven". En een potje dat je op vast zette (Huur, potHeelVast) stond in het budget
+     met de woning (EUR 442) bij vast en de rest (EUR 258) bij de potjes, terwijl de verwachting het hele potje bij vast zet. Nu: het
+     vaste deel is de som van de vaste termijnen van de periode in die categorie (dezelfde PVL als de verwachting); is er geen periode-
+     lijst, dan de oude SEPA-telling. Een potje op vast staat helemaal bij vast. Het totaal en dus het netto veranderen niet: potjes is
+     de rest (totaal - vast - Contant). */
+  const metPVL=PVL.length>0;
   const vastDeel={}; for(const k in base){ if(k===CONTANT_CAT) continue; const b=+base[k]||0; if(!(b>0)) continue;
-    const vd=Math.min(b, Math.max((BP.split[k]?BP.split[k].vast:0)||0, vastPerCat[k]||0)); if(vd>0) vastDeel[k]=Math.round(vd); }
+    const vd=potHeelVast(k)?b:Math.min(b, metPVL?(vastPerCat[k]||0):Math.max((BP.split[k]?BP.split[k].vast:0)||0, vastPerCat[k]||0)); if(vd>0) vastDeel[k]=Math.round(vd); }
   const contant=BP.contant, totaal=BP.totaal+vlSom;
   const vastPotjesSom=Object.values(vastDeel).reduce((a,v)=>a+v,0), vastTotaal=vastPotjesSom+vlSom;
   const potjesTotaal=totaal-vastTotaal-contant;   // de rest = het variabele deel, exact (geen afrondingsdrift op het totaal)

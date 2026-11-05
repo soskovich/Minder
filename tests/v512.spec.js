@@ -55,3 +55,28 @@ test('v512 a2: na "Ja, dit is hem" ook geen signaal; na "Nee, iets anders" telt 
   expect(nee.vast).toBe(false); expect(nee.norm).toBe(50);
   expect(nee.V + nee.P.length + nee.sym.length, 'na Nee is het een gewone uitgave in het potje').toBeGreaterThan(0);
 });
+
+/* ===== b. EEN VASTE LAST STAAT IN BUDGET EN VERWACHTING OP DEZELFDE PLEK ===== */
+const vastStap = page => page.evaluate(() => { window._gripCyc = null; const V = maandVooruit(), PB = V.PB, B = brugIndeling(V), M = gripMeterBudget();
+  const vg = B.groepen.find(g => g.k === 'vast');
+  const vp = {}; for (const x of V.vastePotjes) vp[x.k] = x.bud;
+  const P = rekVoorstel(), VL = (P.vastCur || P.vast || []).map(x => ({ naam: x.naam, cat: x.cat }));
+  return { pbVast: PB.vast.totaal, pbDeel: PB.vast.deel, brugVastB: vg.b, vp, VL, potHuur: (PB.potjes.perDag.huur || 0) + (PB.potjes.perKeer.huur || 0),
+    nettoCent: Math.round(M.netto * 100), budget: PB.totaal, vastNaam: V.vastePotjes.map(x => x.k) }; });
+
+test('v512 b: de huur (EUR 300, potje Huur) en de lease staan in budget en verwachting allebei bij vast; het netto blijft gelijk', async ({ page }) => {
+  await boot(page);
+  /* het netto van d46a6f1 (v511) op dezelfde fixture, in centen, GEMETEN met deze test op die commit */
+  const NETTO = { '2026-11-24': -77100, '2026-11-26': -79200 };
+  for (const d of ['2026-11-24', '2026-11-26']) { await bekijk(page, d); const r = await vastStap(page);
+    /* invoer: de woning (Huur, EUR 300) en de lease (Vervoer) zijn vaste lasten van de periode in een categorie met een potje */
+    expect(r.VL.some(x => x.cat === 'huur' && /Cathalina/.test(x.naam)), d).toBe(true);
+    expect(r.VL.some(x => x.cat === 'vervoer' && /Hiltermann/.test(x.naam)), d).toBe(true);
+    expect(r.pbDeel.huur, d + ': de huur zit in het vaste deel van het budget').toBeGreaterThanOrEqual(300);
+    expect(r.potHuur, d + ': geen deel van Huur bij de potjes').toBe(0);
+    /* per categorie: het vaste deel van het budget is het budget van de stap vast in de verwachting */
+    for (const k of ['huur', 'vervoer']) expect(r.vp[k], d + ' ' + k).toBe(r.pbDeel[k]);
+    expect(r.pbDeel.vervoer, d + ': de lease een keer (EUR 537), niet de kalendermaand').toBe(537);
+    expect(r.brugVastB, d + ': de stap vast in de brug is het vaste budget').toBe(r.pbVast);
+    expect(r.nettoCent, d + ': netto gelijk aan v511').toBe(NETTO[d]); }
+});
