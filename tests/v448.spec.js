@@ -29,9 +29,10 @@ test.describe('1 · historie', () => {
     expect(r.sep).toBe(300);
     expect(r.apr).toBe(100);
     const b = await b20(page);
-    /* v450: contant per maand komt uit de tellingen (contantMaanden), met de correctie van v449: september 300 −300 (rest 20) */
-    expect(regel(b, /^  Contant: /)).toContain('apr 100 · mei 100 · jun 100 · jul 100 · aug 100 · sep 0');
-    expect(regel(b, /waarvan contant \(opname/)).toContain('sep 0');
+    /* v450: contant per maand komt uit de tellingen (contantMaanden). v512 (punt 3): een afgesloten maand verandert niet, dus september
+       houdt zijn 300 en de telling van oktober draagt de correctie als eigen regel (300 uit de opnames van september, rest −20) */
+    expect(regel(b, /^  Contant: /)).toContain('apr 100 · mei 100 · jun 100 · jul 100 · aug 100 · sep 300 · okt -20');
+    expect(regel(b, /waarvan contant \(opname/)).toContain('sep 0');   // sinds v447 0: contant is het potje
     const c = regel(b, /CONTROLE oud "buiten · waarvan contant"/);
     expect(c).toContain('apr 100 = 100 klopt');
     expect(c).toContain('sep 300 = 300 klopt');
@@ -67,7 +68,7 @@ test.describe('1 · historie', () => {
     expect(r.cat).toBe('intern');
     expect(r.P).toBe(300);
     const b = await b20(page);
-    expect(regel(b, /^  Contant: /)).toContain('sep 0');   // v450: uit de tellingen, na de correctie van v449
+    expect(regel(b, /^  Contant: /)).toContain('sep 300');   // v450: uit de tellingen; v512 (punt 3): september (afgesloten) houdt zijn opnames, de correctie staat in oktober
     expect(regel(b, /CONTROLE oud "buiten · waarvan contant"/)).toContain('sep 300 = 300 klopt');
     expect(regel(b, /CONTROLE oud "buiten · waarvan contant"/)).not.toContain('LET OP');
   });

@@ -80,3 +80,39 @@ test('v512 b: de huur (EUR 300, potje Huur) en de lease staan in budget en verwa
     expect(r.brugVastB, d + ': de stap vast in de brug is het vaste budget').toBe(r.pbVast);
     expect(r.nettoCent, d + ': netto gelijk aan v511').toBe(NETTO[d]); }
 });
+
+/* ===== c. EEN KASTELLING-CORRECTIE HOORT BIJ DE MAAND VAN DE OPNAME ===== */
+for (const variant of ['eerste telling', 'na een telling op 25 okt']) {
+  test(`v512 c (${variant}): opname EUR 500 op 28 okt, telling +EUR 500 op 1 nov: november niet onder nul, oktober blijft, de regel noemt 28 okt`, async ({ page }) => {
+    await S.boot(page, '2026-11-01');
+    const voor = await page.evaluate(({ LEEF, v }) => {
+      if (v) { SET.contantHist = [{ datum: '2026-10-25', stand: 0, op: Date.parse('2026-10-25T12:00'), bron: 'moment2' }]; SET.contant = { stand: 0, datum: '2026-10-25', op: Date.parse('2026-10-25T12:00') }; }
+      const t = { id: 'opn28', date: '2026-10-28', amount: -500, acc: LEEF, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT ZWANEBLOEM', typ: '', ref: '', src: 'csv', accName: '', refNums: [] };
+      categorize(t); TX.push(t); TX.sort((a, b) => a.date.localeCompare(b.date)); save(); buildAccMeta(); runMemoVergeten();
+      const okt = contantMaanden(['2026-10', '2026-11'])[0].uitgegeven; const H = verhoudingSalarisData(); const r = H.R.find(x => x.ym === '2026-10');
+      return { okt, oktRij: r && r.potjes, oktU: Math.round(uitgegevenStand({ m: '2026-10' }).cent.potjes) }; }, { LEEF, v: variant !== 'eerste telling' });
+    expect(voor.okt, 'invoer: oktober telt de opname als uitgegeven').toBe(500);
+    await page.evaluate(() => { contantOpslaan(500); runMemoVergeten(); });
+    const na = await page.evaluate(() => { const k = TX.find(x => x.src === 'contant'); const CM = contantMaanden(['2026-10', '2026-11']);
+      const U = uitgegevenStand({ m: '2026-11' }); const H = verhoudingSalarisData(); const r = H.R.find(x => x.ym === '2026-10');
+      go('ins'); const el = document.querySelector('[data-kascorrectie]');
+      return { k: k && [k.name, k.amount].join(':'), okt: CM[0].uitgegeven, nov: CM[1].uitgegeven, oktRij: r && r.potjes, oktU: Math.round(uitgegevenStand({ m: '2026-10' }).cent.potjes),
+        potjes: U.cent.potjes, corr: U.kasCorrectie && U.kasCorrectie.bedrag, datums: U.kasCorrectie && U.kasCorrectie.datums, regel: el && el.innerText }; });
+    expect(na.k, 'invoer: de telling boekt +EUR 500 nog in je zak').toBe('Kastelling · nog in je zak:500');
+    expect(na.okt, 'oktober (afgesloten) verandert niet').toBe(voor.okt);
+    expect(na.oktRij, 'de rij oktober in Verhouding met je salaris verandert niet').toBe(voor.oktRij);
+    expect(na.oktU).toBe(voor.oktU);
+    expect(na.nov, 'november gaat niet onder nul').toBeGreaterThanOrEqual(0);
+    expect(na.potjes, 'potjes november niet onder nul').toBeGreaterThanOrEqual(0);
+    expect(na.corr, 'de correctie is een eigen regel van EUR 500').toBe(500);
+    expect(na.datums).toEqual(['2026-10-28']);
+    expect(na.regel, 'de regel op Inzichten noemt de opnamedatum').toContain('correctie opname 28 okt');
+    /* de overgangsmaand in de tabel (Bekijk als 24 nov): november (1–23) niet onder nul, de correctie staat eronder */
+    await bekijk(page, '2026-11-24');
+    const tab = await page.evaluate(() => { const H = verhoudingSalarisData(); const r = H.R.find(x => x.U && x.U.korteMaand);
+      const div = document.createElement('div'); div.innerHTML = verhoudingSalarisHtml(); const c = div.querySelector('[data-verhoudingcorrectie]');
+      return { potjes: r && r.potjes, corr: c && c.textContent }; });
+    expect(tab.potjes, 'november (1–23) in de tabel').toBeGreaterThanOrEqual(0);
+    expect(tab.corr).toContain('28 okt');
+  });
+}

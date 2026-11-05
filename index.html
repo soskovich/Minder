@@ -3043,9 +3043,16 @@ function contantPeriode(P){ if(!P || !P.start || !P.eind) return null; const H=c
    niet stil verdeeld. Alleen de vorige periode: een periode zonder telling aan het begin heeft per constructie geen telling ervoor,
    dus ook de vorige heeft geen telling en daar is alles wat je pinde uitgegeven. De ruwe uitkomst (uitgegevenRuw) blijft staan voor de
    controle formule = loop. Lezers: blok 20 (POTJE CONTANT) en de tests. */
-function contantCorrigeer(CP){ const r2=x=>Math.round(x*100)/100;
+function contantCorrigeer(CP, geenTerug){ const r2=x=>Math.round(x*100)/100;
   CP.forEach((x,i)=>{ if(!x || x.uitgegeven==null) return; x.uitgegevenRuw=x.uitgegeven;
-    if(x.begin || !(x.uitgegeven<-0.005)) return;
+    if(!(x.uitgegeven<-0.005)) return;
+    /* v512 (punt 3): per kalendermaand (geenTerug) gaat er niets terug naar een afgesloten maand. Wat de telling meer vond door een opname
+       uit een eerdere maand (de correctie van contantUitgegeven, hooguit het overschot) is een eigen regel in deze maand en geen meevaller
+       in het potje; wat dan nog onder nul staat blijft een meting (v454 f: geld dat niet uit een opname kwam). */
+    if(geenTerug){ let C=null; try{ C=contantUitgegeven(x.start, x.eind<vandaagYMD()?x.eind:vandaagYMD()).correctie; }catch(_){}
+      const ab=r2(Math.min(-x.uitgegeven, C?+C.bedrag||0:0)); if(!(ab>0)) return;
+      x.kasCorrectie=Object.assign({}, C, {bedrag:ab}); x.uitgegeven=r2(x.uitgegeven+ab); x.uitkomst=r2(x.uitgegeven+(x.lopend?(+x.verwachtNa||0):0)); return; }
+    if(x.begin) return;
     const over=-x.uitgegeven, prev=i>0?CP[i-1]:null, kan=prev?Math.max(+prev.uitgegeven||0,0):0, corr=r2(Math.min(over,kan));
     x.corr={bedrag:corr, rest:r2(over-corr), overschot:r2(over), naar:prev, telling:x.eindT?x.eindT.datum:null};
     x.uitgegeven=0; x.uitkomst=r2(x.lopend?(+x.verwachtNa||0):0);
@@ -3054,9 +3061,13 @@ function contantCorrigeer(CP){ const r2=x=>Math.round(x*100)/100;
 /* v450 punt 2: CONTANT PER KALENDERMAAND UIT DEZELFDE BEREKENING ALS DE PERIODES (gevraagd door de gebruiker): contantPeriode() over
    elke maand en dezelfde correctie (contantCorrigeer). Lezers: salarisData (het potje Contant per maand in blok 20 punt 3, met een
    potje Contant) en de controle maand = periode in blok 20. */
+/* v512 (punt 3): EEN AFGESLOTEN MAAND VERANDERT NIET. De correctie van v449 (een negatieve maand zonder telling aan het begin gaat terug
+   naar de maand ervoor) wijzigde oktober zodra je op 1 nov telde (gemeten: Verhouding met je salaris, oktober potjes EUR 675 → EUR 175).
+   Per kalendermaand gaat er niets meer terug: de maand zelf gaat op nul (plus het tempo na de telling) en het overschot staat als
+   correctie in die maand (x.corr.rest, de regel uit contantUitgegeven). De salarisperiodes (contantPeriodenGecorr, blok 20) houden v449. */
 function contantMaanden(yms){ const cur=thisYM();
   return contantCorrigeer(yms.map(ym=>{ const dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(), P={ym, start:ym+'-01', eind:ym+'-'+String(dim).padStart(2,'0'), lopend:ym===cur, kalender:true};
-    return Object.assign({P}, contantPeriode(P)||{}); })); }
+    return Object.assign({P}, contantPeriode(P)||{}); }), true); }
 /* v454 punt 2: de lopende maand van het potje Contant (contantMaanden over de vorige en deze maand, gememoiseerd op de gegevens en de
    dag) en de toets "nog niet geteld": zonder telling in de lopende maand is uitgegeven een schatting, en dan is er geen "boven je
    potje" (valtOpSignals, potBovenLijst, insPatronen, uitschieters) en geen "boven je tempo" (kasTempo). Alleen na een telling. */
@@ -3121,8 +3132,26 @@ function contantUitgegeven(van, tot){ van=String(van).slice(0,10); tot=String(to
      pinde, dan kwam er geld uit een eerdere periode bij (v448/v449), en dat is een meting. */
   if(!tW){ uitgegeven=flows; bron='opnames'; }
   else { uitgegeven=begin+flows-(+tW.stand); bron='telling'; }
-  const r={van, tot, uitgegeven:r2(uitgegeven), flows:r2(flows), opn:r2(opn), ontv:r2(ontv), stort:r2(stort), begin:beginRuw==null?null:r2(beginRuw), beginBron, eind:tW?r2(+tW.stand):null, bron, opnTx};
+  /* v512 (punt 3): EEN KASTELLING-CORRECTIE HOORT BIJ DE MAAND VAN DE OPNAME. Gemeten op het toestel: de telling van 1 nov ("+EUR 500 ·
+     nog in je zak") zei dat de opname van 28 okt niet was uitgegeven, terwijl oktober (afgesloten, zonder telling na de opname) die
+     EUR 500 als uitgegeven telde. Oktober verandert niet; het venster met de telling noemt het als eigen regel ("correctie opname
+     28 okt"), en het telt niet in een potje. Het bedrag: wat de telling meer in je zak vond dan de stand voor het venster zonder de
+     opnames ervoor (de laatste telling ervoor, anders 0) plus wat er in het venster tot de telling bij kwam, hooguit die opnames. */
+  let correctie=null;
+  if(tW){ const grens=hV?hV.datum:rekDag(van.slice(0,7)+'-01', -1).slice(0,7)+'-01';
+    const oT=telbareTx().filter(t=>{ const td=String(t.date||'').slice(0,10); return !t.pending && td<van && (hV?td>hV.datum:td>=grens) && isOpnameTx(t); }).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const fSom=oT.reduce((a,t)=>a-t.amount,0);
+    if(fSom>0.005){ const meer=(+tW.stand)-(hV?+hV.stand:0)-flowsTot(rekDag(van,-1), tW.datum), b=r2(Math.min(fSom, Math.max(meer,0)));
+      if(b>0.005) correctie={bedrag:b, opnames:oT, datums:oT.map(t=>String(t.date).slice(0,10)), telling:tW.datum}; } }
+  const r={van, tot, uitgegeven:r2(uitgegeven), flows:r2(flows), opn:r2(opn), ontv:r2(ontv), stort:r2(stort), begin:beginRuw==null?null:r2(beginRuw), beginBron, eind:tW?r2(+tW.stand):null, bron, opnTx, correctie};
   _cUitMemo.map.set(kk, r); return r; }
+/* de regel bij een correctie: "correctie opname 28 okt" (of "opnames 26 en 28 okt") met het bedrag; telt niet in een potje */
+function kasCorrectieTekst(C){ if(!C || !(C.bedrag>0)) return ''; const ds=[...new Set(C.datums||[])];
+  const dag=d=>String(+d.slice(8,10)), mnd=d=>MNAMES[+d.slice(5,7)-1];
+  const lijst=ds.length<=1?ds.map(d=>dag(d)+' '+mnd(d)).join(''):ds.slice(0,-1).map(d=>dag(d)+(mnd(d)===mnd(ds[ds.length-1])?'':' '+mnd(d))).join(', ')+' en '+dag(ds[ds.length-1])+' '+mnd(ds[ds.length-1]);
+  return `correctie ${ds.length>1?'opnames':'opname'} ${lijst}`; }
+function kasCorrectieRegel(U){ const C=U && U.kasCorrectie; if(!C || !(C.bedrag>0)) return '';
+  return `<div class="small" data-kascorrectie="${C.bedrag}" data-kascorrectiedatum="${esc((C.datums||[]).join(','))}" style="color:var(--mut2);margin-top:6px">${esc(kasCorrectieTekst(C))}: ${euro0(C.bedrag)} nog in je zak bij de telling van ${esc(dagKort(C.telling))} · telt niet in je potjes, de maand van de opname blijft zoals hij is</div>`; }
 function contantUitgegevenMaand(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); return contantUitgegeven(m+'-01', m+'-'+String(dim).padStart(2,'0')); }
 function contantUitBronTekst(K){ return !K?'':(K.bron==='opnames'?'schatting · tel je contant':(K.bron==='schatting'?'opnames min wat je kas groeide (schatting)':'opnames min wat je kas groeide (telling)')); }
 /* v447: de salarisperiodes van de laatste n maanden (salPeriodeVan), oud naar nieuw; zonder salarisbron de kalendermaanden */
@@ -14483,7 +14512,7 @@ function eenheidSalarisRij(u){ let sk=null; try{ const D=fase3Sal(); sk=D?D.salB
   const rest=(u.korteMaand && !(sal>0))?null:sal+andere-vast-pot-buiten-opzij, pc=v=>(sal>0 && v!=null)?Math.round(v/sal*100):null;
   let salNote=''; if(!(sal>0) && sk!=null){ let prev=null; for(const t of telbareTx()){ if(t.amount>0 && recurKey(t)===sk && t.date.slice(0,10)<String(u.start) && (!prev || t.date>prev)) prev=t.date.slice(0,10); }
     salNote=prev?`salaris van ${dagKort(prev)} valt in de vorige periode`:'geen salaris in deze periode'; }
-  return {ym:u.ym, U:u, uit:U?{vast:Math.round(U.cent.vast*100), potjes:Math.round(U.cent.potjes*100), zonder:Math.round(U.cent.zonder*100), contant:Math.round(((U.per||{})[CONTANT_CAT]||0)*100), totaal:Math.round(U.totaal*100)}:null, label:eenheidLabelVol(u), kort:eenheidKort(u), sal:Math.round(sal), vast:Math.round(vast), potjes:Math.round(pot), buiten:Math.round(buiten), opzij:Math.round(opzij), opzijE:OE, andere:Math.round(andere), rest:rest==null?null:Math.round(rest), eenmalig:Math.round(een), salTx, salNote,
+  return {ym:u.ym, U:u, uit:U?{vast:Math.round(U.cent.vast*100), potjes:Math.round(U.cent.potjes*100), zonder:Math.round(U.cent.zonder*100), contant:Math.round(((U.per||{})[CONTANT_CAT]||0)*100), totaal:Math.round(U.totaal*100)}:null, label:eenheidLabelVol(u), kort:eenheidKort(u), kasCorrectie:U?U.kasCorrectie:null, sal:Math.round(sal), vast:Math.round(vast), potjes:Math.round(pot), buiten:Math.round(buiten), opzij:Math.round(opzij), opzijE:OE, andere:Math.round(andere), rest:rest==null?null:Math.round(rest), eenmalig:Math.round(een), salTx, salNote,
     pct:{vast:pc(vast), potjes:pc(pot), buiten:pc(buiten), opzij:pc(opzij), rest:pc(rest)}}; }
 function verhoudingSalarisData(){ const D=fase3Sal(); if(!D) return null; const A=D.R.slice(0,-1).slice(-6);
   const rij=r=>{ const SB=salarisBalk(D, r), sal=SB.salaris, d=k=>(SB.delen.find(x=>x.k===k)||{}).v||0;
@@ -14509,6 +14538,7 @@ function verhoudingSalarisHtml(){ let H=null; try{ H=verhoudingSalarisData(); }c
     <table class="small" data-verhouding style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:var(--fs-xs);letter-spacing:-.01em"><colgroup><col style="width:17%"><col style="width:15%">${kol.map(()=>'<col>').join('')}</colgroup><tr><th style="text-align:left">mnd</th><th style="text-align:right">salaris</th>${kol.map(([,l])=>`<th style="text-align:right">${l}</th>`).join('')}</tr>
     ${H.R.map(r=>`<tr ${r.U&&r.U.soort==='periode'?`data-verhoudingperiode="${esc(r.U.start)}"`:`data-verhoudingmaand="${r.ym}"`}${r.U&&r.U.korteMaand?' data-kortemaand':''}${r.uit?` data-uitvast="${r.uit.vast}" data-uitpotjes="${r.uit.potjes}" data-uitzonder="${r.uit.zonder}" data-uitcontant="${r.uit.contant}" data-uittotaal="${r.uit.totaal}"`:''} style="border-top:1px solid var(--line)"><td data-verhoudingnaam style="padding:4px 1px;vertical-align:top;overflow-wrap:anywhere">${esc(verhoudingRijNaam(r))}${r.salNote?`<br><span data-salnote style="color:var(--mut2)">${esc(r.salNote)}</span>`:''}</td><td style="${td}">${euro0(r.sal)}${r.andere>0.5?`<br><span data-verhoudingandere="${r.andere}" style="color:var(--mut2)">+${euro0(r.andere)}</span>`:''}${r.eenmalig>0.5?`<br><span data-verhoudingeenmalig="${r.eenmalig}" style="color:var(--mut2)">eenm. ${euro0(r.eenmalig)}</span>`:''}</td>${kol.map(([k])=>`<td style="${td}"${k==='opzij'?` data-verhoudingopzij="${r.opzij}" title="${r.opzijE?esc(opzijEenheidTekst(r.opzijE)):''}"`:''}${r[k]==null?' data-verhoudinggeen':''}>${r[k]==null?'–':euro0(r[k])}<br><span style="color:var(--mut2)">${r.pct[k]==null?'-':r.pct[k]+'%'}</span></td>`).join('')}</tr>`).join('')}</table>
     <div class="small" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs)">opzij = netto naar je spaarrekening (gestort − eruit) · rest = salaris + andere inkomsten − vast, potjes, buiten, opzij en reserveringen · eenmalig staat apart: het zit in potjes of buiten en telt niet als gedrag</div>
+    ${H.R.filter(r=>r.kasCorrectie && r.kasCorrectie.bedrag>0).map(r=>`<div class="small" data-verhoudingcorrectie="${r.kasCorrectie.bedrag}" style="margin-top:4px;color:var(--mut2);font-size:var(--fs-xs)">${esc(verhoudingRijNaam(r))}: ${esc(kasCorrectieTekst(r.kasCorrectie))} ${euro0(r.kasCorrectie.bedrag)} · telt niet in je potjes</div>`).join('')}
     ${H.lijn?`<div class="small" data-vastpctlijn style="margin-top:8px;font-weight:600">na je salarisverhoging ging je vast-% van ${H.lijn.van}% naar ${H.lijn.naar}%</div>`:''}</div>`; }
 /* v511 (punt 9): de naam van een rij: de korte november "nov (1–23)", een periode "24 nov–23 dec", anders de maand; nooit leeg */
 function verhoudingRijNaam(r){ const mn=f3MN(r.ym)||String(r.ym||''); if(!r.U) return mn;
@@ -26472,7 +26502,7 @@ function insMaandKaart(P, soort){
       <div class="ins-mb" id="insMbBalk" style="margin:8px 0 ${pbud>0?16:4}px">${segs}${streep}</div>
       ${pbud>0?`<div class="small muted" data-instempopot="${pt}">tempo potjes <span data-insgetal>${euro0(pt)}</span> op ${esc(dagTxt)} (${pct}% van de maand)</div>`:''}
       <div class="ins-leg2" style="margin-top:8px"><div class="ins-legk">Uitgegeven</div><div class="ins-legk" data-inslegnog>Nog verwacht</div>${insLegPaar(legU.filter(d=>d.v!==0), legN.filter(d=>d.v!==0), m)}</div>
-      <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${buitenRegel([m])}${insContantLaterRegel(S.U)}${insSaldoEindRegel()}</div>`;
+      <div class="small" data-instempopotjes style="color:var(--mut2);margin-top:4px">tempo gaat alleen over je potjes</div>${insPersRegel(S)}${buitenRegel([m])}${insContantLaterRegel(S.U)}${kasCorrectieRegel(S.U)}${insSaldoEindRegel()}</div>`;
   }
   /* Per soort: variabel is potjes en zonder potje tegen het potjesdeel, vast is de vaste lasten tegen hun som. */
   const delen=insSoortDelen(S, soort);
@@ -26586,8 +26616,12 @@ function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
     else { if(!isUitgave(t, B)) continue; v=uitgaveNorm(t); }
     if(!g) g=(k===CONTANT_CAT && cLater(ym))?'kasNieuw':insVastTx(t)?'vast':((+B[k]||0)>0?'potjes':'zonder');
     c[g]+=v; tx[g].push(t); const key=g==='vast'?'~vast':k; per[key]=(per[key]||0)+v; if(g!=='vast') groep[k]=g; }
-  let kas=null; if(kasF){ try{ let van, tot; if(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); van=m+'-01'; tot=m+'-'+String(o.totDag!=null?Math.min(+o.totDag,dim):dim).padStart(2,'0'); } else { van=String(o.start).slice(0,10); tot=String(o.eind).slice(0,10); }
+  let kas=null, kasCorrectie=null; if(kasF){ try{ let van, tot; if(m){ const dim=new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); van=m+'-01'; tot=m+'-'+String(o.totDag!=null?Math.min(+o.totDag,dim):dim).padStart(2,'0'); } else { van=String(o.start).slice(0,10); tot=String(o.eind).slice(0,10); }
       kas=contantUitgegeven(van, tot); const ymG=(kas.tot<kas.van?van:kas.tot).slice(0,7), BG=Bm(ymG);
+      /* v512 (punt 3): een correctie uit een eerdere maand is een eigen regel en geen meevaller in een potje: een negatieve kas gaat naar
+         de correctie (het potje gaat niet onder nul), de correctie zelf telt niet in het totaal */
+      if(kas.correctie || kas.uitgegeven<-0.005){ const neg=Math.max(-kas.uitgegeven,0); kasCorrectie=Object.assign({bedrag:0, datums:[], telling:(kas.correctie&&kas.correctie.telling)||kas.tot}, kas.correctie||{});
+        if(neg>0){ kasCorrectie.bedrag=Math.round((kasCorrectie.bedrag+neg)*100)/100; kas=Object.assign({}, kas, {uitgegeven:0, uitgegevenRuw:kas.uitgegeven}); } }
       if(kas.uitgegeven>0 || kas.opnTx.length){ const g=cLater(ymG)?'kasNieuw':((+BG[CONTANT_CAT]||0)>0?'potjes':'zonder'); c[g]+=kas.uitgegeven; for(const t of kas.opnTx) tx[g].push(t); per[CONTANT_CAT]=(per[CONTANT_CAT]||0)+kas.uitgegeven; groep[CONTANT_CAT]=g; kas.groep=g; } }catch(_){ kas=null; } }
   /* de reiskostenvergoeding: af van haar potje (tot wat daar uitging), in het deel waar dat potje in valt */
   let reisAf=0; try{ const C=salSplitCfg(); const pot=C&&C.reisPot; if(reis>0 && pot){ const g=groep[pot]||(potHeelVast(pot)?'vast':null), key=g==='vast'?'~vast':pot;
@@ -26597,7 +26631,7 @@ function uitgegevenStand(o){ o=o||{}; const m=o.m||null;
   const totaal=r2(c.vast+c.potjes+c.zonder+c.buiten+c.kasNieuw);
   /* de afgeronde delen tellen op tot het afgeronde totaal (brugAfronden: de grootste-rest-methode) */
   const R=brugAfronden(['vast','potjes','zonder','buiten','kasNieuw'].map(k=>({k, v:c[k]})), Math.round(totaal));
-  return {o, cent:c, r:R, totaal, totaalR:Math.round(totaal), eenmaligR:Math.round(c.eenmalig), reisAf:r2(reisAf), per, tx, kas}; }
+  return {o, cent:c, r:R, totaal, totaalR:Math.round(totaal), eenmaligR:Math.round(c.eenmalig), reisAf:r2(reisAf), per, tx, kas, kasCorrectie}; }
 /* het label van het venster: "oktober", of "24 nov – 23 dec" */
 function uitgegevenLabel(o){ if(o.m) return ymFull(o.m).split(' ')[0]; return `${dagKort(o.start)} – ${dagKort(o.eind)}`; }
 /* v505 (punt 3): wat er deze maand (of periode) BUITEN het budget uitging en dus niet in "verwacht" zit: buiten je potjes (eenmalig en
@@ -35247,7 +35281,7 @@ function diagSalarisVerdeling(){
       const randS=sM<sP?U(sM, rekDag(sP,-1)):-U(sP, rekDag(sM,-1)), randE=eM>eP?U(rekDag(eP,1), eM):-U(rekDag(eM,1), eP);
       const aM=som(KMs,x=>x.pin), aP=som(CP,x=>x.pin), rM=som(KMs,x=>x.corr&&x.corr.rest), rP=som(CP,x=>x.corr&&x.corr.rest), ok=Math.abs(aM-(aP+randS+randE))<0.005;
       L.push(`  CONTROLE maand (punt 3) = periode (deze tabel), v450, op de meting (opnames en tellingen, zonder de schatting van v454): maanden ${dd(sM)} t/m ${dd(eM)} ${c2(aM)} = periodes ${dd(sP)} t/m ${dd(eP)} ${c2(aP)} ${randS>=0?'+':'−'} rand begin ${c2(Math.abs(randS))} ${randE>=0?'+':'−'} rand eind ${c2(Math.abs(randE))} → ${ok?'sluit':'VERSCHIL '+c2(aM-aP-randS-randE)} · na de correctie: maanden ${c2(som(KMs,x=>x.uitgegeven))}, periodes ${c2(som(CP,x=>x.uitgegeven))}${rM||rP?` (rest niet verdeeld: maanden ${c2(rM)}, periodes ${c2(rP)})`:''}`);
-      L.push(`  CONTANT PER MAAND (v450, punt 3): ${KMs.map(x=>`${MN(x.start.slice(0,7))}${x.lopend?'*':''} ${c2(x.uitgegeven)}${x.correctie?` (was ${c2(x.uitgegevenRuw)}, correctie −${c2(x.correctie.bedrag)} uit telling ${dd(x.correctie.telling)})`:x.corr?` (was ${c2(x.uitgegevenRuw)}${x.corr.rest>0.005?`, rest ${c2(x.corr.rest)}`:''})`:''} ${x.eindT?'telling':x.schatting?'schatting':'opnames'}`).join(' · ')} · in de boekingen (categorie): ${R.filter(r=>r.kasMaand).map(r=>`${MN(r.ym)} ${c2(r.kasCat)}`).join(' · ')}`); 
+      L.push(`  CONTANT PER MAAND (v450, punt 3): ${KMs.map(x=>`${MN(x.start.slice(0,7))}${x.lopend?'*':''} ${c2(x.uitgegeven)}${x.kasCorrectie?` (was ${c2(x.uitgegevenRuw)}, ${kasCorrectieTekst(x.kasCorrectie)} +${c2(x.kasCorrectie.bedrag)} als eigen regel, v512)`:''}${x.correctie?` (was ${c2(x.uitgegevenRuw)}, correctie −${c2(x.correctie.bedrag)} uit telling ${dd(x.correctie.telling)})`:x.corr?` (was ${c2(x.uitgegevenRuw)}${x.corr.rest>0.005?`, rest ${c2(x.corr.rest)}`:''})`:''} ${x.eindT?'telling':x.schatting?'schatting':'opnames'}`).join(' · ')} · in de boekingen (categorie): ${R.filter(r=>r.kasMaand).map(r=>`${MN(r.ym)} ${c2(r.kasCat)}`).join(' · ')}`); 
     /* v453: de forecast van het potje Contant in maandVooruit() tegen contantMaanden() voor de lopende maand: een berekening */
     { let V=null; try{ V=maandVooruit(); }catch(_){}
       const cur=thisYM(), CM=contantMaanden([valtOpYmPlus(cur,-1), cur]), C=CM[CM.length-1], pc=V&&V.potjes?V.potjes.find(x=>x.k===CONTANT_CAT):null;

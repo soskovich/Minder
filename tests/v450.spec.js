@@ -100,18 +100,18 @@ test.describe('2 · een bron voor contant', () => {
     const r = await page.evaluate(() => { const D = salarisData(); return D.R.map((x) => ({ ym: x.ym, pot: Math.round((x.potjes[CONTANT_CAT] || 0) * 100) / 100, cat: x.kasCat, km: x.kasMaand && x.kasMaand.uitgegeven })); });
     for (const x of r) expect(x.pot).toBe(x.km);
     const sep = r.find((x) => x.ym === '2026-09');
-    /* september: 100 + 200 + 400 opgenomen = 700, correctie −320 uit de telling van 07-10 */
+    /* september: 100 + 200 + 400 opgenomen = 700. v512 (punt 3): september is afgesloten en verandert niet meer door de telling van 07-10;
+       oktober draagt de correctie (de opnames van september na de laatste telling) als eigen regel en gaat daardoor niet onder nul */
     expect(sep.cat).toBe(700);
-    expect(sep.pot).toBe(380);
+    expect(sep.pot).toBe(700);
     const b = await b20(page);
-    expect(regel(b, /^  Contant: /)).toContain('sep 380');
+    expect(regel(b, /^  Contant: /)).toContain('sep 700');
     expect(regel(b, /CONTROLE maand \(punt 3\) = periode/)).toContain('→ sluit');
-    expect(regel(b, /CONTANT PER MAAND \(v450/)).toContain('sep 380.00 (was 700.00, correctie −320.00 uit telling 07-10)');
+    expect(regel(b, /CONTANT PER MAAND \(v450/)).toMatch(/okt\*? [-\d.]+ \(was -?[\d.]+, correctie opnames? [^)]*als eigen regel, v512\)/);
     expect(regel(b, /CONTROLE formule = loop/)).toContain('sluit in alle');
     /* de controle van de geldstromen noemt het verschil bij naam en sluit */
     const i = b.split('\n').findIndex((l) => /^  sep: .*=/.test(l)), naam = b.split('\n').slice(i, i + 4).join('\n');
-    expect(naam).toMatch(/het verschil bij naam .*sluit/);
-    expect(naam).toContain('contant uit de tellingen 380.00 in plaats van de boekingen 700.00');
+    expect(naam).toMatch(/klopt|sluit/);   // v512: september is gelijk aan zijn boekingen, er is geen verschil meer om bij naam te noemen
   });
 });
 
