@@ -3759,7 +3759,11 @@ function openSavingsPots(){
   showSheetBg();
 }
 // groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
-function recurKey(t){ perfHit('recurKey'); return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
+/* v512 (punt 6): de sleutel hangt alleen aan de naam, dus een keer per naam rekenen (gemeten 7.000 tot 11.000 aanroepen per Grip-render) */
+const _recurKeyMemo=new Map();
+function recurKey(t){ perfHit('recurKey'); const n=t.name||''; let k=_recurKeyMemo.get(n);
+  if(k===undefined){ k=n.toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); if(_recurKeyMemo.size>50000) _recurKeyMemo.clear(); _recurKeyMemo.set(n, k); }
+  return k; }
 function shiftWeekendToMonday(d){ const x=new Date(d); const w=x.getDay(); if(w===6) x.setDate(x.getDate()+2); else if(w===0) x.setDate(x.getDate()+1); return x; }
 /* v413: EEN VERLOPEN POST VERDWIJNT NIET VANZELF UIT HET SCHEMA (gevraagd door de gebruiker). Tot v412 viel een vaste
    post eruit zodra zijn laatste betaling langer dan 1,6 keer zijn interval plus 7 dagen geleden was (55 dagen bij een
@@ -11750,9 +11754,11 @@ function gripKiesTab(t){
   const nu=gripTab();
   if(t!==nu){ const G=SET.gripGezien&&SET.gripGezien.maand===thisYM()?SET.gripGezien:{maand:thisYM(), tabs:{}};
     if(nu==='zien') G.tabs.zien=1;
-    SET.gripGezien=G; save(); }
+    SET.gripGezien=G; save(true); }   /* v512 (punt 6): een boekhoud-save (SET.gripGezien voedt alleen het tab-vinkje, gripAfgerond, en geen gecachte
+       berekening). Tot v512 was dit een gewone save(), die _dataGen ophoogt: elke tabwissel gooide dan elke rekencache weg en rekende
+       Zien, Begrijpen, Kiezen en Terugblik koud opnieuw (gemeten op het toestel: Zien koud 901 ms, Terugblik koud 930 ms). */
   if(t==='begrijpen') window._gripBeg={v:'lijst'};   // v428: de tab opent op de lijst
-  window._gripTab=t; renderMaand();
+  window._gripTab=t; window._gripTabWissel=true; renderMaand();
 }
 function gripTabsHtml(){
   const A=gripAfgerond(), t=gripTab();
@@ -15139,7 +15145,11 @@ function renderMaand(){
      altijd op Zien (go('maand')). De cyclus (gripCyclus) wordt een keer per render opgehaald: valtOpSignals() schrijft
      ook (de log-records en `getoond`, v314). "Let op" is geen kaart meer: de feiten staan op Zien bij Signalen, de
      handelingen in Kiezen. */
-  const C=gripCyclus(); window._gripCyc=C;
+  /* v512 (punt 6): EEN BEREKENING PER STAND, GEDEELD DOOR DE VIER TABS. Een tabwissel (gripKiesTab) verandert geen gegeven, dus hij leest
+     de cyclus van de vorige render zolang de stand gelijk is (_dataGen, de dag en de voorbeeldweergave); elke andere render rekent hem
+     opnieuw. Zo rekent een tabwissel geen gripCyclus en geen rekVoorstelRuw (test f). */
+  const ck=_dataGen+'|'+vandaagYMD()+'|'+voorbeeldSleutel(), wissel=!!window._gripTabWissel; window._gripTabWissel=false;
+  const C=(wissel && window._gripCyc && window._gripCycK===ck)?window._gripCyc:perfK('gripCyclus', gripCyclus); window._gripCyc=C; window._gripCycK=ck;
   try{ if(salRegelZaai()) save(); }catch(_){} try{ salTekortBewaar(); }catch(_){}   // v435: voor het tekenen, zodat Zien de waarschuwing van vandaag meteen toont
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const tab=gripTab();

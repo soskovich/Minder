@@ -177,3 +177,30 @@ test('v512 g: "12,50" en "1.250,00" (en "12.50") in Bestemming, kastelling en po
   expect(w, 'invoer: op 23 nov is er een bestemming voor wat over is').not.toBeNull();
   expect(w).toEqual([12.5, 1250]);
 });
+
+/* ===== f. SNELHEID VAN GRIP: EEN BEREKENING PER STAND, GEDEELD DOOR DE VIER TABS ===== */
+/* v512-grip-getallen.json: alle bedragen en percentages op Grip per tab op 24 en 26 nov, GEMETEN met deze fixture op 9458a86 (punt 1
+   t/m 5 en 7 erin, punt 6 nog niet), met een koude render per tab. Punt 2 verandert op deze fixture het vaste deel van Vervoer (de
+   lease een keer), dus d46a6f1 zelf is hier geen ijkpunt: punt 6 mag geen enkel getal verschuiven tegen de stand ervoor. */
+const IJK = require('./v512-grip-getallen.json');
+test('v512 f: een tabwissel rekent geen rekVoorstelRuw en geen gripCyclus, en alle getallen op Grip blijven in centen gelijk', async ({ page }) => {
+  await boot(page);
+  for (const d of ['2026-11-24', '2026-11-26']) { await bekijk(page, d);
+    const r = await page.evaluate(() => { go('maand');
+      /* een koude render (zoals na een sync): hooguit een keer rekVoorstelRuw */
+      _dataGen++; window._gripCyc = null; window._gripTab = 'zien'; perfReset(); PERF.on = true; renderMaand(); PERF.on = false;
+      const koud = { rv: PERF.n.rekVoorstelRuw || 0, gc: PERF.n.gripCyclus || 0 };
+      const getallen = () => document.getElementById('s-maand').innerText.match(/-?€\s?[\d.]+(,\d+)?|\d+%/g) || [];
+      const tabs = {}, wissel = {};
+      for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { if (t === 'zien') { gripKiesTab('kiezen'); }
+        const g0 = _dataGen; perfReset(); PERF.on = true; gripKiesTab(t); PERF.on = false;
+        wissel[t] = { rv: PERF.n.rekVoorstelRuw || 0, gc: PERF.n.gripCyclus || 0, dg: _dataGen - g0 }; tabs[t] = getallen(); }
+      return { koud, wissel, tabs }; });
+    expect(r.koud.rv, d + ': koud hooguit een keer').toBeLessThanOrEqual(1);
+    expect(r.koud.gc, d + ': koud rekent de cyclus').toBe(1);
+    for (const t in r.wissel) expect(r.wissel[t], d + ' ' + t + ': een tabwissel rekent niets opnieuw').toEqual({ rv: 0, gc: 0, dg: 0 });
+    for (const t in r.tabs) expect(r.tabs[t], d + ' ' + t + ': dezelfde getallen').toEqual(IJK[d][t]); }
+  /* de sleutel per naam (recurKey) komt nu uit een memo: hij is per boeking de sleutel van v511 (de naam zonder cijfers, 20 tekens) */
+  const fout = await page.evaluate(() => TX.filter(t => recurKey(t) !== (t.name || '').toUpperCase().replace(/[0-9]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20)).length);
+  expect(fout).toBe(0);
+});
