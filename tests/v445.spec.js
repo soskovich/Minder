@@ -35,7 +35,8 @@ test.describe('2 · bedragvelden', () => {
       for (const s of ['1.250,00', '12,50', '12.50']) { const el = document.getElementById('potFormBedrag'); el.value = s; el.dispatchEvent(new Event('input', { bubbles: true })); o[s] = potFormVoorstel().bedrag; }
       return { type: document.getElementById('potFormBedrag').type, o }; });
     expect(r.type).toBe('text');
-    expect(r.o).toEqual({ '1.250,00': 1250, '12,50': 13, '12.50': 13 });
+    /* v512 (punt 7): het potje-formulier bewaart centen, "12,50" is 12,50 (tot v512 afgerond op 13) */
+    expect(r.o).toEqual({ '1.250,00': 1250, '12,50': 12.5, '12.50': 12.5 });
   });
 
   test('d. intikken in de browser: "3219,50" en "1.250,00" komen als bedrag binnen (bezitting en budgetwijziging)', async ({ page }) => {
