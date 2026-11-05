@@ -23332,6 +23332,7 @@ const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','ba
 function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
   if(t.vbVast) return true;   // v506: een gesimuleerde termijn (voorbeeld) is die vaste last, betaald
+  if(t.amount<0 && Array.isArray(SET.vastVerwacht) && SET.vastVerwacht.length && vvKandidaatIds().has(t.id) && (CATS[catOf(t)]||{}).type==='expense') return true;   // v512 (punt 1): de kandidaat van een verwachte vaste last is tot je antwoord die vaste last
   if(vvKoppelSleutels().has(recurKey(t)) && (CATS[catOf(t)]||{}).type==='expense' && t.amount<0) return true;   // v511 (punt 7): een afschrijving die je aan een verwachte vaste last koppelde is die vaste last, geen potje-uitgave
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
   const c=CATS[catOf(t)]; if(!c || c.type!=='expense') return false;
@@ -26196,6 +26197,7 @@ function insPatronen(soort){
   const per={}; for(const t of txOfMonth(m)){ if(!(t.amount<0) || !insInNorm(t)) continue;
     if(soort==='var' && insVastTx(t)) continue; if(soort==='vast' && !insVastTx(t)) continue;
     if(eenmaligBevestigd(t)) continue;   // v436: wat jij eenmalig noemde is nooit een patroon
+    if(vvBoeking(t)) continue;   // v512 (punt 1): een verwachte vaste last (gesimuleerd, gekoppeld of kandidaat) is nooit "nieuw deze maand"
     const p=insPartij(t); if(!p || eerder.has(p)) continue; (per[p]=per[p]||[]).push(t); }
   for(const p in per){ const L=per[p].sort((a,b)=>a.date.localeCompare(b.date)); const som=L.reduce((a,t)=>a+uitgaveNorm(t),0);
     if(som<INS_PATROON.nieuwEuro) continue;
@@ -38511,7 +38513,17 @@ function vvLijst(){ return Array.isArray(SET.vastVerwacht)?SET.vastVerwacht:[]; 
 /* v511 (punt 7): hoort deze boeking bij een verwachte vaste last (een gesimuleerde termijn ervan, of een afschrijving die je eraan
    koppelde)? Dan telt hij als vaste last en niet in een potje (catSpendMap, dus ook geen "boven je potje"). */
 function vvBoeking(t){ if(!t) return false; if(t.vbVast && String(t.vbVast).indexOf('vverw|')===0) return true;
-  if(!(t.amount<0) || !Array.isArray(SET.vastVerwacht) || !SET.vastVerwacht.length) return false; return vvKoppelSleutels().has(recurKey(t)); }
+  if(!(t.amount<0) || !Array.isArray(SET.vastVerwacht) || !SET.vastVerwacht.length) return false; return vvKoppelSleutels().has(recurKey(t)) || vvKandidaatIds().has(t.id); }
+/* v512 (punt 1): DE AFSCHRIJVING WAAROVER MINDER VRAAGT "Is dit <verwachte vaste last>?" (vvKandidaat) HOORT TOT JE ANTWOORD BIJ DIE
+   VASTE LAST. Gemeten op het toestel (Bekijk als 26 nov): CJIB EUR 50, sinds v508 een verwachte vaste last, gaf "Belasting & boetes
+   boven je potje · nieuw deze maand · Boetes cjib EUR 50", want zonder koppeling telde de boeking in het potje. Tot het antwoord telt
+   hij als die vaste last (isFixed, vvBoeking), na "Nee, iets anders" (x.nee) is hij geen kandidaat meer en telt hij gewoon in zijn
+   potje; na "Ja" neemt de koppeling (vvKoppelSleutels) het over. Gememoiseerd op _dataGen en de dag (vvKandidaat leest vandaag). */
+let _vvKand=null, _vvKandGen=-1, _vvKandDag='';
+function vvKandidaatIds(){ const d=vandaagYMD(); if(_vvKand && _vvKandGen===_dataGen && _vvKandDag===d) return _vvKand;
+  const S=new Set(); _vvKand=S; _vvKandGen=_dataGen; _vvKandDag=d;   // eerst zetten: vvKandidaat leest telbareTx(), nooit isFixed(), maar een terugkeer hierheen ziet dan een lege set en geen lus
+  try{ for(const x of vvLijst()){ const t=vvKandidaat(x); if(t) S.add(t.id); } }catch(_){}
+  return S; }
 /* v511 (punt 7): de sleutels (recurKey) van de afschrijvingen die je aan een verwachte vaste last koppelde (vvKoppel), gelezen door isFixed() */
 function vvKoppelSleutels(){ const L=Array.isArray(SET.vastVerwacht)?SET.vastVerwacht:null; if(!L || !L.length) return new Set(); return new Set(L.filter(x=>x && x.koppel && x.koppel.key).map(x=>x.koppel.key)); }
 function vvYmPlus(ym, n){ const y=+ym.slice(0,4), m=+ym.slice(5,7)-1+n; const d=new Date(y, m, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
