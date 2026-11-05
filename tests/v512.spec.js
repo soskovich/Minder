@@ -135,3 +135,19 @@ test('v512 d: een eenmalig bedrag van 20 nov staat op 26 nov en 1 dec in de kaar
   for (const d of ['2026-11-26', '2026-12-01']) { await bekijk(page, d); const r = await beide();
     expect(r, d + ': na "klopt, al verdeeld" in geen van beide').toEqual({ kaart: false, lijst: false, kies: false, naam: undefined }); }
 });
+
+/* ===== e. LABELS VAN EEN AFGESLOTEN MAAND ===== */
+test('v512 e: de terugblik op oktober heet op 23, 24 en 26 nov "Spaardoel oktober"; kalendermaand staat in de uitleg', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => { SET.gripOpzij = Object.assign({}, SET.gripOpzij, { '2026-10': { opzij: 2554 } }); save(); runMemoVergeten(); });
+  const okt = () => page.evaluate(() => { const P0 = eraEenheidNu(); let T;
+    if (P0) { const u = periodeHistorie(P0, 12).find(x => x.ym === '2026-10' && x.soort === 'maand'); T = gripTerugblik('2026-10', u); } else T = gripTerugblik('2026-10');
+    const x = T.items.find(i => i.id === 'spaardoel'); return { naam: x.naam, sub: x.sub, uitleg: x.uitleg, era: !!P0 }; });
+  const uit = [];
+  for (const d of DAGEN) { await bekijk(page, d); uit.push(await okt()); }
+  /* invoer: 24 en 26 nov liggen in de era, 23 nov niet (anders kan het label per constructie niet verschillen) */
+  expect(uit.map(u => u.era)).toEqual([false, true, true]);
+  for (const u of uit) expect(u.naam).toBe('Spaardoel oktober');
+  for (const u of uit) { expect(u.uitleg).toContain('kalendermaand'); expect(u.sub).toBe(uit[0].sub); }
+});
+
