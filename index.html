@@ -14177,7 +14177,7 @@ function watOverState(W){ const op=SET.watOver&&SET.watOver[W.key]; if(op) retur
   const w=window._watover; if(w && w.key===W.key) return w;
   return (window._watover={key:W.key, delen:{}, resWelke:'', anderLabel:''}); }
 function watOverVeld(k, v){ const W=watOverPeriode(); if(!W.ok || (SET.watOver&&SET.watOver[W.key])) return; const s=watOverState(W);
-  const n=numIn(v); s.delen[k]=(n==null?0:Math.max(Math.round(n),0));
+  const n=numIn(v); s.delen[k]=(n==null?0:Math.max(Math.round(n*100)/100,0));   // v512 (punt 7): centen, "12,50" blijft 12,50
   const som=WATOVER_SOORTEN.reduce((a,x)=>a+(+s.delen[x.k]||0),0), rest=W.over-som, klaar=Math.abs(rest)<0.5;
   const r=$('#gripWatOver [data-watrest]'); if(r) r.innerHTML=`Nog te verdelen: ${euro0(rest)}${klaar?'':' · niets voorgeselecteerd'}`;
   const b=$('#gripWatOver [data-watopslaan]'); if(b) b.disabled=!klaar; }
@@ -14190,7 +14190,7 @@ function watOverKaart(){ const W=watOverPeriode(); if(!W.ok) return '';
   const rij=x=>{ const hint=x.k==='inhalen'&&W.inhaal>0?` · tekort ${e(W.inhaal)}`:x.k==='anders'&&(vast?s.anderLabel:true)?'':'';
     const sel=x.k==='reservering'&&resL.length?`<select data-watreswelke onchange="watOverResWelke(this.value)" ${vast?'disabled':''} style="margin-top:3px;max-width:160px"><option value="">welke reservering?</option>${resL.map(v=>`<option value="${esc(v.id)}" ${s.resWelke===v.id?'selected':''}>${esc(v.naam||'Reservering')}</option>`).join('')}</select>`:'';
     const ander=x.k==='anders'?`<input type="text" data-watander placeholder="waarvoor?" value="${esc(s.anderLabel||'')}" ${vast?'disabled':''} oninput="watOverAnder(this.value)" style="margin-top:3px;max-width:160px">`:'';
-    return `<div data-watrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}${hint?`<span style="color:var(--mut2);font-weight:400">${hint}</span>`:''}</span><input type="text" inputmode="decimal" data-watveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" ${vast?'disabled':''} oninput="watOverVeld('${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
+    return `<div data-watrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}${hint?`<span style="color:var(--mut2);font-weight:400">${hint}</span>`:''}</span><input type="text" inputmode="decimal" data-watveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k]*100)/100):''}" placeholder="€ 0" ${vast?'disabled':''} oninput="watOverVeld('${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
   const voet=vast
     ? `<div class="small" data-watklaar style="margin-top:8px;color:var(--mut2)">Vastgelegd op ${esc(dagKort(vast.op))}. <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="watOverHerstel()">wijzigen ›</span></div>`
     : `<div class="small" data-watrest style="margin-top:8px;font-weight:700">Nog te verdelen: ${e(rest)}${klaar?'':' · niets voorgeselecteerd'}</div><div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" data-watopslaan ${klaar?'':'disabled'} onclick="watOverZet()">Opslaan</button><button class="btn sec" data-watlater onclick="closeSheet&&0;go('maand')">Later</button></div>`;
@@ -14202,7 +14202,7 @@ function watOverKaart(){ const W=watOverPeriode(); if(!W.ok) return '';
 function watOverZet(){ const W=watOverPeriode(); if(!W.ok) return; const s=watOverState(W), delen=s.delen||{};
   const som=WATOVER_SOORTEN.reduce((a,x)=>a+(+delen[x.k]||0),0); if(Math.abs(W.over-som)>=0.5) return;   // leest opnieuw (v319)
   const herstel=setSnap(['watOver']); SET.watOver=SET.watOver||{};
-  SET.watOver[W.key]={delen:Object.fromEntries(WATOVER_SOORTEN.map(x=>[x.k, Math.round(+delen[x.k]||0)])), resWelke:s.resWelke||'', anderLabel:s.anderLabel||'', over:Math.round(W.over), op:vandaagYMD()};
+  SET.watOver[W.key]={delen:Object.fromEntries(WATOVER_SOORTEN.map(x=>[x.k, Math.round((+delen[x.k]||0)*100)/100])), resWelke:s.resWelke||'', anderLabel:s.anderLabel||'', over:Math.round(W.over), op:vandaagYMD()};
   save(); keuzeKlaar('Bestemming vastgelegd', herstel); }
 function watOverHerstel(){ const W=watOverPeriode(); if(!W.ok) return; if(SET.watOver) delete SET.watOver[W.key]; window._watover=null; save(); renderMaand(); }
 /* (4b) de Terugblik volgende periode: wat je koos tegen wat er werkelijk naar je spaar- en reserveringsrekening ging */
@@ -14235,7 +14235,7 @@ function onregBinnen(){ let start=thisYM()+'-01'; try{ const P=salPeriode(); if(
   return uit.sort((a,b)=>b.bedrag-a.bedrag); }
 function onregState(id){ const w=window._onreg=window._onreg||{}; return (w[id]=w[id]||{delen:{}, resWelke:'', anderLabel:''}); }
 function onregVeld(id, k, v){ if(SET.onregBestemming&&SET.onregBestemming[id]) return; const s=onregState(id), bon=onregBinnen().find(x=>x.id===id); if(!bon) return;
-  const n=numIn(v); s.delen[k]=(n==null?0:Math.max(Math.round(n),0));
+  const n=numIn(v); s.delen[k]=(n==null?0:Math.max(Math.round(n*100)/100,0));   // v512 (punt 7): centen, "12,50" blijft 12,50
   const som=ONREG_SOORTEN.reduce((a,x)=>a+(+s.delen[x.k]||0),0), rest=bon.bedrag-som, klaar=Math.abs(rest)<0.5;
   const r=document.querySelector(`[data-onreg="${id}"] [data-onregrest]`); if(r) r.innerHTML=`Nog te verdelen: ${euro0(rest)}${klaar?'':' · niets voorgeselecteerd · het gevolg per doel zie je live'}`;
   const b=document.querySelector(`[data-onreg="${id}"] [data-onregopslaan]`); if(b) b.disabled=!klaar; }
@@ -14244,7 +14244,7 @@ function onregAnder(id, v){ if(SET.onregBestemming&&SET.onregBestemming[id]) ret
 function onregZet(id){ const bon=onregBinnen().find(x=>x.id===id); if(!bon) return; const s=onregState(id), delen=s.delen||{};   // leest opnieuw (v319)
   const som=ONREG_SOORTEN.reduce((a,x)=>a+(+delen[x.k]||0),0); if(Math.abs(bon.bedrag-som)>=0.5) return;
   const herstel=setSnap(['onregBestemming']); SET.onregBestemming=SET.onregBestemming||{};
-  SET.onregBestemming[id]={delen:Object.fromEntries(ONREG_SOORTEN.map(x=>[x.k, Math.round(+delen[x.k]||0)])), resWelke:s.resWelke||'', anderLabel:s.anderLabel||'', bedrag:bon.bedrag, naam:bon.naam, op:vandaagYMD()};
+  SET.onregBestemming[id]={delen:Object.fromEntries(ONREG_SOORTEN.map(x=>[x.k, Math.round((+delen[x.k]||0)*100)/100])), resWelke:s.resWelke||'', anderLabel:s.anderLabel||'', bedrag:bon.bedrag, naam:bon.naam, op:vandaagYMD()};
   save(); keuzeKlaar('Bestemming vastgelegd', herstel); }
 function onregKaart(){ const B=onregBinnen(); if(!B.length) return ''; const e=euro0, resL=resLijst().filter(v=>v&&v.id&&(+v.bedrag>0));
   return B.map(bon=>{
@@ -14257,7 +14257,7 @@ function onregKaart(){ const B=onregBinnen(); if(!B.length) return ''; const e=e
     const s=onregState(bon.id), delen=s.delen||{}, som=ONREG_SOORTEN.reduce((a,x)=>a+(+delen[x.k]||0),0), rest=bon.bedrag-som, klaar=Math.abs(rest)<0.5;
     const rij=x=>{ const sel=x.k==='reservering'&&resL.length?`<select data-onregreswelke onchange="onregResWelke('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px"><option value="">welke reservering?</option>${resL.map(v=>`<option value="${esc(v.id)}" ${s.resWelke===v.id?'selected':''}>${esc(v.naam||'Reservering')}</option>`).join('')}</select>`:'';
       const ander=x.k==='anders'?`<input type="text" data-onregander placeholder="waarvoor?" value="${esc(s.anderLabel||'')}" oninput="onregAnder('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px">`:'';
-      return `<div data-onregrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}</span><input type="text" inputmode="decimal" data-onregveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k])):''}" placeholder="€ 0" oninput="onregVeld('${esc(bon.id)}','${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
+      return `<div data-onregrij="${x.k}" style="padding:7px 0;border-top:1px solid var(--line)"><div class="row" style="gap:8px;align-items:center"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(x.naam)}</span><input type="text" inputmode="decimal" data-onregveld="${x.k}" value="${(+delen[x.k]||0)?numUit(Math.round(delen[x.k]*100)/100):''}" placeholder="€ 0" oninput="onregVeld('${esc(bon.id)}','${x.k}',this.value)" style="width:86px;text-align:right"></div>${sel}${ander}</div>`; };
     return `<div class="card" data-onreg="${esc(bon.id)}"><div class="hlabel" style="margin:0">${esc(bon.naam)} · eenmalig ${e(bon.bedrag)}</div>${gripSub(`binnen op ${dagKort(bon.datum)} · niet in je maandbudget of salarisverdeling`)}
       ${ONREG_SOORTEN.map(rij).join('')}<div class="small" data-onregrest style="margin-top:8px;font-weight:700">Nog te verdelen: ${e(rest)}${klaar?'':' · niets voorgeselecteerd · het gevolg per doel zie je live'}</div>
       <div class="row" style="gap:8px;margin-top:6px"><button class="btn sec" data-onregopslaan ${klaar?'':'disabled'} onclick="onregZet('${esc(bon.id)}')">Opslaan</button><button class="btn sec" data-onreglater onclick="go('maand')">Later</button></div></div>`; }).join(''); }
@@ -22649,7 +22649,7 @@ function budgetVoorMaand(ym){
   return B;
 }
 function potPlanZet(k, ym, bedrag){
-  const cur=potHuidigeMaand(), nx=nextYM(cur), v=Math.max(Math.round(+bedrag||0),0);
+  const cur=potHuidigeMaand(), nx=nextYM(cur), v=Math.max(Math.round((+bedrag||0)*100)/100,0);   // v512 (punt 7): een bedrag in centen blijft in centen ("12,50" is 12,50)
   if(v>0 && SET.potOpen) delete SET.potOpen[k];   // een bedrag maakt het potje vastgesteld
   if(ym<=cur){
     /* v436: het maandbudget van deze maand ligt vast voordat het potje verandert; de wijziging gaat in de log (label van de lijst) */
@@ -22803,7 +22803,7 @@ function potFormVoorstel(d){
   const k=nieuweCat?null:d.cat;
   const naam=nieuweCat?String(d.naam||'').trim():(CATS[k]?CATS[k].name:'');
   const catKlaar=nieuweCat ? (eigenCatNaamMag(naam) && (d.aard==='vast'||d.aard==='wisselend')) : !!(k && CATS[k]);
-  const bedrag=(d.bedrag===''||d.bedrag==null)?null:Math.max(Math.round(numIn(d.bedrag)),0);
+  const bedrag=(d.bedrag===''||d.bedrag==null)?null:Math.max(Math.round(numIn(d.bedrag)*100)/100,0);   // v512 (punt 7): centen
   const vanaf=d.vanaf||null;
   const P={k, nieuweCat, naam, catKlaar, bedrag, vanaf, bron:d.bron||null, dek:d.dek||null, kand:[], klaar:false};
   if(d.open && !d.vast){   // nog niet vastgesteld: geen bedrag en geen maand, wel de keuze over een schatting

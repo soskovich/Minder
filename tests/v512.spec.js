@@ -151,3 +151,29 @@ test('v512 e: de terugblik op oktober heet op 23, 24 en 26 nov "Spaardoel oktobe
   for (const u of uit) { expect(u.uitleg).toContain('kalendermaand'); expect(u.sub).toBe(uit[0].sub); }
 });
 
+/* ===== g. BEDRAG MET KOMMA ===== */
+test('v512 g: "12,50" en "1.250,00" (en "12.50") in Bestemming, kastelling en potjes geven 12,50 en 1.250,00', async ({ page }) => {
+  await boot(page);
+  await add(page, [[MAIN, '2026-11-02', 1300, 'SKF', 'BONUS SKF NOVEMBER', 'inkomen']]);
+  const r = await page.evaluate(() => { const out = {};
+    const t = TX.find(x => x.name === 'SKF' && x.amount === 1300); SET.onregelmatig = Object.assign({}, SET.onregelmatig, { [t.id]: 1300 }); save(); runMemoVergeten();
+    /* Bestemming (het eenmalige bedrag): het veld zoals je het intikt */
+    onregVeld(t.id, 'sparen', '12,50'); out.best1 = onregState(t.id).delen.sparen;
+    onregVeld(t.id, 'sparen', '12.50'); out.best2 = onregState(t.id).delen.sparen;
+    onregVeld(t.id, 'sparen', '1.250,00'); out.best3 = onregState(t.id).delen.sparen;
+    onregVeld(t.id, 'inhalen', '50'); onregZet(t.id); out.bestOpgeslagen = (SET.onregBestemming || {})[t.id] && SET.onregBestemming[t.id].delen.sparen;
+    /* potjes: de budgeteditor (een nieuw potje) en het potje-formulier */
+    setCatBudget('cadeaus', '12,50'); out.pot1 = SET.budgets.cadeaus;
+    setCatBudget('vakantie', '1.250,00'); out.pot2 = SET.budgets.vakantie;
+    potPlanZet('vakantie', thisYM(), numIn('12.50')); out.pot3 = SET.budgets.vakantie;
+    /* kastelling */
+    contantOpslaan('12,50'); out.kas1 = SET.contant.stand;
+    contantOpslaan('1.250,00'); out.kas2 = SET.contant.stand;
+    return out; });
+  expect(r).toEqual({ best1: 12.5, best2: 12.5, best3: 1250, bestOpgeslagen: 1250, pot1: 12.5, pot2: 1250, pot3: 12.5, kas1: 12.5, kas2: 1250 });
+  /* Bestemming voor wat over is (op 23 nov, moment 2) */
+  await bekijk(page, '2026-11-23');
+  const w = await page.evaluate(() => { const W = watOverPeriode(); if (!W.ok) return null; watOverVeld('sparen', '12,50'); const a = watOverState(W).delen.sparen; watOverVeld('sparen', '1.250,00'); return [a, watOverState(W).delen.sparen]; });
+  expect(w, 'invoer: op 23 nov is er een bestemming voor wat over is').not.toBeNull();
+  expect(w).toEqual([12.5, 1250]);
+});
