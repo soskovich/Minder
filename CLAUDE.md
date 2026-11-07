@@ -140,7 +140,7 @@ genoemde versietag.)*
   BEWUST: een feit zonder vraag of keuze (de wissel van de buffer voor beleggen, `lo:belegwissel`) is niet open en staat dus niet meer in
   Signalen; hij staat altijd in de sheet achter de tegel (`openBeleggenVoorwaarden()`). Blok 22 telt afgehandeld uit de stand. Spec
   `v512b.spec.js` (6 tests, 6 van 6 sabotages rood); `v434` 1b/1d, `v436` 3b/3c, `afspraak-schema` d, `inzichten-dashboard` e/g en
-  `inzichten-week` g gemigreerd (de stand van Inzichten is dag 7 van 31; de herstel-tests draaien op 16 okt).
+  `inzichten-week` g en `boven-verwacht-eind` gemigreerd (de stand van Inzichten is dag 7 van 31; de herstel-tests draaien op 16 okt).
 - **v512: DE FOUTENLIJST UIT DE GENERALE REPETITIE, OP EEN EIGEN TAK** (`v512`, tak `werk/v512`, NIET SAMENVOEGEN VOOR DE NACONTROLE VAN 1 DEC;
   gemeten op het toestel, Bekijk als 23, 24 en 26 nov, data t/m 5 nov). (1) De afschrijving waarover Minder vraagt "Is dit <verwachte vaste
   last>?" (`vvKandidaat()`, `vvKandidaatIds()`, memo op `_dataGen` en de dag) hoort tot je antwoord bij die vaste last: `vvBoeking()` en

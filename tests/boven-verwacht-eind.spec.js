@@ -43,8 +43,14 @@ test.describe('herhaalt of herstelt op het verwachte eind', () => {
   test('herstelt alleen als het potje naar verwachting niet boven eindigt', async ({ page }) => {
     await boot(page, { bud: 450 }); const s = await stand(page);
     expect(s.boven).toBe(false);
-    expect(s.ip.soort).toBe('herstelt');
+    /* v512b (punt 8): de stand staat voor de helft van het venster, dan is er nog geen herstel (en ook geen herhaalt) */
+    expect(s.ip).toBe(null);
     expect(s.gp).toBe(null);
+    /* met de helft van het venster voorbij (alleen het venster nagebootst, de uitgaven blijven) is het wel herstelt */
+    const na = await page.evaluate(() => { const o = window.huidigVenster;
+      window.huidigVenster = () => { const H = o(); return Object.assign({}, H, { elapsed: H.dagen, over: 0 }); };
+      try { const p = insPatronen('var').find((q) => q.k === 'boodschappen'); return p && p.soort; } finally { window.huidigVenster = o; } });
+    expect(na).toBe('herstelt');
   });
 });
 
