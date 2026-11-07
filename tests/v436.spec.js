@@ -159,14 +159,15 @@ test.describe('v436 · 3. Patronen', () => {
   });
   /* 3c, op de stand van Inzichten (die draagt herhaalt, structureel, nieuw en herstelt): herstelt zich is een positief signaal,
      met een groene stip, zonder keuze en zonder "waarom ›", en na GRIP_HERSTEL_DAGEN dagen staat hij onder Afgehandeld. */
-  test('3b/3c. Zien: herhaalt draagt "herhaalt zich · Ne maand" met het bedrag; herstelt is groen zonder keuze en gaat na 7 dagen naar Afgehandeld', async ({ page }) => {
-    await I.boot(page);
+  test('3b/3c. Zien: herhaalt draagt "herhaalt zich · Ne maand" met het bedrag; herstelt is groen zonder keuze en is na 7 dagen weg uit Signalen', async ({ page }) => {
+    await I.boot(page, { dag: '2026-10-16' });   // v512b (punt 8): herstelt pas vanaf de helft van het venster
     await page.evaluate(() => { go('maand'); gripKiesTab('zien'); renderMaand(); });
     const k = await page.evaluate(() => gripPatroonInfo().herstel.map(x => x.k));
     expect(k.length).toBeGreaterThan(0);
     const rij = page.locator(`[data-herstelt="${k[0]}"]`);
     await expect(rij).toHaveCount(1);
     await expect(rij).toContainText('herstelt zich');
+    await expect(rij).toContainText('onder je gewone tempo (');   // v512b: niet meer "t.o.v. gewoonlijk"
     expect(await rij.locator('[data-waarom]').count()).toBe(0);
     expect(await rij.evaluate(e => getComputedStyle(e.querySelector('span span span')).color === (() => { const d = document.createElement('i'); d.style.color = 'var(--green)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })())).toBe(true);
     const lab = await page.evaluate(() => Object.values(gripPatroonInfo().lab).find(x => x.soort === 'herhaalt'));
@@ -176,8 +177,8 @@ test.describe('v436 · 3. Patronen', () => {
     expect(op).toBe(await page.evaluate(() => vandaagYMD()));
     await page.evaluate(k => { const d = new Date(vandaagYMD() + 'T12:00'); d.setDate(d.getDate() - GRIP_HERSTEL_DAGEN); SET.herstelGezien[thisYM()][k] = ymdVan(d); save(); renderMaand(); }, k[0]);
     await expect(page.locator(`[data-herstelt="${k[0]}"]`)).toHaveCount(0);
-    await page.evaluate(() => gripAfToggle());
-    await expect(page.locator(`[data-afgehandeldrij="herstelt:${k[0]}"]`)).toContainText('herstelt zich sinds');
+    /* v512b (punt 9): Signalen toont alleen wat open is, dus geen Afgehandeld-regel */
+    await expect(page.locator('#gripSignalen [data-afgehandeld], #gripSignalen [data-afgehandeldrij]')).toHaveCount(0);
   });
 });
 

@@ -11,7 +11,7 @@ const S = require('./v421-stand');
 async function boot(page) {
   await page.setViewportSize({ width: 390, height: 844 });
   await S.boot(page);
-  await page.evaluate(() => { window._gripTab = 'zien'; window._gripAfOpen = false; go('maand'); });
+  await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); });
 }
 /* vaste lasten: alles geaccepteerd; na je salaris: "Was dat bewust?" beantwoord en de verhoging verdeeld */
 async function handelAf(page) {
@@ -37,22 +37,15 @@ test.describe('v434 · 1. Signalen in Zien volgen de cyclus', () => {
     for (const id of r.open) { const o = await page.evaluate(id => { const C = gripCyclusLees(); return symOpen(C.sym.find(s => s.id === id), C).open; }, id); expect(o).toBe(true); }
   });
 
-  test('1b. alles gekozen of beantwoord: een ingeklapte regel "Afgehandeld deze maand (N) ›", uitgeklapt per signaal wat je koos', async ({ page }) => {
+  /* v512b (punt 9): Signalen toont alleen wat open is. Wat je koos staat in Terugblik (Al gekozen) en in de stand
+     (gripSignaalStand().af), niet meer als "Afgehandeld deze maand (N) ›" in Signalen. */
+  test('1b. alles gekozen of beantwoord: niet in Signalen, wel in de stand met wat je koos', async ({ page }) => {
     await boot(page);
     await handelAf(page);
     const r = await stand(page);
     expect(r.af).toEqual(expect.arrayContaining([['vast:gestegen', 'alles geaccepteerd'], ['inkomen:na', 'verhoging verdelen']]));
     expect(r.dom).not.toContain('vast:gestegen'); expect(r.dom).not.toContain('inkomen:na');
-    const rij = page.locator('#gripSignalen [data-afgehandeld]');
-    await expect(rij).toHaveText(`Afgehandeld deze maand (${r.af.length})›`);
-    await expect(page.locator('#gripSignalen [data-afgehandeldrij]')).toHaveCount(0);   // ingeklapt
-    await rij.click();
-    const t = await page.evaluate(() => [...document.querySelectorAll('#gripSignalen [data-afgehandeldrij]')].map(e => e.innerText));
-    expect(t).toEqual(expect.arrayContaining(['Vaste lasten gestegen · alles geaccepteerd', 'Na je salaris · verhoging verdelen']));
-    expect(t.length).toBe(r.af.length);
-    /* een tik op een afgehandeld signaal opent hetzelfde symptoom in Begrijpen */
-    await page.locator('#gripSignalen [data-afgehandeldrij="vast:gestegen"]').click();
-    expect(await page.evaluate(() => document.querySelector('#gripInhoud').dataset.griptabinhoud)).toBe('begrijpen');
+    await expect(page.locator('#gripSignalen [data-afgehandeld], #gripSignalen [data-afgehandeldrij]')).toHaveCount(0);
   });
 
   test('1b. de stand bij je keuze staat vast bij het tekenen; lezen (gripCyclusLees, gripSignaalStand) schrijft niets', async ({ page }) => {
@@ -97,7 +90,7 @@ test.describe('v434 · 1. Signalen in Zien volgen de cyclus', () => {
     await boot(page);
     expect((await stand(page)).dom).toContain('lo:eenmalig:zorg');
     await page.evaluate(() => { const t = TX.find(x => catOf(x) === 'zorg' && x.amount === -159); SET.eenmaligOk = Object.assign({}, SET.eenmaligOk, { [t.id]: { op: '2026-10-10' } }); save(); renderMaand(); });
-    const r = await page.evaluate(() => { const C = gripCyclusLees(); window._gripAfOpen = true; renderMaand();
+    const r = await page.evaluate(() => { const C = gripCyclusLees(); renderMaand();
       const z = [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map(e => e.dataset.signaal || e.dataset.afgehandeldrij);
       gripKiesTab('begrijpen'); const b = [...document.querySelectorAll('#gripSymptomen [data-symptoom]')].map(e => e.dataset.symptoom);
       return { leeg: C.leeg.map(x => x.id), z, b }; });

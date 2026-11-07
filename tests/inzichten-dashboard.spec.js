@@ -161,7 +161,7 @@ test.describe('e · geen handeling op Inzichten', () => {
       Storage.prototype.setItem = orig;
       return { uit, filt, schrijf, gelijk: voor === localStorage.getItem('minder_set'), npat: insPatronen('alle').length };
     }, aanroepen.toString());
-    expect(r.npat).toBe(4);
+    expect(r.npat).toBe(3);   // v512b (punt 8): op dag 7 van de periode is er nog geen "herstelt zich"
     expect(r.schrijf).toBe(0); expect(r.gelijk).toBe(true);
     expect(r.uit.filter((x) => !MAG_SHEET.includes(x) && !SCHRIJVER.includes(x))).toEqual([]);
     expect(r.filt.filter((x) => x !== 'insFilterZet')).toEqual([]);
@@ -206,7 +206,7 @@ test.describe('g · de vier patronen', () => {
   test('elk patroon met wat er gebeurt en gezien in, op de bron', async ({ page }) => {
     await open(page);
     const P = await page.evaluate(() => insPatronen('alle').map((p) => ({ s: p.soort, k: p.k, h: p.naam, t: p.tekst, b: 'gezien in: ' + p.bron.filter(Boolean).join(', '), g: !!p.grip })));
-    expect(P.map((p) => p.s)).toEqual(['herhaalt', 'structureel', 'nieuw', 'herstelt']);
+    expect(P.map((p) => p.s)).toEqual(['herhaalt', 'structureel', 'nieuw']);   // v512b: herstelt pas vanaf de helft van het venster (v512b.spec.js)
     expect(P[0].t).toBe('In september €194 boven je potje; je noemde het toen een uitzondering. Oktober loopt weer voor: verwacht €130 erboven.');
     expect(P[0].b).toBe('gezien in: het logboek van september, de vooruitblik van oktober');
     expect(P[1].t).toBe('Je potje is €20; je geeft er gewoonlijk €121 per maand aan uit. In september ging je €103 erboven.');
@@ -214,11 +214,10 @@ test.describe('g · de vier patronen', () => {
     expect(P[2].h).toContain('Allianz Nederland €98,88');
     expect(P[2].t).toBe('Afgeschreven op 1 oktober onder Vervoer & auto. Bij deze partij zag de app in twaalf maanden geen eerdere boeking.');
     expect(P[2].b).toBe('gezien in: één boeking');
-    expect(P[3].t).toBe('In september €84 boven je potje. Oktober loopt achter: €49 in 7 dagen, gewoonlijk €79.');
-    expect(P.map((p) => p.g)).toEqual([true, true, true, false]);
+    expect(P.map((p) => p.g)).toEqual([true, true, true]);
   });
   test('Inzichten draagt geen patroontegels meer, Zien draagt het label uit dezelfde bron', async ({ page }) => {
-    await open(page);
+    await open(page, { dag: '2026-10-16' });   // v512b: herstelt pas vanaf de helft van het venster
     expect(await page.locator('#s-ins #insPatronen, #s-ins .ins-pt').count()).toBe(0);
     const L = await page.evaluate(() => { const I = gripPatroonInfo(); return { lab: Object.fromEntries(Object.entries(I.lab).map(([k, v]) => [k, v.soort])), herstel: I.herstel.map((x) => x.k) }; });
     const P = await page.evaluate(() => insPatronen('alle').map((p) => p.soort + ':' + p.k));

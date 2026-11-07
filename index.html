@@ -14692,7 +14692,6 @@ function gripAfgehandeldBewaar(C){ const m=C.m||thisYM(), vm=prevYM(m), A=SET.gr
   if(!Object.keys(nu).length) delete A[m];
   if(!Object.keys(A).length) delete SET.gripAfgehandeld;
   if(w) save(true); }   /* v490: boekhoud-save (SET.gripAfgehandeld voedt geen berekening), bumpt _dataGen niet */
-function gripAfToggle(){ window._gripAfOpen=!window._gripAfOpen; renderMaand(); }
 /* v436: HET LABEL UIT DE PATROONLOGICA BIJ EEN SIGNAAL (dezelfde bron als de tegels van v382, insPatronen). Per potje: herhaalt
    zich (de hoeveelste maand en het bedrag van vorige maand), past niet in je potje, of nieuw deze maand. "Herstelt zich" is een
    positief signaal: groene stip, geen keuze en geen "waarom", en na GRIP_HERSTEL_DAGEN (7) vanzelf bij Afgehandeld. */
@@ -14715,13 +14714,11 @@ function gripHerstelBewaar(){ let P=[]; try{ P=insPatronen('alle').filter(p=>p.s
 /* Signalen: alleen feiten, elk met "waarom ›" naar hetzelfde symptoom in Begrijpen. Geen knop die iets verandert. */
 function gripSignalenKaart(C){ const PI=gripPatroonInfo(); if(!C.sym.length && !PI.herstel.length) return ''; const S=gripSignaalStand(C);
   const lbl=s=>{ const l=s.label||(s.k?PI.lab[s.k]:null); return l?`<span class="small" data-signaallabel="${l.soort}" style="display:block;font-size:var(--fs-xs);line-height:1.35"><span style="color:${l.soort==='nieuw'?'var(--blue)':'var(--red)'}">${esc(l.t)}</span>${l.b?` <span style="color:var(--mut2)">· ${esc(l.b)}</span>`:''}</span>`:''; };
-  const hOpen=PI.herstel.filter(x=>!x.af), hAf=PI.herstel.filter(x=>x.af);
-  const hRij=x=>`<div class="row" data-herstelt="${esc(x.k)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${maandDot('ok')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(x.potNaam)}</span><span class="small" style="display:block;font-size:var(--fs-xs);line-height:1.35"><span style="color:var(--green)">herstelt zich</span> <span style="color:var(--mut2)">· −${euro0(Math.round(x.bedrag))} t.o.v. gewoonlijk ${euro0(x.typisch)}</span></span></span></div>`;
+  const hOpen=PI.herstel.filter(x=>!x.af);
+  const hRij=x=>`<div class="row" data-herstelt="${esc(x.k)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${maandDot('ok')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(x.potNaam)}</span><span class="small" style="display:block;font-size:var(--fs-xs);line-height:1.35"><span style="color:var(--green)">herstelt zich</span> <span style="color:var(--mut2)">· ${euro0(Math.round(x.bedrag))} onder je gewone tempo (${euro0(x.typisch)})</span></span></span></div>`;
   const rij=x=>{ const s=x.s; return `<div class="row" data-signaal="${esc(s.id)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${s.x&&s.x.dot?maandDot(s.x.dot):''}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(s.naam)}</span>${lbl(s)}${x.terug?`<span class="small" data-signaalterug style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(x.terug)}</span>`:''}</span><span class="small" data-waarom role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')">waarom ›</span></div>`; };
-  const afOpen=!!window._gripAfOpen;
-  const nAf=S.af.length+hAf.length;
-  const af=nAf?`<div class="row" data-afgehandeld="${nAf}" role="button" style="gap:8px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripAfToggle()"><span class="small" style="flex:1;color:var(--mut)">Afgehandeld deze maand (${nAf})</span><span style="color:var(--teal);font-weight:700;display:inline-block;transform:rotate(${afOpen?90:0}deg)">›</span></div>${afOpen?S.af.map(x=>`<div class="row" data-afgehandeldrij="${esc(x.s.id)}" role="button" style="gap:8px;padding:4px 0 4px 10px;cursor:pointer" onclick="gripNaarSymptoom('${esc(x.s.id).replace(/'/g,"\\'")}')"><span class="small" style="flex:1;min-width:0;color:var(--mut)">${esc(x.s.naam)} · ${esc(x.tekst)}</span></div>`).join('')+hAf.map(x=>`<div class="row" data-afgehandeldrij="herstelt:${esc(x.k)}" style="gap:8px;padding:4px 0 4px 10px"><span class="small" style="flex:1;min-width:0;color:var(--mut)">${esc(x.potNaam)} · herstelt zich sinds ${esc(new Date(x.op+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''))}</span></div>`).join(''):''}`:'';
-  return `<div class="card" id="gripSignalen" data-signalenopen="${S.open.length}"><div class="hlabel" style="margin:0 0 2px">Signalen</div>${S.open.map(rij).join('')}${hOpen.map(hRij).join('')}${!S.open.length&&!hOpen.length?`<div class="small" data-signalengeen style="color:var(--mut2);padding:4px 0 6px">Geen open signalen.</div>`:''}${af}</div>`; }
+  /* v512b (punt 9): Signalen toont alleen wat open is. Afgehandeld staat in Terugblik (Al gekozen, tussenstand) en niet nog eens hier. */
+  return `<div class="card" id="gripSignalen" data-signalenopen="${S.open.length}"><div class="hlabel" style="margin:0 0 2px">Signalen</div>${S.open.map(rij).join('')}${hOpen.map(hRij).join('')}${!S.open.length&&!hOpen.length?`<div class="small" data-signalengeen style="color:var(--mut2);padding:4px 0 6px">Geen open signalen.</div>`:''}</div>`; }
 /* Kloppen mijn gegevens?: de wachtrij van v425 (hooguit KENNIS_MAX_OPEN), elk een tik naar die vraag. De enige plek op Zien
    waar je iets wijzigt. */
 function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MAX_OPEN); }catch(_){}
@@ -26203,6 +26200,19 @@ function insUitzondering(k, m){
     if(r && r.antwoord && r.antwoord.keuze==='uitzondering') return mm; }
   return null;
 }
+/* v512b (punt 8): GEEN "HERSTELT ZICH" OP TE WEINIG GEGEVENS. Gemeten op het toestel (6 nov, november 1-23): Contant en Uit eten
+   heetten "herstelt zich" met EUR 0 uitgegeven, en Contant stond tegelijk als "2 van de laatste 3 boven budget". Herstel is pas een
+   meting (1) vanaf de helft van het venster (huidigVenster: de periode, de overgangsmaand of de kalendermaand), (2) met iets
+   uitgegeven (EUR 0 is geen tempo maar geen gegevens), (3) bij Contant alleen met een kastelling in het venster (een opname is geen
+   uitgave, v258), en (4) nooit naast "boven budget" voor hetzelfde potje (potBovenLijst, de bron van die Let op-regel). */
+function insHerstelMag(x, m){
+  let HV=null; try{ HV=huidigVenster(); }catch(_){}
+  if(!HV || !(HV.dagen>0) || HV.elapsed*2<HV.dagen) return false;
+  if(!(x.uit>0)) return false;
+  if(x.k===CONTANT_CAT){ let C=null; try{ C=contantMaandNu(m); }catch(_){}
+    const tel=C&&C.eindT?String(C.eindT).slice(0,10):''; if(!tel || tel<HV.start || tel>vandaagYMD()) return false; }
+  try{ if(potBovenLijst(m, true).some(b=>b.k===x.k)) return false; }catch(_){}
+  return true; }
 function insPartij(t){ return cleanMerch(t.name||'').toUpperCase().trim(); }
 function insPatronen(soort){
   const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -26239,7 +26249,7 @@ function insPatronen(soort){
     /* v391: eindigt hij naar verwachting boven, dan is het geen herstel maar herhaalt het zich, met het verwachte bedrag.
        Structureel gaat voor: dat is de sterkere verklaring en die toets is niet veranderd. */
     if((vb || uz) && boven){ herhaalt(); continue; }
-    if(vb && achter){
+    if(vb && achter && insHerstelMag(x, m)){
       bron.push(logBron, `je eerste dagen van ${Mn}`);
       out.push({soort:'herstelt', k:x.k, naam:x.naam, bedrag:x.typisch-x.uit, grip:false, potNaam:x.naam, typisch:x.typisch,
         tekst:`In ${Pn} ${euro0(vb.bedrag)} boven je potje. ${MN(Mn)} loopt achter: ${euro0(x.uit)} in ${el} dagen, gewoonlijk ${euro0(x.typisch)}.`, bron,
@@ -35717,10 +35727,10 @@ function diagOorzaken(){
      Begrijpen, zodat de controle leest wat er op het scherm staat en niet wat de functie erachter zegt. */
   { let V=null; try{ V=maandVooruit(); }catch(_){}
     const ids=(h, a)=>[...String(h).matchAll(new RegExp(a+'="([^"]*)"','g'))].map(x=>x[1].replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"));
-    const af0=window._gripAfOpen; let zh=''; try{ window._gripAfOpen=true; zh=gripSignalenKaart(C); } finally { window._gripAfOpen=af0; }
+    let zh=''; try{ zh=gripSignalenKaart(C); }catch(_){}
     let bh=''; try{ bh=gripBegrijpenLijst(C, V); }catch(_){}
-    const zOpen=ids(zh,'data-signaal'), zAf=ids(zh,'data-afgehandeldrij'), beg=new Set(ids(bh,'data-symptoom')), S=gripSignaalStand(C), afIds=new Set(S.af.map(x=>x.s.id));
-    L.push('', `ZIEN (v434): ${zOpen.length} open · ${zAf.length} afgehandeld deze maand`);
+    const zOpen=ids(zh,'data-signaal'), beg=new Set(ids(bh,'data-symptoom')), S=gripSignaalStand(C), afIds=new Set(S.af.map(x=>x.s.id)), zAf=[...afIds];   /* v512b: afgehandeld staat niet meer op de kaart, dus uit de stand */
+    L.push('', `ZIEN (v434): ${zOpen.length} open · ${zAf.length} afgehandeld deze maand (v512b: niet in Signalen, wel in Terugblik)`);
     for(const x of S.open) L.push(`  open        ${x.s.id} · ${x.s.naam} · ${[x.O.kies?'keuze':'', x.O.wacht?'wacht op oorzaak':'', x.O.vraag?'vraag':''].filter(Boolean).join(', ')||'-'}${x.terug?' · '+x.terug:''}`);
     for(const x of S.af){ const r=((SET.gripAfgehandeld||{})[m]||{})[x.s.id]; L.push(`  afgehandeld ${x.s.id} · ${x.s.naam} · ${x.tekst}${r?` · sinds ${r.op}${r.bedrag!=null?' bij '+Math.round(r.bedrag):''}`:' · nog niet vastgelegd'}${symBedrag(x.s)!=null?' · nu '+Math.round(symBedrag(x.s)):''}`); }
     const zonder=zOpen.concat(zAf).filter(id=>!beg.has(id)), dubbel=zOpen.filter(id=>afIds.has(id)), weg=(C.leeg||[]).filter(x=>zOpen.includes(x.id)||zAf.includes(x.id));

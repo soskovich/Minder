@@ -313,7 +313,7 @@ test.describe('g · patronen als label in Zien', () => {
     expect(L.t).toBe('herhaalt zich · 3e keer'); expect(L.b).toMatch(/^sep \+€194$/);
   });
   test('nieuw deze maand en herstelt zich staan in Zien, en Inzichten draagt geen tegels', async ({ page }) => {
-    await boot(page, '2026-10-10'); await kies(page);
+    await boot(page, '2026-10-16'); await kies(page);   // v512b: herstelt pas vanaf de helft van het venster
     expect(await page.locator('#s-ins .ins-pt, #s-ins #insPatronen').count()).toBe(0);
     const I = await page.evaluate(() => { const I = gripPatroonInfo(); return { soorten: Object.values(I.lab).map((x) => x.soort), herstel: I.herstel.length, nieuw: Object.values(I.lab).find((x) => x.soort === 'nieuw') }; });
     expect(I.soorten).toContain('nieuw'); expect(I.nieuw.t).toBe('nieuw deze maand');

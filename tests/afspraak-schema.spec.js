@@ -137,14 +137,16 @@ test.describe('d · de wissel van de buffer voor beleggen', () => {
     await page.evaluate(() => { go('maand'); });
     const r = await page.evaluate(() => { const L = gripLetOpItems(maandRegels(), valtOpSignals(thisYM()), belegVragen ? belegVragen() : []);
       return { L: L.map((x) => x.soort), item: L.find((x) => x.soort === 'belegwissel'),
-        /* v434: een feit zonder vraag of keuze staat onder "Afgehandeld deze maand" (uitgeklapt gelezen) */
-        sig: (window._gripAfOpen = true, renderMaand(), [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map((e) => e.dataset.signaal || e.dataset.afgehandeldrij)), W: beleggenWissel() }; });
+        /* v512b (punt 9): een feit zonder vraag of keuze is niet open en staat dus niet in Signalen; wel in de stand en in de sheet */
+        sig: (renderMaand(), [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map((e) => e.dataset.signaal || e.dataset.afgehandeldrij)),
+        af: gripSignaalStand(gripCyclusLees()).af.map((x) => x.s.id), W: beleggenWissel() }; });
     expect(r.W).toEqual({ nu: 2, vlg: 3, ym: '2026-11' });
     expect(r.item.naam).toBe('Buffer voor beleggen: 3 maanden vanaf november');
     expect(r.item.sub).toBe('nu 2, volgt je ondergrens');
     expect(r.item.dot).toBe('neutraal');
-    /* v428: een feit staat onder Signalen op Zien, niet onder Te kiezen */
-    expect(r.sig.some((s) => s.startsWith('lo:belegwissel'))).toBe(true);
+    /* v428/v512b: een feit staat niet onder Te kiezen; Signalen toont alleen wat open is, dus de wissel staat in de stand (af) */
+    expect(r.af.some((s) => s.startsWith('lo:belegwissel'))).toBe(true);
+    expect(r.sig.some((s) => s.startsWith('lo:belegwissel'))).toBe(false);
     await page.evaluate(() => gripKiesTab('kiezen'));
     await expect(page.locator('#gripTeKiezen [data-letop="belegwissel"]')).toHaveCount(0);
     await page.evaluate(() => openBeleggenVoorwaarden());
@@ -157,8 +159,8 @@ test.describe('d · de wissel van de buffer voor beleggen', () => {
       SET.potOpen = {}; ks.forEach((k, i) => { const id = 'po' + i; TX.push({ id, date: '2026-10-03', amount: -40, acc: TX[0].acc, name: 'Test ' + k, desc: 'TEST ' + k, typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
         categorize(TX[TX.length - 1]); TX[TX.length - 1].id = id; OVR[id] = k; SET.potOpen[k] = { op: '2026-10-01' }; });
       save(); go('maand');
-      window._gripAfOpen = true; renderMaand();   // v434: de wissel is een feit zonder keuze, dus afgehandeld
-      const sig = [...document.querySelectorAll('#gripSignalen [data-signaal], #gripSignalen [data-afgehandeldrij]')].map((e) => e.dataset.signaal || e.dataset.afgehandeldrij);
+      renderMaand();   // v512b: de wissel is een feit zonder keuze, dus niet open en niet in Signalen
+      const sig = gripSignaalStand(gripCyclusLees()).af.map((x) => x.s.id);
       gripKiesTab('kiezen');
       return { ks, kaart: [...document.querySelectorAll('#gripTeKiezen [data-letop]')].map((e) => e.dataset.letop), sig }; });
     expect(r.ks.length).toBe(2);   // de invoer draagt het geval
