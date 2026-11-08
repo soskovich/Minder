@@ -1,0 +1,134 @@
+{
+ "bron": "d46a6f1 (v511)",
+ "fixture": "periode-stand op 2026-11-04 (GECONSTRUEERD)",
+ "meting": {
+  "2026-11-23": {
+   "pb": {
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   },
+   "over": "€412",
+   "opzij": {
+    "advies": 2416,
+    "doel": null
+   },
+   "terug": {
+    "status": "?",
+    "bedragen": [],
+    "nietGemeten": true,
+    "geenDoel": false
+   },
+   "hoe": {
+    "vorm": "tabel",
+    "vast": {
+     "budget": 2369,
+     "verwacht": 4011
+    },
+    "potjes": {
+     "budget": 1356,
+     "verwacht": 133
+    },
+    "totaal": {
+     "budget": 3725,
+     "verwacht": 4144
+    }
+   }
+  },
+  "2026-11-24": {
+   "pb": {
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   },
+   "over": "€412",
+   "opzij": {
+    "advies": 2066,
+    "doel": 1766
+   },
+   "terug": {
+    "status": "✗",
+    "bedragen": [
+     "€0",
+     "€450",
+     "-€450",
+     "€1.766",
+     "€2.200"
+    ],
+    "nietGemeten": false,
+    "geenDoel": false
+   },
+   "hoe": {
+    "vorm": "periode",
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   }
+  },
+  "2026-11-26": {
+   "pb": {
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   },
+   "over": "€412",
+   "opzij": {
+    "advies": 2116,
+    "doel": 1766
+   },
+   "terug": {
+    "status": "✗",
+    "bedragen": [
+     "€0",
+     "€450",
+     "-€450",
+     "€1.766",
+     "€2.200"
+    ],
+    "nietGemeten": false,
+    "geenDoel": false
+   },
+   "hoe": {
+    "vorm": "periode",
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   }
+  },
+  "2026-12-01": {
+   "pb": {
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   },
+   "over": "€412",
+   "opzij": {
+    "advies": 2166,
+    "doel": 1766
+   },
+   "terug": {
+    "status": "·",
+    "bedragen": [
+     "€0",
+     "€0",
+     "€0"
+    ],
+    "nietGemeten": false,
+    "geenDoel": true
+   },
+   "hoe": {
+    "vorm": "periode",
+    "vast": 2111,
+    "potjes": 1209,
+    "contant": 400,
+    "totaal": 3720
+   }
+  }
+ }
+}

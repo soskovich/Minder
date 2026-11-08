@@ -12337,9 +12337,27 @@ function gripOnderDrempelTik(){ let V=null; try{ V=maandVooruit(); }catch(_){} c
    ("Potje Huur EUR 700") en "N afspraken voor nov–dec" stonden er naast de rijen van de patronen; een potje dat te ruim
    is staat als melding op Zien, en de afspraken staan in het logboek (logAfsprakenBlok). Wat blijft is de afspraak uit
    het gesprek, want die is de ingang terug naar dat gesprek en staat nergens anders. */
+/* v512c (punt 3): DE AFSPRAAK UIT HET GESPREK STAAT ALLEEN ONDER "AL GEKOZEN" ALS HIJ ECHT GEKOZEN IS EN NOG GELDT, MET VINKJE EN
+   DATUM. Gemeten tot v512c: gripAfsprakenHtml() tekende hem altijd met afspraakBox('loopt') (een leeg vakje, geen datum), las de maand
+   uit de echte klok (coSameMonth) en niet uit de bekeken maand (thisYM), en keek niet of een acceptatie nog geldt. Zo stond "Ik
+   accepteer dit voorlopig, voor dekking reserveringen" leeg onder Al gekozen terwijl de regel (maandAcceptStatus) weer open was.
+   coachGekozenStand() is de ENE beslissing, met twee lezers: Al gekozen (gripAfsprakenHtml) en Te kiezen (gripCyclus). open:true
+   betekent: de keuze geldt niet meer (verlopen, veranderd of nooit vastgelegd) en de regel vraagt nog iets. */
+function coachGekozenStand(){
+  let c=null; try{ c=coachThisMonthAfspraak(); }catch(_){}
+  if(!c || !c.ts) return null;
+  const op=ymdVan(new Date(c.ts));
+  if(op.slice(0,7)!==thisYM()) return null;
+  if(c.vorm==='accepteer' && c.regel){
+    let r=null; try{ r=maandRegels().find(x=>x.key===c.regel); }catch(_){}
+    if(!r || r.status==='ok' || r.status==='onbekend') return null;   // er valt niets (meer) te accepteren
+    const st=maandAcceptStatus(c.regel, r);
+    if(!st || !st.geldig) return {c, op, open:true, regel:r, reden:st?st.reden:'geen'}; }
+  return {c, op, open:false};
+}
 function gripAfsprakenHtml(){
   const m=thisYM(); let af='';
-  try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
+  try{ const G=coachGekozenStand(); if(G && !G.open) af+=`<div class="row" data-afspraak="coach" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(G.c.text||'')}</span><span class="small" data-afspraakop="${esc(G.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(G.op))} · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
   return af;
 }
 /* ===== v428: GRIP ALS CYCLUS, FASE 1 (gevraagd door de gebruiker, mockup "Grip compleet v423") =====
@@ -12444,6 +12462,10 @@ function gripCyclus(SIG){
   let H=[]; try{ H=gripTeRuimHerzien(); }catch(_){}
   for(const x of H) kies.push({id:'herz:'+x.k, k:x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e keer · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
   let A=[]; try{ A=overboekActiesOpen(); }catch(_){}
+  /* v512c: een acceptatie uit het gesprek die niet meer geldt is een open keuze, hier en niet onder Al gekozen */
+  try{ const G=coachGekozenStand(); if(G && G.open){ const RR=G.regel, rq=esc(RR.key).replace(/'/g,"\\'");
+    const why={maand:'de maand is voorbij', oud:'te lang geleden', veranderd:'het bedrag is veranderd', geen:'niet vastgelegd'}[G.reden]||'geldt niet meer';
+    kies.push({id:'accept:'+RR.key, bron:'accept', naam:`${RR.naam}: accepteren of oplossen`, reden:`je acceptatie van ${dagKort(G.op)} geldt niet meer · ${why}`, act:`openMaandBeslis('${rq}')`}); } }catch(_){}
   for(const a of A) kies.push({id:'actie:'+a.soort, bron:'actie', naam:overboekActieTekst(a), reden:`bij je bank · sinds ${gripKortDatum(a.op)} · nog niet gezien`, act:'', a});
   /* v443: is het potje Huur lager dan de verwachte huur plus de andere vaste posten in Huur vanaf volgende maand, dan een keuze */
   { let HV=null; try{ HV=huurPotjeVoorstel(); }catch(_){}
@@ -14719,6 +14741,15 @@ function gripSignalenKaart(C){ const PI=gripPatroonInfo(); if(!C.sym.length && !
   const rij=x=>{ const s=x.s; return `<div class="row" data-signaal="${esc(s.id)}" style="gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${s.x&&s.x.dot?maandDot(s.x.dot):''}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(s.naam)}</span>${lbl(s)}${x.terug?`<span class="small" data-signaalterug style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(x.terug)}</span>`:''}</span><span class="small" data-waarom role="button" style="color:var(--teal);font-weight:700;white-space:nowrap;cursor:pointer" onclick="gripNaarSymptoom('${esc(s.id).replace(/'/g,"\\'")}')">waarom ›</span></div>`; };
   /* v512b (punt 9): Signalen toont alleen wat open is. Afgehandeld staat in Terugblik (Al gekozen, tussenstand) en niet nog eens hier. */
   return `<div class="card" id="gripSignalen" data-signalenopen="${S.open.length}"><div class="hlabel" style="margin:0 0 2px">Signalen</div>${S.open.map(rij).join('')}${hOpen.map(hRij).join('')}${!S.open.length&&!hOpen.length?`<div class="small" data-signalengeen style="color:var(--mut2);padding:4px 0 6px">Geen open signalen.</div>`:''}</div>`; }
+/* v512c (punt 2): AFGEHANDELD STAAT IN TERUGBLIK EN NERGENS ANDERS. v512b haalde "Afgehandeld deze maand (N)" uit Signalen, maar
+   Terugblik droeg die punten niet (gemeten op v421-stand: "Vaste lasten gestegen · alles geaccepteerd" stond na v512b op geen enkel
+   scherm). Dezelfde bron en dezelfde rijen als de lijst die tot v512b in Signalen stond (gripSignaalStand().af en de herstel-signalen
+   na GRIP_HERSTEL_DAGEN), nu open in Terugblik; een tik op een signaal opent zijn symptoom in Begrijpen. */
+function gripAfgehandeldTerugHtml(C){
+  if(!C){ try{ C=gripCyc(); }catch(_){ return ''; } }
+  let S=null, PI=null; try{ S=gripSignaalStand(C); PI=gripPatroonInfo(); }catch(_){ return ''; }
+  const hAf=((PI&&PI.herstel)||[]).filter(x=>x.af), n=S.af.length+hAf.length; if(!n) return '';
+  return `<div class="card" id="gripAfgehandeld" data-afgehandeld="${n}"><div class="hlabel" style="margin:0 0 2px">Afgehandeld deze ${eraEenheidNu()?'periode':'maand'} (${n})</div>${S.af.map(x=>`<div class="row" data-afgehandeldrij="${esc(x.s.id)}" role="button" style="gap:8px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripNaarSymptoom('${esc(x.s.id).replace(/'/g,"\\'")}')"><span class="small" style="flex:1;min-width:0;color:var(--mut)">${esc(x.s.naam)} · ${esc(x.tekst)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`).join('')}${hAf.map(x=>`<div class="row" data-afgehandeldrij="herstelt:${esc(x.k)}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0;color:var(--mut)">${esc(x.potNaam)} · herstelt zich sinds ${esc(new Date(x.op+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''))}</span></div>`).join('')}</div>`; }
 /* Kloppen mijn gegevens?: de wachtrij van v425 (hooguit KENNIS_MAX_OPEN), elk een tik naar die vraag. De enige plek op Zien
    waar je iets wijzigt. */
 function gripGegevensKaart(){ let Q=[]; try{ Q=gegevensOpen().slice(0, KENNIS_MAX_OPEN); }catch(_){}
@@ -15656,7 +15687,7 @@ function gripTerugblikHtml(){
     ${eenmaligPatroonHtml()}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">deels = half · gemeten aan je meetlat · geschoven en instellingen tellen niet mee</div>
     <div class="small" id="gripNaarLogboek" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek ›</div></div>`
-    +gripKlopteOorzaakHtml()+kasVraagHtml()+salMoment2Html()+watOverTerugHtml()+onregTerugHtml()+gripTerugAfgesloten()+verhoudingSalarisHtml()
+    +gripAfgehandeldTerugHtml()+gripKlopteOorzaakHtml()+kasVraagHtml()+salMoment2Html()+watOverTerugHtml()+onregTerugHtml()+gripTerugAfgesloten()+verhoudingSalarisHtml()
     +(()=>{ const x=`${(()=>{ const E=[valtOpYmPlus(m,-1), m].flatMap(ym=>ym===m?T.onbepaald:gripTerugblik(ym).onbepaald); if(!E.length) return '';
       return `<div data-terugonbepaald style="margin-top:10px"><div class="small" style="font-weight:700">Nog niet bepaald · eenmalig of komt terug?</div>${E.map(B=>`<div class="row" data-terugbenoem="${esc(B.t.id)}" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGegevensVragen('benoemtx|${esc(B.t.id)}')"><b style="width:18px;text-align:center">?</b><span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(B.label)}</span><span class="small" style="display:block;color:var(--mut2)">${esc(B.partij)} · ${esc(dagKort(B.t.date))} · ${esc(BENOEM_BRON[B.bron]||B.bron)} · telt niet als gedrag ›</span></span><span class="small" style="font-weight:700;white-space:nowrap">${euro0(B.bedrag)}</span></div>`).join('')}</div>`; })()}`; return x?`<div class="card" id="gripTerugOnbepaald">${x}</div>`:''; })();
 }
@@ -26249,11 +26280,16 @@ function insPatronen(soort){
     /* v391: eindigt hij naar verwachting boven, dan is het geen herstel maar herhaalt het zich, met het verwachte bedrag.
        Structureel gaat voor: dat is de sterkere verklaring en die toets is niet veranderd. */
     if((vb || uz) && boven){ herhaalt(); continue; }
-    if(vb && achter && insHerstelMag(x, m)){
-      bron.push(logBron, `je eerste dagen van ${Mn}`);
-      out.push({soort:'herstelt', k:x.k, naam:x.naam, bedrag:x.typisch-x.uit, grip:false, potNaam:x.naam, typisch:x.typisch,
-        tekst:`In ${Pn} ${euro0(vb.bedrag)} boven je potje. ${MN(Mn)} loopt achter: ${euro0(x.uit)} in ${el} dagen, gewoonlijk ${euro0(x.typisch)}.`, bron,
-        kop:`${x.naam} loopt achter: ${euro0(x.uit)} in ${el} dagen, gewoonlijk ${euro0(x.typisch)}, na ${euro0(vb.bedrag)} boven je potje in ${Pn}.`});
+    /* v512c (punt 1): herstel vraagt een overschrijding in minstens een van de twee vorige maanden (vorige, anders die ervoor) en een
+       achterstand op het dagtempo die afgerond boven EUR 0 ligt; het bedrag van het signaal IS dat verschil, dus EUR 0 is geen signaal. */
+    const prev2=valtOpYmPlus(m,-2), vbH=vb?{b:vb, ym:prev}:(()=>{ const b=insVorigeBoven(x.k, prev2); return b?{b, ym:prev2}:null; })();
+    const verschilH=Math.round(x.typisch-x.uit);
+    if(vbH && achter && verschilH>0 && insHerstelMag(x, m)){
+      const Hn=ymFull(vbH.ym), hb=vbH.b;
+      bron.push(hb.log?`het logboek van ${Hn}`:`je uitgaven van ${Hn}`, `je eerste dagen van ${Mn}`);
+      out.push({soort:'herstelt', k:x.k, naam:x.naam, bedrag:verschilH, grip:false, potNaam:x.naam, typisch:x.typisch,
+        tekst:`In ${Hn} ${euro0(hb.bedrag)} boven je potje. ${MN(Mn)} loopt achter: ${euro0(x.uit)} in ${el} dagen, gewoonlijk ${euro0(x.typisch)}.`, bron,
+        kop:`${x.naam} loopt achter: ${euro0(x.uit)} in ${el} dagen, gewoonlijk ${euro0(x.typisch)}, na ${euro0(hb.bedrag)} boven je potje in ${Hn}.`});
     }
   }
   // nieuw deze maand
