@@ -12357,7 +12357,7 @@ function coachGekozenStand(){
 }
 function gripAfsprakenHtml(){
   const m=thisYM(); let af='';
-  try{ const G=coachGekozenStand(); if(G && !G.open) af+=`<div class="row" data-afspraak="coach" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(G.c.text||'')}</span><span class="small" data-afspraakop="${esc(G.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(G.op))} · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
+  try{ const G=coachGekozenStand(); if(G && !G.open) af+=`<div class="row" data-afspraak="coach" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(G.c.text||'')}</span><span class="small" data-afspraakop="${esc(G.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(G.op))} · Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
   return af;
 }
 /* ===== v428: GRIP ALS CYCLUS, FASE 1 (gevraagd door de gebruiker, mockup "Grip compleet v423") =====
