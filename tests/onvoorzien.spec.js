@@ -56,15 +56,17 @@ const meet = async (page, m) => {
 };
 
 test.describe('a - de categorie bestaat, zonder potje', () => {
-  test('type expense met geenNorm, en te kiezen in de transactie', async ({ page }) => {
+  test('type expense met geenNorm; geen tegel meer, wel bestaand en instelbaar', async ({ page }) => {
     await boot(page);
     const c = await page.evaluate(() => ({ cat: CATS.onvoorzien, gn: geenNorm('onvoorzien'), andere: geenNorm('vervoer') }));
     expect(c.cat.type).toBe('expense');
     expect(c.cat.geenNorm).toBe(true);
     expect(c.gn).toBe(true);
     expect(c.andere).toBe(false);
+    // v513 punt 5: Onvoorzien is geen keuzetegel meer; de categorie blijft bestaan en is nog via setCat te zetten
     await page.evaluate(() => { openSheet(TX.find((x) => x.amount < 0).id); });
-    expect(await page.locator('#sheet .catgrid').innerText()).toContain('Onvoorzien');
+    expect(await page.locator('#sheet .catgrid').innerText()).not.toContain('Onvoorzien');
+    expect(await page.evaluate(() => { const t = TX.find((x) => x.amount < 0); setCat(t.id, 'onvoorzien'); return catOf(t); })).toBe('onvoorzien');
   });
 
   test('geen potje aan te maken, geen voorstel', async ({ page }) => {

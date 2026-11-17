@@ -850,13 +850,15 @@ const CATS={
   verzekering:{name:'Verzekeringen',icon:ICON('shield'),color:'#22d3ee',type:'expense'},
   zorg:{name:'Zorg & apotheek',icon:ICON('cross'),color:'#f472b6',type:'expense'},
   sport:{name:'Sport & gezondheid',icon:ICON('dumbbell'),color:'#fb923c',type:'expense'},
+  /* v513 punt 6: een nieuwe uitgavencategorie (kapper, laserbehandeling, massage, pedicure). Geen potje, geen regel, geen
+     herkenning (geen keywords in RULES), geen migratie: zonder boekingen levert hij nergens een rij, nul of melding op. */
   belasting:{name:'Belasting & boetes',icon:ICON('bank'),color:'#f87171',type:'expense'},
   studie:{name:'Studieschuld',icon:ICON('cap'),color:'#818cf8',type:'expense'},
   goededoel:{name:'Goede doelen',icon:ICON('heart'),color:'#4ade80',type:'expense'},
   abonnement:{name:'Abonnementen',icon:ICON('repeat'),color:'#c084fc',type:'expense'},
   vakantie:{name:'Vakantie & reizen',icon:ICON('plane'),color:'#38bdf8',type:'expense'},
   bankkosten:{name:'Bankkosten',icon:ICON('card'),color:'#94a3b8',type:'expense'},
-  persoonlijk:{name:'Persoonlijke overboeking',icon:ICON('user'),color:'#fca5a5',type:'expense'},
+  persoonlijk:{name:'Persoonlijke overboeking',icon:ICON('user'),color:'#fca5a5',type:'expense',geenTegel:true},   // v513: geen keuzetegel; een automatische route (Revolut/Wise/N26/Tikkie, loanNietTerugSync) zet hem
   vices:{name:'Vices',icon:ICON('vice'),color:'#d98c5f',type:'expense'},
   /* v234: een uitgave die geen keuze en geen patroon is (een wegsleep, een kapotte wasmachine) hoort
      in geen potje: een potje is een norm, en dit is per definitie geen overbesteding. geenNorm zegt
@@ -864,7 +866,7 @@ const CATS={
      historie meet (insSignals, noPotLeak, het big-signaal, budgetnaleving). Het blijft een uitgave:
      netSpend(), het maandtotaal, de maandvergelijking en de drill-down tellen hem gewoon. Geen
      keywords in categorize(): je kiest hem zelf in de transactie. */
-  onvoorzien:{name:'Onvoorzien',icon:ICON('alert'),color:'#b7a99a',type:'expense',geenNorm:true},
+  onvoorzien:{name:'Onvoorzien',icon:ICON('alert'),color:'#b7a99a',type:'expense',geenNorm:true,geenTegel:true},   // v513: geen keuzetegel meer (punt 5); bestaande boekingen houden hem
   /* v258: de tweede geenNorm-categorie. Contant is geen onvoorzien: een wegsleep kon je niet zien
      aankomen, contant geld geef je gewoon uit, alleen ziet de app niet waaraan. Dezelfde vlag om
      dezelfde reden - er valt geen potje voor te maken, want op het moment van pinnen weet je nog
@@ -16280,7 +16282,7 @@ function resBetaaldZet(id){
      als overbesteding leest. Hier mag je hem aanwijzen. GEEN MATCH: de app zet niets uit zichzelf,
      ook niet als er precies één kandidaat is. Is er niets aan te wijzen, dan gaat het scherm terug
      naar de editor zoals vóór v269. */
-  if(resBoekingKandidaten(v).length) openResBoekingPick(id); else openReservering(id);
+  if(resBoekingKandidaten(v).length || resBoekMarked(v).length) openResBoekingPick(id); else openReservering(id);   // v513: ook met alleen al-gemarkeerde boekingen is er iets te koppelen
 }
 /* De kandidaten: afschrijvingen van DEZE maand in een uitgavencategorie die nog geen vlag dragen.
    Een geenNorm-categorie valt eruit, want daar doet de vlag per constructie niets
@@ -16295,23 +16297,47 @@ function resBoekingKandidaten(v){
     .sort((a,b)=>{ const pa=(cat&&catOf(a)===cat)?0:1, pb=(cat&&catOf(b)===cat)?0:1;
                    return pa-pb || b.date.localeCompare(a.date) || (-b.amount)-(-a.amount); });
 }
-function openResBoekingPick(id){
-  const v=resLijst().find(x=>x.id===id); if(!v){ renderResSheet(); return; }
-  const K=resBoekingKandidaten(v);
-  const terug=esc(String(id).replace(/'/g,"\\'"));
+/* v513 deel 2: de afschrijvingen van deze maand die AL "uit een reservering" dragen. Ze staan ook in de lijst, met een
+   label, en kiezen laat hun vlag ongemoeid (resBoekingKies): koppelen gebeurt aan de post, niet aan de vlag. */
+function resBoekMarked(v){
+  const m=thisYM(); let L=[]; try{ L=txOfMonth(m); }catch(_){ return []; }
+  return L.filter(t=>t.amount<0 && CATS[catOf(t)] && CATS[catOf(t)].type==='expense' && !geenNormTx(t) && isUitReservering(t))
+    .sort((a,b)=>b.date.localeCompare(a.date) || (-b.amount)-(-a.amount));
+}
+/* het zoekveld filtert op tegenpartij, omschrijving en bedrag (komma en punt allebei, via numIn). */
+function resBoekMatch(t, q){
+  const s=String(q||'').trim().toLowerCase(); if(!s) return true;
+  const hay=((cleanMerch(t.name)||t.name||'')+' '+(t.name||'')+' '+(t.desc||'')).toLowerCase();
+  if(hay.includes(s)) return true;
+  const num=s.replace(/[^\d.,-]/g,''); if(num && /\d/.test(num)){ const n=numIn(num); if(n>0 && Math.abs(Math.abs(t.amount)-n)<0.005) return true; }
+  return false;
+}
+function openResBoekingPick(id){ window._resBoek={id, zoek:''}; renderResBoekPick(); showSheetBg(); }
+function renderResBoekPick(focus){
+  const S=window._resBoek||{}; const v=resLijst().find(x=>x.id===S.id); if(!v){ renderResSheet(); return; }
+  const terug=esc(String(S.id).replace(/'/g,"\\'")), q=S.zoek||'';
+  const K=resBoekingKandidaten(v).filter(t=>resBoekMatch(t,q));
+  const KM=resBoekMarked(v).filter(t=>resBoekMatch(t,q));
+  const rij=(t,marked)=>`<div class="row" data-resboekrij="${esc(String(t.id))}"${marked?' data-resboekmarked':''} style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="resBoekingKies('${terug}','${esc(String(t.id).replace(/'/g,"\\'"))}')">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(cleanMerch(t.name)||t.name)}</div>
+        <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} \u00b7 ${esc(CATS[catOf(t)].name)}${marked?' \u00b7 al gemarkeerd \u00b7 uit een reservering':''}</div></div>
+      <div class="small" style="font-weight:700;white-space:nowrap">${euro0(-t.amount)} <span style="color:var(--teal)">\u203a</span></div></div>`;
+  const lijstHtml=[...K.slice(0,12).map(t=>rij(t,false)), ...KM.slice(0,12).map(t=>rij(t,true))].join('')
+    || '<div class="small muted" data-resboekleeg style="padding:10px 0">Geen boeking gevonden.</div>';
+  const extra=(K.length>12)?`<div class="small muted" style="padding:6px 0">en nog ${K.length-12} andere boekingen deze maand; die vind je in je transacties</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">Welke boeking was dit?</div>
-    <div class="small muted" style="margin-bottom:12px">${esc(v.naam||'Verplichting')} staat op betaald. Wijs je de boeking aan, dan telt dat bedrag wel in je maandtotaal en niet tegen je potjes. Je kunt dit ook laten.</div>
-    ${K.slice(0,12).map(t=>`<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="resBoekingKies('${terug}','${esc(String(t.id).replace(/'/g,"\\'"))}')">
-      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(cleanMerch(t.name)||t.name)}</div>
-        <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} \u00b7 ${esc(CATS[catOf(t)].name)}</div></div>
-      <div class="small" style="font-weight:700;white-space:nowrap">${euro0(-t.amount)} <span style="color:var(--teal)">\u203a</span></div></div>`).join('')}
-    ${K.length>12?`<div class="small muted" style="padding:6px 0">en nog ${K.length-12} andere boekingen deze maand; die vind je in je transacties</div>`:''}
+    <div class="small muted" style="margin-bottom:10px">${esc(v.naam||'Verplichting')} staat op betaald. Wijs je de boeking aan, dan telt dat bedrag wel in je maandtotaal en niet tegen je potjes. Je kunt dit ook laten.</div>
+    <input type="text" id="resBoekZoek" value="${esc(q)}" placeholder="Zoek op tegenpartij, omschrijving of bedrag" oninput="resBoekZoek(this.value)" style="width:100%;margin-bottom:10px">
+    <div id="resBoekLijst">${lijstHtml}${extra}</div>
     <div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openReservering('${terug}')">Geen boeking aanwijzen</div>`;
-  showSheetBg();
+  if(focus){ const z=document.getElementById('resBoekZoek'); if(z){ z.focus(); z.setSelectionRange(z.value.length, z.value.length); } }
 }
+function resBoekZoek(v){ const S=window._resBoek; if(!S) return; S.zoek=v; renderResBoekPick(true); }
 function resBoekingKies(resId, txId){
   const t=TX.find(x=>x.id===txId); if(!t){ openReservering(resId); return; }
+  /* v513 deel 2: een boeking die AL uit een reservering is, houdt zijn vlag; kiezen koppelt alleen aan de post. */
+  if(isUitReservering(t)){ openReservering(resId); toast(`${ICON('check')} al uit een reservering`); return; }
   zetUitReservering(txId, -t.amount, false);
   openReservering(resId);
   toast(`${ICON('check')} ${euro0(-t.amount)} uit een reservering`);
@@ -20990,8 +21016,12 @@ function renderNfSheet(){
     <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel · ${M.doelVast!=null?'door jou vastgezet':M.maanden+' mnd'}</div>
       <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
       <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
+      <div data-nfdoelkop style="font-weight:700;font-size:var(--fs-sm);margin:14px 0 0;text-align:left">Doelbedrag &middot; hoeveel maanden spaar je op</div>
+      <div class="small muted" style="font-size:var(--fs-xs);margin:2px 0 0;text-align:left">Bepaalt hoe hoog je noodfonds wordt (maanden &times; minimaal nodig in crisis)</div>
       <div class="chips" id="nfMaandChips" style="margin-top:10px">${chips}</div>
       ${nfDoelVastRij(M)}
+      <div data-nfgrenskop style="font-weight:700;font-size:var(--fs-sm);margin:16px 0 0;text-align:left">Ondergrens &middot; vanaf wanneer is je buffer genoeg</div>
+      <div class="small muted" style="font-size:var(--fs-xs);margin:2px 0 0;text-align:left">Bepaalt alleen het oordeel op Grip; verandert je doelbedrag niet omlaag</div>
       ${bufferNormRij(M)}</div>
     ${nfAllocCard()}
     ${(function(){ try{ const v=planOrdeVeld(PLAN_NF); return v?`<div class="card">${v}</div>`:''; }catch(_){ return ''; } })()}
@@ -27588,16 +27618,10 @@ function loanBlokHTML(t){
     </div>`;
     return '';
   }
-  const b=Math.round(Math.abs(+t.amount||0)); if(!(b>0)) return '';
-  const knop=(lab,sub,fn)=>`<div class="cz-pot" style="cursor:pointer" onclick="${fn}"><div class="cp-info"><div class="cp-nm">${lab}</div><div class="cp-sub">${sub}</div></div><span class="muted">›</span></div>`;
-  return `<div style="margin:10px 0 6px">
-    <div class="small" style="font-weight:700;margin:0 2px 6px">Dit was geen uitgave →</div>
-    <div class="cz-card" style="padding:2px 14px">
-      ${knop('Geld uitgeleend','ik krijg dit terug',`markLoan('${t.id}','uit','lening')`)}
-      ${knop('Geld geleend','ik moet dit terugbetalen',`markLoan('${t.id}','in','lening')`)}
-      ${knop('Borg / voorschot','komt later terug',`markLoan('${t.id}','uit','borg')`)}
-      ${knop('Eigen overboeking','tussen je eigen rekeningen',`setCat('${t.id}','intern')`)}
-    </div></div>`;
+  /* v513: de "Dit was geen uitgave →"-tegels staan nu in catKeuzeHTML() onder "Geen uitgave" (richting-afhankelijk,
+     met Sparen & beleggen en Terugbetaling van geleend geld erbij). loanBlokHTML draagt alleen nog de kaarten die
+     context nodig hebben: een lopende lening, een terugbetaal-suggestie en een overschot. */
+  return '';
 }
 function openLoan(id){
   const l=loans().find(x=>x.id===id); if(!l) return;
@@ -28026,29 +28050,99 @@ function openSchuldRegelVraag(txId, schuldId){
     <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openSchuldPick('${txId}')">Terug</div>`;
   showSheetBg();
 }
+/* ===== v513: DE CATEGORIE-KEUZE IN DE BOEKINGSSHEET (gevraagd door de gebruiker) =====
+   De sheet die opent bij een tik op een boeking, van boven naar onder: de KOP, een VOORSTEL (max 3 chips, niets
+   voorgeselecteerd), de VINKJES (Voortaan, Eenmalig, Uit een reservering), een ZOEKVELD, de UITGAVE-tegels (3 breed,
+   minstens 44px hoog), en "GEEN UITGAVE" ingeklapt onderaan. De RICHTING van het geld bepaalt wat zichtbaar is: bij een
+   uitgave de uitgaventegels, bij een bijschrijving de inkomsten/overboekingen (en de uitgaventegels ingeklapt onder
+   "Terugbetaling van een uitgave"). Elke keuze staat EEN keer en leest dezelfde handler als voorheen (markLoan, setCat),
+   dus er verandert geen getal. Persoonlijke overboeking en Onvoorzien zijn geen tegel meer; staat een boeking erop, dan
+   toont de sheet "nu: <categorie>" zodat er niets stil verandert. */
+/* het voorstel: eerst wat de app nu al denkt (een eigen regel of de herkenning), daarna de twee categorieën die je voor
+   deze tegenpartij het vaakst koos. Niets voorgeselecteerd; een tik is een keuze. */
+function ruleHitVoor(t){ if(!t) return null; const U=String(t.desc||'').toUpperCase(), Z=U.replace(/\s/g,'');
+  const match=w=>{ const wu=String(w||'').toUpperCase(); if(!wu) return false; const wz=wu.replace(/\s/g,''); return U.includes(wu)||(wz.length>=4&&Z.includes(wz)); };
+  for(const r of (SET.rules||[])){ if(r && CATS[r.cat] && match(r.kw)) return r.cat; } return null; }
+function huurTermijnAchtig(bedrag){ if(!(bedrag>0)) return false;
+  for(const x of TX){ if(x.amount<0 && catOf(x)==='huur' && Math.abs(Math.abs(x.amount)-bedrag)<=1) return true; } return false; }
+function catVoorstelChips(t){
+  const chips=[], seen=new Set();
+  const add=(cat,label)=>{ if(!cat||!CATS[cat]||seen.has(cat)) return; seen.add(cat); chips.push({cat,label}); };
+  const rc=ruleHitVoor(t);
+  if(rc) add(rc,'via je regel');
+  else { const a=t.autoCat; if(a && CATS[a] && a!=='overig') add(a,'herkend'); }
+  const key=catTegenpartij(t), tally={};
+  if(key) for(const x of TX){ if(x.id===t.id) continue; const c=OVR[x.id]; if(!c||!CATS[c]||catTegenpartij(x)!==key) continue; tally[c]=(tally[c]||0)+1; }
+  for(const [c,n] of Object.entries(tally).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))){ if(chips.length>=3) break; if(seen.has(c)) continue; add(c, `${n}× gekozen`); }
+  /* v513 punt 4: een bedrag binnen EUR 1 van een bekende huurtermijn kan een borg zijn; die staat als voorstel naast Huur.
+     Beide voorstel, niets voorgekozen. */
+  if(t.amount<0 && chips.some(ch=>ch.cat==='huur') && huurTermijnAchtig(Math.abs(t.amount))){
+    const i=chips.findIndex(ch=>ch.cat==='huur'); chips.splice(i+1,0,{borg:true, label:'borg'}); }
+  return chips.slice(0,3);
+}
+function catVoorstelBlok(t){ const chips=catVoorstelChips(t); if(!chips.length) return ''; const id=t.id;
+  const chip=ch=>{ const fn=ch.borg?`markLoan('${id}','uit','borg')`:`setCat('${id}','${ch.cat}')`; const nm=ch.borg?'Borg / voorschot':CATS[ch.cat].name;
+    return `<span class="chip" data-voorstelchip="${ch.borg?'borg':ch.cat}" onclick="${fn}" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:7px 12px;min-height:44px;justify-content:center">${esc(nm)}<span class="small muted" style="font-size:var(--fs-xs)">${esc(ch.label)}</span></span>`; };
+  return `<div class="small muted" style="margin:10px 0 2px">Voorstel</div><div class="chips wrap" data-catvoorstel style="padding:2px 0 4px">${chips.map(chip).join('')}</div>`;
+}
+/* de keuze-tegels en "Geen uitgave", filterbaar op naam (ook in het ingeklapte deel: een zoekterm klapt het open). De
+   richting (geld eruit / erin) bepaalt wat zichtbaar is en wat ingeklapt. */
+function catKeuzeHTML(t, zoek){
+  const id=t.id, cur=catOf(t), eruit=t.amount<0;
+  const q=String(zoek||'').trim().toLowerCase();
+  const naamMatch=c=>!q || CATS[c].name.toLowerCase().includes(q);
+  const uitCats=Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !CATS[k].geenTegel && (k===cur||!potGearchiveerd(k)));   // v513: persoonlijk en onvoorzien dragen geenTegel (geen sleutel-string: geennorm-hardcode)
+  const tile=k=>`<div class="catpick ${cur===k?'on':''}" data-catpick="${k}" onclick="setCat('${id}','${k}')" style="min-height:44px;min-width:0;gap:7px;padding:8px 9px;overflow:hidden"><span style="font-size:var(--fs-lg);flex-shrink:0">${CATS[k].icon}</span><span style="min-width:0;overflow-wrap:anywhere;line-height:1.15">${esc(CATS[k].name)}</span></div>`;
+  const grid=cats=>{ const f=cats.filter(naamMatch); return `<div class="catgrid" style="grid-template-columns:repeat(3,1fr)">${f.map(tile).join('')||'<div class="small muted" style="grid-column:1/-1">Geen categorie gevonden</div>'}</div>`; };
+  const gu=[];
+  if(eruit){
+    gu.push({lab:'Borg / voorschot', sub:'komt later terug', fn:`markLoan('${id}','uit','borg')`});
+    gu.push({lab:'Geld uitgeleend', sub:'ik krijg dit terug', fn:`markLoan('${id}','uit','lening')`});
+    gu.push({lab:'Terugbetaling van geleend geld', sub:'ik betaal geleend geld terug', fn:`setCat('${id}','geleend')`});
+    gu.push({lab:'Eigen overboeking', sub:'tussen je eigen rekeningen', fn:`setCat('${id}','intern')`});
+    gu.push({lab:'Sparen & beleggen', sub:'naar je spaar- of beleggingsrekening', fn:`setCat('${id}','sparen')`});
+  } else {
+    gu.push({lab:'Inkomen', sub:'loon, uitkering of andere inkomsten', fn:`setCat('${id}','inkomen')`});
+    gu.push({lab:'Rente', sub:'rente of een vergoeding', fn:`setCat('${id}','rente')`});
+    gu.push({lab:'Geld geleend', sub:'ik moet dit terugbetalen', fn:`markLoan('${id}','in','lening')`});
+    gu.push({lab:'Borg of lening terug', sub:'een borg of lening die je terugkrijgt', fn:`setCat('${id}','uitgeleend')`});
+    gu.push({lab:'Eigen overboeking', sub:'tussen je eigen rekeningen', fn:`setCat('${id}','intern')`});
+  }
+  const guF=gu.filter(x=>!q || x.lab.toLowerCase().includes(q));
+  const knop=x=>`<div class="cz-pot" data-guitem="${esc(x.lab)}" style="cursor:pointer" onclick="${x.fn}"><div class="cp-info"><div class="cp-nm">${esc(x.lab)}</div><div class="cp-sub">${esc(x.sub)}</div></div><span class="muted">›</span></div>`;
+  const guHtml=`<div class="cz-card" style="padding:2px 14px">${guF.map(knop).join('')||'<div class="small muted" style="padding:11px 0">Geen optie gevonden</div>'}</div>`;
+  const zoekveld=`<input type="text" id="catZoek" value="${esc(zoek||'')}" placeholder="Zoek een categorie" oninput="catSheetZoek(this.value)" style="width:100%;margin:8px 0">`;
+  if(eruit){
+    return `<div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>${zoekveld}${grid(uitCats)}
+      <details data-geenuitgave ${q?'open':''} style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:700;padding:8px 0">Geen uitgave</summary>${guHtml}</details>`;
+  }
+  return `<div class="small muted" style="margin:6px 0 2px">Wat voor bijschrijving is dit?</div>${zoekveld}${guHtml}
+    <details data-uitgaveraster ${q?'open':''} style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:700;padding:8px 0">Terugbetaling van een uitgave</summary><div class="small muted" style="margin:4px 2px 2px">Een retour of terugbetaling van een winkel hoort bij een uitgavencategorie.</div>${grid(uitCats)}</details>`;
+}
+function catSheetZoek(v){ const S=window._catSheet; if(!S) return; S.zoek=v; const t=TX.find(x=>x.id===S.id); if(!t) return;
+  const el=document.getElementById('catKeuzeDeel'); if(!el) return; el.innerHTML=catKeuzeHTML(t, v);
+  const z=document.getElementById('catZoek'); if(z){ z.focus(); z.setSelectionRange(z.value.length, z.value.length); } }
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
-  window._setSheet=null;
+  window._setSheet=null; window._catSheet={id, zoek:''};
   const cur=catOf(t);
-  /* v338: vanuit de werklijst van de afsluiting staat een eerdere eigen keuze voor dezelfde tegenpartij bovenaan. */
-  const wv=window._werklijst ? catVoorstel(t) : null;
+  /* v513 punt 5: een boeking die nu op Persoonlijke overboeking of Onvoorzien staat kun je niet meer als tegel kiezen; de
+     sheet toont "nu: <categorie>" zodat er niets stil verandert. */
+  const nu=(CATS[cur]&&CATS[cur].geenTegel)?`<div class="small muted" data-cathuidig="${cur}" style="margin-top:2px">nu: <b>${esc(CATS[cur].name)}</b></div>`:'';   // v513: geen keuzetegel (persoonlijk/onvoorzien), via de vlag (geennorm-hardcode)
   $('#sheet').innerHTML=`<div class="grab"></div>
-    ${wv?`<div data-catvoorstel="${wv.cat}" class="row" style="gap:8px;align-items:center;padding:8px 10px;margin-bottom:8px;background:var(--card2);border-radius:10px"><span class="small" style="flex:1;min-width:0">Voorstel: <b>${esc(CATS[wv.cat].name)}</b><span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Dat koos je eerder voor ${esc(wv.naam)} op ${esc(afDag(wv.datum))}</span></span><button class="btn" style="width:auto;flex-shrink:0;padding:6px 10px;font-size:var(--fs-xs)" onclick="setCat('${id}','${wv.cat}')">Zo categoriseren</button></div>`:''}
     <div class="center" style="margin-bottom:4px"><div style="font-size:var(--fs-xl)">${CATS[cur].icon}</div>
       <div class="small muted">${JARGON[cur]?jrg(cur,CATS[cur].name):esc(CATS[cur].name)}</div>
       <div style="font-weight:700;margin-top:4px">${esc(t.name)}</div>
       <div class="${t.amount>0?'amt pos':''}" style="font-size:var(--fs-xl);font-weight:800;margin:4px 0">${t.amount>0?'+':''}${euro(t.amount)}</div>
-      <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}${t.acc?' · '+esc(accLabel(t.acc)):''}</div></div>
+      <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}${t.acc?' · '+esc(accLabel(t.acc)):''}</div>${nu}</div>
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
+    ${catVoorstelBlok(t)}
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${CATS[cur].type==='expense'?`<label class="row" data-eenmaligrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)"><input type="checkbox" data-eenmaligtoggle ${(SET.eenmaligOk||{})[id]?'checked':''} onchange="eenmaligZet('${id}')"><span class="small"><b>Eenmalig</b> · telt niet in je potje en niet in het typische niveau</span></label>`:''}
+    ${CATS[cur].type==='expense'?`<label class="row" data-eenmaligrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)"><input type="checkbox" data-eenmaligtoggle ${(SET.eenmaligOk||{})[id]?'checked':''} onchange="eenmaligZet('${id}')"><span class="small"><b>Eenmalig</b> · telt niet in je potje en niet in je patroon</span></label>`:''}
     ${kennisBlok(t)}${salSplitsing(t)?salSplitBlok(t):onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
-    <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
-    <div class="catgrid">${Object.entries(CATS).filter(([k])=>k===cur||!potGearchiveerd(k)).map(([k,c])=>`
-      <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
-        <span style="font-size:var(--fs-lg)">${c.icon}</span><span>${c.name}</span></div>`).join('')}</div>`;
+    <div id="catKeuzeDeel">${catKeuzeHTML(t,'')}</div>`;
   showSheetBg();
 }
 
@@ -37130,7 +37224,7 @@ try{ new MutationObserver(()=>sheetLangMeet()).observe(document.getElementById('
    doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
    dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de
    rest van de sessie weer openspringen nadat je hem had gesloten. */
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._cijfersZonder=null; window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; window._werklijst=null; hideTip();
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._cijfersZonder=null; window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; window._werklijst=null; window._catSheet=null; window._resBoek=null; hideTip();
   try{ coAfbreken(); }catch(_){}   // v138: de sheet dicht midden in een gesprek = coEnd(), zonder iets vast te leggen
 }
 

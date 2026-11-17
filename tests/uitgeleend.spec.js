@@ -171,17 +171,20 @@ test.describe('d · terugzetten en kwijtschelden', () => {
 });
 
 test.describe('e · de sheet', () => {
-  test('biedt vier keuzes bij een afschrijving en niets bij een bijschrijving zonder post', async ({ page }) => {
+  /* v513: "Dit was geen uitgave →" is "Geen uitgave" geworden, richting-afhankelijk. Bij een afschrijving (geld eruit):
+     Borg, Geld uitgeleend, Terugbetaling van geleend geld, Eigen overboeking, Sparen & beleggen. Bij een bijschrijving
+     (geld erin): Inkomen, Rente, Geld geleend, Borg of lening terug, Eigen overboeking. Dezelfde handlers (markLoan, setCat). */
+  test('de geen-uitgave-opties staan per richting in de sheet', async ({ page }) => {
     await boot(page, [LEEN, TERUG]);
     await page.evaluate((i) => openSheet(i), await UIT(page));
     await page.waitForSelector('#sheetBg.show');
-    const s = await page.locator('#sheet').innerText();
-    expect(s).toContain('Dit was geen uitgave');
-    for (const k of ['Geld uitgeleend', 'Geld geleend', 'Borg / voorschot', 'Eigen overboeking']) expect(s, k).toContain(k);
+    const eruit = await page.evaluate(() => [...document.querySelectorAll('#sheet [data-guitem]')].map((e) => e.getAttribute('data-guitem')));
+    expect(eruit).toEqual(['Borg / voorschot', 'Geld uitgeleend', 'Terugbetaling van geleend geld', 'Eigen overboeking', 'Sparen & beleggen']);
 
     await page.evaluate((i) => { closeSheet(); openSheet(i); }, await IN(page));
     await page.waitForSelector('#sheetBg.show');
-    expect(await page.locator('#sheet').innerText()).not.toContain('Dit was geen uitgave');
+    const erin = await page.evaluate(() => [...document.querySelectorAll('#sheet [data-guitem]')].map((e) => e.getAttribute('data-guitem')));
+    expect(erin).toEqual(['Inkomen', 'Rente', 'Geld geleend', 'Borg of lening terug', 'Eigen overboeking']);
   });
 
   test('na markeren toont de sheet de post met een uitweg', async ({ page }) => {

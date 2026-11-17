@@ -102,18 +102,18 @@ test('e. een eerdere eigen keuze voor dezelfde tegenpartij staat bovenaan, en op
   expect(await page.locator(`[data-werkrij="${xy}"]`).innerText()).toContain('eerder koos je Boodschappen');
   expect(await page.locator(`[data-werkrij="${q4}"]`).innerText()).not.toContain('eerder koos je');
   await page.click(`[data-werkrij="${xy}"] > span:first-child`);
-  const v = page.locator('#sheet [data-catvoorstel]');
-  await expect(v).toHaveAttribute('data-catvoorstel', 'boodschappen');
-  // bovenaan: het voorstel komt voor de rest van de sheet
-  expect(await page.evaluate(() => { const s = document.getElementById('sheet'); const v = s.querySelector('[data-catvoorstel]'); return [...s.children].indexOf(v); })).toBe(1);
+  // v513: het voorstel is nu een rij chips (max 3), met voor deze tegenpartij "boodschappen · 1× gekozen"
+  await expect(page.locator('#sheet [data-voorstelchip="boodschappen"]')).toHaveCount(1);
+  // het voorstel komt voor de categoriekeuze
+  expect(await page.evaluate(() => { const s = document.getElementById('sheet'); const v = s.querySelector('[data-catvoorstel]'); const k = document.getElementById('catKeuzeDeel'); return [...s.children].indexOf(v) < [...s.children].indexOf(k); })).toBe(true);
   expect(await page.evaluate(() => [window._schrijf, JSON.stringify(OVR)])).toEqual([0, voor]);
   expect(l.teller).toBe(14);
-  // een boeking zonder eerdere keuze heeft geen voorstel
+  // een boeking zonder eerdere keuze en zonder herkenning heeft geen voorstel
   await page.evaluate(([i, m]) => afsluitOverigOpen(i, m), [q4, M]);
   await expect(page.locator('#sheet [data-catvoorstel]')).toHaveCount(0);
   // het voorstel overnemen
   await page.evaluate(([i, m]) => afsluitOverigOpen(i, m), [xy, M]);
-  await page.click('#sheet [data-catvoorstel] button');
+  await page.click('#sheet [data-voorstelchip="boodschappen"]');
   expect(await page.evaluate((i) => catOf(TX.find((t) => t.id === i)), xy)).toBe('boodschappen');
   expect((await lijst(page)).teller).toBe(13);
 });
@@ -162,7 +162,8 @@ test('i. buiten de werklijst opent de transactie-sheet zoals altijd', async ({ p
   await page.evaluate(([i, m]) => afsluitOverigOpen(i, m), [xy, M]);
   await page.evaluate(() => closeSheet());
   await page.evaluate((i) => openSheet(i), xy);
-  await expect(page.locator('#sheet [data-catvoorstel]')).toHaveCount(0);
+  // v513: het voorstel is nu altijd zichtbaar (niet meer werklijst-only); buiten de werklijst staat de app niet in werklijst-modus
+  expect(await page.evaluate(() => window._werklijst)).toBeNull();
   await page.click('#sheet .catpick:has-text("Vervoer")');
   expect(await page.evaluate(() => !!document.getElementById('afsluitOverig'))).toBe(false);
   expect(await page.evaluate(() => OVR[TX.find((t) => t.date === '2026-09-20' && t.name === 'Xyzzy Winkel').id])).toBe('vervoer');
@@ -204,9 +205,11 @@ for (const [w, h] of [[360, 640], [390, 844]]) {
     expect(m.over).toBe(false);
     const xy = await id(page, 'Xyzzy Winkel', '2026-09-20');
     await page.click(`[data-werkrij="${xy}"] > span:first-child`);
-    const v = await page.evaluate(() => { const e = document.querySelector('#sheet [data-catvoorstel]'); const s = document.getElementById('sheet'); return { h: e.getBoundingClientRect().height, tekst: e.firstElementChild.getBoundingClientRect().width, over: s.scrollWidth > s.clientWidth }; });
-    expect(v.tekst).toBeGreaterThan(120);
+    // v513: het voorstel is een chip; hij is er, minstens 44px hoog, en de sheet loopt niet over
+    const v = await page.evaluate(() => { const e = document.querySelector('#sheet [data-voorstelchip="boodschappen"]'); const s = document.getElementById('sheet'); return { ok: !!e, h: e ? e.getBoundingClientRect().height : 0, over: s.scrollWidth > s.clientWidth }; });
+    expect(v.ok).toBe(true);
+    expect(v.h).toBeGreaterThanOrEqual(44);
     expect(v.over).toBe(false);
-    console.log(`meting ${w}: rij ${m.rijen.map((r) => Math.round(r.h)).join('/')}px, voorstel ${Math.round(v.h)}px`);
+    console.log(`meting ${w}: rij ${m.rijen.map((r) => Math.round(r.h)).join('/')}px, voorstelchip ${Math.round(v.h)}px`);
   });
 }

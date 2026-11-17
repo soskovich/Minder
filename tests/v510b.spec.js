@@ -85,7 +85,10 @@ test('v510b b: de categorie Holding vervalt; maandtotalen, opzij, budget en de C
   await page.evaluate(id => openSheet(id), id);
   const picks = await page.locator('#sheet .catpick').allInnerTexts();
   expect(picks.some(p => /^\s*Holding\s*$/.test(p))).toBe(false);
-  expect(picks.some(p => /Eigen rekening/.test(p))).toBe(true);
+  // v513: Eigen rekening / overboeking staat onder "Geen uitgave" (data-guitem), niet meer als tegel; Holding staat er evenmin
+  const gu = await page.evaluate(() => [...document.querySelectorAll('#sheet [data-guitem]')].map(e => e.getAttribute('data-guitem')));
+  expect(gu).not.toContain('Holding');
+  expect(gu).toContain('Eigen overboeking');
   // blok 20 noemt de holding nog, nu op Eigen rekening, met de omzetting
   const b20 = await page.evaluate(async () => (await diagTekst()));
   expect(b20).toContain('categorie Holding vervallen (v510b');
@@ -103,7 +106,7 @@ test('v510b c: jouw keuze per boeking wint van een regel per partij, ook bij je 
   expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), id)).toBe('inkomen');   // de invoer: de regel zette hem op Inkomen
   const okt0 = await page.evaluate(() => maandInkomen('2026-10').alles);
   await page.evaluate(id => openSheet(id), id);
-  const pick = page.locator('#sheet .catpick', { hasText: 'Eigen rekening' });
+  const pick = page.locator('#sheet [data-guitem="Eigen overboeking"]');   // v513: onder "Geen uitgave"
   await pick.scrollIntoViewIfNeeded();
   const bereik = await pick.evaluate(e => { const r = e.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const o = document.elementFromPoint(x, y); return !!o && (o === e || e.contains(o)); });
   expect(bereik).toBe(true);                                       // op 390x844 te bereiken
@@ -117,7 +120,7 @@ test('v510b c: jouw keuze per boeking wint van een regel per partij, ook bij je 
   expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), hid)).toBe('inkomen');
   await page.evaluate(id => openSheet(id), hid);
   await page.locator('#mkrule').check();
-  await page.locator('#sheet .catpick', { hasText: 'Eigen rekening' }).click();
+  await page.locator('#sheet [data-guitem="Eigen overboeking"]').click();   // v513: onder "Geen uitgave"
   await H.herlaad(page);
   expect(await page.evaluate(id => catOf(TX.find(t => t.id === id)), hid)).toBe('intern');
 });
