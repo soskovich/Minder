@@ -10670,6 +10670,20 @@ function gripJaarRegel(k){
   if(!s || !(s.over>0)) return '';
   return `<div class="small" data-jaarbedrag style="line-height:1.5;margin-top:4px;color:var(--mut2)">${euro0(s.over)} boven je potje. Als dit elke maand gebeurt, is dat ${euro0(s.over*12)} per jaar.</div>`;
 }
+/* v514 (deel 2): NA DE LAATSTE KASTELLING IS DE VERWACHTING VAN CONTANT EEN SCHATTING. maandVooruit() neemt voor het potje Contant de
+   uitkomst van contantMaanden() (V.contant): uitgegeven tot de telling plus het tempo van het potje (contantDagTempo) per dag erna. Dat
+   tweede deel is geen meting, en "Verwacht eind" leest zonder deze regel als een meting (gemeld: EUR 609 = EUR 630 / 30 x 29 dagen na de
+   telling van 1 nov). De regel leest de telling en de dagen uit contantMaandNu() (dezelfde contantMaanden-aanroep) en het tempo uit
+   contantDagTempo(); hij rekent niets opnieuw. Geen telling in de lopende maand, een telling van vandaag, of niets na de telling: geen
+   regel. Alleen in deze sheet. */
+function gripKasSchatRegel(k, V){
+  if(k!==CONTANT_CAT || !V || !V.contant) return '';
+  let C=null; try{ C=contantMaandNu(V.m); }catch(_){}
+  if(!C || !C.lopend || !C.eindT || !(C.dagenNa>0) || !(C.verwachtNa>0)) return '';
+  const td=C.eindT.datum; if(td<C.start || td>=vandaagYMD()) return '';
+  const tempo=contantDagTempo(rekDag(td,1));
+  return `<div class="small" data-kasschatting="${esc(td)}" style="line-height:1.5;margin-top:4px;color:var(--mut2)">Schatting: sinds je telling van ${esc(dagKort(td))} rekent Minder met het tempo van je potje (${euro0(tempo)} per dag). <span data-kastellen role="button" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="contantTellen()">Tel je contant</span> voor een echte stand.</div>`;
+}
 function renderGripPotje(){
   const k=window._gripPotje; let V=null; try{ V=maandVooruit(); }catch(_){}
   /* v355: een gemengd potje staat twee keer in maandVooruit(): zijn variabele deel in de bridge en zijn vaste
@@ -10712,7 +10726,7 @@ function renderGripPotje(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}${potSchatTag(k)}</div>
     <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · gewoonlijk ${euro0(x.typisch)} in dezelfde dagen · potje ${euro0(x.bud)}</div>
-    <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>${gripJaarRegel(k)}
+    <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>${gripKasSchatRegel(k, V)}${gripJaarRegel(k)}
     ${x.vastDeel>0?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">Van je potje van ${euro0(x.potje)} is ${euro0(x.vastDeel)} vaste last (herkende incasso's). Deze stap gaat over de ${euro0(x.bud)} daarnaast.</div>`:''}
     <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${waarom}</div>
     ${doen}${x.vastDeel>0?'':`<div class="small" data-potaardvraag="vast" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotAard('${esc(k)}')">Is dit een vaste last? ›</div>`}${gripAllesLink}</div>`;
@@ -14037,6 +14051,8 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   const potAfg=(()=>{ try{ return brugAfronden(potDal.map(p=>({k:p.k, v:+p.periode||0})), D.pot); }catch(_){ return {}; } })();
   const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="row small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" data-totpotbedrag="${potAfg[p.k]!=null?potAfg[p.k]:Math.round(p.periode||0)}" style="gap:8px;padding:3px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> <span style="color:var(--mut2)">· ${Math.round(p.aandeel*100)}% via deze rekening · ${esc(ritLbl[p.ritme]||p.ritme)}</span></span><span style="white-space:nowrap">−${e(potAfg[p.k]!=null?potAfg[p.k]:Math.round(p.periode||0))}</span></div>`).join(''):rij('geen potjes via deze rekening','')}
     ${(D.potZelden||[]).length?`<div class="small" data-totzelden style="padding:4px 0;color:var(--mut2);border-top:1px solid var(--line)">Kan komen, niet meegerekend: ${D.potZelden.map(z=>`${esc(z.naam)} gemiddeld ${e(z.gemiddeld)}`).join(' · ')}${zeldenTekort}</div>`:''}</div>`:'';
+  /* v514 (deel 1): de potjesregel en Contant staan onder een eigen kop "Potjes tot je salaris", in de stijl van "Vaste lasten" en
+     "Na je salaris": ze gaan over het hele venster tot de dag voor je salaris en niet over wat er na je salaris valt. Alleen opmaak. */
   const waarom=`${D.afspraak!=null?`Je sprak af ${e(D.afspraak)} te laten staan.`:'Nog geen verdeling afgesproken.'}${D.naSal!=null?` Na je salaris stond er ${e(D.naSal)}.`:''}`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris" data-totsalaris="${esc(acc)}">
     <div class="small muted">Tot je volgende salaris</div><div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${esc(D.naam)}</div>
@@ -14054,6 +14070,7 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
       <div class="small" style="font-weight:700;margin-top:4px;color:var(--mut2)">Vaste lasten</div>
       <div class="small" data-totvastkol style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.4">bedrag · saldo na, incl. potjes tot die dag</div>${vastRij}
       ${naSalRij?`<div class="small" data-totnasalkop style="font-weight:700;margin-top:6px;color:var(--mut2)">Na je salaris</div>${naSalRij}`:''}
+      <div class="small" data-totpotkop style="font-weight:700;margin-top:6px;color:var(--mut2)">Potjes tot je salaris</div>
       <div class="row" data-totpot data-totpotcent="${Math.round((D.potExact||0)*100)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening${D.venster?` <span data-totvenster="${esc(D.venster.van)}|${esc(D.venster.tot)}" style="color:var(--mut2)">· ${esc(dagKort(D.venster.van))} – ${esc(dagKort(D.venster.tot))}</span>`:''} ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
       ${rij('Contant', `−${e(D.kas)}`, 'data-totkas')}
       <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:3px">${rij('<b>Stand dag voor je salaris</b>', `<b style="${D.eind<0?'color:var(--red)':''}">${e(D.eind)}</b>`, 'data-toteind')}</div>
