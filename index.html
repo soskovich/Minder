@@ -28312,11 +28312,22 @@ function meldPotKeys(){
   const perCat={}; for(const [sl, v] of laatste){ (perCat[v.cat]=perCat[v.cat]||[]).push(sl); }
   return perCat;
 }
+/* v517b: DE BOEKINGEN DIE AL IN `nog` ZITTEN, per categorie, voor de week van de snapshot. De sleutel is txId(t, ''): de identiteit
+   van de app (hash over datum, bedrag en desc) met een LEGE rekening, want de Worker kent de rekening-id van Minder niet en hoort hem
+   niet te kennen (bij een IBAN-rekening zijn dat de IBAN-cijfers). De Worker rekent dezelfde sleutel uit de bank-regel uit
+   (boekingSleutel() in worker/worker.js). De lijst is een BOVENVERZAMELING van wat in `nog` telt: elke boeking van die categorie in die
+   week, ook een die de week niet raakt; voor sw.js betekent "staat erin" alleen "niet nog eens aftrekken". Blijft op het toestel. */
+function meldTxSleutel(t){ return txId(t, ''); }
+function meldVerwerktPerCat(van, tot){ const per={};
+  for(const t of TX){ if(!t || !t.date || typeof t.amount!=='number' || typeof t.desc!=='string') continue; const d=String(t.date).slice(0,10); if(d<van || d>tot) continue;
+    const k=catOf(t); (per[k]=per[k]||[]).push(meldTxSleutel(t)); }
+  return per; }
 function meldPeriodiekKan(){ try{ return typeof ServiceWorkerRegistration!=='undefined' && 'periodicSync' in ServiceWorkerRegistration.prototype; }catch(_){ return false; } }
 function meldSnapData(){
   const WB=weekTegelBron(false); if(WB.soort!=='stand') return null;
   const perCat = meldBetaalAan() ? meldPotKeys() : null;   // v517: alleen bij betaalmelding, en alleen voor aangezette potjes
-  const pot=WB.N.potjes.filter(x=>meldPotAan(x.k)).map(x=>{ const e={naam:x.naam, nog:Math.round(x.nog)}; if(perCat) e.keys=perCat[x.k]||[]; return e; });
+  const ver = perCat ? meldVerwerktPerCat(WB.van, WB.tot) : null;   // v517b: de sleutels van de boekingen die al in `nog` zitten (alleen bij betaalmelding)
+  const pot=WB.N.potjes.filter(x=>meldPotAan(x.k)).map(x=>{ const e={naam:x.naam, nog:Math.round(x.nog)}; if(perCat){ e.keys=perCat[x.k]||[]; e.verwerkt=ver[x.k]||[]; } return e; });
   if(!pot.length) return null;
   const nu=new Date(), hm=String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
   return {v:1, op:ymdVan(nu)+'T'+hm, opMs:nu.getTime(), weekVan:WB.van, weekTot:WB.tot, weekbedrag:Math.round(WB.N.bedrag), weekNog:Math.round(WB.N.nog), vorige:null, potjes:pot};
@@ -36819,9 +36830,10 @@ function diagMeldingen(){
       if(!S) L.push('snapshot (meldSnap): <geen>');
       else { L.push('snapshot (meldSnap): op '+S.op+' · '+Math.round((Date.now()-S.opMs)/3600000)+' uur oud · week '+S.weekVan+' t/m '+S.weekTot+' · weekbedrag '+S.weekbedrag+' · nog '+S.weekNog);
         L.push('  vorige week: '+(S.vorige?S.vorige.weekVan+' t/m '+S.vorige.weekTot+' · nog '+S.vorige.nog+' (stand van '+S.vorige.op+')':'<geen>'));
-        L.push('  potjes: '+(S.potjes||[]).map(x=>x.naam+' nog '+x.nog+(x.keys?(' · '+x.keys.length+' tegenpartijen'):'')).join(' · '));
+        L.push('  potjes: '+(S.potjes||[]).map(x=>x.naam+' nog '+x.nog+(x.keys?(' · '+x.keys.length+' tegenpartijen'):'')+(x.verwerkt?(' · '+x.verwerkt.length+' verwerkte boekingen'):'')).join(' · '));
         L.push('  velden: '+Object.keys(S).join(', ')); }
     }catch(e){ L.push('snapshot: FOUT: '+String(e&&e.message||e).slice(0,80)); }
+    try{ const BL=await idbGet('meldBetaald'), S=await idbGet('meldSnap'); L.push('betaald sinds snapshot (meldBetaald): '+(BL?((BL.items||[]).length+' boekingen · bij snapshot '+(BL.opMs&&S&&BL.opMs===S.opMs?'deze':'een andere')):'<leeg>')); }catch(_){ L.push('betaald sinds snapshot: niet te lezen'); }
     try{ const M=await idbGet('meldLaatst'); L.push('laatste melding (meldLaatst): '+(M?('dag '+M.dag+' · week van '+(M.week||'-')+' · '+(M.soort||'')):'<nog geen>')); }catch(_){ L.push('laatste melding: niet te lezen'); }
     /* v517: betaalmelding. Alleen de LOKALE stand plus de gecachte /push/status (opgehaald bij het aanzetten); geen netwerk in de diagnose (v244). */
     L.push('betaalmelding aan (SET.meldBetaal): '+ja(meldBetaalAan())+' · aangemeld: '+ja(!!SET.meldBetaalId)+(SET.meldBetaalId?' (id '+String(SET.meldBetaalId).slice(0,8)+'…)':''));

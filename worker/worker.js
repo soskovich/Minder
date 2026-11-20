@@ -12,7 +12,7 @@
  *   ALLOWED_ORIGIN   — origin van je app (bv. https://USER.github.io). '*' = alles toestaan.
  *   EB_BASE          — standaard https://api.enablebanking.com
  *   VAPID_PUBLIC     — v517: publieke Web Push-sleutel (base64url van het 65-byte punt)
- *   VAPID_SUBJECT    — v517: mailto:... of https://... voor de VAPID-JWT
+ *   VAPID_SUBJECT    — v517: https://... voor de VAPID-JWT (v517b: geen mailadres, de repo is openbaar)
  * KV (wrangler.toml):
  *   MINDER_KV        — v517: push-abonnement, sessie/rekening-ID's, gehashte geziene boeking-ID's,
  *                      tijd van de laatste ophaalronde. GEEN bedragen, GEEN namen, GEEN saldi.
@@ -29,6 +29,9 @@ const PUSH_MAX_BYTES = 4096;                            // de versleutelde paylo
 const SEEN_MAX = 200;                                   // hooguit 200 gehashte boeking-id's per rekening
 const SLOT_TTL = 2 * 86400;                             // de slot-grendel leeft 2 dagen
 const SLOTS = [{ h: 12, m: 0 }, { h: 17, m: 0 }, { h: 20, m: 30 }]; // Europe/Amsterdam
+const FETCH_DAGEN = 5;                                  // v517b: date_from = vandaag (Amsterdam) min 5 dagen
+const FETCH_MAX_PAGINAS = 10;                           // v517b: hooguit 10 pagina's per rekening per slot
+const MELD_MAX_DAGEN = 2;                               // v517b: een boeking met booking_date ouder dan 2 dagen geeft nooit een melding
 
 async function handleFetch(request, env) {
   const origin = env.ALLOWED_ORIGIN || '*';
@@ -253,7 +256,7 @@ async function vapidJwt(audience, env) {
   const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const header = { typ: 'JWT', alg: 'ES256' };
   const now = Math.floor(Date.now() / 1000);
-  const payload = { aud: audience, exp: now + 12 * 3600, sub: env.VAPID_SUBJECT || 'mailto:minder@localhost' };
+  const payload = { aud: audience, exp: now + 12 * 3600, sub: env.VAPID_SUBJECT || 'https://soskovich.github.io/Minder' };
   const enc = o => bytesToB64url(new TextEncoder().encode(JSON.stringify(o)));
   const signingInput = enc(header) + '.' + enc(payload);
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(signingInput));
@@ -302,17 +305,42 @@ async function sendPush(sub, payloadObj, env) {
 }
 
 /* ===== v517: de ophaalronde ===== */
+/* v517b: DE SLEUTEL VAN EEN BOEKING IS DIE VAN DE APP. De app maakt een boeking uniek met txId(t) = hash(rekening + datum +
+   bedrag.toFixed(2) + desc) + '_' + centen (index.html, gelezen door commitTx() bij elke import). De Worker kent de rekening-id
+   van Minder niet (die is bij een IBAN-rekening de IBAN-cijfers, en die horen niet in KV), dus beide kanten gebruiken txId met een
+   LEGE rekening: de app met txId(t, ''), de Worker hieronder met dezelfde hash, dezelfde desc en dezelfde datum als mapPsd2Tx().
+   entry_reference en transaction_id doen NIET mee: die zijn bij N26 vaak leeg (v451/v456) en de app leest ze niet voor t.id. */
+function appHash(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h).toString(36); }
+function boekingSleutel(raw) {
+  const amtObj = raw.transaction_amount || raw.amount || {};
+  const val = parseFloat(amtObj.amount); if (isNaN(val)) return null;
+  const cdi = (raw.credit_debit_indicator || '').toUpperCase();
+  const amount = cdi === 'DBIT' ? -Math.abs(val) : (cdi === 'CRDT' ? Math.abs(val) : val);
+  const date = (raw.booking_date || raw.value_date || raw.transaction_date || '').slice(0, 10);
+  if (!date) return null;
+  const remit = Array.isArray(raw.remittance_information) ? raw.remittance_information.join(' ') : (raw.remittance_information || '');
+  const cp = amount < 0 ? (raw.creditor || {}) : (raw.debtor || {});
+  const name = ((cp.name || '').trim() || remit.slice(0, 42).trim() || 'Transactie');
+  const desc = [name, remit, (raw.bank_transaction_code && raw.bank_transaction_code.description) || ''].filter(Boolean).join(' ');
+  return appHash('' + date + amount.toFixed(2) + desc) + '_' + Math.round(Math.abs(amount) * 100);
+}
+/* v517b: de status van een regel, gelezen zoals mapPsd2Tx() hem leest (v471: status, transaction_status of booking_status). */
+function boekingStatus(raw) { return String(raw.status || raw.transaction_status || raw.booking_status || '').toUpperCase().trim(); }
 function mapBoeking(raw) {
   const amtObj = raw.transaction_amount || raw.amount || {};
   const val = parseFloat(amtObj.amount); if (isNaN(val)) return null;
   const cdi = (raw.credit_debit_indicator || '').toUpperCase();
   if (cdi !== 'DBIT') return null; // alleen uitgaande boekingen
-  const date = (raw.booking_date || raw.value_date || raw.transaction_date || '').slice(0, 10);
-  if (!date) return null;
+  /* v517b: een voorlopige regel (PDNG) geeft nooit een melding; de geboekte versie komt later en geeft hem dan. Zonder
+     booking_date is een regel ook niet geboekt (de bank kan de status weglaten), dus die valt ook weg. */
+  if (boekingStatus(raw) === 'PDNG') return null;
+  const date = String(raw.booking_date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   const remit = Array.isArray(raw.remittance_information) ? raw.remittance_information.join(' ') : (raw.remittance_information || '');
   const cp = raw.creditor || {};
   const naam = ((cp.name || '').trim() || String(remit).slice(0, 42).trim() || 'Transactie').replace(/\s+/g, ' ').slice(0, 44);
-  const id = String(raw.entry_reference || raw.transaction_id || (date + '|' + val + '|' + naam));
+  const id = boekingSleutel(raw);
+  if (!id) return null;
   return { id, datum: date, bedrag: Math.round(Math.abs(val) * 100) / 100, naam };
 }
 function amsterdamParts(d) {
@@ -326,12 +354,24 @@ function amsterdamSlot(d) {
   for (let i = 0; i < SLOTS.length; i++) { const sm = SLOTS[i].h * 60 + SLOTS[i].m; if (Math.abs(mins - sm) <= 30) return { ymd: p.ymd, idx: i }; }
   return { ymd: p.ymd, idx: -1 };
 }
-async function fetchTx(uid, env, base) {
+/* v517b: een kalenderdag verschuiven, op de datum zelf (geen klok, geen tijdzone). */
+function ymdMin(ymd, dagen) { const [j, m, d] = ymd.split('-').map(Number); const x = new Date(Date.UTC(j, m - 1, d - dagen)); return x.toISOString().slice(0, 10); }
+function dagenTussen(van, tot) { const a = Date.UTC(...van.split('-').map((v, i) => i === 1 ? +v - 1 : +v)), b = Date.UTC(...tot.split('-').map((v, i) => i === 1 ? +v - 1 : +v)); return Math.round((b - a) / 86400000); }
+/* v517b: dezelfde aanroep als de app (psd2Refresh): date_from, en continuation_key volgen tot het einde, met een grens op het
+   aantal pagina's. Geen transaction_status: de app vraagt pending apart, en de Worker heeft geen pending nodig. */
+async function fetchTx(uid, env, base, dateFrom) {
   const jwt = await makeJWT(env);
-  const r = await fetch(base + '/accounts/' + encodeURIComponent(uid) + '/transactions', { headers: { Authorization: 'Bearer ' + jwt } });
-  if (!r.ok) return { error: r.status };
-  const d = await r.json().catch(() => ({}));
-  return { transactions: d.transactions || [] };
+  const out = []; let cont = null, pag = 0;
+  do {
+    const qs = '?date_from=' + encodeURIComponent(dateFrom) + (cont ? '&continuation_key=' + encodeURIComponent(cont) : '');
+    const r = await fetch(base + '/accounts/' + encodeURIComponent(uid) + '/transactions' + qs, { headers: { Authorization: 'Bearer ' + jwt } });
+    pag++;
+    if (!r.ok) return pag === 1 ? { error: r.status, paginas: pag } : { transactions: out, paginas: pag, afgebroken: r.status };
+    const d = await r.json().catch(() => ({}));
+    for (const t of (d.transactions || [])) out.push(t);
+    cont = d.continuation_key || null;
+  } while (cont && pag < FETCH_MAX_PAGINAS);
+  return { transactions: out, paginas: pag };
 }
 
 async function runCron(env, nowMs) {
@@ -342,6 +382,7 @@ async function runCron(env, nowMs) {
   if (await env.MINDER_KV.get(slotKey)) return { ran: false, reden: 'slot al gedraaid' };
   await env.MINDER_KV.put(slotKey, '1', { expirationTtl: SLOT_TTL }); // grendel eerst: bij een fout liever te weinig dan te veel aanroepen
   const base = env.EB_BASE || DEFAULT_BASE;
+  const vandaag = amsterdamParts(new Date(nowMs)).ymd, dateFrom = ymdMin(vandaag, FETCH_DAGEN);
   const devices = JSON.parse(await env.MINDER_KV.get('devices') || '[]');
   const uitkomst = [];
   for (const id of devices) {
@@ -350,9 +391,9 @@ async function runCron(env, nowMs) {
       dev.status = 'verlopen'; await env.MINDER_KV.put('device:' + id, JSON.stringify(dev));
       uitkomst.push({ device: id, verlopen: true }); continue; // verlopen sessie: niets sturen, alleen de status
     }
-    const nieuw = [];
+    const nieuw = []; let paginas = 0;
     for (const uid of (dev.accounts || [])) {
-      const res = await fetchTx(uid, env, base);
+      const res = await fetchTx(uid, env, base, dateFrom); paginas += res.paginas || 0;
       if (res.error) continue; // weigering/verlopen op deze rekening: niets sturen
       const boekingen = (res.transactions || []).map(mapBoeking).filter(Boolean);
       const hashes = []; for (const b of boekingen) hashes.push(await hashId(b.id));
@@ -360,19 +401,28 @@ async function runCron(env, nowMs) {
       const seenRaw = await env.MINDER_KV.get(seenKey);
       if (seenRaw === null) {
         // eerste ronde na aanmelden: alles als gezien markeren en niets sturen
-        await env.MINDER_KV.put(seenKey, JSON.stringify(hashes.slice(-SEEN_MAX)));
+        await env.MINDER_KV.put(seenKey, JSON.stringify([...new Set(hashes)].slice(-SEEN_MAX)));
         continue;
       }
       const seenArr = JSON.parse(seenRaw); const seen = new Set(seenArr);
-      for (let i = 0; i < boekingen.length; i++) if (!seen.has(hashes[i])) nieuw.push(boekingen[i]);
-      const nieuweHashes = hashes.filter((h) => !seen.has(h));
-      await env.MINDER_KV.put(seenKey, JSON.stringify(seenArr.concat(nieuweHashes).slice(-SEEN_MAX)));
+      for (let i = 0; i < boekingen.length; i++) {
+        if (seen.has(hashes[i])) continue;
+        seen.add(hashes[i]); // dezelfde sleutel twee keer in een ophaalronde geeft een melding, niet twee
+        // v517b: een boeking ouder dan 2 dagen (booking_date) geeft nooit een melding, ook als zijn hash uit seen gevallen is
+        if (dagenTussen(boekingen[i].datum, vandaag) > MELD_MAX_DAGEN) continue;
+        nieuw.push(boekingen[i]);
+      }
+      /* v517b: wat in deze ronde terugkwam staat ACHTERAAN, zodat de grens van SEEN_MAX eerst de hashes laat vallen die de bank niet
+         meer teruggeeft (ouder dan het venster) en niet de boekingen die er nog staan. */
+      const nuSet = new Set(hashes);
+      const blijft = seenArr.filter((h) => !nuSet.has(h));
+      await env.MINDER_KV.put(seenKey, JSON.stringify(blijft.concat([...nuSet]).slice(-SEEN_MAX)));
     }
     if (nieuw.length) {
       const payload = { t: 'betaal', boekingen: nieuw.slice(0, PUSH_MAX) };
-      try { const pr = await sendPush(dev.subscription, payload, env); uitkomst.push({ device: id, verstuurd: payload.boekingen.length, status: pr.status }); }
+      try { const pr = await sendPush(dev.subscription, payload, env); uitkomst.push({ device: id, verstuurd: payload.boekingen.length, status: pr.status, paginas }); }
       catch (e) { uitkomst.push({ device: id, fout: String(e && e.message || e).slice(0, 80) }); }
-    } else { uitkomst.push({ device: id, verstuurd: 0 }); }
+    } else { uitkomst.push({ device: id, verstuurd: 0, paginas }); }
     dev.laatsteRonde = nowMs; dev.status = 'ok';
     await env.MINDER_KV.put('device:' + id, JSON.stringify(dev));
   }
@@ -380,4 +430,4 @@ async function runCron(env, nowMs) {
 }
 
 /* Named exports voor de tests (geen secrets; puur de rekenkern). */
-export { handleFetch, runCron, sendPush, webPushEncrypt, vapidJwt, mapBoeking, hashId, amsterdamSlot, hkdf, b64urlToBytes, bytesToB64url, concatBytes };
+export { handleFetch, runCron, sendPush, webPushEncrypt, vapidJwt, mapBoeking, boekingSleutel, appHash, hashId, amsterdamSlot, hkdf, b64urlToBytes, bytesToB64url, concatBytes };

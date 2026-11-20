@@ -8,7 +8,8 @@ ALLOWED_ORIGIN = "https://soskovich.github.io"
 EB_BASE = "https://api.enablebanking.com"
 # v517: de publieke Web Push-sleutel (base64url van het 65-byte punt). De privé gaat als secret (VAPID_PRIVATE).
 VAPID_PUBLIC = "VUL_IN_NA_web-push_generate-vapid-keys"
-VAPID_SUBJECT = "mailto:minder@example.com"
+# v517b: geen mailadres: de repo is openbaar. Een https-URL is volgens RFC 8292 net zo geldig.
+VAPID_SUBJECT = "https://soskovich.github.io/Minder"
 
 # v517: KV voor het push-abonnement, de sessie/rekening-ID's, de gehashte geziene boeking-ID's en de laatste ophaalronde.
 # Maak hem aan met `npx wrangler kv namespace create MINDER_KV` en plak de id hieronder (zie README).

@@ -76,3 +76,59 @@ test('v517 sw f: niet bij een snapshot van 4 dagen oud (wel bij 3 dagen min een 
   W.store.meldSnap = snap(230, nu(17, 13, 1));
   expect((await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 10)]), nu(20, 13))).toon).toBe(true);
 });
+
+/* ===== v517b: de rest klopt ===== */
+function snapB(nog, opMs, verwerkt) { const s = snap(nog, opMs); s.potjes[0].verwerkt = verwerkt || []; return s; }
+
+test('v517b sw g: een boeking die de snapshot al verwerkt heeft wordt niet nog eens afgetrokken', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(20, 11, 30), ['X']);
+  await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 30, 'X')]), nu(20, 12));
+  expect(W.shown[0]).toMatchObject({ titel: 'Boodschappen · €30', body: 'Deze week nog €100 in dit potje.' });
+});
+
+test('v517b sw h: twee pushes zonder nieuwe snapshot tellen allebei', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(20, 8));
+  await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 10, 'p1')]), nu(20, 12));
+  W.store.meldLaatst = { dag: '2026-11-19' };              // de dag-grens loslaten, zodat de tweede getoond wordt
+  await W.ctx.meldBetaalbericht(push([boeking('JUMBO', 15, 'p2')]), nu(20, 17));
+  expect(W.shown.map((x) => x.body)).toEqual(['Deze week nog €90 in dit potje.', 'Deze week nog €75 in dit potje.']);
+});
+
+test('v517b sw i: een push in de stille uren telt mee in de volgende', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(19, 20));
+  const B1 = await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 25, 's1')]), nu(19, 23));
+  expect(B1.reden).toBe('stille uren'); expect(W.shown.length).toBe(0);
+  await W.ctx.meldBetaalbericht(push([boeking('JUMBO', 15, 's2')]), nu(20, 12));
+  expect(W.shown).toHaveLength(1);
+  expect(W.shown[0]).toMatchObject({ titel: 'Boodschappen · €15', body: 'Deze week nog €60 in dit potje.' });
+});
+
+test('v517b sw j: een nieuwe snapshot maakt de lijst leeg van wat hij al verwerkt heeft', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(20, 8));
+  await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 25, 'j1')]), nu(20, 12));
+  expect(W.store.meldBetaald.items.map((i) => i.id)).toEqual(['j1']);
+  // de app opent: de nieuwe snapshot heeft j1 al in nog (75) en in zijn sleutellijst
+  W.store.meldSnap = snapB(75, nu(20, 14), ['j1']);
+  W.store.meldLaatst = { dag: '2026-11-19' };
+  await W.ctx.meldBetaalbericht(push([boeking('JUMBO', 15, 'j2')]), nu(20, 17));
+  expect(W.store.meldBetaald.opMs).toBe(nu(20, 14));
+  expect(W.store.meldBetaald.items.map((i) => i.id)).toEqual(['j2']);
+  expect(W.shown[1].body).toBe('Deze week nog €60 in dit potje.');
+});
+
+test('v517b sw j2: wat de nieuwe snapshot nog niet heeft (de app synchroniseerde nog niet) blijft staan', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(20, 8));
+  await W.ctx.meldBetaalbericht(push([boeking('ALBERT HEIJN 456', 25, 'q1')]), nu(20, 12));
+  W.store.meldSnap = snapB(100, nu(20, 14), []);                // nieuwe snapshot zonder q1: de app heeft hem nog niet
+  W.store.meldLaatst = { dag: '2026-11-19' };
+  await W.ctx.meldBetaalbericht(push([boeking('JUMBO', 15, 'q2')]), nu(20, 17));
+  expect(W.store.meldBetaald.items.map((i) => i.id)).toEqual(['q1', 'q2']);
+  expect(W.shown[1].body).toBe('Deze week nog €60 in dit potje.');
+});
+
+test('v517b sw k: een boeking buiten de week van de snapshot krijgt geen rest', async () => {
+  const W = laadSw(); W.store.meldSnap = snapB(100, nu(22, 20));  // zondag, week 16 t/m 22 nov
+  const B = await W.ctx.meldBetaalbericht(push([{ id: 'k1', datum: '2026-11-23', bedrag: 40, naam: 'ALBERT HEIJN 456' }]), nu(23, 12));
+  expect(B.toon).toBe(true);
+  expect(W.shown[0]).toEqual({ titel: 'Boodschappen · €40', body: 'Open Minder voor de stand van deze week.', tag: 'minder-betaal', data: { scherm: 'ins' } });
+});

@@ -145,7 +145,8 @@ npx web-push generate-vapid-keys
 Je krijgt een **Public Key** en een **Private Key** (base64url).
 
 - Zet de **Public Key** in `wrangler.toml` bij `VAPID_PUBLIC`.
-- Zet bij `VAPID_SUBJECT` je eigen `mailto:` of een https-URL.
+- `VAPID_SUBJECT` staat op `https://soskovich.github.io/Minder` (v517b). Zet hier **geen mailadres**: de repo is openbaar.
+  Een https-URL is volgens RFC 8292 een geldig contact.
 
 ### 3. De privésleutel als secret
 
@@ -180,6 +181,14 @@ de Worker wist dan alles voor dat toestel.
 | `POST` | `/push/afmelden` | alles voor dit toestel uit KV wissen |
 | `GET`  | `/push/status` | wat er bewaard is (aantallen en datums; **geen** geheimen) |
 | `GET`  | `/push/vapid` | de publieke VAPID-sleutel (publiek) |
+
+### Wat de Worker per ronde ophaalt (v517b)
+
+Per rekening dezelfde aanroep als de app: `/transactions?date_from=<vandaag min 5 dagen>`, en de
+`continuation_key` volgen tot het einde (hooguit 10 pagina's). Bij 5 dagen is dat normaal **1 aanroep per
+rekening per slot**. Een regel met status `PDNG` (voorlopig) of zonder `booking_date` geeft geen melding; de
+geboekte versie geeft hem later. Een boeking met een `booking_date` ouder dan 2 dagen geeft nooit een melding.
+De id van een boeking is dezelfde sleutel als in de app (`txId` met een lege rekening), gehasht in KV.
 
 ### Verlopen sessie
 

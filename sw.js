@@ -2,7 +2,7 @@
    Network-first voor de app-pagina (altijd verse versie als je online bent),
    cache-first voor statische assets (iconen). Werkt offline via de cache.
    v3: backend-/cross-origin-aanroepen (PSD2) NOOIT cachen — altijd live van het netwerk. */
-const CACHE='minder-v517';
+const CACHE='minder-v517b';
 const ASSETS = [
   './',
   './index.html',
@@ -149,47 +149,76 @@ function meldSleutel(s) { let x = (s || '').replace(/\s+/g, ' ')
   return x.replace(/\b(B\.?V\.?|N\.?V\.?|PURMEREND|PURME|AMSTERDAM|ZAANDAM|WEERWAL|KOOIMANPLEIN|HOUTEN|DE MEERN)\b/gi, '')
     .replace(/BCK\*|CCV\*|SUMUP ?\*|ZTL\*/gi, '')
     .replace(/[^A-Za-z0-9 &.\-]/g, '').replace(/\s+/g, ' ').trim().toUpperCase(); }
-/* Groepeer de boekingen per aangezet potje: som van de bedragen en de rest (nog in de snapshot − som). Een boeking zonder
-   gevonden potje valt weg. Geeft [] als niets matcht. */
-function meldBetaalGroepen(snap, boekingen) {
-  const pots = (snap && snap.potjes) || [];
+/* ===== v517b: DE REST KLOPT =====
+   Drie fouten in v517: (1) een boeking die de app al in `nog` had verwerkt werd nog een keer afgetrokken, (2) een boeking uit een
+   EERDERE push (ook een die niet getoond werd door de stille uren of de dag-grens) telde bij de volgende niet meer mee, en (3) een
+   boeking van een andere week werd van de rest van de week van de snapshot afgetrokken.
+   DE LIJST "BETAALD SINDS SNAPSHOT" (IndexedDB 'meldBetaald' = {opMs, items:[{id, datum, bedrag, naam}]}) krijgt ELKE boeking uit
+   ELKE push, voordat er beslist wordt of de melding getoond wordt. Een nieuwe snapshot (andere opMs) maakt hem leeg van wat die
+   snapshot al verwerkt heeft (zijn sleutellijsten) en van wat buiten zijn week valt; wat de app nog niet heeft blijft staan.
+   rest = nog − de som van de boekingen in die lijst die bij dat potje horen, in de week van de snapshot vallen en NIET al in de
+   sleutellijst van de snapshot staan. De id van een boeking is de sleutel van de app (txId met een lege rekening). */
+const MELD_BETAALD_MAX = 300;
+function meldInWeek(snap, datum) { const d = String(datum || '').slice(0, 10); return !!(snap && snap.weekVan && snap.weekTot && snap.weekVan <= d && d <= snap.weekTot); }
+function meldVerwerkt(snap) { const V = new Set(); for (const p of ((snap && snap.potjes) || [])) for (const k of (p.verwerkt || [])) V.add(k); return V; }
+function meldPotVan(snap, naam) { const sl = meldSleutel(naam); return ((snap && snap.potjes) || []).find(p => (p.keys || []).indexOf(sl) >= 0) || null; }
+function meldBetaaldBijwerken(lijst, snap, boekingen) {
+  const opMs = (snap && snap.opMs) || null;
+  let items = (lijst && Array.isArray(lijst.items)) ? lijst.items.slice() : [];
+  if (!lijst || lijst.opMs !== opMs) { const V = meldVerwerkt(snap); items = items.filter(i => !V.has(i.id) && meldInWeek(snap, i.datum)); }
+  const ids = new Set(items.map(i => i.id));
+  for (const b of (boekingen || [])) { if (!b || !b.id || ids.has(b.id)) continue; ids.add(b.id);
+    items.push({ id: String(b.id), datum: String(b.datum || '').slice(0, 10), bedrag: Math.abs(+b.bedrag || 0), naam: String(b.naam || '') }); }
+  return { opMs, items: items.slice(-MELD_BETAALD_MAX) };
+}
+/* De rest van een potje: nog in de snapshot min de betaalde boekingen die bij dat potje horen, in de week vallen en niet verwerkt zijn. */
+function meldBetaalRestVan(snap, pot, items) {
+  const V = meldVerwerkt(snap); let som = 0;
+  for (const i of (items || [])) { if (V.has(i.id) || !meldInWeek(snap, i.datum)) continue; const p = meldPotVan(snap, i.naam); if (p && p.naam === pot.naam) som += Math.abs(+i.bedrag || 0); }
+  return Math.round(+pot.nog || 0) - som;
+}
+/* Groepeer de boekingen van DEZE push per aangezet potje: de som die de melding noemt, en de rest uit de lijst. Een boeking zonder
+   gevonden potje valt weg. Valt een boeking van de groep buiten de week van de snapshot, dan heeft de groep geen rest. */
+function meldBetaalGroepen(snap, boekingen, items) {
   const perPot = new Map();
   for (const b of (boekingen || [])) {
-    const sl = meldSleutel(b.naam);
-    const pot = pots.find(p => (p.keys || []).indexOf(sl) >= 0);
-    if (!pot) continue;
-    let e = perPot.get(pot.naam); if (!e) { e = { naam: pot.naam, nog: Math.round(+pot.nog || 0), som: 0, n: 0 }; perPot.set(pot.naam, e); }
-    e.som += Math.abs(+b.bedrag || 0); e.n++;
+    const pot = meldPotVan(snap, b.naam); if (!pot) continue;
+    let e = perPot.get(pot.naam); if (!e) { e = { naam: pot.naam, pot, som: 0, n: 0, inWeek: true }; perPot.set(pot.naam, e); }
+    e.som += Math.abs(+b.bedrag || 0); e.n++; if (!meldInWeek(snap, b.datum)) e.inWeek = false;
   }
-  return [...perPot.values()];
+  const lijst = items || meldBetaaldBijwerken(null, snap, boekingen).items;
+  return [...perPot.values()].map(e => ({ naam: e.naam, som: e.som, n: e.n, inWeek: e.inWeek, rest: e.inWeek ? meldBetaalRestVan(snap, e.pot, lijst) : null }));
 }
-function meldBetaalRest(g) { return g.nog - g.som; }
-function meldBetaalTekst(snap, boekingen) {
-  const G = meldBetaalGroepen(snap, boekingen); if (!G.length) return null;
+function meldBetaalTekst(snap, boekingen, items) {
+  const G = meldBetaalGroepen(snap, boekingen, items); if (!G.length) return null;
   if (G.length === 1) {
-    const g = G[0], rest = meldBetaalRest(g);
+    const g = G[0];
     const titel = g.n > 1 ? g.naam + ' · ' + g.n + ' betalingen · ' + meldEuro(g.som) : g.naam + ' · ' + meldEuro(g.som);
-    const body = rest >= 0 ? 'Deze week nog ' + meldEuro(rest) + ' in dit potje.' : meldEuro(rest) + ' boven je weekbedrag.';
+    const body = g.rest == null ? 'Open Minder voor de stand van deze week.' : (g.rest >= 0 ? 'Deze week nog ' + meldEuro(g.rest) + ' in dit potje.' : meldEuro(g.rest) + ' boven je weekbedrag.');
     return { titel, body };
   }
   // meer dan een potje in deze push: een melding (de dag-grens laat er een per dag toe), met per potje een regel
   const n = G.reduce((a, g) => a + g.n, 0), som = G.reduce((a, g) => a + g.som, 0);
-  const body = G.map(g => { const rest = meldBetaalRest(g); return g.naam + ' ' + meldEuro(g.som) + ' · ' + (rest >= 0 ? 'nog ' + meldEuro(rest) : meldEuro(rest) + ' erover'); }).join('\n');
+  const body = G.map(g => g.naam + ' ' + meldEuro(g.som) + (g.rest == null ? '' : ' · ' + (g.rest >= 0 ? 'nog ' + meldEuro(g.rest) : meldEuro(g.rest) + ' erover'))).join('\n')
+    + (G.some(g => g.rest == null) ? '\nOpen Minder voor de stand van deze week.' : '');
   return { titel: n + ' betalingen · ' + meldEuro(som), body };
 }
-function meldBetaalBeslis(snap, boekingen, laatst, nuMs) {
+function meldBetaalBeslis(snap, boekingen, laatst, nuMs, items) {
   const d = new Date(nuMs), h = d.getHours(), vd = meldYmd(d); laatst = laatst || {};
   if (!snap || !snap.opMs) return { toon: false, reden: 'geen stand' };
   if (h >= MELD_STIL_VANAF || h < MELD_STIL_TOT) return { toon: false, reden: 'stille uren' };
   if (nuMs - snap.opMs > MELD_MAX_OUD) return { toon: false, reden: 'stand ouder dan 3 dagen' };
   if (laatst.dag === vd) return { toon: false, reden: 'vandaag al een melding' };
-  const T = meldBetaalTekst(snap, boekingen); if (!T) return { toon: false, reden: 'geen bekende boeking' };
+  const T = meldBetaalTekst(snap, boekingen, items); if (!T) return { toon: false, reden: 'geen bekende boeking' };
   return { toon: true, titel: T.titel, body: T.body, laatst: { dag: vd, opMs: nuMs, soort: 'betaal' } };
 }
 async function meldBetaalbericht(payload, nuMs) {
   const boekingen = (payload && payload.boekingen) || [];
-  let snap = null, laatst = null; try { snap = await swKvGet('meldSnap'); laatst = await swKvGet('meldLaatst'); } catch (_) {}
-  const B = meldBetaalBeslis(snap, boekingen, laatst, nuMs); if (!B.toon) return B;
+  let snap = null, laatst = null, lijst = null; try { snap = await swKvGet('meldSnap'); laatst = await swKvGet('meldLaatst'); lijst = await swKvGet('meldBetaald'); } catch (_) {}
+  // v517b: EERST bijhouden, ook als de melding hierna niet getoond wordt (stille uren, een per dag, geen stand)
+  const L = meldBetaaldBijwerken(lijst, snap, boekingen);
+  try { await swKvSet('meldBetaald', L); } catch (_) {}
+  const B = meldBetaalBeslis(snap, boekingen, laatst, nuMs, L.items); if (!B.toon) return B;
   await self.registration.showNotification(B.titel, Object.assign({ body: B.body, tag: 'minder-betaal' }, MELD_OPT));
   try { await swKvSet('meldLaatst', B.laatst); } catch (_) {}
   return B;

@@ -52,3 +52,37 @@ test('v517 app e: alle bedragen op Inzichten, Grip en Plan zijn gelijk aan d5e11
   await K.boot(page, { set: { meldAan: true, meldBetaal: true, meldBetaalId: 'dev1', meldPotjes: { boodschappen: true } } });
   expect(await bedragen(page)).toEqual(VOOR.v516);
 });
+
+/* ===== v517b ===== */
+const pathB = require('path'); const { pathToFileURL: tfuB } = require('url');
+
+test('v517b app f: zonder betaalmelding is de snapshot van vorm gelijk aan v516 (geen keys, geen verwerkt)', async ({ page }) => {
+  await K.boot(page, { set: { meldAan: true, meldPotjes: { boodschappen: true } } });
+  const r = await page.evaluate(() => { const S = meldSnapData(); return { top: Object.keys(S), pot: S.potjes.map((p) => Object.keys(p)) }; });
+  expect(r.top).toEqual(['v', 'op', 'opMs', 'weekVan', 'weekTot', 'weekbedrag', 'weekNog', 'vorige', 'potjes']);
+  expect(r.pot).toEqual([['naam', 'nog']]);
+});
+
+test('v517b app g: met betaalmelding draagt elk aangezet potje de sleutels van de boekingen van die week in die categorie', async ({ page }) => {
+  await K.boot(page, { set: { meldAan: true, meldBetaal: true, meldPotjes: { boodschappen: true } } });
+  const r = await page.evaluate(() => { const S = meldSnapData();
+    const verwacht = TX.filter((t) => t.date >= S.weekVan && t.date <= S.weekTot && catOf(t) === 'boodschappen').map((t) => txId(t, ''));
+    const buiten = TX.filter((t) => t.date < S.weekVan && catOf(t) === 'boodschappen').map((t) => txId(t, ''));
+    return { ver: S.potjes[0].verwerkt, verwacht, buiten }; });
+  expect(r.verwacht.length).toBeGreaterThan(0);                 // de stand draagt boodschappen in deze week
+  expect(r.buiten.length).toBeGreaterThan(0);                   // en ook ervoor, anders toetst de weekgrens niets
+  expect(r.ver).toEqual(r.verwacht);
+  for (const k of r.buiten) expect(r.ver).not.toContain(k);
+});
+
+test('v517b app h: de app en de Worker maken uit dezelfde bank-regel dezelfde sleutel', async ({ page }) => {
+  await K.boot(page, { set: { meldAan: true } });
+  const raws = [
+    { booking_date: '2026-11-20', credit_debit_indicator: 'DBIT', transaction_amount: { amount: '45.10' }, creditor: { name: 'Albert Heijn 1234' }, remittance_information: ['BEA, Betaalpas Albert Heijn 1234,PAS123'], bank_transaction_code: { description: 'PMNT' } },
+    { booking_date: '2026-11-19', credit_debit_indicator: 'DBIT', transaction_amount: { amount: '9.99' }, creditor: {}, remittance_information: 'eCom, Betaalpas PLAYSTATION', entry_reference: 'e1' },
+  ];
+  const app = await page.evaluate((R) => R.map((raw) => meldTxSleutel(mapPsd2Tx(raw, 'NL00TEST0123456789'))), raws);
+  const w = await import(tfuB(pathB.join(__dirname, '..', 'worker', 'worker.js')).href);
+  expect(raws.map((r) => w.boekingSleutel(r))).toEqual(app);
+  expect(raws.map((r) => w.mapBoeking(r).id)).toEqual(app);
+});
