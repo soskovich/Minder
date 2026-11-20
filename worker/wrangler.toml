@@ -1,0 +1,12 @@
+name = "minder-psd2"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Pas dit aan naar de origin van je app (zónder pad). '*' mag ook, maar specifieker = veiliger.
+# Voorbeeld GitHub Pages: "https://JOUWNAAM.github.io"
+[vars]
+ALLOWED_ORIGIN = "*"
+EB_BASE = "https://api.enablebanking.com"
+
+# Secrets NIET hier zetten — gebruik `wrangler secret put` (zie README):
+#   EB_APP_ID, EB_PRIVATE_KEY, APP_TOKEN
