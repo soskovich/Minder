@@ -216,7 +216,9 @@ test.describe('d · het trap-tempo', () => {
   test('een potje loopt lineair, met het patroon als grijze stip', async ({ page }) => {
     await boot(page, '2026-10-10'); await kies(page);
     await page.locator('[data-insleg="nogpot"]').click();
+    /* v515: een tik op de balk klapt het detail open; de doorklik naar het potje is de link "potje openen ›" daarin */
     await page.locator('[data-inspotrij="uiteten"]').click();
+    await page.locator('[data-insfcpot="uiteten"] [data-insfcopen]').click();
     const d = await page.locator('#insPotjeSheet').evaluate((e) => Object.assign({}, e.dataset));
     expect(+d.tempo).toBe(Math.round(+d.bud * 10 / 31));
     expect(d.normaal).toBeDefined();

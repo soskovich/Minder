@@ -143,7 +143,7 @@ genoemde versietag.)*
   kastelling met geld uit een eerdere opname (EUR 500 nog in je zak) is die boeking in `totals().spendNorm`, via `zonderBreed` in
   `maandVooruitKern()` de groep "rest zonder naam" (V.zonderLos), door `budgetPerGroep()` bij potjes gelegd; de rij Contant
   (`contantMaanden()`) en `uitgegevenStand()` (kasCorrectie, v512) dragen hem niet. Naar de foutenlijst, niet gerepareerd. Spec
-  `v515.spec.js` (9 tests, 8 van 8 sabotages rood), fixture `v515-stand.js`, de bedragen van d62e105 in `v515-voor.json`.
+  `v515.spec.js` (9 tests, 8 van 8 sabotages rood), fixture `v515-stand.js`, de bedragen van d62e105 in `v515-voor.json`; `v443-nazorg` 3 en `inzichten-week` d (de doorklik via "potje openen ›") gemigreerd.
 - **v514: EEN KOP BOVEN DE POTJESREGEL IN "TOT JE VOLGENDE SALARIS", EN DE VERWACHTING VAN CONTANT NA EEN TELLING HEET EEN SCHATTING —
   ALLEEN OPMAAK EN TEKST, GEEN ENKEL GETAL** (`v514`, gevraagd door de gebruiker, tak `werk/v514`). (1) `renderTotSalaris()` draagt boven de
   regel "Potjes via deze rekening" en Contant een eigen kop "Potjes tot je salaris" (`data-totpotkop`, de stijl van "Vaste lasten" en "Na je
