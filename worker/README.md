@@ -106,3 +106,91 @@ Alle verzoeken vereisen de header `Authorization: Bearer <APP_TOKEN>`.
 
 Zet in stap 1 *Sandbox* en gebruik Enable Banking's testbank. Werkt het end-to-end,
 maak dan een *Production*-applicatie en herhaal stap 3–5 met de nieuwe sleutel.
+
+---
+
+## v517 — Betaalmelding (push op je telefoon)
+
+Naast het proxyen haalt de Worker nu **3x per dag** (rond 12:00, 17:00 en 20:30 Europe/Amsterdam)
+zelf je nieuwe uitgaande boekingen op en stuurt per nieuwe boeking een **versleutelde** Web Push naar
+je telefoon (RFC 8291 + VAPID, met Web Crypto; geen npm-dependency in de Worker). In KV staan **alleen**
+je push-abonnement, je sessie/rekening-ID's, de **gehashte** ID's van de laatst geziene boekingen en de
+tijd van de laatste ophaalronde — **geen bedragen, geen namen, geen saldi**. De cijfers (welk potje, hoeveel
+er nog in zit) blijven op je telefoon: de app leest de melding uit een lokale snapshot.
+
+Eenmalige extra opzet (naast de stappen hierboven), op Windows in `worker/`:
+
+### 1. KV-namespace aanmaken
+
+```powershell
+npx wrangler kv namespace create MINDER_KV
+```
+
+Je krijgt een regel met een `id`. Plak die id in `wrangler.toml` onder `[[kv_namespaces]]`:
+
+```toml
+[[kv_namespaces]]
+binding = "MINDER_KV"
+id = "hierkomtdeid..."
+```
+
+### 2. VAPID-sleutels genereren
+
+Dit doe je één keer, los van de Worker (geen dependency in de Worker zelf):
+
+```powershell
+npx web-push generate-vapid-keys
+```
+
+Je krijgt een **Public Key** en een **Private Key** (base64url).
+
+- Zet de **Public Key** in `wrangler.toml` bij `VAPID_PUBLIC`.
+- Zet bij `VAPID_SUBJECT` je eigen `mailto:` of een https-URL.
+
+### 3. De privésleutel als secret
+
+```powershell
+npx wrangler secret put VAPID_PRIVATE
+# plak de Private Key uit stap 2
+```
+
+### 4. Controleer `wrangler.toml`
+
+- `ALLOWED_ORIGIN` staat op je app-origin (bv. `https://JOUWNAAM.github.io`), **niet** op `*`.
+- `[triggers] crons` staat erin (6 regels: beide DST-offsets; de Worker rekent de Amsterdamse tijd uit).
+
+### 5. Deployen
+
+```powershell
+npx wrangler deploy
+```
+
+### 6. In de app aanzetten
+
+Minder → **Instellingen → 🔔 Meldingen → Betalingen melden**. De app maakt een push-abonnement, haalt de
+publieke VAPID-sleutel op (`GET /push/vapid`) en meldt zich aan bij de Worker (`POST /push/aanmelden`) met je
+rekening-UID's en tot wanneer de bank-toestemming geldig is. Uitzetten meldt zich af (`POST /push/afmelden`);
+de Worker wist dan alles voor dat toestel.
+
+### Nieuwe endpoints (v517, allemaal achter `Authorization: Bearer <APP_TOKEN>`)
+
+| Methode | Pad | Doel |
+|--------|-----|------|
+| `POST` | `/push/aanmelden` | abonnement + rekening-UID's + geldig-tot opslaan |
+| `POST` | `/push/afmelden` | alles voor dit toestel uit KV wissen |
+| `GET`  | `/push/status` | wat er bewaard is (aantallen en datums; **geen** geheimen) |
+| `GET`  | `/push/vapid` | de publieke VAPID-sleutel (publiek) |
+
+### Verlopen sessie
+
+PSD2 verloopt na ~90 dagen (SCA). Is de toestemming verlopen, dan stuurt de Worker niets meer en zet alleen de
+status; de app ziet dat via `/push/status` en vraagt je opnieuw te koppelen.
+
+### Live code vergelijken met wat er draait
+
+```powershell
+npx wrangler deployments list
+npx wrangler versions view <versie-id>
+```
+
+Of in het dashboard: **Workers & Pages → minder-psd2 → Edit code**.

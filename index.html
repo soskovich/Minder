@@ -28299,10 +28299,24 @@ const SET_SUBS=[
    Geschreven bij elke render als meldingen aan staan en er minstens een potje aan staat, nooit in de voorbeeldweergave. */
 function meldAan(){ return SET.meldAan===true; }
 function meldPotAan(k){ return !!(SET.meldPotjes && SET.meldPotjes[k]===true); }
+/* v517: betaalmelding. meldBetaalAan() vereist het hoofdschakelaar EN de tweede schakelaar. meldPotKeys() geeft per categorie de
+   tegenpartij-sleutels die Minder NU al aan die categorie toewijst: de sleutel van elke tegenpartij in TX, met de categorie van zijn
+   NIEUWSTE boeking (catOf, de bestaande herkenning/regels; niets nieuw berekend). De sleutel is cleanMerch()+toUpperCase(), dezelfde
+   die sw.js met meldSleutel() op de binnenkomende naam legt. */
+function meldBetaalAan(){ return meldAan() && SET.meldBetaal===true; }
+function meldTegenpartijSleutel(naam){ return (cleanMerch(naam)||'').toUpperCase(); }
+function meldPotKeys(){
+  const laatste=new Map();
+  for(const t of TX){ if(!t || !t.name) continue; const sl=meldTegenpartijSleutel(t.name); if(!sl) continue;
+    const p=laatste.get(sl); const dt=String(t.date||''); if(!p || dt>=p.date) laatste.set(sl, {date:dt, cat:catOf(t)}); }
+  const perCat={}; for(const [sl, v] of laatste){ (perCat[v.cat]=perCat[v.cat]||[]).push(sl); }
+  return perCat;
+}
 function meldPeriodiekKan(){ try{ return typeof ServiceWorkerRegistration!=='undefined' && 'periodicSync' in ServiceWorkerRegistration.prototype; }catch(_){ return false; } }
 function meldSnapData(){
   const WB=weekTegelBron(false); if(WB.soort!=='stand') return null;
-  const pot=WB.N.potjes.filter(x=>meldPotAan(x.k)).map(x=>({naam:x.naam, nog:Math.round(x.nog)}));
+  const perCat = meldBetaalAan() ? meldPotKeys() : null;   // v517: alleen bij betaalmelding, en alleen voor aangezette potjes
+  const pot=WB.N.potjes.filter(x=>meldPotAan(x.k)).map(x=>{ const e={naam:x.naam, nog:Math.round(x.nog)}; if(perCat) e.keys=perCat[x.k]||[]; return e; });
   if(!pot.length) return null;
   const nu=new Date(), hm=String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
   return {v:1, op:ymdVan(nu)+'T'+hm, opMs:nu.getTime(), weekVan:WB.van, weekTot:WB.tot, weekbedrag:Math.round(WB.N.bedrag), weekNog:Math.round(WB.N.nog), vorige:null, potjes:pot};
@@ -28342,18 +28356,63 @@ async function meldTest(){
    weekbericht. De worker toetst dezelfde regels (een keer per week, een keer per dag, niet 22:00-07:00, stand hooguit 3 dagen oud). */
 async function meldWeekBijOpenen(){ if(!meldAan() || new Date().getDay()!==1) return; const S=await meldSnapSchrijf(); if(!S) return;
   const reg=await meldSw(); if(reg && reg.active) reg.active.postMessage({type:'meld-week'}); }
-function setSubMeldStand(){ if(!meldAan()) return 'uit'; const n=Object.keys(SET.meldPotjes||{}).filter(k=>SET.meldPotjes[k]===true && wekKandidaten().includes(k) && potWekelijks(k)===true).length; return `aan · ${n} ${n===1?'potje':'potjes'}`; }
+/* v517: de tweede schakelaar "Betalingen melden". Aanzetten maakt een push-abonnement en meldt zich aan bij de Worker (met de
+   rekening-UIDs en tot wanneer de toestemming geldig is); uitzetten meldt zich af, waarna de Worker alles voor dit toestel wist.
+   Zonder backend-URL, token of push-ondersteuning blijft hij uit met een reden. Standaard uit (MECHANISM_SPEC.defaultEffect). */
+function meldBackend(){ return {url:(SET.psd2Url||'').replace(/\/+$/,''), tok:SET.psd2Token||''}; }
+async function meldPost(pad, body){ const B=meldBackend(); if(!B.url||!B.tok) throw new Error('geen backend');
+  const r=await fetch(B.url+pad, {method:'POST', headers:{'Authorization':'Bearer '+B.tok,'Content-Type':'application/json'}, body:JSON.stringify(body||{})});
+  if(!r.ok) throw new Error('status '+r.status); return r.json(); }
+async function meldGet(pad){ const B=meldBackend(); if(!B.url||!B.tok) throw new Error('geen backend');
+  const r=await fetch(B.url+pad, {headers:{'Authorization':'Bearer '+B.tok}}); if(!r.ok) throw new Error('status '+r.status); return r.json(); }
+function b64urlNaarBytes(s){ s=String(s||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; const bin=atob(s); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+function meldRekeningen(){ const ps=SET.psd2Accounts||{}; const uids=[]; let geldig=null;
+  for(const a of Object.keys(ps)){ const p=ps[a]||{}; if(p.uid) uids.push(p.uid); if(p.exp && (!geldig || p.exp<geldig)) geldig=p.exp; }
+  return {uids, geldigTot:geldig}; }
+async function meldBetaalAanmelden(){
+  if(!('serviceWorker' in navigator) || typeof PushManager==='undefined') throw new Error('geen push');
+  const reg=await meldSw(); if(!reg || !reg.pushManager) throw new Error('geen push');
+  const vk=await meldGet('/push/vapid'); if(!vk || !vk.publicKey) throw new Error('geen sleutel');
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64urlNaarBytes(vk.publicKey)});
+  const R=meldRekeningen();
+  const res=await meldPost('/push/aanmelden', {subscription:sub.toJSON(), accounts:R.uids, geldigTot:R.geldigTot, sessie:SET.psd2Sessie||null});
+  SET.meldBetaalId=(res&&res.id)||null; save();
+  try{ SET.meldBetaalStatus=Object.assign({op:Date.now()}, await meldGet('/push/status?id='+encodeURIComponent(SET.meldBetaalId||''))); save(); }catch(_){}
+  return res;
+}
+async function meldBetaalAfmelden(){
+  try{ await meldPost('/push/afmelden', {id:SET.meldBetaalId||null}); }catch(_){}
+  try{ const reg=await meldSw(1500); const sub=reg && reg.pushManager && await reg.pushManager.getSubscription(); if(sub) await sub.unsubscribe(); }catch(_){}
+  SET.meldBetaalId=null; SET.meldBetaalStatus=null; save();
+}
+async function meldBetaalAanZet(v){
+  if(!v){ SET.meldBetaal=false; save(); await meldBetaalAfmelden(); window._meldBetaalReden=null; renderSet(); return; }
+  if(!meldAan()){ await meldAanZet(true); if(!meldAan()){ window._meldBetaalReden='meldingen'; renderSet(); return; } }
+  const B=meldBackend(); if(!B.url||!B.tok){ window._meldBetaalReden='backend'; SET.meldBetaal=false; save(); renderSet(); return; }
+  try{ await meldBetaalAanmelden(); window._meldBetaalReden=null; SET.meldBetaal=true; save(); await meldSnapSchrijf(); }
+  catch(e){ window._meldBetaalReden='fout'; window._meldBetaalFout=String((e&&e.message)||e).slice(0,80); SET.meldBetaal=false; save(); }
+  renderSet();
+}
+function setSubMeldStand(){ if(!meldAan()) return 'uit'; const n=Object.keys(SET.meldPotjes||{}).filter(k=>SET.meldPotjes[k]===true && wekKandidaten().includes(k) && potWekelijks(k)===true).length; return `aan · ${n} ${n===1?'potje':'potjes'}${meldBetaalAan()?' · betalingen':''}`; }
 function setMeldPagina(){
   const aan=meldAan(), R=window._meldReden, K=wekKandidaten().filter(k=>potWekelijks(k)===true);
   const reden=R==='geweigerd'?'Je toestel gaf geen toestemming voor meldingen. Zet meldingen voor Minder aan in de instellingen van je telefoon of browser en probeer het opnieuw.'
     :R==='geen'?'Dit toestel of deze browser kan geen meldingen tonen.':R==='niet'?'Er is geen toestemming gegeven, dus meldingen blijven uit.':'';
   const moment=meldPeriodiekKan()?'Het weekbericht komt op maandag na 07:00, ook als Minder dicht is, als je telefoon de app op de achtergrond laat verversen.':'Op dit toestel komt het weekbericht pas als je Minder opent.';
+  const BR=window._meldBetaalReden, bAan=meldBetaalAan();
+  const betaalReden=BR==='backend'?'Vul eerst de backend-URL en het app-token in bij Instellingen → Bank & rekeningen.'
+    :BR==='meldingen'?'Zet eerst de meldingen hierboven aan.':BR==='geen'?'Dit toestel kan geen push-meldingen ontvangen.'
+    :BR==='fout'?('Aanmelden bij de Worker lukte niet'+(window._meldBetaalFout?': '+window._meldBetaalFout:'')+'.'):'';
   const rij=k=>`<div class="toggle" data-meldpot="${esc(k)}"><div><div style="font-weight:600">${esc(CATS[k].name)}</div></div>
       <label class="sw"><input type="checkbox" ${meldPotAan(k)?'checked':''} onchange="meldPotZet('${esc(k)}',this.checked)"><span class="sl"></span></label></div>`;
-  return `<div id="setMeld" data-meldaan="${aan?1:0}">
+  return `<div id="setMeld" data-meldaan="${aan?1:0}" data-meldbetaalaan="${bAan?1:0}">
     <div class="toggle" data-meldhoofd><div><div style="font-weight:600">Meldingen op je telefoon</div><div class="small muted">Hooguit een per dag, nooit tussen 22:00 en 07:00. Op maandag een weekbericht: je weekbedrag en wat je vorige week overhield of erover ging.</div></div>
       <label class="sw"><input type="checkbox" data-meldschakel ${aan?'checked':''} onchange="meldAanZet(this.checked)"><span class="sl"></span></label></div>
     ${reden?`<div class="small" data-meldreden="${esc(R)}" style="color:var(--mut);margin:6px 0">${reden}</div>`:''}
+    <div class="toggle" data-meldbetaal><div><div style="font-weight:600">Betalingen melden</div><div class="small muted">Je Worker haalt 3 keer per dag je nieuwe boekingen op en stuurt een signaal naar je telefoon. Je potjes en budget blijven op je telefoon.</div></div>
+      <label class="sw"><input type="checkbox" data-meldbetaalschakel ${bAan?'checked':''} onchange="meldBetaalAanZet(this.checked)"><span class="sl"></span></label></div>
+    ${betaalReden?`<div class="small" data-meldbetaalreden="${esc(BR)}" style="color:var(--mut);margin:6px 0">${betaalReden}</div>`:''}
     <div class="hlabel" style="margin:14px 0 4px">Wekelijkse potjes</div>
     ${K.length?`<div class="small muted" style="margin-bottom:4px">Het weekbericht komt alleen als minstens een potje aan staat. Het bedrag gaat over je hele week, zoals de tegel "Deze week" op Inzichten.</div>${K.map(rij).join('')}`:'<div class="small muted" data-meldgeenpot>Geen potje staat op wekelijks. Kies dat via Instellingen → Potjes.</div>'}
     <div class="small muted" data-meldmoment style="margin-top:10px;line-height:1.45">${moment}</div>
@@ -36760,10 +36819,15 @@ function diagMeldingen(){
       if(!S) L.push('snapshot (meldSnap): <geen>');
       else { L.push('snapshot (meldSnap): op '+S.op+' · '+Math.round((Date.now()-S.opMs)/3600000)+' uur oud · week '+S.weekVan+' t/m '+S.weekTot+' · weekbedrag '+S.weekbedrag+' · nog '+S.weekNog);
         L.push('  vorige week: '+(S.vorige?S.vorige.weekVan+' t/m '+S.vorige.weekTot+' · nog '+S.vorige.nog+' (stand van '+S.vorige.op+')':'<geen>'));
-        L.push('  potjes: '+(S.potjes||[]).map(x=>x.naam+' nog '+x.nog).join(' · '));
+        L.push('  potjes: '+(S.potjes||[]).map(x=>x.naam+' nog '+x.nog+(x.keys?(' · '+x.keys.length+' tegenpartijen'):'')).join(' · '));
         L.push('  velden: '+Object.keys(S).join(', ')); }
     }catch(e){ L.push('snapshot: FOUT: '+String(e&&e.message||e).slice(0,80)); }
-    try{ const M=await idbGet('meldLaatst'); L.push('laatste melding (meldLaatst): '+(M?('dag '+M.dag+' · week van '+M.week+' · '+(M.soort||'')):'<nog geen>')); }catch(_){ L.push('laatste melding: niet te lezen'); }
+    try{ const M=await idbGet('meldLaatst'); L.push('laatste melding (meldLaatst): '+(M?('dag '+M.dag+' · week van '+(M.week||'-')+' · '+(M.soort||'')):'<nog geen>')); }catch(_){ L.push('laatste melding: niet te lezen'); }
+    /* v517: betaalmelding. Alleen de LOKALE stand plus de gecachte /push/status (opgehaald bij het aanzetten); geen netwerk in de diagnose (v244). */
+    L.push('betaalmelding aan (SET.meldBetaal): '+ja(meldBetaalAan())+' · aangemeld: '+ja(!!SET.meldBetaalId)+(SET.meldBetaalId?' (id '+String(SET.meldBetaalId).slice(0,8)+'…)':''));
+    { const st=SET.meldBetaalStatus;
+      if(st) L.push('  laatste status (uit /push/status, opgehaald '+(st.op?new Date(st.op).toLocaleString('nl-NL'):'?')+'): rekeningen '+(st.rekeningen!=null?st.rekeningen:'?')+' · laatste ophaalronde '+(st.laatsteRonde?new Date(st.laatsteRonde).toLocaleString('nl-NL'):'nog geen')+' · sessie geldig tot '+(st.geldigTot||'?')+(st.verlopen?' · VERLOPEN':'')+' · status '+(st.status||'?'));
+      else L.push('  laatste status: <nog niet opgehaald>'); }
     return L;
   });
 }
