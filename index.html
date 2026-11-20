@@ -26150,6 +26150,10 @@ function insNaarGrip(k){
   go('maand');
   try{ if(k){ const V=maandVooruit(); if(V && !V.onbekend && (V.potjes||[]).some(x=>x.k===k)) openGripPotje(k); } }catch(_){}
 }
+/* v515: de sheet "Nog verwacht in je potjes" toont de vier grootste potjes als balk; de rest staat samen op een regel. Een tik op een
+   balk of op die regel klapt de details eronder open en weer dicht; bij openen staat alles dicht (geen opslag, alleen de DOM). */
+const INS_FC_TOP=4;
+function insFcToggle(el){ const d=el && el.nextElementSibling; if(d && d.hasAttribute('data-insfcdetail')) d.hidden=!d.hidden; }
 function renderInsTegel(){
   const k=window._insTegel, P=insPeriode(), soort=insSoort(), m=thisYM();
   let h='';
@@ -26191,12 +26195,27 @@ function renderInsTegel(){
     /* v443: vanuit de maandkaart (soort alle) is "in potjes" de forecast min wat er al uit is (insGroepen). De rijen zijn per
        potje wat de forecast nog verwacht (maandVooruit: eindR min uit, niet onder nul), en wat overblijft (zonder potje
        verwacht en de afronding) is een eigen rij, zodat ze per constructie optellen tot het getal waarop je tikte. */
+    /* v515: IN EEN BLIK, ALLEEN WEERGAVE (gevraagd door de gebruiker; geen enkel getal verandert). De kop is de som van de potjesrijen,
+       de vier grootste staan als balk (lengte r.nog / de grootste), de rest als EEN regel "<k> andere potjes" die openklapt, de details
+       per potje pas na een tik, de rest (rest = G.pot.nog - de som van de rijen) apart onder de balken en niet als balk, en daaronder
+       "In je maandtotaal" met G.pot.nog: het getal van de tegel waarop je tikte (data-inswaarde). Elke rij draagt nog data-insrij, dus
+       de rijen tellen per constructie op tot dat getal. Bij openen staat alles dicht. */
     const S=insMaandStand(), G=insGroepen(S); let V=null; try{ V=maandVooruit(); }catch(_){}
     const rows=((V&&V.potjes)||[]).map(x=>({k:x.k, naam:x.naam, uit:Math.round(x.uit), eind:Math.round(x.eindR), nog:Math.max(Math.round(x.eindR)-Math.round(x.uit),0)})).filter(r=>r.nog>0).sort((a,b)=>b.nog-a.nog || (a.naam<b.naam?-1:1));
-    const rest=G.pot.nog-rows.reduce((a,r)=>a+r.nog,0);
-    h=`<div id="insTegelSheet" data-instegelsheet="potjes" data-insfc="1" data-inswaarde="${G.pot.nog}">${insSheetKop('Nog verwacht · in potjes · '+esc(ymFull(m)), 'wat de forecast nog verwacht, per potje', euro0(G.pot.nog))}
-      ${rows.map(r=>insRij(esc(r.naam)+' ›', `${euro0(r.uit)} uitgegeven · verwacht eind ${euro0(r.eind)}`, euro0(r.nog), ` data-insrij="${r.nog}" data-inspotrij="${esc(r.k)}" role="button" onclick="openInsPotje('${esc(r.k)}')"`)).join('')}
-      ${rest?insRij('zonder potje en overig', 'wat de forecast verder verwacht', euro0(rest), ` data-insrij="${rest}" data-insrest`):''}
+    const potSom=rows.reduce((a,r)=>a+r.nog,0), rest=G.pot.nog-potSom;
+    const top=rows.slice(0,INS_FC_TOP), ander=rows.slice(INS_FC_TOP), topSom=top.reduce((a,r)=>a+r.nog,0), anderSom=ander.reduce((a,r)=>a+r.nog,0);
+    const max=top.length?top[0].nog:1, pct=v=>Math.min(Math.round(v/max*10000)/100,100);
+    const kopSub=`tot eind ${esc(ymFull(m))}, op je tempo${top.length?` · ${top.length===1?'1 potje is':top.length+' potjes zijn'} samen ${euro0(topSom)}`:''}`;
+    const balk=(lab, v, w, licht, attr)=>`<div class="row" style="gap:8px;align-items:center;padding:7px 0;cursor:pointer"${attr}><span style="flex:0 0 38%;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-insfcnaam>${lab}</span><span class="ins-fcbaan" style="flex:1;min-width:0;height:8px;border-radius:4px;background:var(--bar);overflow:hidden"><i data-insfcbalk style="display:block;height:100%;width:${w}%;border-radius:4px;background:${licht?'color-mix(in srgb, var(--teal) 40%, var(--card2))':'var(--teal)'}"></i></span><b style="flex:0 0 auto;white-space:nowrap;min-width:48px;text-align:right">${euro0(v)}</b></div>`;
+    const rij=r=>`<div data-insfcpot="${esc(r.k)}">${balk(esc(r.naam), r.nog, pct(r.nog), false, ` role="button" data-insrij="${r.nog}" data-inspotrij="${esc(r.k)}" onclick="insFcToggle(this)"`)}
+      <div class="small muted" data-insfcdetail hidden style="padding:0 0 8px;line-height:1.5">${euro0(r.uit)} uitgegeven · verwacht eind ${euro0(r.eind)} · <span style="color:var(--teal);font-weight:600;cursor:pointer" data-insfcopen onclick="openInsPotje('${esc(r.k)}')">potje openen ›</span></div></div>`;
+    const anderH=ander.length?`<div data-insfcander="${anderSom}">${balk(`${ander.length} andere potjes`, anderSom, pct(anderSom), true, ` role="button" onclick="insFcToggle(this)"`)}
+      <div class="small muted" data-insfcdetail hidden style="padding:0 0 8px;line-height:1.5">${ander.map(r=>`<span data-insrij="${r.nog}" data-inspotrij="${esc(r.k)}">${esc(r.naam)} ${euro0(r.nog)}</span>`).join(' · ')}</div></div>`:'';
+    const restH=rest?`<div class="row" data-insrij="${rest}" data-insrest="${rest<0?'verlaagt':'zonder'}" style="gap:10px;align-items:baseline;padding:8px 0;margin-top:8px;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><span style="font-size:13px">${rest<0?'Verlaagt je totaal · geen uitgave uit een potje':'Zonder potje'}</span><span class="small muted" style="display:block;margin-top:1px">valt buiten je potjes</span></span><b style="white-space:nowrap${rest<0?';color:var(--green)':''}">${euro0(rest)}</b></div>`:'';
+    const totH=`<div class="row" data-insmaandtotaal="${G.pot.nog}" style="gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)${rest?'':';margin-top:8px'}"><span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:700">In je maandtotaal</span><span class="small muted" style="display:block;margin-top:1px">${euro0(potSom)} in potjes${rest?` ${rest<0?'−':'+'} ${euro0(Math.abs(rest))}`:''}</span></span><b style="white-space:nowrap">${euro0(G.pot.nog)}</b></div>`;
+    h=`<div id="insTegelSheet" data-instegelsheet="potjes" data-insfc="1" data-inswaarde="${G.pot.nog}" data-inspotsom="${potSom}">${insSheetKop('Nog verwacht in je potjes', kopSub, euro0(potSom))}
+      <div data-insfcbalken style="margin-top:6px">${top.map(rij).join('')}${anderH}</div>
+      ${restH}${totH}
       ${insNaarGripLink('')}</div>`;
   } else if(k==='potjes'){
     /* v383: de rijen zijn de potjes van insMaandStand() (maandSplitsing): per potje het variabele deel min wat eruit

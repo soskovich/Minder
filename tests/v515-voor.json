@@ -1,0 +1,30 @@
+{
+ "toestel": {
+  "totaal": 171,
+  "rijen": {
+   "boodschappen": 199,
+   "vervoer": 124,
+   "zorg": 62,
+   "belasting": 53,
+   "contant": 46,
+   "vices": 46,
+   "e_kinderen": 42,
+   "e_verzorging": 39,
+   "uiteten": 21,
+   "shopping": 18,
+   "overig": 9,
+   "bankkosten": 6,
+   "abonnement": 5
+  },
+  "rest": -499
+ },
+ "drie": {
+  "totaal": 386,
+  "rijen": {
+   "boodschappen": 199,
+   "vervoer": 124,
+   "zorg": 62
+  },
+  "rest": 1
+ }
+}

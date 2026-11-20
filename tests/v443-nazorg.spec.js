@@ -62,7 +62,7 @@ test('3. de kolom heet Nog verwacht op de alle-kaart en in de forecast-sheet; de
     window._insSoort = 'alle'; renderIns(); return uit; });
   expect(r.kop.toLowerCase()).toBe('nog verwacht');
   expect(r.alle).not.toMatch(/nog te gaan/i);
-  expect(r.sheet).toMatch(/^Nog verwacht · in potjes/i);
+  expect(r.sheet).toMatch(/^Nog verwacht in je potjes/i);   // v515: de kop heet "Nog verwacht in je potjes" (was "Nog verwacht · in potjes · <maand>")
   expect(r.var).toMatch(/nog te gaan/i);
 });
 
