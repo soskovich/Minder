@@ -3990,6 +3990,7 @@ function render(){
     try{ if(document.getElementById('gripVooruit')) renderGripVooruit(); }catch(_){}
     try{ if(document.getElementById('logMaand')) renderLogMaand(); }catch(_){}
   }
+  try{ meldPlanSchrijf(); }catch(_){}   // v516: de snapshot voor de melding, alleen als meldingen aan staan
 }
 
 function onboardManual(){ if(FSA){ connectFolder(); } else { document.getElementById('file').click(); } }
@@ -26970,21 +26971,31 @@ function weekOpbouwHtml(N, kort){ const per=N.periode?'deze periode':'deze maand
   if(N.nogInTeHalen>0) r.push(`<span data-weeknoginhalen="${N.nogInTeHalen}">nog ${euro0(N.nogInTeHalen)} in te halen</span>`);
   if(N.ruimte>0) r.push(`<span data-weekruimte="${N.ruimte}">ruimte ${per} ${euro0(N.ruimte)}${kort?'':' · schuift niet door, komt terug bij Bestemming voor wat over is'}</span>`);
   return r.length?`<div class="ins-wk-s" data-weekopbouw>${r.join(' · ')}</div>`:''; }
-function insWeekTegel(){
-  if(!wekKandidaten().length) return '';
-  const open=wekOpen();
-  if(open.length) return `<div class="card ins-weekkies" id="insWeek" data-weekkies="${open.length}" role="button" onclick="openWekelijks()"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Kies welke potjes wekelijks zijn, dan staat hier wat je deze week nog kunt uitgeven.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+/* v516: DE BRON VAN DE TEGEL "DEZE WEEK", EEN KEER. insWeekTegel() tekent hem en meldSnapData() (de melding op je telefoon) leest hem;
+   allebei dezelfde aanroep, dus de melding kan per constructie geen ander getal noemen dan de tegel (v104). Alleen het opzoeken is
+   hierheen verplaatst; de rekensom (weekNu, insWeekTegelP) is niet aangeraakt. */
+function weekTegelBron(vastzetten){
+  if(!wekKandidaten().length) return {soort:'leeg'};
+  const open=wekOpen(); if(open.length) return {soort:'kies', open};
   let NP=null; try{ NP=insWeekTegelP(); }catch(_){}
-  if(NP){
-    if(!NP.cur || !NP.potjes.length) return `<div class="card" id="insWeek" data-weekgeen role="button" onclick="openSetSub('potjes')"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Geen potje staat op wekelijks. Wijzigen via Instellingen → Potjes.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  if(NP){ if(!NP.cur || !NP.potjes.length) return {soort:'geen'}; return {soort:'stand', N:NP, periode:true, van:NP.cur.van, tot:NP.cur.tot}; }
+  const N=weekNu(vastzetten); if(!N) return {soort:'leeg'};
+  if(!N.potjes.length) return {soort:'geen'};
+  return {soort:'stand', N, periode:false, van:N.start, tot:N.m+'-'+String(N.cur.tot).padStart(2,'0')};
+}
+function insWeekTegel(){
+  const WB=weekTegelBron(true);
+  if(WB.soort==='leeg') return '';
+  if(WB.soort==='kies') return `<div class="card ins-weekkies" id="insWeek" data-weekkies="${WB.open.length}" role="button" onclick="openWekelijks()"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Kies welke potjes wekelijks zijn, dan staat hier wat je deze week nog kunt uitgeven.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  if(WB.soort==='geen') return `<div class="card" id="insWeek" data-weekgeen role="button" onclick="openSetSub('potjes')"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Geen potje staat op wekelijks. Wijzigen via Instellingen → Potjes.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  if(WB.periode){ const NP=WB.N;
     const over=NP.nog<0, dg=NP.dagenTeGaan;
     return `<div class="ins-week" id="insWeek" data-weekperiode data-weekbedrag="${NP.bedrag}" data-weeknog="${NP.nog}" data-weekuit="${NP.uit}" data-weekstart="${NP.cur.van}"${over?' data-weekover':''} role="button" onclick="openWeekSheet()">
       <div style="flex:1;min-width:0"><div class="row" style="justify-content:space-between;gap:8px"><span class="ins-wk-c">Deze week · ${esc(weekKortDat(NP.cur))}</span><span style="font-weight:700">›</span></div>
         <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="ins-wk-v" data-insgetal${over?' style="color:var(--amber)"':''}>${over?`${euro0(-NP.nog)} erover`:`nog ${euro0(NP.nog)}`}</span><span class="ins-wk-s" data-weekvan>van <span data-insgetal>${euro0(NP.bedrag)}</span> · ${dg} ${dg===1?'dag':'dagen'} te gaan</span></div>
         ${weekOpbouwHtml(NP, true)}${NP.erover.length?`<div class="ins-wk-s" data-weekerover="${NP.erover.length}">${NP.erover.length} ${NP.erover.length===1?'potje':'potjes'} erover: ${esc(NP.erover.map(x=>x.naam).join(', '))}</div>`:`<div class="ins-wk-s" data-weekerover="0">geen potje erover</div>`}</div></div>`;
   }
-  const N=weekNu(true); if(!N) return '';
-  if(!N.potjes.length) return `<div class="card" id="insWeek" data-weekgeen role="button" onclick="openSetSub('potjes')"><div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Deze week</span><span class="small" style="display:block;color:var(--mut)">Geen potje staat op wekelijks. Wijzigen via Instellingen → Potjes.</span></span><span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  const N=WB.N;
   const over=N.nog<0, dg=N.dagenTeGaan;
   return `<div class="ins-week" id="insWeek" data-weekbedrag="${N.bedrag}" data-weeknog="${N.nog}" data-weekuit="${N.uit}" data-weekstart="${N.start}"${over?' data-weekover':''} role="button" onclick="openWeekSheet()">
     <div style="flex:1;min-width:0"><div class="row" style="justify-content:space-between;gap:8px"><span class="ins-wk-c">Deze week · ${esc(weekKort(N.m, N.cur))}</span><span style="font-weight:700">›</span></div>
@@ -28274,8 +28285,80 @@ const SET_SUBS=[
   {id:'potjes',     ic:'coins', naam:'Potjes',             sub:()=>setSubPotjesStand(),    inh:()=>setPotjes()},   // v436: de wekelijkse potjes
   {id:'herkenning', ic:'swap',  naam:'Herkenning',         sub:()=>setSubHerkStand(),      inh:()=>setTransacties()},
   {id:'coach',      ic:'robot', naam:'Coach & weergave',   sub:()=>setSubCoachStand(),     inh:()=>setCoachWeergave()},
+  {id:'meldingen',  ic:'alert', naam:'Meldingen',          sub:()=>setSubMeldStand(),      inh:()=>setMeldPagina()},   // v516: meldingen op je telefoon
   {id:'gegevens',   ic:'lock',  naam:'Gegevens & privacy', sub:()=>setSubGegevensStand(),  inh:()=>setPrivacy()},
 ];
+/* ===== v516: MELDINGEN OP JE TELEFOON, OOK ALS MINDER DICHT IS (deel 1: het weekbericht en de basis) =====
+   OPT-IN EN STANDAARD UIT (MECHANISM_SPEC.defaultEffect): SET.meldAan wordt alleen true na de toestemming van het toestel, en per
+   wekelijks potje SET.meldPotjes[k] alleen na jouw tik. Niets voorgeselecteerd.
+   DE SNAPSHOT (IndexedDB 'minder', store 'kv', sleutel 'meldSnap'): de service worker kan localStorage niet lezen. Hij draagt ALLEEN
+   {v, op, opMs, weekVan, weekTot, weekbedrag, weekNog, vorige, potjes:[{naam, nog}]}: geen boekingen, geen tegenpartijen, geen IBAN.
+   De getallen komen uit weekTegelBron(), dezelfde bron als de tegel "Deze week" op Inzichten, afgerond op hele euro's zoals de tegel
+   ze toont (euro0). Er wordt niets opnieuw berekend. "Vorige week" is de laatste snapshot van de week ervoor (de stand van de tegel
+   op dat moment, met zijn tijd), dus een stand en geen eindafrekening: de melding noemt de dag als die niet de laatste dag was.
+   Geschreven bij elke render als meldingen aan staan en er minstens een potje aan staat, nooit in de voorbeeldweergave. */
+function meldAan(){ return SET.meldAan===true; }
+function meldPotAan(k){ return !!(SET.meldPotjes && SET.meldPotjes[k]===true); }
+function meldPeriodiekKan(){ try{ return typeof ServiceWorkerRegistration!=='undefined' && 'periodicSync' in ServiceWorkerRegistration.prototype; }catch(_){ return false; } }
+function meldSnapData(){
+  const WB=weekTegelBron(false); if(WB.soort!=='stand') return null;
+  const pot=WB.N.potjes.filter(x=>meldPotAan(x.k)).map(x=>({naam:x.naam, nog:Math.round(x.nog)}));
+  if(!pot.length) return null;
+  const nu=new Date(), hm=String(nu.getHours()).padStart(2,'0')+':'+String(nu.getMinutes()).padStart(2,'0');
+  return {v:1, op:ymdVan(nu)+'T'+hm, opMs:nu.getTime(), weekVan:WB.van, weekTot:WB.tot, weekbedrag:Math.round(WB.N.bedrag), weekNog:Math.round(WB.N.nog), vorige:null, potjes:pot};
+}
+async function meldSnapSchrijf(){
+  if(!meldAan() || window._voorbeeld || window._voorbeeldDag) return null;
+  const S=meldSnapData();
+  let oud=null; try{ oud=await idbGet('meldSnap'); }catch(_){}
+  if(!S){ try{ await idbSet('meldSnap', null); }catch(_){} return null; }
+  if(oud && oud.weekVan && oud.weekVan<S.weekVan) S.vorige={weekVan:oud.weekVan, weekTot:oud.weekTot, nog:oud.weekNog, op:oud.op};
+  else if(oud && oud.weekVan===S.weekVan && oud.vorige) S.vorige=oud.vorige;
+  try{ await idbSet('meldSnap', S); }catch(_){ return null; }
+  return S;
+}
+function meldPlanSchrijf(){ if(!meldAan()) return; clearTimeout(window._meldT); window._meldT=setTimeout(()=>{ meldSnapSchrijf().catch(()=>{}); }, 150); }
+async function meldSw(ms){ try{ if(!('serviceWorker' in navigator)) return null; return await Promise.race([navigator.serviceWorker.ready, new Promise(r=>setTimeout(()=>r(null), ms||3000))]); }catch(_){ return null; } }
+async function meldRegistreer(){ if(!meldAan() || !meldPeriodiekKan()) return 'niet'; const reg=await meldSw(); if(!reg || !reg.periodicSync) return 'niet';
+  try{ await reg.periodicSync.register('minder-week', {minInterval:12*3600*1000}); window._meldPs='aan'; return 'aan'; }catch(e){ window._meldPs='fout: '+String((e&&e.message)||e).slice(0,80); return 'fout'; } }
+async function meldAfmelden(){ try{ const reg=await meldSw(1500); if(reg && reg.periodicSync) await reg.periodicSync.unregister('minder-week'); }catch(_){} }
+async function meldAanZet(v){
+  if(!v){ SET.meldAan=false; save(); try{ await idbSet('meldSnap', null); }catch(_){} meldAfmelden(); window._meldReden=null; renderSet(); return; }
+  if(typeof Notification==='undefined'){ window._meldReden='geen'; SET.meldAan=false; save(); renderSet(); return; }
+  let p=Notification.permission;
+  if(p!=='granted'){ try{ p=await Notification.requestPermission(); }catch(_){ p='denied'; } }
+  if(p!=='granted'){ window._meldReden=(p==='denied'?'geweigerd':'niet'); SET.meldAan=false; save(); renderSet(); return; }
+  window._meldReden=null; SET.meldAan=true; save(); renderSet();
+  await meldRegistreer(); await meldSnapSchrijf(); renderSet();
+}
+function meldPotZet(k, v){ SET.meldPotjes=Object.assign({}, SET.meldPotjes||{}); SET.meldPotjes[k]=!!v; save(); renderSet(); meldSnapSchrijf().catch(()=>{}); }
+async function meldTest(){
+  const S=await meldSnapSchrijf();
+  if(!S){ toast(meldAan()?'Nog geen stand om te melden: zet een wekelijks potje aan':'Zet eerst meldingen aan'); return false; }
+  const reg=await meldSw(); if(!reg || !reg.active){ toast('Meldingen werken in de geïnstalleerde app'); return false; }
+  reg.active.postMessage({type:'meld-test'}); toast('Testmelding verstuurd'); return true;
+}
+/* Zonder Periodic Background Sync (of als hij niet vuurt): bij het openen op maandag vraagt Minder de service worker om het
+   weekbericht. De worker toetst dezelfde regels (een keer per week, een keer per dag, niet 22:00-07:00, stand hooguit 3 dagen oud). */
+async function meldWeekBijOpenen(){ if(!meldAan() || new Date().getDay()!==1) return; const S=await meldSnapSchrijf(); if(!S) return;
+  const reg=await meldSw(); if(reg && reg.active) reg.active.postMessage({type:'meld-week'}); }
+function setSubMeldStand(){ if(!meldAan()) return 'uit'; const n=Object.keys(SET.meldPotjes||{}).filter(k=>SET.meldPotjes[k]===true && wekKandidaten().includes(k) && potWekelijks(k)===true).length; return `aan · ${n} ${n===1?'potje':'potjes'}`; }
+function setMeldPagina(){
+  const aan=meldAan(), R=window._meldReden, K=wekKandidaten().filter(k=>potWekelijks(k)===true);
+  const reden=R==='geweigerd'?'Je toestel gaf geen toestemming voor meldingen. Zet meldingen voor Minder aan in de instellingen van je telefoon of browser en probeer het opnieuw.'
+    :R==='geen'?'Dit toestel of deze browser kan geen meldingen tonen.':R==='niet'?'Er is geen toestemming gegeven, dus meldingen blijven uit.':'';
+  const moment=meldPeriodiekKan()?'Het weekbericht komt op maandag na 07:00, ook als Minder dicht is, als je telefoon de app op de achtergrond laat verversen.':'Op dit toestel komt het weekbericht pas als je Minder opent.';
+  const rij=k=>`<div class="toggle" data-meldpot="${esc(k)}"><div><div style="font-weight:600">${esc(CATS[k].name)}</div></div>
+      <label class="sw"><input type="checkbox" ${meldPotAan(k)?'checked':''} onchange="meldPotZet('${esc(k)}',this.checked)"><span class="sl"></span></label></div>`;
+  return `<div id="setMeld" data-meldaan="${aan?1:0}">
+    <div class="toggle" data-meldhoofd><div><div style="font-weight:600">Meldingen op je telefoon</div><div class="small muted">Hooguit een per dag, nooit tussen 22:00 en 07:00. Op maandag een weekbericht: je weekbedrag en wat je vorige week overhield of erover ging.</div></div>
+      <label class="sw"><input type="checkbox" data-meldschakel ${aan?'checked':''} onchange="meldAanZet(this.checked)"><span class="sl"></span></label></div>
+    ${reden?`<div class="small" data-meldreden="${esc(R)}" style="color:var(--mut);margin:6px 0">${reden}</div>`:''}
+    <div class="hlabel" style="margin:14px 0 4px">Wekelijkse potjes</div>
+    ${K.length?`<div class="small muted" style="margin-bottom:4px">Het weekbericht komt alleen als minstens een potje aan staat. Het bedrag gaat over je hele week, zoals de tegel "Deze week" op Inzichten.</div>${K.map(rij).join('')}`:'<div class="small muted" data-meldgeenpot>Geen potje staat op wekelijks. Kies dat via Instellingen → Potjes.</div>'}
+    <div class="small muted" data-meldmoment style="margin-top:10px;line-height:1.45">${moment}</div>
+    <button class="btn sec" data-meldtest style="margin-top:12px;width:100%"${aan?'':' disabled'} onclick="meldTest()">Stuur een testmelding</button></div>`;
+}
 /* v436: INSTELLINGEN → POTJES. Welke potjes wekelijks zijn kies je een keer (de vraag op Inzichten); daarna wijzig je het hier,
    per potje in een tik (potWekelijksZet). Een potje dat later bijkomt staat hier als "niet gekozen" en telt niet in je week. */
 function setSubPotjesStand(){ const K=wekKandidaten(), n=K.filter(k=>potWekelijks(k)===true).length; return K.length?`${n} van ${K.length} wekelijks`:'nog geen potjes'; }
@@ -36654,7 +36737,36 @@ const DIAG_BLOKKEN=[
   {titel:'voorautorisatie, vrijgave en betaling op dezelfde rekening (A − V = B), per maand en per partij', lees:diagVorautPatroon},
   {titel:'snelheid: de tijd per actie op dit toestel en de duurste functies (alleen meten)', lees:diagSnelheid},
   {titel:'uitgegeven: een definitie, en elk totaal per scherm voor deze en vorige maand', lees:diagUitgegeven},
+  {titel:'meldingen op je telefoon: wat dit toestel kan, en de snapshot voor de service worker', lees:diagMeldingen},
 ];
+/* v516: ALLEEN LEZEN. Welke van Notification, showNotification, PushManager en periodicSync dit toestel heeft, of Minder als
+   geïnstalleerde app draait, de toestemmingen, of de periodieke sync geregistreerd staat, en wat de snapshot en de laatste melding
+   in IndexedDB zeggen. Schrijft niets (v244): idbGet, permissions.query en getTags lezen alleen. */
+function diagMeldingen(){
+  const L=[], ja=b=>b?'ja':'nee';
+  return Promise.resolve().then(async()=>{
+    L.push('Notification: '+ja(typeof Notification!=='undefined')+(typeof Notification!=='undefined'?' · toestemming '+Notification.permission:''));
+    L.push('ServiceWorkerRegistration.showNotification: '+ja(typeof ServiceWorkerRegistration!=='undefined' && 'showNotification' in ServiceWorkerRegistration.prototype));
+    L.push('PushManager: '+ja(typeof PushManager!=='undefined'));
+    L.push('periodicSync (Periodic Background Sync): '+ja(meldPeriodiekKan()));
+    L.push('als geïnstalleerde app (display-mode standalone): '+_dS(()=>ja(matchMedia('(display-mode: standalone)').matches || navigator.standalone===true)));
+    try{ const q=await navigator.permissions.query({name:'periodic-background-sync'}); L.push('toestemming periodic-background-sync: '+q.state); }catch(e){ L.push('toestemming periodic-background-sync: niet op te vragen ('+String(e&&e.message||e).slice(0,60)+')'); }
+    try{ const q=await navigator.permissions.query({name:'notifications'}); L.push('toestemming notifications (permissions-API): '+q.state); }catch(e){ L.push('toestemming notifications: niet op te vragen'); }
+    try{ const reg=await meldSw(1500); if(!reg) L.push('service worker: <geen registratie of niet klaar>');
+      else { L.push('service worker actief: '+ja(!!reg.active)); if(reg.periodicSync){ const t=await reg.periodicSync.getTags(); L.push('periodieke sync geregistreerd: '+(t.length?t.join(', '):'<geen>')); } }
+    }catch(e){ L.push('service worker: FOUT: '+String(e&&e.message||e).slice(0,80)); }
+    L.push('meldingen aan (SET.meldAan): '+ja(meldAan())+' · potjes aan: '+(Object.keys(SET.meldPotjes||{}).filter(k=>SET.meldPotjes[k]===true).join(', ')||'<geen>'));
+    try{ const S=await idbGet('meldSnap');
+      if(!S) L.push('snapshot (meldSnap): <geen>');
+      else { L.push('snapshot (meldSnap): op '+S.op+' · '+Math.round((Date.now()-S.opMs)/3600000)+' uur oud · week '+S.weekVan+' t/m '+S.weekTot+' · weekbedrag '+S.weekbedrag+' · nog '+S.weekNog);
+        L.push('  vorige week: '+(S.vorige?S.vorige.weekVan+' t/m '+S.vorige.weekTot+' · nog '+S.vorige.nog+' (stand van '+S.vorige.op+')':'<geen>'));
+        L.push('  potjes: '+(S.potjes||[]).map(x=>x.naam+' nog '+x.nog).join(' · '));
+        L.push('  velden: '+Object.keys(S).join(', ')); }
+    }catch(e){ L.push('snapshot: FOUT: '+String(e&&e.message||e).slice(0,80)); }
+    try{ const M=await idbGet('meldLaatst'); L.push('laatste melding (meldLaatst): '+(M?('dag '+M.dag+' · week van '+M.week+' · '+(M.soort||'')):'<nog geen>')); }catch(_){ L.push('laatste melding: niet te lezen'); }
+    return L;
+  });
+}
 /* ===== GEDEELDE IDS NA categorize() (v451, alleen lezen) =====
    Elke import-route slaat een bestaande id over, dus via een import kan een id niet twee keer in TX komen. Wel bij het
    opstarten: `categorize()` rekent elke id opnieuw uit, en twee boekingen met een eerder andere id (een pending-regel
@@ -38915,6 +39027,11 @@ try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localS
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
 try{ if(Object.keys(SET.psd2Accounts||{}).length) psd2Refresh(true, true); }catch(_){}   // v466: de grens per bank (6 uur, niet na een weigering vandaag) staat IN psd2Refresh(); v468: de voorcheck hier was dezelfde toets een keer te veel en is weg
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
+/* v516: een tik op een melding opent Minder op Inzichten (?scherm=ins of een bericht van de service worker), en op maandag vraagt het
+   openen het weekbericht als meldingen aan staan. */
+try{ if(TX.length && new URLSearchParams(location.search).get('scherm')==='ins'){ go('ins'); history.replaceState(null,'',location.pathname); } }catch(_){}
+try{ if('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e=>{ const d=e.data||{}; if(d.type==='open' && d.scherm==='ins' && TX.length) go('ins'); }); }catch(_){}
+try{ if(TX.length) setTimeout(()=>{ meldWeekBijOpenen().catch(()=>{}); meldRegistreer().catch(()=>{}); }, 800); }catch(_){}
 // snelkoppeling koopcheck (PWA-shortcut / bookmark ./index.html?action=buy): open direct de check; lege app opent gewoon normaal
 try{ if(TX.length && new URLSearchParams(location.search).get('action')==='buy'){ openBuy(); history.replaceState(null,'',location.pathname); } }catch(_){}
 (async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
