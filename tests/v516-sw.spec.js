@@ -21,8 +21,10 @@ test.use({ channel: 'chromium', serviceWorkers: 'allow', permissions: ['notifica
     expect(r.data).toEqual({ scherm: 'ins' });
   });
 
-  test('v516 k: na de nieuwe sw.js staat alleen cache minder-v518, en de app laadt offline', async ({ page, context }) => {
+  test('v516 k: na de nieuwe sw.js staat alleen de cache van sw.js, en de app laadt offline', async ({ page, context }) => {
     const nieuw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+    const huidig = nieuw.match(/const CACHE='(minder-v\d+[a-z]*)';/)[1];   // v519: uit sw.js zelf, zodat een ophoging de spec niet laat omvallen
+    expect(huidig).not.toBe('minder-v515');
     const oud = nieuw.replace(/const CACHE='minder-v\d+[a-z]*';/, "const CACHE='minder-v515';");
     await context.route('**/sw.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: oud }));
     await K.boot(page, { metSw: true }); await klaar(page);
@@ -31,7 +33,7 @@ test.use({ channel: 'chromium', serviceWorkers: 'allow', permissions: ['notifica
     await opnieuw(page, async () => { const r = await navigator.serviceWorker.getRegistration(); await r.update(); });
     let keys = [];
     for (let i = 0; i < 60; i++) { keys = await opnieuw(page, () => caches.keys()); if (!keys.includes('minder-v515')) break; await page.waitForTimeout(250); }
-    expect(keys).toEqual(['minder-v518']);   // v518: de cache is gebumpt
+    expect(keys).toEqual([huidig]);
     await page.waitForTimeout(500); await page.waitForLoadState('load');
     await context.setOffline(true);
     await page.reload(); await page.waitForFunction(() => typeof renderIns === 'function', null, { timeout: 10000 });
