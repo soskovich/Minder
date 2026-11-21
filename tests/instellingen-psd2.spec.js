@@ -63,7 +63,7 @@ test.describe('a · het hoofdscherm', () => {
     await boot(page, fixture());
     const r = await page.evaluate(() => { openSetSub(null); const el = document.getElementById('s-set');
       return { rijen: [...el.querySelectorAll('[data-setrij]')].map(x => x.dataset.setrij), tekst: el.innerText, html: el.innerHTML }; });
-    expect(r.rijen).toEqual(['inkomen', 'bank', 'spelregels', 'potjes', 'herkenning', 'coach', 'meldingen', 'gegevens']);
+    expect(r.rijen).toEqual(['inkomen', 'bank', 'spelregels', 'potjes', 'herkenning', 'coach', 'meldingen', 'vraag', 'gegevens']);
     for (const n of ['Inkomen', 'Bank & rekeningen', 'Spelregels', 'Potjes', 'Herkenning', 'Coach & weergave', 'Gegevens & privacy']) expect(r.tekst).toContain(n);
     expect(r.html).not.toMatch(/▼|▲|toggleSet\(/);
     expect(r.tekst).toContain('Minder · veilig & lokaal');

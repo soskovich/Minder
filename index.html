@@ -15234,7 +15234,7 @@ function renderMaand(){
      schuift geen inhoud zichtbaar onder. Elke tab krijgt onderaan een opvulling van de hoogte van die balk plus 16px
      (gripKoopbalkMaat), zodat de laatste kaart helemaal leesbaar is als je naar beneden scrolt. */
   $('#s-maand').innerHTML=`${gripMeters()}${gripTabsHtml()}<div id="gripInhoud" data-griptabinhoud="${tab}" style="padding-bottom:${GRIP_KOOPBALK_H+16}px">${inhoud}</div>
-    <div class="grip-koopbalk" id="gripKoopbalk" data-koopbalk><button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button></div>`;
+    <div class="grip-koopbalk" id="gripKoopbalk" data-koopbalk>${koopbalkKnop()}</div>`;   // v519: "Vraag" met vragen aan en online
   gripKoopbalkMaat();
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
 }
@@ -22435,7 +22435,7 @@ function coSlaapVraag(cat,amt,item){
   });
 }
 // BESLISMOMENT (prototype, 4 stappen): invoer → binaire check → vertakking (regie bij gebruiker) → altijd vastleggen
-function openBuy(){
+function openBuy(vul){
   const cats=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&!geenNorm(k));   // v234
   const B=SET.budgets||{}; const m=curMonth||months()[months().length-1];
   const optHtml=cats.map(k=>{ const has=+B[k]>0; const rest=has?Math.max(Math.round(+B[k]-(catSpendMap(m)[k]||0)),0):null; return `<option value="${k}">${CATS[k].name}${has?` · nog ${euro0(rest)}`:' · geen potje'}</option>`; }).join('');
@@ -22449,6 +22449,13 @@ function openBuy(){
     <label class="fld" style="margin-top:10px">Uit welk potje?</label>
     <select id="buyCat" style="width:100%">${optHtml}</select>
     <button class="btn" style="margin-top:14px;width:100%" onclick="startBuy()">${ICON('cart')} Check</button>`;
+  /* v519: vanuit een vraag opent de koopcheck ingevuld (wat, bedrag, potje uit de opdracht). Alleen de velden: er wordt niets
+     gekozen of bewaard voordat je op Check tikt (startBuy). */
+  if(vul){ try{ const h=document.createElement('div'); h.className='small'; h.dataset.vraagkoop=''; h.style.cssText='margin:0 0 10px;line-height:1.45';
+      h.textContent='Dat is een aankoop. Ik open de koopcheck; die rekent het uit.'; const lab=$('#sheet').querySelector('label.fld'); lab.parentNode.insertBefore(h, lab);
+      if(vul.wat) $('#buyItem').value=String(vul.wat);
+      if(vul.bedrag>0) $('#buyAmt').value=String(vul.bedrag).replace('.',',');
+      if(vul.potje && cats.includes(vul.potje)) $('#buyCat').value=vul.potje; }catch(_){} }
   showSheetBg();
 }
 /* De check zelf draait als gesprek: buyFlow() schrijft in #coThr/#coCh, en die twee bestaan sinds
@@ -22457,6 +22464,128 @@ function openBuy(){
    terugkeren: geen bubbel, geen keuze, geen log-entry. Het overnemen van de sheet loopt daarom
    via coStart(), de enige ingang naar het gesprek; het formulier maakt er geen tweede naast. */
 function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(numIn((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; if(amt>0&&cat) coStart('koop',null,{cat,amt,item}); else { closeSheet(); toast('Vul een bedrag in'); } }
+/* ===== v519: VRAAG, DEEL 1 (een knop, de koopcheck blijft, drie soorten vragen) =====
+   De AI rekent niet en schrijft het antwoord niet: hij vertaalt alleen je vraag naar een opdracht ({soort, potje, venster, dag,
+   bedrag, wat}). Minder voert die opdracht hier op het toestel uit met dezelfde functies als de schermen (weekTegelBron() voor
+   Deze week, uitgegevenStand() voor een venster of een dag, gripCyc() voor de oorzaken van Begrijpen) en tekent het antwoord zelf.
+   Er gaat ALLEEN van het toestel: je vraag zoals je hem typt, de namen van je potjes met hun sleutels, en de datum van vandaag
+   (vraagBody()). Geen boekingen, bedragen, saldi, namen of IBAN's, en ook niet de uitkomst. Standaard uit (SET.vraagAan). */
+const VRAAG_VOORBEELDEN=['Hoeveel gaf ik deze week uit aan boodschappen?','Wat gaf ik gisteren uit?','Waarom zit uit eten erboven?'];
+const VRAAG_ZIN_ONBEKEND='Die vraag kan Minder nog niet beantwoorden.';
+const VRAAG_ZIN_NIETS='Daar weet Minder nog niets over.';
+function vraagOnline(){ try{ return navigator.onLine!==false; }catch(_){ return true; } }
+/* de knop in de balk is "Vraag" alleen met vragen aan, online en een ingestelde backend; anders de koopknop zoals hij was */
+function vraagKnopAan(){ return !!SET.vraagAan && vraagOnline() && psd2Ready(); }
+function koopbalkKnop(){ return vraagKnopAan()
+  ? `<button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop data-vraagknop onclick="openVraag()">${ICON('robot')} Vraag</button>`
+  : `<button class="btn sec grip-koop" id="gripKoopcheck" data-koopknop onclick="openBuy()">${ICON('cart')} Ik wil iets kopen</button>`; }
+function koopbalkHerteken(){ try{ const b=document.getElementById('gripKoopbalk'); if(b) b.innerHTML=koopbalkKnop(); }catch(_){} }
+try{ window.addEventListener('online', koopbalkHerteken); window.addEventListener('offline', koopbalkHerteken); }catch(_){}
+/* de potjes die meegaan: de sleutel en de naam van elk potje met een budget, hooguit 60 */
+function vraagPotjes(){ const B=SET.budgets||{};
+  return Object.keys(B).filter(k=>(+B[k]||0)>0 && CATS[k] && CATS[k].type==='expense').slice(0,60).map(k=>({k, naam:CATS[k].name})); }
+function vraagBody(vraag){ return {vraag:String(vraag||'').trim().slice(0,300), potjes:vraagPotjes(), vandaag:vandaagYMD()}; }
+function openVraag(){ window._vraagStand=null; renderVraag(); showSheetBg(); }
+function vraagVoorbeeldenHtml(){ return `<div class="chips" data-vraagvoorbeelden style="margin-top:8px">${VRAAG_VOORBEELDEN.map((v,i)=>`<span class="chip" data-vraagvoorbeeld="${i}" style="cursor:pointer" onclick="vraagVoorbeeld(${i})">${esc(v)}</span>`).join('')}</div>`; }
+function vraagVoorbeeld(i){ const el=document.getElementById('vraagVeld'); if(el){ el.value=VRAAG_VOORBEELDEN[i]; try{ el.focus(); }catch(_){} } }
+function renderVraag(){ const st=window._vraagStand||{}, veld=(document.getElementById('vraagVeld')||{}).value;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="vraagSheet">
+    <div class="row" data-vraagkoopregel role="button" style="justify-content:space-between;gap:8px;padding:6px 0 10px;border-bottom:1px solid var(--line);cursor:pointer" onclick="openBuy()"><span class="small" style="font-weight:700">${ICON('cart')} Ik wil iets kopen · werkt ook zonder AI</span><span style="color:var(--teal);font-weight:700">›</span></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-top:10px">Vraag het Minder</div>
+    <textarea id="vraagVeld" maxlength="300" rows="2" placeholder="bv. Hoeveel gaf ik deze week uit aan boodschappen?" style="width:100%;margin-top:6px;box-sizing:border-box;font:inherit">${esc(veld!=null?veld:(st.vraag||''))}</textarea>
+    ${st.antwoord?'':vraagVoorbeeldenHtml()}
+    <div id="vraagAntwoord">${st.bezig?`<div class="small muted" data-vraagbezig style="margin-top:10px">Even kijken…</div>`:(st.antwoord||'')}</div>
+    ${sheetVoet(`<button class="btn" data-vraagstuur style="flex:1" onclick="vraagStuur()"${st.bezig?' disabled':''}>Vraag</button><button class="btn sec" onclick="closeSheet()">Sluiten</button>`, '')}</div>`; }
+async function vraagStuur(){
+  const vraag=((document.getElementById('vraagVeld')||{}).value||'').trim(); if(!vraag) return;
+  if(!vraagKnopAan()){ window._vraagStand={vraag, antwoord:vraagAntwoordOnbekend()}; renderVraag(); return; }   // uit of offline: er gaat niets van het toestel
+  window._vraagStand={vraag, bezig:true}; renderVraag();
+  const body=vraagBody(vraag), c=psd2Cfg(); let o=null;
+  try{ const ac=(typeof AbortController!=='undefined')?new AbortController():null; const tm=ac?setTimeout(()=>ac.abort(), 20000):null;
+    const r=await fetch(c.url+'/vraag', {method:'POST', headers:{'Authorization':'Bearer '+c.token, 'Content-Type':'application/json'}, body:JSON.stringify(body), signal:ac?ac.signal:undefined});
+    if(tm) clearTimeout(tm); if(r.ok) o=await r.json(); }catch(_){ o=null; }
+  window._vraagStand={vraag, antwoord:vraagUitvoer(vraagOpdracht(o, body.potjes))}; renderVraag(); }
+/* de app loopt de opdracht zelf nog eens na (de Worker doet het ook): alleen de bekende velden, een potje uit de meegestuurde lijst,
+   een geldige datum. Klopt er iets niet, dan is het onbekend. */
+function vraagDagGeldig(d){ if(typeof d!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false; const [j,m,x]=d.split('-').map(Number), D=new Date(j,m-1,x); return D.getFullYear()===j && D.getMonth()===m-1 && D.getDate()===x; }
+function vraagOpdracht(o, potjes){ const ONB={soort:'onbekend'};
+  if(!o || typeof o!=='object' || !['som','dag','waarom','koop'].includes(o.soort)) return ONB;
+  const ks=new Set((potjes||vraagPotjes()).map(p=>p.k)), uit={soort:o.soort, potje:null, venster:null, dag:null, bedrag:null, wat:null};
+  if(o.potje!=null){ if(!ks.has(o.potje)) return ONB; uit.potje=o.potje; }
+  if(o.venster!=null){ if(typeof o.venster==='string'){ if(!['deze_week','deze_maand','deze_periode','vorige_periode'].includes(o.venster)) return ONB; uit.venster=o.venster; }
+    else if(o.venster && vraagDagGeldig(o.venster.van) && vraagDagGeldig(o.venster.tot) && o.venster.van<=o.venster.tot && salDagenTussen(o.venster.van, o.venster.tot)<=397) uit.venster={van:o.venster.van, tot:o.venster.tot};
+    else return ONB; }
+  if(o.dag!=null){ if(!vraagDagGeldig(o.dag)) return ONB; uit.dag=o.dag; }
+  if(o.bedrag!=null){ const b=+o.bedrag; if(!Number.isFinite(b) || b<0) return ONB; uit.bedrag=Math.round(b*100)/100; }
+  if(o.wat!=null) uit.wat=String(o.wat).slice(0,80);
+  if(uit.soort==='som' && (!uit.potje || !uit.venster)) return ONB;
+  if(uit.soort==='dag' && !uit.dag) return ONB;
+  if(uit.soort==='waarom' && !uit.potje) return ONB;
+  return uit; }
+/* HET VENSTER, met de vensters van de app: deze week is die van de tegel Deze week (weekTegelBron), deze maand en deze periode zijn
+   de eenheid waarin vandaag valt (periodeVan: november 1–23 als korte maand, daarna de salarisperiode), vorige periode de eenheid
+   ervoor. Een venster met datums is letterlijk die datums. */
+function vraagVenster(v, vd){ vd=vd||vandaagYMD(); const P0=periodeVan(vd);
+  if(v==='deze_week'){ let WB=null; try{ WB=weekTegelBron(false); }catch(_){}
+    if(WB && WB.soort==='stand') return {van:WB.van, tot:WB.tot, label:'deze week', bron:'week', WB};
+    let van=null, tot=null;
+    if(P0.soort==='periode'){ const W=weekIndelingDat(P0.start, P0.eind), c=W.find(w=>vd>=w.van && vd<=w.tot); if(c){ van=c.van; tot=c.tot; } }
+    else { const W=weekIndeling(P0.ym), d=+vd.slice(8,10), c=W.find(w=>d>=w.van && d<=w.tot); if(c){ van=P0.ym+'-'+String(c.van).padStart(2,'0'); tot=P0.ym+'-'+String(c.tot).padStart(2,'0'); } }
+    return van?{van, tot, label:'deze week', P:P0}:null; }
+  if(v==='deze_maand' || v==='deze_periode') return {van:P0.start, tot:P0.eind, label:P0.soort==='periode'?'deze periode':'deze maand', P:P0};
+  if(v==='vorige_periode'){ const P=periodeVan(rekDag(P0.start,-1)); return {van:P.start, tot:P.eind, label:P.soort==='periode'?'vorige periode':ymFull(P.ym).split(' ')[0]+(P.korteMaand?' (1–'+(+P.eind.slice(8,10))+')':''), P}; }
+  if(v && v.van) return {van:v.van, tot:v.tot, label:`${dagKort(v.van)} – ${dagKort(v.tot)}`}; return null; }
+function vraagBedragTx(t){ const k=catOf(t); return (CATS[k] && CATS[k].type==='expense' && geenNormTx(t))?-t.amount:uitgaveNorm(t); }
+/* SOM: een potje over een venster. Deze week en een wekelijks potje: precies de regel van de tegel (x.uit, x.tx). Anders
+   uitgegevenStand() over het venster, de bron van de maand- en periodekaart op Inzichten. */
+function vraagSom(k, V){
+  if(V.bron==='week'){ const x=(V.WB.N.potjes||[]).find(p=>p.k===k);
+    if(x) return {bedrag:x.uit, tx:x.tx.slice(), scherm:'Inzichten › Deze week', open:'openWeekSheet()'}; }
+  const U=uitgegevenStand({start:V.van, eind:V.tot}), tx=[];
+  for(const g of ['vast','potjes','zonder','buiten','kasNieuw']) for(const t of (U.tx[g]||[])) if(catOf(t)===k) tx.push(t);
+  const vast=(U.tx.vast||[]).filter(t=>catOf(t)===k).reduce((a,t)=>a+uitgaveNorm(t),0);
+  tx.sort((a,b)=>b.date.localeCompare(a.date));
+  const per=V.P&&V.P.soort==='periode';
+  return {bedrag:Math.round(((U.per[k]||0)+vast)*100)/100, tx, scherm:per?'Inzichten › periodekaart':'Inzichten › maandkaart', open:`go('ins');openInsPotje('${esc(k)}')`}; }
+/* DAG: alle uitgaven van een dag, uit uitgegevenStand() (geen eigen overboekingen, geen spaarstortingen: die zijn geen uitgave) */
+function vraagDag(dag){ const U=uitgegevenStand({start:dag, eind:dag}), kasF=!!(U.kas && U.per[CONTANT_CAT]!=null), regels=[];
+  for(const g of ['vast','potjes','zonder','buiten','kasNieuw']) for(const t of (U.tx[g]||[])){ if(kasF && catOf(t)===CONTANT_CAT) continue; regels.push({t, k:catOf(t), bedrag:Math.round(vraagBedragTx(t)*100)/100}); }
+  if(kasF && U.per[CONTANT_CAT]) regels.push({t:null, k:CONTANT_CAT, bedrag:U.per[CONTANT_CAT]});
+  return {totaal:U.totaal, regels}; }
+/* WAAROM: alleen wat Begrijpen voor dat potje al weet (de oorzaken van gripCyc(), oorzaakRijen() met dezelfde woorden) */
+function vraagWaarom(k){ let C=null; try{ C=gripCyc(); }catch(_){}
+  const s=C && C.OV && C.OV.A ? (C.sym||[]).find(x=>x.k===k && C.OV.A[x.id]) : null; if(!s) return null;
+  const X=C.OV.A[s.id]; if(!(X.oorzaken||[]).length && !(X.bevestigd||[]).length) return null; return {s, X}; }
+function vraagAntwoordOnbekend(){ return `<div data-vraagantwoord="onbekend" style="margin-top:12px"><div style="font-weight:700">${VRAAG_ZIN_ONBEKEND}</div><div class="small muted" style="margin-top:4px">Probeer een van deze:</div>${vraagVoorbeeldenHtml()}</div>`; }
+function vraagUitvoer(o){ const dk=d=>new Date(d+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
+  const kop=(soort, zin)=>`<div data-vraagantwoord="${soort}" style="margin-top:12px"><div style="font-size:var(--fs-md);line-height:1.4">${zin}</div>`;
+  try{
+  if(o.soort==='som'){ const V=vraagVenster(o.venster); if(!V) return vraagAntwoordOnbekend(); const S=vraagSom(o.potje, V), naam=CATS[o.potje].name;
+    return kop('som', `${esc(naam)} ${esc(V.label)}: <b data-vraaggetal="${S.bedrag}">${euro(S.bedrag)}</b>`)
+      +`<div data-vraagregels style="margin-top:6px">${S.tx.length?S.tx.map(t=>`<div class="row small" data-vraagregel="${vraagBedragTx(t)}" role="button" style="gap:8px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openSheet('${esc(t.id)}')"><span style="flex:1;min-width:0">${esc(dk(t.date))} · ${esc(txNaam(t))}</span><b>${euro(vraagBedragTx(t))}</b></div>`).join(''):'<div class="small muted">Geen boekingen in dit venster.</div>'}</div>
+      <div class="small muted" data-vraaggerekend style="margin-top:8px;line-height:1.45">Zo gerekend: potje ${esc(naam)} · venster ${esc(dk(V.van))}–${esc(dk(V.tot))} · som van de boekingen · dezelfde bron als ${esc(S.scherm)}</div>
+      <div class="small" data-vraagopen role="button" style="margin-top:6px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();${S.open}">open in ${esc(S.scherm)} ›</div></div>`; }
+  if(o.soort==='dag'){ const D=vraagDag(o.dag);
+    return kop('dag', `Uitgegeven op ${esc(dagKort(o.dag))}: <b data-vraaggetal="${D.totaal}">${euro(D.totaal)}</b>`)
+      +`<div data-vraagregels style="margin-top:6px">${D.regels.length?D.regels.map(r=>`<div class="row small" data-vraagregel="${r.bedrag}"${r.t?` role="button" onclick="openSheet('${esc(r.t.id)}')"`:''} style="gap:8px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer"><span style="flex:1;min-width:0">${r.t?esc(txNaam(r.t)):'Contant'} · ${esc((CATS[r.k]||{}).name||r.k)}</span><b>${euro(r.bedrag)}</b></div>`).join(''):'<div class="small muted">Geen uitgaven op die dag.</div>'}</div>
+      <div class="small muted" data-vraaggerekend style="margin-top:8px;line-height:1.45">Zo gerekend: alle uitgaven van ${esc(dagKort(o.dag))} · zonder eigen overboekingen en spaarstortingen · dezelfde bron als de maandkaart op Inzichten</div></div>`; }
+  if(o.soort==='waarom'){ const W=vraagWaarom(o.potje), naam=CATS[o.potje].name;
+    if(!W) return kop('waarom', esc(VRAAG_ZIN_NIETS))+`<div class="small muted" data-vraaggerekend style="margin-top:6px">Begrijpen op Grip toont voor ${esc(naam)} geen oorzaken.</div></div>`;
+    const X=W.X;
+    return kop('waarom', `Wat Begrijpen weet over <b>${esc(W.s.naam)}</b>`)
+      +`<div data-oorzaken="${esc(X.key)}" style="margin-top:6px">${oorzaakRijen(X)}</div>`
+      +(X.bevestigd.length?`<div data-oorzaakbevestigd style="margin-top:8px">${X.bevestigd.map(b=>`<div class="row" data-bevestigd="${b.soort}" style="gap:8px;padding:4px 0"><span style="color:var(--green);font-weight:800">✓</span><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(b.soort==='gevoel'||b.soort==='gewoonte'||b.soort==='gelegenheid'?(b.bewijs||OORZAAK_NAAM[b.soort]):OORZAAK_NAAM[b.soort])}</span>${gripSub(esc(oorzaakBronTxt(b)))}</span></div>`).join('')}</div>`:'')
+      +`<div class="small muted" data-vraaggerekend style="margin-top:8px">Zo gerekend: dezelfde oorzaken als Begrijpen op Grip, niets erbij</div>
+      <div class="small" data-vraagopen role="button" style="margin-top:6px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();go('maand');gripNaarSymptoom('${esc(W.s.id).replace(/'/g,"\\'")}')">open in Begrijpen ›</div></div>`; }
+  if(o.soort==='koop'){ setTimeout(()=>openBuy({wat:o.wat, bedrag:o.bedrag, potje:o.potje}), 0); return kop('koop', 'Dat is een aankoop. Ik open de koopcheck; die rekent het uit.')+'</div>'; }
+  }catch(_){}
+  return vraagAntwoordOnbekend(); }
+/* Instellingen › Vragen aan Minder */
+const VRAAG_UITLEG='Alleen je vraag zoals je hem typt, de namen van je potjes (en hun sleutels) en de datum van vandaag gaan naar je eigen backend. Geen boekingen, bedragen, saldi, winkel- of persoonsnamen, IBAN\'s of rekeningnamen, en ook niet het antwoord: dat rekent Minder hier op je toestel uit.';
+function setSubVraagStand(){ return SET.vraagAan?(psd2Ready()?'aan':'aan · backend nog niet ingesteld'):'uit'; }
+function setVraagPagina(){ return `<div class="toggle" data-vraagaan><div><div style="font-weight:600">Vragen aan Minder</div><div class="small muted" data-vraaguitleg style="line-height:1.45">${esc(VRAAG_UITLEG)}${SET.vraagAan&&!psd2Ready()?' Je backend staat nog niet ingesteld, dus de knop blijft "Ik wil iets kopen".':''}</div></div>
+    <label class="sw"><input type="checkbox" ${SET.vraagAan?'checked':''} onchange="SET.vraagAan=this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="small muted" style="margin-top:8px;line-height:1.45">Staat dit aan en ben je online, dan heet de knop op Grip "Vraag". Zonder netwerk is het de koopcheck zoals altijd, en gaat er niets van het toestel.</div>`; }
 function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`});
   /* v429: een aankoop in een potje met een lopende testweek krijgt een tik "Hoe voelde je je net?" (overslaan mag) */
   if(['gepland','verschoven','doorgezet'].includes(uitkomst)){ try{ const T=testweekKoop(cat, amt, item); if(T) setTimeout(()=>{ try{ openTestweekTik(T.key, T.id); }catch(_){} }, 700); }catch(_){} } }
@@ -28295,6 +28424,7 @@ const SET_SUBS=[
   {id:'herkenning', ic:'swap',  naam:'Herkenning',         sub:()=>setSubHerkStand(),      inh:()=>setTransacties()},
   {id:'coach',      ic:'robot', naam:'Coach & weergave',   sub:()=>setSubCoachStand(),     inh:()=>setCoachWeergave()},
   {id:'meldingen',  ic:'alert', naam:'Meldingen',          sub:()=>setSubMeldStand(),      inh:()=>setMeldPagina()},   // v516: meldingen op je telefoon
+  {id:'vraag',      ic:'robot', naam:'Vragen aan Minder',  sub:()=>setSubVraagStand(),     inh:()=>setVraagPagina()},   // v519: standaard uit
   {id:'gegevens',   ic:'lock',  naam:'Gegevens & privacy', sub:()=>setSubGegevensStand(),  inh:()=>setPrivacy()},
 ];
 /* ===== v516: MELDINGEN OP JE TELEFOON, OOK ALS MINDER DICHT IS (deel 1: het weekbericht en de basis) =====
@@ -31099,12 +31229,13 @@ function privacyUitzonderingen(){
   const uit=[];
   if(Object.keys(SET.psd2Accounts||{}).length) uit.push('je bankkoppeling');
   if(SET.aiCoach) uit.push('de AI-coach');
+  if(SET.vraagAan) uit.push('vragen aan Minder');   // v519
   return uit;
 }
 function privacySub(){
   const u=privacyUitzonderingen();
   if(!u.length) return 'Alles blijft op dit toestel';
-  return 'Lokaal, behalve '+(u.length===2?u[0]+' en '+u[1]:u[0]);
+  return 'Lokaal, behalve '+(u.length>=2?u.slice(0,-1).join(', ')+' en '+u[u.length-1]:u[0]);
 }
 /* v181: zonder ingesteld inkomen is de uitkomst van deze twee niet nul maar onbekend. Home zegt
    daar het woord "onbekend" met een tik naar de invoer; de instellingsregel doet hetzelfde, en de

@@ -7,7 +7,7 @@
  *   EB_PRIVATE_KEY   — de bijbehorende private key (PEM, PKCS#8: "-----BEGIN PRIVATE KEY-----")
  *   APP_TOKEN        — zelfgekozen geheim; ditzelfde token zet je in de app
  *   VAPID_PRIVATE    — v517: privésleutel voor Web Push (base64url van de 32-byte d)
- *   LLM_API_KEY      — optioneel, alleen voor /coach
+ *   LLM_API_KEY      — optioneel, voor /coach en /vraag (v519); zonder deze key geeft /vraag 503
  * Vars (wrangler.toml):
  *   ALLOWED_ORIGIN   — origin van je app (bv. https://USER.github.io). '*' = alles toestaan.
  *   EB_BASE          — standaard https://api.enablebanking.com
@@ -95,6 +95,29 @@ async function handleFetch(request, env) {
       verlopen: dev.geldigTot ? new Date(dev.geldigTot).getTime() < Date.now() : false });
   }
 
+  // --- v519: VRAAG. Het model vertaalt alleen een vraag naar een opdracht (JSON volgens VRAAG_SCHEMA); het rekent niets en
+  //     schrijft geen antwoord. De app voert de opdracht op het toestel uit. Er wordt NIETS opgeslagen: geen KV, geen log. ---
+  if (request.method === 'POST' && path.endsWith('/vraag')) {
+    if (!env.LLM_API_KEY) return json({ error: 'vragen staat niet aan' }, 503);
+    let vb = {}; try { vb = await request.json(); } catch (_) {}
+    const inv = vraagInvoer(vb);
+    if (!inv) return json({ soort: 'onbekend' });
+    try {
+      const lr = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': env.LLM_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json',
+          'anthropic-beta': 'server-side-fallback-2026-07-01' },
+        body: JSON.stringify(vraagVerzoek(inv, env.LLM_MODEL || VRAAG_MODEL_STANDAARD)),
+      });
+      if (!lr.ok) return json({ soort: 'onbekend' });
+      const ld = await lr.json();
+      if (!ld || ld.stop_reason === 'refusal') return json({ soort: 'onbekend' });
+      const blok = ((ld.content || []).find((b) => b && b.type === 'text') || {}).text || '';
+      let ruw = null; try { ruw = JSON.parse(blok); } catch (_) { ruw = null; }
+      return json(vraagValideer(ruw, inv));
+    } catch (e) { return json({ soort: 'onbekend' }); }
+  }
+
   // --- AI-coach: een taalmodel verwoordt de coach-zin (hybride; de app levert alle cijfers) ---
   // Secret: LLM_API_KEY. Var (optioneel): LLM_MODEL. Geen Enable-Banking-keys nodig voor dit endpoint.
   if (request.method === 'POST' && path.endsWith('/coach')) {
@@ -103,14 +126,15 @@ async function handleFetch(request, env) {
     const draft = String(cb.draft || '').slice(0, 500);
     if (!draft) return json({ text: '' });
     const facts = JSON.stringify(cb.facts || {}).slice(0, 2000);
-    const model = String(cb.model || env.LLM_MODEL || 'claude-3-5-haiku-latest');
+    const model = String(cb.model || env.LLM_MODEL || VRAAG_MODEL_STANDAARD);   // v519: 'claude-3-5-haiku-latest' was verouderd
     const sys = String(cb.spec || '').slice(0, 2000);
     const userMsg = `Cijfers (alleen ter info, niet verzinnen):\n${facts}\n\nHerschrijf deze draft in de gevraagde toon, behoud alle bedragen exact:\n${draft}`;
     try {
       const lr = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'x-api-key': env.LLM_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model, max_tokens: 160, temperature: 0.6, system: sys,
+        /* v519: geen temperature (de huidige modellen weigeren hem) en ruimte voor het denkwerk, met lage effort */
+        body: JSON.stringify({ model, max_tokens: 1024, output_config: { effort: 'low' }, system: sys,
           messages: [{ role: 'user', content: userMsg }] }),
       });
       const ld = await lr.json();
@@ -429,5 +453,66 @@ async function runCron(env, nowMs) {
   return { ran: true, ymd: slot.ymd, idx: slot.idx, uitkomst };
 }
 
+/* ===== v519: VRAAG — invoer, het verzoek aan het model en de validatie van de opdracht ===== */
+const VRAAG_MODEL_STANDAARD = 'claude-opus-5-5';
+const VRAAG_MAX_TEKENS = 300, VRAAG_MAX_POTJES = 60, VRAAG_MAX_DAGEN = 397;   // 13 maanden
+const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'onbekend'];
+const VRAAG_VENSTERS = ['deze_week', 'deze_maand', 'deze_periode', 'vorige_periode'];
+const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat'];
+function geldigeDag(s) { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [j, m, d] = s.split('-').map(Number); const x = new Date(Date.UTC(j, m - 1, d));
+  return x.getUTCFullYear() === j && x.getUTCMonth() === m - 1 && x.getUTCDate() === d; }
+/* alleen vraag, potjes {k,naam} en vandaag; al het andere valt weg */
+function vraagInvoer(b) {
+  if (!b || typeof b !== 'object') return null;
+  const vraag = String(b.vraag || '').trim().slice(0, VRAAG_MAX_TEKENS); if (!vraag) return null;
+  const potjes = (Array.isArray(b.potjes) ? b.potjes : []).slice(0, VRAAG_MAX_POTJES)
+    .filter((p) => p && typeof p.k === 'string' && /^[\w-]{1,40}$/.test(p.k))
+    .map((p) => ({ k: p.k, naam: String(p.naam || p.k).slice(0, 60) }));
+  const vandaag = geldigeDag(b.vandaag) ? b.vandaag : new Date().toISOString().slice(0, 10);
+  return { vraag, potjes, vandaag }; }
+const VRAAG_SCHEMA = { type: 'object', additionalProperties: false,
+  required: VRAAG_VELDEN,
+  properties: {
+    soort: { type: 'string', enum: VRAAG_SOORTEN },
+    potje: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    venster: { anyOf: [{ type: 'string', enum: VRAAG_VENSTERS },
+      { type: 'object', additionalProperties: false, required: ['van', 'tot'], properties: { van: { type: 'string', format: 'date' }, tot: { type: 'string', format: 'date' } } },
+      { type: 'null' }] },
+    dag: { anyOf: [{ type: 'string', format: 'date' }, { type: 'null' }] },
+    bedrag: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+    wat: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+  } };
+function vraagVerzoek(inv, model) {
+  const sys = 'Je vertaalt een vraag over persoonlijke uitgaven naar een opdracht in JSON. Je rekent niets en beantwoordt de vraag niet. '
+    + 'soort: "som" (hoeveel ging er naar een potje in een periode), "dag" (wat gaf ik uit op een dag), "waarom" (waarom zit een potje erboven), '
+    + '"koop" (ik wil iets kopen; zet wat, bedrag en zo mogelijk potje), anders "onbekend". '
+    + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null. '
+    + 'dag: YYYY-MM-DD, of null ("gisteren" en weekdagen reken je terug vanaf vandaag). Alles wat niet past is null. Twijfel je, dan "onbekend".';
+  const user = 'Vandaag: ' + inv.vandaag + '\nPotjes (k: naam):\n' + inv.potjes.map((p) => p.k + ': ' + p.naam).join('\n') + '\n\nVraag: ' + inv.vraag;
+  return { model, max_tokens: 1024, output_config: { effort: 'low', format: { type: 'json_schema', schema: VRAAG_SCHEMA } },
+    fallbacks: 'default', system: sys, messages: [{ role: 'user', content: user }] }; }
+/* de opdracht van het model nalopen: onbekende velden weg, k uit de meegestuurde lijst, geldige datums, venster hooguit 13 maanden.
+   Klopt er iets niet, dan {soort:'onbekend'}. */
+function vraagValideer(o, inv) {
+  const ONB = { soort: 'onbekend' };
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return ONB;
+  if (!VRAAG_SOORTEN.includes(o.soort) || o.soort === 'onbekend') return ONB;
+  const uit = { soort: o.soort, potje: null, venster: null, dag: null, bedrag: null, wat: null };
+  if (o.potje != null) { if (typeof o.potje !== 'string' || !(inv.potjes || []).some((p) => p.k === o.potje)) return ONB; uit.potje = o.potje; }
+  if (o.venster != null) {
+    if (typeof o.venster === 'string') { if (!VRAAG_VENSTERS.includes(o.venster)) return ONB; uit.venster = o.venster; }
+    else if (typeof o.venster === 'object' && !Array.isArray(o.venster)) {
+      const { van, tot } = o.venster; if (!geldigeDag(van) || !geldigeDag(tot) || van > tot || dagenTussen(van, tot) > VRAAG_MAX_DAGEN) return ONB;
+      uit.venster = { van, tot }; }
+    else return ONB; }
+  if (o.dag != null) { if (!geldigeDag(o.dag)) return ONB; uit.dag = o.dag; }
+  if (o.bedrag != null) { const b = Number(o.bedrag); if (!Number.isFinite(b) || b < 0 || b > 1e7) return ONB; uit.bedrag = Math.round(b * 100) / 100; }
+  if (o.wat != null) { if (typeof o.wat !== 'string') return ONB; uit.wat = o.wat.slice(0, 80); }
+  if (uit.soort === 'som' && (!uit.potje || !uit.venster)) return ONB;
+  if (uit.soort === 'dag' && !uit.dag) return ONB;
+  if (uit.soort === 'waarom' && !uit.potje) return ONB;
+  return uit; }
+
 /* Named exports voor de tests (geen secrets; puur de rekenkern). */
-export { handleFetch, runCron, sendPush, webPushEncrypt, vapidJwt, mapBoeking, boekingSleutel, appHash, hashId, amsterdamSlot, hkdf, b64urlToBytes, bytesToB64url, concatBytes };
+export { handleFetch, runCron, vraagInvoer, vraagValideer, vraagVerzoek, VRAAG_SCHEMA, sendPush, webPushEncrypt, vapidJwt, mapBoeking, boekingSleutel, appHash, hashId, amsterdamSlot, hkdf, b64urlToBytes, bytesToB64url, concatBytes };

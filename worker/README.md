@@ -203,3 +203,16 @@ npx wrangler versions view <versie-id>
 ```
 
 Of in het dashboard: **Workers & Pages → minder-psd2 → Edit code**.
+
+## v519 — Vragen aan Minder (`POST /vraag`)
+
+Het model vertaalt alleen een vraag naar een opdracht (JSON); de app rekent het antwoord zelf uit. De Worker slaat niets op.
+
+1. Zet de API-sleutel als secret: `npx wrangler secret put LLM_API_KEY`.
+2. Controleer in `wrangler.toml` de var `LLM_MODEL` (standaard `claude-opus-5-5`; `/coach` leest hem ook).
+3. Deploy: `npx wrangler deploy`.
+4. In de app: Instellingen › Vragen aan Minder aanzetten. De knop op Grip heet dan "Vraag" zolang je online bent.
+
+Zonder `LLM_API_KEY` geeft `/vraag` een 503 ("vragen staat niet aan"); de app toont dan de vaste zin en de koopcheck werkt gewoon.
+Wat er binnenkomt: `{vraag (≤300 tekens), potjes:[{k,naam}] (≤60), vandaag}`. Wat eruit gaat: `{soort, potje, venster, dag, bedrag, wat}`,
+of `{soort:"onbekend"}` als de opdracht niet door de validatie komt.
