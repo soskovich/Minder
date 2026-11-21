@@ -13758,11 +13758,14 @@ function salVerdelingGevolg(P, B){ return P.rek.map(r=>{ const L=+B[r.acc]||0, z
 function salHoeHtml(P, r){ const e=euro0, pc=v=>Math.round(v*100)+'%', R=P.SP.R, rij=(l,v,attr)=>`<div class="row" ${attr||''} style="gap:8px;padding:2px 0"><span style="flex:1;min-width:0">${l}</span><span style="white-space:nowrap">${v}</span></div>`;
   const kp=r.kasPatroon||{}, mn=ym=>MNAMES[+ym.slice(5,7)-1], sinds=P.af.length>1?`sinds ${mn(P.af[0])}`:`in ${mn(P.af[0])}`;
   /* v441 (1d): per potje "gaat niet via deze rekening ›", bewaard in Wat Minder van jou weet; het aandeel herverdeelt */
-  const potRij=p=>rij(`${esc(p.naam)}${p.zonder?' (zonder potje)':''}: ${pc(p.aandeel)} × ${e(p.totaal)}<br><span data-salvgeenrek="${esc(p.k)}" style="color:var(--teal);cursor:pointer" onclick="rekGeenViaZet('${esc(p.k)}','${esc(r.acc)}')">gaat niet via deze rekening ›</span>`, e(p.bedrag), 'data-salvhoepot');
+  /* v518 (3): de keuze staat EEN keer per rekening, onder het blok Geschat; de sheet (salGeenViaSheet) toont de potjes van dat blok */
+  const potRij=p=>rij(`${esc(p.naam)}${p.zonder?' (zonder potje)':''}: ${pc(p.aandeel)} × ${e(p.totaal)}`, e(p.bedrag), 'data-salvhoepot');
+  /* v518 (2): gepland op datum, de eerste datum in x.data oplopend, bij gelijke datum op naam; alleen de volgorde (een kopie, r.vast blijft) */
+  const vastOp=[...r.vast].sort((a,b)=>{ const da=String((a.data||[])[0]||''), db=String((b.data||[])[0]||''); return da<db?-1:da>db?1:String(a.naam).localeCompare(String(b.naam),'nl'); });
   return `<div class="small" data-salvhoe="${esc(r.acc)}" style="margin:4px 0 2px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.4">
-    <div style="font-weight:700" data-salvgepland>Gepland · op datum</div>${r.vast.length?r.vast.map(x=>rij(`${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.termijn)}`:''} · ${x.data.map(dagKort).join(', ')}`, e(x.bedrag), 'data-salvhoevast')).join(''):rij('geen termijn in de periode','€0')}
+    <div style="font-weight:700" data-salvgepland>Gepland · op datum</div>${vastOp.length?vastOp.map(x=>rij(`${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.termijn)}`:''} · ${x.data.map(dagKort).join(', ')}`, e(x.bedrag), 'data-salvhoevast')).join(''):rij('geen termijn in de periode','€0')}
     ${(r.vastBuiten||[]).length?`<div style="color:var(--mut2)">geen termijn in de periode: ${r.vastBuiten.map(x=>esc(x.naam)).join(', ')}</div>`:''}
-    <div style="font-weight:700;margin-top:4px" data-salvgeschat>Geschat · uit je boekingen ${esc(sinds)}</div>${r.potDelen.length?r.potDelen.map(potRij).join(''):rij('geen potjes via deze rekening','€0')}
+    <div style="font-weight:700;margin-top:4px" data-salvgeschat>Geschat · uit je boekingen ${esc(sinds)}</div>${r.potDelen.length?r.potDelen.map(potRij).join('')+`<div data-salvgeenviaregel="${esc(r.acc)}" role="button" style="color:var(--teal);cursor:pointer;padding:2px 0" onclick="salGeenViaSheet('${esc(r.acc)}')">Gaat een potje niet via deze rekening? ›</div>`:rij('geen potjes via deze rekening','€0')}
     ${rij(P.kasBron==='budget'?`Contant: ${pc(r.kasAandeel)} × ${e(P.kasP)} (potje Contant ${e(P.kasBud)} × ${P.dagen}/${P.dimStart} dagen${P.kasStand!=null?` min ${e(P.kasStand)} nog in je portemonnee${P.kasStandBron==='schatting'?` (schatting: telling ${e(P.kasSchat?P.kasSchat.telling:P.kasStand)} op ${esc(dagKort(P.kasStandDatum))} min ${P.kasSchat?P.kasSchat.dagen:0} dagen tempo)`:''}`:' · stand portemonnee onbekend, het hele budget'})`:`Contant: ${pc(r.kasAandeel)} × ${e(P.kasP)} (mediaan ${e(P.kas)} per maand)`, e(r.kasS), 'data-salvhoekas')}
     <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:2px">${rij('<b>Verwacht</b>', `<b>${e(r.verwacht)}</b>`, 'data-salvhoeverwacht')}
     ${rij(`Buffer: p75 ${e(r.p75)} − mediaan ${e(r.med)} = ${e(r.p75-r.med)}, minstens ${e(REKV.bufferMin)}, hoogstens 20% (${e(r.bufMax)})`, e(r.buffer), 'data-salvhoebuffer')}
@@ -13772,6 +13775,15 @@ function salHoeHtml(P, r){ const e=euro0, pc=v=>Math.round(v*100)+'%', R=P.SP.R,
     <div data-salvaannames style="margin-top:6px;color:var(--mut2)">Periode ${dagKort(P.start)} t/m ${dagKort(P.eind)} (${P.dagen} dagen): ${P.nu?'je salaris kwam vandaag':`verwachte storting ${dagKort(P.start)}`}, regel ${esc(salRegelTekst(R))}${P.per0.regel && P.per0.regel.includes('→')?` (${esc(P.per0.regel)})`:''}${R.bron==='boekingen'?', uit je boekingen':', door jou'}.<br>
     Potjes = wat je in ${esc(ymFull(P.potMaand))} verwacht uit te geven, niet je budget, × ${P.dagen}/${P.dimStart} dagen.<br>
     Geschat (aandeel per rekening en contant) uit je boekingen ${esc(sinds)}${P.af.length>1?` t/m ${mn(P.af[P.af.length-1])}`:''} · het venster sinds je huidige rekening-indeling${kp.dag!=null?`. Contant meestal op dag ${kp.dag} na je salaris`:'. Contant gelijk over de dagen (minder dan 3 maanden met een opname)'}${kasNaSalKennis()?'. Jij gaf aan dat je na je salaris pint: tot je storting rekent het voorstel dan geen contant op een rekening waar je nog niet pinde':''}.</div></div>`; }
+/* v518 (3): de potjes van het blok Geschat van EEN rekening, elk met naam en bedrag; een tik roept rekGeenViaZet(k, acc) aan, zoals de
+   inline link tot v518, en die tekent de verdeling opnieuw (de sheet sluit daarmee). Niets voorgeselecteerd; Terug tekent de verdeling. */
+function salGeenViaSheet(acc){ const P=rekVoorstel(), r=P&&P.ok?P.rek.find(x=>x.acc===acc):null; if(!r) return;
+  const aq=esc(acc).replace(/'/g,"\\'");
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="salGeenVia" data-salvgeenviasheet="${esc(acc)}">
+    <div style="font-weight:800">Gaat een potje niet via ${esc(r.naam)}?</div>
+    <div class="small muted" style="margin-top:4px;line-height:1.45">Tik het potje dat niet via deze rekening gaat. Het aandeel gaat dan naar je andere betaalrekeningen.</div>
+    ${r.potDelen.map(p=>`<div class="row" data-salvgeenrek="${esc(p.k)}" role="button" style="gap:8px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="rekGeenViaZet('${esc(p.k).replace(/'/g,"\\'")}','${aq}')"><span class="small" style="flex:1;min-width:0;font-weight:700">${esc(p.naam)}${p.zonder?' (zonder potje)':''}</span><span class="small" style="white-space:nowrap">${euro0(p.bedrag)}</span><span class="small" style="color:var(--teal)">›</span></div>`).join('')}
+    <div class="row" style="gap:8px;margin-top:10px"><button class="btn sec" onclick="renderSalVerdeling()">Terug</button></div></div>`; }
 function salGevolgHtml(P, B){ const G=salVerdelingGevolg(P, B), som=P.rek.reduce((a,r)=>a+(+B[r.acc]||0),0), opzij=P.salaris-som-(P.reserveringen||0), planMist=Math.max(P.plan-opzij,0);
   return `<b>Gevolg</b><br>${G.map(g=>`${esc(g.naam)}: laagste saldo ${euro0(g.laagst)} op ${dagKort(g.dag)}, onttrekkingen ${g.laagst>=0?euro0(0):'nodig'}`).join('<br>')}<br>${rekOpzijTekst(opzij, P.plan)}${planMist>0.5?', je doelen zijn later vol':''}`; }
 /* v441 sectie 2: de regel "Reserveringen EUR X" in de verdeling, met Hoe berekend per reservering (doel, saldo op volgorde,
@@ -20719,12 +20731,9 @@ function renderVermogen(){
     ${_nwBar}
     ${_nwTrend}
   </div>`;
-  /* v232: de spaarquote, van Maand hierheen. Eigen kaart, niet in de netto-vermogen-kaart: Opbouw
-     daarboven leest inkomen min uitgaven, de spaarquote leest vermogensInleg(), en twee verwante
-     metingen in één kaart lezen als één getal in twee vormen. Stand, dan tempo, dan waar je heen
-     gaat (Vermogensreis). Laatste afgeronde maand; is die er niet, dan staat er niets. */
-  const spaarquote=(function(){ try{ const mA=vermogenSpaarquoteMaand(); if(!mA) return ''; const sq=maandKpiBlok(mA,{maandInLabel:true}); return sq?`<div class="card">${sq}</div>`:''; }catch(_){ return ''; } })();
-  $('#s-vermogen').innerHTML = head + samenvatting + nwCard + spaarquote + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
+  /* v518 (1): de kaart Spaarquote staat niet meer op Vermogen (gevraagd door de gebruiker). Alleen de kaart: maandKpiBlok(),
+     insKpis(), KPI_META.inleg, openKpiDetail() en vermogenSpaarquoteMaand() blijven, want specs en de berekening lezen ze. */
+  $('#s-vermogen').innerHTML = head + samenvatting + nwCard + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
