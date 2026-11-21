@@ -3,6 +3,9 @@
    op 14 september (rente 111,62, aflossing 425,71), en DUO met EUR 399,72 per maand. De klok staat op
    4 oktober, zodat september de maand van de tegel op Vermogen is (vermogenSpaarquoteMaand()). */
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { boot } = require('./bezit-koppeling.fixture');
 
 const LEASE_DESC = 'SEPA INCASSO ONTVANGSTEN HILTERMANN L CONTRACT 4471 TERMIJN';

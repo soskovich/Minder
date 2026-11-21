@@ -7,8 +7,12 @@
 // detail opent op diezelfde maand. Verplaatsen is nooit kopiëren: een test leest beide schermen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
+const { sectieVan } = require('./bron-sectie');
 
 const MFULL = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 const naam = (m) => MFULL[+m.slice(5, 7) - 1];
@@ -26,10 +30,11 @@ const tekst = (page, s) => page.evaluate((x) => { go(x); return document.querySe
 const tegel = (page) => page.locator('#s-vermogen #maandKpiBlok .wvo-tile[data-kpi="inleg"]');
 
 test.describe('a - op Vermogen, niet op Maand', () => {
-  test('beide schermen gelezen: Vermogen draagt hem, Maand niet', async ({ page }) => {
+  test('beide schermen gelezen: sinds v518 draagt Vermogen hem niet meer (alleen de probe), en Maand ook niet', async ({ page }) => {
     await vermogen(page);
-    await expect(tegel(page)).toHaveCount(1);
-    expect(await tekst(page, 'vermogen')).toMatch(/spaarquote/i);
+    await expect(tegel(page)).toHaveCount(1);   // de probe
+    expect(await page.evaluate(() => { go('vermogen'); return [...document.querySelectorAll('#s-vermogen .card:not([data-kpiprobe])')].map(c => c.innerText).join(' '); })).not.toMatch(/spaarquote/i);
+    expect(/maandKpiBlok|vermogenSpaarquoteMaand/.test(kaalBron(sectieVan(require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8'), 'function renderVermogen(')))).toBe(false);   // de bron, niet de functie (die is door de probe omwikkeld)
     expect(await tekst(page, 'maand')).not.toMatch(/spaarquote/i);
     expect(await page.evaluate(() => document.querySelectorAll('#s-maand [data-kpi]').length)).toBe(0);
     expect(/maandKpiBlok/.test(await kaalUit(page, 'renderMaand'))).toBe(false);

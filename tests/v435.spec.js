@@ -88,7 +88,8 @@ test.describe('v435 · 1. Hoe berekend', () => {
     const h = page.locator(`[data-salvhoe="${LEEF}"]`);
     const P = await page.evaluate(acc => { const P = rekVoorstel(), r = P.rek.find(x => x.acc === acc); return { pot: r.potDelen.map(p => [p.naam, Math.round(p.bedrag)]), kas: Math.round(r.kasS), verwacht: Math.round(r.verwacht), buf: Math.round(r.buffer), laten: r.laten, af: Math.round(r.laten0 - (r.verwacht + r.buffer)) }; }, LEEF);   // af nagerekend uit laten0, niet uit r.afronding zelf
     const t = await h.innerText();
-    for (const [n, b] of P.pot) expect(t).toMatch(new RegExp(`${n.replace('&', '&')}: 100% × €[\\d.]+[\\s\\S]*?gaat niet via deze rekening[\\s\\S]*?€${b}`));   // v441: de potje-rij draagt "gaat niet via deze rekening ›"
+    for (const [n, b] of P.pot) expect(t).toMatch(new RegExp(`${n.replace('&', '&')}: 100% × €[\\d.]+\\s+€${b}`));   // v518: de potje-rij draagt geen link meer
+    expect(await h.locator('[data-salvgeenviaregel]').count()).toBe(P.pot.length ? 1 : 0);   // v518: een keer per rekening onder Geschat
     expect(await h.locator('[data-salvhoeverwacht]').innerText()).toMatch(new RegExp(`€${P.verwacht}$`));
     expect(await h.locator('[data-salvhoebuffer]').innerText()).toMatch(/Buffer: p75 €[\d.]+ − mediaan €[\d.]+ = €[\d.]+, minstens €50, hoogstens 20% \(€[\d.]+\)\s+€\d+/);
     expect(await h.locator('[data-salvhoeafronding]').innerText()).toMatch(new RegExp(`\\+€${P.af}$`));

@@ -7,6 +7,9 @@
 // niet nul: een verzonnen doel van 0% zou elk cijfer eeuwig 'boven je doel' laten lezen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
 
 async function boot(page, maand) {

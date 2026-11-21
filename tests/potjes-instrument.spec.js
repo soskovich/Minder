@@ -7,6 +7,9 @@
 // voor dezelfde vraag zijn. Dat percentage daalde bovendien zodra je vaste lasten stegen, zonder
 // dat je gedrag veranderde.
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 /* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
    maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
    november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */

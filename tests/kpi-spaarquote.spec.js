@@ -5,6 +5,9 @@
 // gedekt was door je overschot, maar stelt het cijfer niet bij (v117 ingetrokken in v161).
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { open, CUR, M1, M2, MAIN, SAV } = require('./budget-fixture');
 
 // inkomen 3000, uitgaven 2100, en per maand een storting naar de spaarrekening

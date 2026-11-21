@@ -5,6 +5,9 @@
 // maandregel op Maand laat je niet van scherm wisselen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
+const { kpiProbe } = require('./kpi-probe');
+test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { seed, open } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
