@@ -10,6 +10,7 @@ async function kpiProbe(page) {
       window.renderVermogen = function () { const r = oud.apply(this, arguments);
         try { const s = document.getElementById('s-vermogen'), mA = vermogenSpaarquoteMaand(); if (s && mA) { const sq = maandKpiBlok(mA, { maandInLabel: true }); if (sq) { const h = `<div class="card" data-kpiprobe>${sq}</div>`, reis = s.querySelector('.card[onclick="go(\'fire\')"]'); if (reis) reis.insertAdjacentHTML('beforebegin', h); else s.insertAdjacentHTML('beforeend', h); } } } catch (_) {}
         return r; };
+      try { renderVermogen(); } catch (_) {}   /* de eerste render() liep al tijdens het laden, voor deze haak */
     });
   });
 }
