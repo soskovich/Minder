@@ -22570,7 +22570,7 @@ function vraagWaarom(k){ let C=null; try{ C=gripCyc(); }catch(_){}
      geen eigen overboekingen, geen spaarstortingen), met per boeking vraagBedragTx(), precies de regels van de dag-vraag;
    - tegenpartij zoekt op de schone naam (txNaam(), cleanMerch(): de naam die Recent en de boekingssheet tonen), nooit in de ruwe desc;
    - eenmalig leest eenmaligLabel() (het label door jou, v453), per eenheid;
-   - naOverschrijding leest catSpendMap(ym) tegen maandPotjes(ym), en ALLEEN maanden met een bewaard potjebedrag (SET.budgetHist, v309);
+   - naOverschrijding leest catSpendMap(ym) tegen maandPotjes(ym), en ALLEEN maanden met een bewaard potjebedrag (de maandhistorie van v309, via maandPotjes);
    - contantRitme leest isOpnameTx() (GEA, BETAALPAS / GELDMAAT, v258/v420): een kastelling is geen opname.
    DE EENHEDEN zijn die van de app: historiePerioden() (kalendermaanden t/m november 1–23, daarna salarisperiodes). Zonder venster de
    laatste drie afgesloten eenheden, behalve drempel (deze eenheid, periodeVan) en tegenpartij (de laatste 12 maanden). */
