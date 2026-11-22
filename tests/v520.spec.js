@@ -9,16 +9,18 @@ const getal = async (page) => +(await page.getAttribute('[data-vraaggetal]', 'da
 
 test('a. weekdag: de som per dag van de week is die van de fixture, een eigen overboeking telt niet', async ({ page }) => {
   await S.boot(page);
-  /* jul–sep, maandag t/m zondag: ma 300+30+450+410+18, di 0, wo 200+150, do 50*3+100*2+100, vr 0, za 40+90+60+25+125+35+85+10, zo 20+100
-     (de 500 naar je spaarrekening op zondag 19 jul is intern en telt niet) */
-  const VERWACHT = [1208, 0, 350, 450, 0, 470, 120];
+  /* v520b: standaard alleen je potjes, zonder contant. jul–sep, maandag t/m zondag: ma 300+450+410+18 (Boodschappen; de kastelling van
+     30 is contant), di 0, wo 0 (Ikea 200 is eenmalig, Mediamarkt 150 heeft geen potje), do 0 (de opnames zijn contant), vr 0,
+     za 40+90+60+25+125+35+85+10 (Uit eten en Overig), zo 0 (Bol.com 20 op 23 aug: augustus heeft geen bewaard potje Overig, dus zonder
+     potje; Fietsenmaker 100 is eenmalig). De 500 naar je spaarrekening op zondag 19 jul is intern en telt niet. */
+  const VERWACHT = [1178, 0, 0, 0, 0, 470, 0];
   await S.stubVraag(page, Object.assign({}, L, { soort: 'weekdag' }));
   await S.vraag(page, 'Op welke dag geef ik het meest uit?');
   const per = await page.$$eval('[data-vraagdag]', (e) => e.map((x) => +x.dataset.bedrag));
   expect(per).toEqual(VERWACHT);
-  expect(await getal(page)).toBe(1208);
+  expect(await getal(page)).toBe(1178);
   const t = await page.locator('[data-vraagantwoord="weekdag"]').innerText();
-  expect(t).toContain('Maandag: €1.208,00 in juli–september, 46% van alles. Zaterdag volgt met €470,00.');
+  expect(t).toContain('Maandag: €1.178,00 in juli–september, vooral Boodschappen (€1.178,00). Zaterdag volgt met €470,00.');
   await expect(page.locator('[data-vraagstaaf]')).toHaveCount(7);
   expect(t).toContain('Zo gerekend'); expect(t).toContain('per dag van de week opgeteld');
   /* met een potje: alleen Uit eten (za 40+90+25+125+35+85 = 400, wo 150 jun valt buiten het venster) */
@@ -66,7 +68,7 @@ test('d. drempel: een betaling van precies het bedrag telt niet mee (onder is st
   /* onder 30: alle vier, samen 43, meer dan het kleinste potje (Overig 40) */
   await S.stubVraag(page, Object.assign({}, L, { soort: 'drempel', bedrag: 30 }));
   await S.vraag(page, 'onder 30?');
-  await expect(page.locator('[data-vraagantwoord="drempel"]')).toContainText('4 betalingen onder €30,00, samen €43,00, meer dan je potje Overig (€40,00).');
+  await expect(page.locator('[data-vraagantwoord="drempel"]')).toContainText('4 betalingen onder €30,00, samen €43,00. Vooral bij Jumbo en Kiosk.');   // v520b: geen vergelijking met een potje
 });
 
 test('e. eenmalig: alleen de boekingen die jij eenmalig noemde', async ({ page }) => {
@@ -124,10 +126,10 @@ test('j. de app loopt een opdracht zelf na: zoektermen ingekort, onbekende soort
   await S.boot(page);
   const r = await page.evaluate(() => {
     const L = { potje: null, venster: null, dag: null, bedrag: null, wat: null };
-    return { t: vraagOpdracht(Object.assign({}, L, { soort: 'tegenpartij', zoektermen: ['a', 'b'.repeat(60), 'c', 'd', 'e', 'f', 7] })),
+    return { t: vraagOpdracht(Object.assign({}, L, { soort: 'tegenpartij', zoektermen: ['aaa', 'b'.repeat(60), 'ccc', 'ddd', 'eee', 'fff', 7] })),   // v520b: termen van 3+ tekens
       x: vraagOpdracht({ soort: 'advies' }), d: vraagOpdracht(Object.assign({}, L, { soort: 'drempel' })), z: vraagOpdracht(Object.assign({}, L, { soort: 'tegenpartij', zoektermen: [] })),
       w: vraagOpdracht(Object.assign({}, L, { soort: 'weekdag', zoektermen: ['x'] })) }; });
-  expect(r.t.zoektermen).toEqual(['a', 'b'.repeat(40), 'c', 'd', 'e']);
+  expect(r.t.zoektermen).toEqual(['aaa', 'b'.repeat(40), 'ccc', 'ddd', 'eee']);
   expect(r.x).toEqual({ soort: 'onbekend' }); expect(r.d).toEqual({ soort: 'onbekend' }); expect(r.z).toEqual({ soort: 'onbekend' });
   expect(r.w.zoektermen).toBeUndefined();   // zoektermen alleen bij tegenpartij
   await expect(page.locator('body')).toBeVisible();

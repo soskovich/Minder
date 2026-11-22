@@ -89,8 +89,8 @@ async function vraag(o) { const w = await W(), s = stubLLM(o);
 test('i. de zes nieuwe soorten en zoektermen worden gevalideerd; >5 of >40 tekens ingekort; onbekende soort is onbekend', async () => {
   for (const soort of ['weekdag', 'eenmalig', 'naOverschrijding', 'contantRitme']) expect((await vraag(Object.assign({}, N, { soort, zoektermen: null }))).json, soort).toEqual(Object.assign({}, N, { soort }));
   expect((await vraag(Object.assign({}, N, { soort: 'weekdag', potje: 'uiteten', zoektermen: null }))).json.potje).toBe('uiteten');
-  const t = (await vraag(Object.assign({}, N, { soort: 'tegenpartij', zoektermen: ['  thuisbezorgd ', 'u'.repeat(60), 'a', 'b', 'c', 'd', 42, ''] }))).json;
-  expect(t.zoektermen).toEqual(['thuisbezorgd', 'u'.repeat(40), 'a', 'b', 'c']);
+  const t = (await vraag(Object.assign({}, N, { soort: 'tegenpartij', zoektermen: ['  thuisbezorgd ', 'u'.repeat(60), 'abc', 'bcd', 'cde', 'def', 42, ''] }))).json;
+  expect(t.zoektermen).toEqual(['thuisbezorgd', 'u'.repeat(40), 'abc', 'bcd', 'cde']);   // v520b: termen van 3+ tekens (een korter staat in v520b-worker)
   expect((await vraag(Object.assign({}, N, { soort: 'drempel', bedrag: 10, zoektermen: ['x'] }))).json).toEqual(Object.assign({}, N, { soort: 'drempel', bedrag: 10 }));   // zoektermen alleen bij tegenpartij
   for (const [naam, o] of [['tegenpartij zonder termen', Object.assign({}, N, { soort: 'tegenpartij', zoektermen: [] })], ['tegenpartij zonder lijst', Object.assign({}, N, { soort: 'tegenpartij', zoektermen: 'bezorging' })],
     ['drempel zonder bedrag', Object.assign({}, N, { soort: 'drempel', zoektermen: null })], ['onbekende soort', Object.assign({}, N, { soort: 'patroon' })], ['weekdag met vreemd potje', Object.assign({}, N, { soort: 'weekdag', potje: 'huur' })]])

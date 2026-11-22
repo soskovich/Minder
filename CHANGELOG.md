@@ -1790,3 +1790,16 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   en contantRitme (`isOpnameTx()`). Elk antwoord een zin met een vet getal, een kleine grafiek en "Zo gerekend". Wat van het toestel gaat is
   ongewijzigd. Geen bedrag op de schermen veranderd (test k tegen f1e0d7e). Specs `v520.spec.js`, `v520-worker.spec.js`; fixture
   `v520-stand.js`; `v520-voor.json` (generator `tests/wip/v520-voor-gen.spec.js`).
+
+- **v520b: Vraag, drie antwoorden kloppen beter** (`minder-v520b`, tak `werk/v520b`, gemeten op de telefoon op 22 nov). (A) TEGENPARTIJ:
+  `vraagTreft()` zoekt op WOORDGRENS (`vraagWoorden()`: kleine letters, woorden, punten weg; een term treft een of meer opeenvolgende woorden,
+  eventueel met een webachtervoegsel), dus "bol" vindt BOL.COM en BOLCOM en niet BOLT of "Febo Linnaeusstra" (die zat er door de spatieloze
+  substring in). Zoektermen korter dan 3 tekens vallen weg (`VRAAG_MIN_TERM`, app en Worker); de prompt vraagt de naam voluit en geen stam
+  korter dan 4 tekens, en "dit jaar" = 1 jan t/m vandaag. Een venster loopt niet voorbij vandaag, dus per maand is door de verstreken maanden
+  (11 op 22 nov) en de lijn stopt in november; gelijk per maand en per keer toont alleen per keer met de maanden met een boeking. (B) WEEKDAG:
+  standaard alleen de groep potjes van `uitgegevenStand()` (zonder vaste lasten, zonder contant); `metVast` (nieuw veld in het schema) alleen
+  als de vraag er uitdrukkelijk om vraagt; per dag het grootste potje en "vooral <potje> (€Y)" in de zin. (C) DREMPEL: de vergelijking met
+  het kleinste potje is weg; erbij de top 3 tegenpartijen op aantal en per potje het aantal. Geen bedrag op de schermen veranderd (test g
+  tegen ff9467c, `v520b-voor.json`, generator `tests/wip/v520b-voor-gen.spec.js`). Spec `v520b.spec.js` (7 tests, 10 van 10 sabotages
+  rood, waarvan een op de Worker); `v520` a/d/j en `v520-worker` i gemigreerd. DE WORKER MOET OPNIEUW GEDEPLOYD WORDEN (prompt, schema en
+  validatie); zonder deploy werkt de app nog, maar met de oude prompt en zonder `metVast`.

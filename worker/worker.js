@@ -464,9 +464,9 @@ async function runCron(env, nowMs) {
 const VRAAG_MODEL_STANDAARD = 'claude-opus-5-5';
 const VRAAG_MAX_TEKENS = 300, VRAAG_MAX_POTJES = 60, VRAAG_MAX_DAGEN = 397;   // 13 maanden
 const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'onbekend'];
-const VRAAG_MAX_TERMEN = 5, VRAAG_MAX_TERM = 40;   // v520: zoektermen voor tegenpartij (alleen die soort)
+const VRAAG_MAX_TERMEN = 5, VRAAG_MAX_TERM = 40, VRAAG_MIN_TERM = 3;   // v520: zoektermen voor tegenpartij (alleen die soort); v520b: korter dan 3 valt weg
 const VRAAG_VENSTERS = ['deze_week', 'deze_maand', 'deze_periode', 'vorige_periode'];
-const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen'];
+const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen', 'metVast'];   // v520b: metVast (alleen weekdag)
 function geldigeDag(s) { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [j, m, d] = s.split('-').map(Number); const x = new Date(Date.UTC(j, m - 1, d));
   return x.getUTCFullYear() === j && x.getUTCMonth() === m - 1 && x.getUTCDate() === d; }
@@ -491,17 +491,21 @@ const VRAAG_SCHEMA = { type: 'object', additionalProperties: false,
     bedrag: { anyOf: [{ type: 'number' }, { type: 'null' }] },
     wat: { anyOf: [{ type: 'string' }, { type: 'null' }] },
     zoektermen: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
+    metVast: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
   } };
 function vraagVerzoek(inv, model) {
   const sys = 'Je vertaalt een vraag over persoonlijke uitgaven naar een opdracht in JSON. Je rekent niets en beantwoordt de vraag niet. '
     + 'soort: "som" (hoeveel ging er naar een potje in een periode), "dag" (wat gaf ik uit op een dag), "waarom" (waarom zit een potje erboven), '
     + '"koop" (ik wil iets kopen; zet wat, bedrag en zo mogelijk potje), '
-    + '"weekdag" (op welke dag van de week geef ik het meest uit; potje mag, of null voor alles), '
-    + '"tegenpartij" (hoeveel ging er naar een soort winkel of dienst; zet zoektermen: hooguit 5 namen of woorden die in de naam van '
-    + 'de tegenpartij staan, bv. bezorging: ["thuisbezorgd","uber eats"]), "drempel" (betalingen onder een bedrag; zet bedrag), '
+    + '"weekdag" (op welke dag van de week geef ik het meest uit; potje mag, of null voor alles; metVast is true ALLEEN als de vraag '
+    + 'uitdrukkelijk vaste lasten of alles inclusief vaste lasten noemt, anders null), '
+    + '"tegenpartij" (hoeveel ging er naar een soort winkel of dienst; zet zoektermen: hooguit 5 namen van de tegenpartij, voluit zoals '
+    + 'de gebruiker ze noemt, bv. "bol.com" en niet "bol", bezorging: ["thuisbezorgd","uber eats"]; nooit een afgekorte stam korter dan '
+    + '4 tekens), "drempel" (betalingen onder een bedrag; zet bedrag), '
     + '"eenmalig" (wat was er eenmalig per maand), "naOverschrijding" (zit ik na een overschrijding weer boven met hetzelfde potje), '
     + '"contantRitme" (hoe vaak neem ik contant op), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
-    + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null. '
+    + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null; '
+    + '"dit jaar" is {van: 1 januari van dit jaar, tot: vandaag}, en tot ligt nooit na vandaag. metVast is null behalve bij weekdag. '
     + 'dag: YYYY-MM-DD, of null ("gisteren" en weekdagen reken je terug vanaf vandaag). Alles wat niet past is null. Twijfel je, dan "onbekend".';
   const user = 'Vandaag: ' + inv.vandaag + '\nPotjes (k: naam):\n' + inv.potjes.map((p) => p.k + ': ' + p.naam).join('\n') + '\n\nVraag: ' + inv.vraag;
   return { model, max_tokens: 1024, output_config: { effort: 'low', format: { type: 'json_schema', schema: VRAAG_SCHEMA } },
@@ -529,10 +533,11 @@ function vraagValideer(o, inv) {
   /* v520: zoektermen alleen voor tegenpartij: hooguit 5, elk ingekort tot 40 tekens, lege weg; zonder een term is het onbekend */
   if (uit.soort === 'tegenpartij') {
     if (!Array.isArray(o.zoektermen)) return ONB;
-    const termen = o.zoektermen.filter((z) => typeof z === 'string').map((z) => z.trim().slice(0, VRAAG_MAX_TERM)).filter(Boolean).slice(0, VRAAG_MAX_TERMEN);
+    const termen = o.zoektermen.filter((z) => typeof z === 'string').map((z) => z.trim().slice(0, VRAAG_MAX_TERM)).filter((z) => z.length >= VRAAG_MIN_TERM).slice(0, VRAAG_MAX_TERMEN);
     if (!termen.length) return ONB;
     uit.zoektermen = termen; }
   if (uit.soort === 'drempel' && !(uit.bedrag > 0)) return ONB;
+  if (uit.soort === 'weekdag' && o.metVast === true) uit.metVast = true;   // v520b
   return uit; }
 
 /* Named exports voor de tests (geen secrets; puur de rekenkern). */
