@@ -1803,3 +1803,6 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   tegen ff9467c, `v520b-voor.json`, generator `tests/wip/v520b-voor-gen.spec.js`). Spec `v520b.spec.js` (7 tests, 10 van 10 sabotages
   rood, waarvan een op de Worker); `v520` a/d/j en `v520-worker` i gemigreerd. DE WORKER MOET OPNIEUW GEDEPLOYD WORDEN (prompt, schema en
   validatie); zonder deploy werkt de app nog, maar met de oude prompt en zonder `metVast`.
+  PUNT 4 (zelfde ronde): de soort `rangTegenpartij` (`vraagRang()`): welke tegenpartijen het vaakst of het meest, maat aantal of bedrag,
+  top 1–10, liggende staafjes met accent op nummer 1, per regel aantal en bedrag en een tik op de boekingen; vaste lasten tellen mee,
+  eigen overboekingen niet. Schema `maat`/`top`, prompt met "afgelopen N maanden". Tests h en i (4 van 4 sabotages rood).

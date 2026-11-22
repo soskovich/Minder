@@ -47,7 +47,17 @@ function seed(extra) {
     maandGelezen: '2026-11-01', afsluitPopup: { dag: DAG }, wekGekozen: true, opnameVanaf: '',
   }, BACKEND, extra || {});
 }
-async function boot(page, extra) {
+/* v520b, punt 4 (rangTegenpartij): een tweede set die alleen boot(page, null, RANG) erbij legt. Okt–nov: Dirk 6 x 20 = 120,
+   Lidl 4 x 40 = 160, NS 4 x 15 = 60; een eigen overboeking "Naar spaarrekening" 10 x 100 (intern) telt nergens. Met de basisstand in
+   22 sep–22 nov (Albert Heijn 100 + 45, Jumbo 4+6+8, Restaurant Lona 60, ...): op aantal Dirk 6, dan Lidl en NS elk 4 (Lidl eerst op
+   naam), Jumbo 3; op bedrag de huur (Woonstichting Oost 1200 op 5 okt, vaste lasten tellen mee), Lidl 160, Albert Heijn 145. */
+const RANG = [
+  ...['2026-10-01', '2026-10-08', '2026-10-15', '2026-10-22', '2026-11-03', '2026-11-12'].map((d) => [d, -20, 'Dirk', 'boodschappen']),
+  ...['2026-10-04', '2026-10-18', '2026-11-01', '2026-11-15'].map((d) => [d, -40, 'Lidl', 'boodschappen']),
+  ...['2026-10-06', '2026-10-20', '2026-11-05', '2026-11-19'].map((d) => [d, -15, 'NS', 'vervoer']),
+  ...Array.from({ length: 10 }, (_, i) => ['2026-10-' + String(2 + i * 2).padStart(2, '0'), -100, 'Naar spaarrekening', 'intern']),
+];
+async function boot(page, extra, meer) {
   await page.route('**/sw.js', (r) => r.abort());
   await pinDatum(page, DAG);
   await page.addInitScript((d) => { if (!sessionStorage.getItem('v520bboot')) { sessionStorage.setItem('v520bboot', '1'); for (const k in d) localStorage.setItem(k, d[k]); } }, {
@@ -62,6 +72,6 @@ async function boot(page, extra) {
       categorize(t); TX.push(t); OVR[t.id] = cat;
     }
     TX.sort((a, b) => a.date.localeCompare(b.date)); save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {} window._gripCyc = null; render();
-  }, { TXS, MAIN });
+  }, { TXS: TXS.concat(meer || []), MAIN });
 }
-module.exports = { boot, seed, DAG, MAIN, TXS, BUD };
+module.exports = { boot, seed, DAG, MAIN, TXS, BUD, RANG };

@@ -137,6 +137,10 @@ genoemde versietag.)*
   (geen vaste lasten, nooit contant) en noemt per dag het grootste potje; `metVast` (schemaveld, alleen weekdag) neemt alles mee. DREMPEL
   vergelijkt niet met een potje en noemt de top 3 tegenpartijen op aantal en per potje het aantal. Spec `v520b.spec.js`, fixture
   `v520b-stand.js`, bedragen van ff9467c in `v520b-voor.json`. De Worker moet opnieuw gedeployd worden. Cache `minder-v520b`.
+  PUNT 4, RANGTEGENPARTIJ (`vraagRang()`): de tegenpartijen het vaakst (maat aantal, standaard) of het meest (maat bedrag), top 1–10
+  (standaard 5), op dezelfde uitgaven als tegenpartij (vraagUitgaven, txNaam; vaste lasten tellen mee en "Zo gerekend" zegt dat, eigen
+  overboekingen en spaarstortingen niet); gelijke stand op naam; een venster loopt niet voorbij vandaag, zonder venster de laatste 12
+  maanden. Schemavelden `maat` en `top` (alleen deze soort); de prompt kent "afgelopen N maanden" = vandaag min N maanden t/m vandaag.
 - **v520: DE WORKER GELIJK AAN LIVE, EN VRAAG DEEL 2 — ZES SOORTEN; GEEN ENKEL GETAL** (`v520`, gevraagd door de gebruiker, tak `werk/v520`
   vanaf f1e0d7e). DEEL 0: `handleFetch` zet `Psu-Ip-Address` (uit `CF-Connecting-IP`) en `Psu-User-Agent` op de app-routes (aspsps, auth,
   sessions, transactions, balances), NOOIT in `fetchTx` (de cron, de gebruiker is er niet bij); `wrangler.toml` draagt wat sinds 22 nov live staat

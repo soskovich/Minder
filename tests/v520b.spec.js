@@ -111,3 +111,46 @@ test('g. met vragen aan zijn alle bedragen op de schermen byte-gelijk aan ff9467
   for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'plan', 'vermKaart', 'vermogen', 'salv']) expect(nu[k], k).toEqual(VOOR[k]);
   expect(nu.gepland).toEqual(VOOR.gepland);
 });
+
+/* ===== punt 4: rangTegenpartij ===== */
+const TWEE_MND = { van: '2026-09-22', tot: '2026-11-22' };   // "afgelopen 2 maanden" op 22 nov
+const rang = (page) => page.$$eval('[data-vraagrang]', (e) => e.map((x) => [x.dataset.vraagrang, +x.dataset.n, +x.dataset.som]));
+test('h. rangTegenpartij: op aantal Dirk, dan Lidl en NS gelijk op naam; op bedrag de huur, Lidl, Albert Heijn', async ({ page }) => {
+  await S.boot(page, null, S.RANG);
+  await V.stubVraag(page, Object.assign({}, L, { soort: 'rangTegenpartij', venster: TWEE_MND, maat: 'aantal', top: 3 }));
+  await V.vraag(page, 'Waar betaal ik de afgelopen 2 maanden het vaakst?');
+  /* 22 sep–22 nov: Dirk 6x 120, Lidl 4x 160, NS 4x 60; uit de basisstand Albert Heijn 2x 145, Jumbo 3x 18, ... */
+  expect(await rang(page)).toEqual([['Dirk', 6, 120], ['Lidl', 4, 160], ['Ns', 4, 60]]);   // txNaam(): de schone naam, zoals Recent hem toont
+  expect(await getal(page)).toBe(6);
+  const t = await antw(page, 'rangTegenpartij');
+  expect(t).toContain('Dirk: 6 keer in 22 sep – 22 nov, samen €120,00. Daarna Lidl (4×) en Ns (4×).');
+  expect(t).toContain('op aantal betalingen'); expect(t).toContain('alle potjes'); expect(t).toContain('zonder eigen overboekingen en spaarstortingen');
+  expect(t).toContain('vaste lasten tellen mee');
+  await expect(page.locator('[data-vraaggrafiek="rang"]')).toHaveCount(1);
+  await page.locator('[data-vraagrang="Lidl"]').click();
+  await expect(page.locator('[data-vraagrangboek="1"] [data-vraagregel]')).toHaveCount(4);
+  await V.stubVraag(page, Object.assign({}, L, { soort: 'rangTegenpartij', venster: TWEE_MND, maat: 'bedrag', top: 3 }));
+  await V.vraag(page, 'Waar geef ik het meest uit?');
+  /* vaste lasten tellen mee: de huur van 5 okt (1200) staat op bedrag bovenaan, en dan Lidl 160 en Albert Heijn 145 (Dirk 120 valt erbuiten) */
+  expect((await rang(page)).map((x) => x[0])).toEqual(['Woonstichting Oost', 'Lidl', 'Albert Heijn']);
+  expect(await getal(page)).toBe(1200);
+  expect(await antw(page, 'rangTegenpartij')).toContain('Woonstichting Oost: €1.200,00 in 22 sep – 22 nov, 1 keer. Daarna Lidl (€160,00) en Albert Heijn (€145,00).');
+  /* de app loopt maat en top na: onbekende maat is aantal, top buiten 1–10 is 5 */
+  const o = await page.evaluate(() => [vraagOpdracht({ soort: 'rangTegenpartij', maat: 'x', top: 40 }), vraagOpdracht({ soort: 'rangTegenpartij', maat: 'bedrag', top: 2 })]);
+  expect([o[0].maat, o[0].top, o[1].maat, o[1].top]).toEqual(['aantal', 5, 'bedrag', 2]);
+});
+
+test('i. rangTegenpartij: een eigen overboeking (10x) staat niet in de lijst', async ({ page }) => {
+  await S.boot(page, null, S.RANG);
+  await V.stubVraag(page, Object.assign({}, L, { soort: 'rangTegenpartij', venster: TWEE_MND, maat: 'aantal', top: 10 }));
+  await V.vraag(page, 'Waar betaal ik het vaakst?');
+  const r = await rang(page);
+  expect(r[0]).toEqual(['Dirk', 6, 120]);
+  expect(r.map((x) => x[0])).not.toContain('Naar spaarrekening');
+  /* de Worker kent de soort en loopt maat en top na */
+  const w = await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'worker.js')).href);
+  const v = w.vraagValideer({ soort: 'rangTegenpartij', potje: null, venster: null, dag: null, bedrag: null, wat: null, zoektermen: null, metVast: null, maat: 'bedrag', top: 12 }, { potjes: [] });
+  expect([v.soort, v.maat, v.top]).toEqual(['rangTegenpartij', 'bedrag', 5]);
+  expect(w.VRAAG_SCHEMA.properties.soort.enum).toContain('rangTegenpartij');
+  expect(w.vraagVerzoek({ vraag: 'x', potjes: [], vandaag: S.DAG }, 'm').system).toContain('"afgelopen N maanden" is {van: vandaag min N maanden, tot: vandaag}');
+});

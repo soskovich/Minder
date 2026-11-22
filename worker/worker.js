@@ -463,10 +463,10 @@ async function runCron(env, nowMs) {
 /* ===== v519: VRAAG — invoer, het verzoek aan het model en de validatie van de opdracht ===== */
 const VRAAG_MODEL_STANDAARD = 'claude-opus-5-5';
 const VRAAG_MAX_TEKENS = 300, VRAAG_MAX_POTJES = 60, VRAAG_MAX_DAGEN = 397;   // 13 maanden
-const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'onbekend'];
+const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'rangTegenpartij', 'onbekend'];
 const VRAAG_MAX_TERMEN = 5, VRAAG_MAX_TERM = 40, VRAAG_MIN_TERM = 3;   // v520: zoektermen voor tegenpartij (alleen die soort); v520b: korter dan 3 valt weg
 const VRAAG_VENSTERS = ['deze_week', 'deze_maand', 'deze_periode', 'vorige_periode'];
-const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen', 'metVast'];   // v520b: metVast (alleen weekdag)
+const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen', 'metVast', 'maat', 'top'];   // v520b: metVast (alleen weekdag), maat en top (alleen rangTegenpartij)
 function geldigeDag(s) { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [j, m, d] = s.split('-').map(Number); const x = new Date(Date.UTC(j, m - 1, d));
   return x.getUTCFullYear() === j && x.getUTCMonth() === m - 1 && x.getUTCDate() === d; }
@@ -492,6 +492,8 @@ const VRAAG_SCHEMA = { type: 'object', additionalProperties: false,
     wat: { anyOf: [{ type: 'string' }, { type: 'null' }] },
     zoektermen: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
     metVast: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+    maat: { anyOf: [{ type: 'string', enum: ['aantal', 'bedrag'] }, { type: 'null' }] },
+    top: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
   } };
 function vraagVerzoek(inv, model) {
   const sys = 'Je vertaalt een vraag over persoonlijke uitgaven naar een opdracht in JSON. Je rekent niets en beantwoordt de vraag niet. '
@@ -503,9 +505,10 @@ function vraagVerzoek(inv, model) {
     + 'de gebruiker ze noemt, bv. "bol.com" en niet "bol", bezorging: ["thuisbezorgd","uber eats"]; nooit een afgekorte stam korter dan '
     + '4 tekens), "drempel" (betalingen onder een bedrag; zet bedrag), '
     + '"eenmalig" (wat was er eenmalig per maand), "naOverschrijding" (zit ik na een overschrijding weer boven met hetzelfde potje), '
-    + '"contantRitme" (hoe vaak neem ik contant op), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
+    + '"contantRitme" (hoe vaak neem ik contant op), "rangTegenpartij" (bij welke winkels of diensten het vaakst of het meest; maat "aantal" bij '
+    + 'vaakst of hoe vaak, "bedrag" bij meest uitgegeven; top 1 t/m 10, standaard 5; potje mag), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
     + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null; '
-    + '"dit jaar" is {van: 1 januari van dit jaar, tot: vandaag}, en tot ligt nooit na vandaag. metVast is null behalve bij weekdag. '
+    + '"dit jaar" is {van: 1 januari van dit jaar, tot: vandaag}, en tot ligt nooit na vandaag. metVast is null behalve bij weekdag; maat en top zijn null behalve bij rangTegenpartij. "afgelopen N maanden" is {van: vandaag min N maanden, tot: vandaag}. '
     + 'dag: YYYY-MM-DD, of null ("gisteren" en weekdagen reken je terug vanaf vandaag). Alles wat niet past is null. Twijfel je, dan "onbekend".';
   const user = 'Vandaag: ' + inv.vandaag + '\nPotjes (k: naam):\n' + inv.potjes.map((p) => p.k + ': ' + p.naam).join('\n') + '\n\nVraag: ' + inv.vraag;
   return { model, max_tokens: 1024, output_config: { effort: 'low', format: { type: 'json_schema', schema: VRAAG_SCHEMA } },
@@ -538,6 +541,7 @@ function vraagValideer(o, inv) {
     uit.zoektermen = termen; }
   if (uit.soort === 'drempel' && !(uit.bedrag > 0)) return ONB;
   if (uit.soort === 'weekdag' && o.metVast === true) uit.metVast = true;   // v520b
+  if (uit.soort === 'rangTegenpartij') { uit.maat = o.maat === 'bedrag' ? 'bedrag' : 'aantal'; const n = Math.round(Number(o.top)); uit.top = (Number.isFinite(n) && n >= 1 && n <= 10) ? n : 5; }
   return uit; }
 
 /* Named exports voor de tests (geen secrets; puur de rekenkern). */
