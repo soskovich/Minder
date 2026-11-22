@@ -7,23 +7,25 @@ compatibility_date = "2025-01-01"
 ALLOWED_ORIGIN = "https://soskovich.github.io"
 EB_BASE = "https://api.enablebanking.com"
 # v517: de publieke Web Push-sleutel (base64url van het 65-byte punt). De privé gaat als secret (VAPID_PRIVATE).
-VAPID_PUBLIC = "VUL_IN_NA_web-push_generate-vapid-keys"
+VAPID_PUBLIC = "BDzhkxNKmxcYnMrpOuPVEQZVFrdDLJ8mZQ_e0GllNC8p_cilpYJqlRFRCK4rTQVOZD1rz5COrnKW0mgl8BiEGqw"
 # v517b: geen mailadres: de repo is openbaar. Een https-URL is volgens RFC 8292 net zo geldig.
 VAPID_SUBJECT = "https://soskovich.github.io/Minder"
-# v519: het model voor /vraag en /coach. De key gaat als secret (LLM_API_KEY).
-LLM_MODEL = "claude-opus-5-5"
+# v519: het model voor /vraag en /coach (v520: claude-haiku-5-5, zoals live sinds 22 nov). De key gaat als secret (LLM_API_KEY).
+LLM_MODEL = "claude-haiku-5-5"
 
 # v517: KV voor het push-abonnement, de sessie/rekening-ID's, de gehashte geziene boeking-ID's en de laatste ophaalronde.
 # Maak hem aan met `npx wrangler kv namespace create MINDER_KV` en plak de id hieronder (zie README).
 [[kv_namespaces]]
 binding = "MINDER_KV"
-id = "VUL_IN_NA_wrangler_kv_namespace_create"
+id = "f0732ce091364259bca23ab5ff9dd443"
 
 # v517: 3x per dag ophalen rond 12:00, 17:00 en 20:30 Europe/Amsterdam. Cron is UTC, dus beide DST-offsets staan erin
 # (winter UTC+1: 11/16/19:30, zomer UTC+2: 10/15/18:30). De worker rekent de Amsterdamse tijd uit en draait elk slot
 # hooguit een keer per dag, dus per rekening hooguit 3 ophaalacties — binnen de PSD2-grens van 4 per dag.
+# v520: twee expressies met meerdere uren in plaats van zes losse: Workers Free staat 5 cron-triggers per ACCOUNT toe.
+# Ze vuren op dezelfde zes momenten; amsterdamSlot() en de slot-grendel houden het op hooguit 3 rondes per dag.
 [triggers]
-crons = ["0 10 * * *", "0 11 * * *", "0 15 * * *", "0 16 * * *", "30 18 * * *", "30 19 * * *"]
+crons = ["0 10,11,15,16 * * *", "30 18,19 * * *"]
 
 # Secrets NIET hier zetten — gebruik `wrangler secret put` (zie README):
 #   EB_APP_ID, EB_PRIVATE_KEY, APP_TOKEN, VAPID_PRIVATE, LLM_API_KEY (v519, voor /vraag en /coach)

@@ -1780,3 +1780,13 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
 - **v518: drie weergavepunten** (`minder-v518`, tak `werk/v518`): geen getal verandert. (1) De kaart Spaarquote is weg van Vermogen; de berekening en `maandKpiBlok()` blijven. (2) Gepland in de salarisverdeling staat op datum, bij gelijke datum op naam. (3) "gaat niet via deze rekening" staat een keer per rekening, met een sheet die de potjes van dat blok toont (`salGeenViaSheet`). Spec `v518.spec.js`.
 
 - **v519: Vraag, deel 1** (tak `werk/v519`): een knop "Vraag" op Grip (alleen met Instellingen › Vragen aan Minder aan, online en een backend), de koopcheck blijft bovenaan het vraagveld, en drie soorten vragen (som, dag, waarom) plus koop. De Worker (`POST /vraag`) vertaalt de vraag alleen naar een opdracht en valideert die; de app rekent het antwoord uit met de functies van de schermen. Van het toestel gaat alleen de vraag, de potjesnamen met sleutels en de datum. Geen enkel bedrag op de schermen veranderd (test k tegen dd83bac). `LLM_MODEL` staat in wrangler.toml (`claude-opus-5-5`); `/coach` stuurt geen `temperature` meer.
+
+- **v520: de Worker gelijk aan live, en Vraag, deel 2** (`minder-v520`, tak `werk/v520`). DEEL 0, geen gedrag erbij: de Psu-headers
+  (`Psu-Ip-Address` uit `CF-Connecting-IP`, `Psu-User-Agent`) op de app-routes van `handleFetch` (niet in `fetchTx` van de cron), wat sinds
+  26 okt al live stond; `wrangler.toml` met de VAPID-sleutel, de KV-id, `LLM_MODEL = "claude-haiku-5-5"` en twee cron-expressies
+  (`"0 10,11,15,16 * * *"`, `"30 18,19 * * *"`) want Workers Free staat 5 cron-triggers per account toe; README met `npx.cmd` en die grens.
+  DEEL 2: zes soorten erbij in `/vraag` en in de app (`vraagUitvoer520()`): weekdag, tegenpartij (met `zoektermen`, ≤5 × ≤40 tekens, alleen
+  daar), drempel (strikt onder), eenmalig (`eenmaligLabel()`), naOverschrijding (alleen maanden met een bewaard potjebedrag, `maandPotjes()`)
+  en contantRitme (`isOpnameTx()`). Elk antwoord een zin met een vet getal, een kleine grafiek en "Zo gerekend". Wat van het toestel gaat is
+  ongewijzigd. Geen bedrag op de schermen veranderd (test k tegen f1e0d7e). Specs `v520.spec.js`, `v520-worker.spec.js`; fixture
+  `v520-stand.js`; `v520-voor.json` (generator `tests/wip/v520-voor-gen.spec.js`).

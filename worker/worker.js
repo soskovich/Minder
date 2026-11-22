@@ -146,6 +146,13 @@ async function handleFetch(request, env) {
   try {
     const jwt = await makeJWT(env);
     const ebHeaders = { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' };
+    /* v520 (live sinds 26 okt, nu ook in de repo): de app-routes sturen het IP en de user-agent van de gebruiker mee. Dan is de
+       ophaalactie "met de gebruiker erbij" en telt hij niet tegen de PSD2-grens van 4 onbeheerde per dag. NIET in fetchTx (de cron):
+       daar is de gebruiker er niet bij, en een IP doorgeven zou liegen. */
+    const psuIp = request.headers.get('CF-Connecting-IP');
+    const psuUa = request.headers.get('User-Agent');
+    if (psuIp) ebHeaders['Psu-Ip-Address'] = psuIp;
+    if (psuUa) ebHeaders['Psu-User-Agent'] = psuUa;
 
     // 1) lijst van banken (ASPSP's) voor een land
     if (request.method === 'GET' && path.endsWith('/aspsps')) {
@@ -456,9 +463,10 @@ async function runCron(env, nowMs) {
 /* ===== v519: VRAAG — invoer, het verzoek aan het model en de validatie van de opdracht ===== */
 const VRAAG_MODEL_STANDAARD = 'claude-opus-5-5';
 const VRAAG_MAX_TEKENS = 300, VRAAG_MAX_POTJES = 60, VRAAG_MAX_DAGEN = 397;   // 13 maanden
-const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'onbekend'];
+const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'onbekend'];
+const VRAAG_MAX_TERMEN = 5, VRAAG_MAX_TERM = 40;   // v520: zoektermen voor tegenpartij (alleen die soort)
 const VRAAG_VENSTERS = ['deze_week', 'deze_maand', 'deze_periode', 'vorige_periode'];
-const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat'];
+const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen'];
 function geldigeDag(s) { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const [j, m, d] = s.split('-').map(Number); const x = new Date(Date.UTC(j, m - 1, d));
   return x.getUTCFullYear() === j && x.getUTCMonth() === m - 1 && x.getUTCDate() === d; }
@@ -482,11 +490,17 @@ const VRAAG_SCHEMA = { type: 'object', additionalProperties: false,
     dag: { anyOf: [{ type: 'string', format: 'date' }, { type: 'null' }] },
     bedrag: { anyOf: [{ type: 'number' }, { type: 'null' }] },
     wat: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    zoektermen: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
   } };
 function vraagVerzoek(inv, model) {
   const sys = 'Je vertaalt een vraag over persoonlijke uitgaven naar een opdracht in JSON. Je rekent niets en beantwoordt de vraag niet. '
     + 'soort: "som" (hoeveel ging er naar een potje in een periode), "dag" (wat gaf ik uit op een dag), "waarom" (waarom zit een potje erboven), '
-    + '"koop" (ik wil iets kopen; zet wat, bedrag en zo mogelijk potje), anders "onbekend". '
+    + '"koop" (ik wil iets kopen; zet wat, bedrag en zo mogelijk potje), '
+    + '"weekdag" (op welke dag van de week geef ik het meest uit; potje mag, of null voor alles), '
+    + '"tegenpartij" (hoeveel ging er naar een soort winkel of dienst; zet zoektermen: hooguit 5 namen of woorden die in de naam van '
+    + 'de tegenpartij staan, bv. bezorging: ["thuisbezorgd","uber eats"]), "drempel" (betalingen onder een bedrag; zet bedrag), '
+    + '"eenmalig" (wat was er eenmalig per maand), "naOverschrijding" (zit ik na een overschrijding weer boven met hetzelfde potje), '
+    + '"contantRitme" (hoe vaak neem ik contant op), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
     + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null. '
     + 'dag: YYYY-MM-DD, of null ("gisteren" en weekdagen reken je terug vanaf vandaag). Alles wat niet past is null. Twijfel je, dan "onbekend".';
   const user = 'Vandaag: ' + inv.vandaag + '\nPotjes (k: naam):\n' + inv.potjes.map((p) => p.k + ': ' + p.naam).join('\n') + '\n\nVraag: ' + inv.vraag;
@@ -512,6 +526,13 @@ function vraagValideer(o, inv) {
   if (uit.soort === 'som' && (!uit.potje || !uit.venster)) return ONB;
   if (uit.soort === 'dag' && !uit.dag) return ONB;
   if (uit.soort === 'waarom' && !uit.potje) return ONB;
+  /* v520: zoektermen alleen voor tegenpartij: hooguit 5, elk ingekort tot 40 tekens, lege weg; zonder een term is het onbekend */
+  if (uit.soort === 'tegenpartij') {
+    if (!Array.isArray(o.zoektermen)) return ONB;
+    const termen = o.zoektermen.filter((z) => typeof z === 'string').map((z) => z.trim().slice(0, VRAAG_MAX_TERM)).filter(Boolean).slice(0, VRAAG_MAX_TERMEN);
+    if (!termen.length) return ONB;
+    uit.zoektermen = termen; }
+  if (uit.soort === 'drempel' && !(uit.bedrag > 0)) return ONB;
   return uit; }
 
 /* Named exports voor de tests (geen secrets; puur de rekenkern). */

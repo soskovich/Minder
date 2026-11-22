@@ -78,6 +78,19 @@ In Minder → **Instellingen → 🔗 Live bankkoppeling (PSD2)**:
 
 ---
 
+## v520 — deployen op Windows (PowerShell)
+
+PowerShell blokkeert `npx.ps1` met de standaard execution policy. Gebruik daarom overal **`npx.cmd`** in plaats van `npx`:
+
+```powershell
+cd worker
+npx.cmd wrangler deploy
+npx.cmd wrangler secret put LLM_API_KEY
+```
+
+Hetzelfde geldt voor de andere commando's in dit bestand (`npx.cmd wrangler kv namespace create MINDER_KV`, `npx.cmd web-push
+generate-vapid-keys`, `npx.cmd wrangler deployments list`). Let op de grens van **5 cron-triggers per account** (Workers Free).
+
 ## Wat de Worker doet (endpoints)
 
 | Methode | Pad | Doel |
@@ -123,7 +136,7 @@ Eenmalige extra opzet (naast de stappen hierboven), op Windows in `worker/`:
 ### 1. KV-namespace aanmaken
 
 ```powershell
-npx wrangler kv namespace create MINDER_KV
+npx.cmd wrangler kv namespace create MINDER_KV
 ```
 
 Je krijgt een regel met een `id`. Plak die id in `wrangler.toml` onder `[[kv_namespaces]]`:
@@ -139,7 +152,7 @@ id = "hierkomtdeid..."
 Dit doe je één keer, los van de Worker (geen dependency in de Worker zelf):
 
 ```powershell
-npx web-push generate-vapid-keys
+npx.cmd web-push generate-vapid-keys
 ```
 
 Je krijgt een **Public Key** en een **Private Key** (base64url).
@@ -151,19 +164,21 @@ Je krijgt een **Public Key** en een **Private Key** (base64url).
 ### 3. De privésleutel als secret
 
 ```powershell
-npx wrangler secret put VAPID_PRIVATE
+npx.cmd wrangler secret put VAPID_PRIVATE
 # plak de Private Key uit stap 2
 ```
 
 ### 4. Controleer `wrangler.toml`
 
 - `ALLOWED_ORIGIN` staat op je app-origin (bv. `https://JOUWNAAM.github.io`), **niet** op `*`.
-- `[triggers] crons` staat erin (6 regels: beide DST-offsets; de Worker rekent de Amsterdamse tijd uit).
+- `[triggers] crons` staat erin (v520: 2 expressies, `"0 10,11,15,16 * * *"` en `"30 18,19 * * *"`, samen beide DST-offsets; de
+  Worker rekent de Amsterdamse tijd uit). Workers Free staat **hooguit 5 cron-triggers per account** toe: zes losse regels
+  worden geweigerd bij de deploy.
 
 ### 5. Deployen
 
 ```powershell
-npx wrangler deploy
+npx.cmd wrangler deploy
 ```
 
 ### 6. In de app aanzetten
@@ -198,8 +213,8 @@ status; de app ziet dat via `/push/status` en vraagt je opnieuw te koppelen.
 ### Live code vergelijken met wat er draait
 
 ```powershell
-npx wrangler deployments list
-npx wrangler versions view <versie-id>
+npx.cmd wrangler deployments list
+npx.cmd wrangler versions view <versie-id>
 ```
 
 Of in het dashboard: **Workers & Pages → minder-psd2 → Edit code**.
@@ -208,11 +223,15 @@ Of in het dashboard: **Workers & Pages → minder-psd2 → Edit code**.
 
 Het model vertaalt alleen een vraag naar een opdracht (JSON); de app rekent het antwoord zelf uit. De Worker slaat niets op.
 
-1. Zet de API-sleutel als secret: `npx wrangler secret put LLM_API_KEY`.
-2. Controleer in `wrangler.toml` de var `LLM_MODEL` (standaard `claude-opus-5-5`; `/coach` leest hem ook).
-3. Deploy: `npx wrangler deploy`.
+1. Zet de API-sleutel als secret: `npx.cmd wrangler secret put LLM_API_KEY`.
+2. Controleer in `wrangler.toml` de var `LLM_MODEL` (v520: `claude-haiku-5-5`; `/coach` leest hem ook).
+3. Deploy: `npx.cmd wrangler deploy` (vanuit `worker\`).
 4. In de app: Instellingen › Vragen aan Minder aanzetten. De knop op Grip heet dan "Vraag" zolang je online bent.
 
 Zonder `LLM_API_KEY` geeft `/vraag` een 503 ("vragen staat niet aan"); de app toont dan de vaste zin en de koopcheck werkt gewoon.
 Wat er binnenkomt: `{vraag (≤300 tekens), potjes:[{k,naam}] (≤60), vandaag}`. Wat eruit gaat: `{soort, potje, venster, dag, bedrag, wat}`,
 of `{soort:"onbekend"}` als de opdracht niet door de validatie komt.
+
+**v520:** zes soorten erbij: `weekdag`, `tegenpartij`, `drempel`, `eenmalig`, `naOverschrijding`, `contantRitme`. Bij `tegenpartij` komt
+er `zoektermen` mee (hooguit 5, elk ingekort tot 40 tekens; zonder term is het `onbekend`), bij `drempel` is `bedrag` verplicht. Wat er
+binnenkomt is ongewijzigd: de zoektermen komen van het model en de app zoekt ze op het toestel.

@@ -22508,8 +22508,9 @@ async function vraagStuur(){
 /* de app loopt de opdracht zelf nog eens na (de Worker doet het ook): alleen de bekende velden, een potje uit de meegestuurde lijst,
    een geldige datum. Klopt er iets niet, dan is het onbekend. */
 function vraagDagGeldig(d){ if(typeof d!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false; const [j,m,x]=d.split('-').map(Number), D=new Date(j,m-1,x); return D.getFullYear()===j && D.getMonth()===m-1 && D.getDate()===x; }
+const VRAAG_SOORTEN_APP=['som','dag','waarom','koop','weekdag','tegenpartij','drempel','eenmalig','naOverschrijding','contantRitme'];   // v520: zes erbij
 function vraagOpdracht(o, potjes){ const ONB={soort:'onbekend'};
-  if(!o || typeof o!=='object' || !['som','dag','waarom','koop'].includes(o.soort)) return ONB;
+  if(!o || typeof o!=='object' || !VRAAG_SOORTEN_APP.includes(o.soort)) return ONB;
   const ks=new Set((potjes||vraagPotjes()).map(p=>p.k)), uit={soort:o.soort, potje:null, venster:null, dag:null, bedrag:null, wat:null};
   if(o.potje!=null){ if(!ks.has(o.potje)) return ONB; uit.potje=o.potje; }
   if(o.venster!=null){ if(typeof o.venster==='string'){ if(!['deze_week','deze_maand','deze_periode','vorige_periode'].includes(o.venster)) return ONB; uit.venster=o.venster; }
@@ -22521,6 +22522,10 @@ function vraagOpdracht(o, potjes){ const ONB={soort:'onbekend'};
   if(uit.soort==='som' && (!uit.potje || !uit.venster)) return ONB;
   if(uit.soort==='dag' && !uit.dag) return ONB;
   if(uit.soort==='waarom' && !uit.potje) return ONB;
+  /* v520: zoektermen alleen voor tegenpartij (hooguit 5, elk hooguit 40 tekens); drempel vraagt een bedrag */
+  if(uit.soort==='tegenpartij'){ if(!Array.isArray(o.zoektermen)) return ONB;
+    const z=o.zoektermen.filter(x=>typeof x==='string').map(x=>x.trim().slice(0,40)).filter(Boolean).slice(0,5); if(!z.length) return ONB; uit.zoektermen=z; }
+  if(uit.soort==='drempel' && !(uit.bedrag>0)) return ONB;
   return uit; }
 /* HET VENSTER, met de vensters van de app: deze week is die van de tegel Deze week (weekTegelBron), deze maand en deze periode zijn
    de eenheid waarin vandaag valt (periodeVan: november 1–23 als korte maand, daarna de salarisperiode), vorige periode de eenheid
@@ -22556,6 +22561,131 @@ function vraagDag(dag){ const U=uitgegevenStand({start:dag, eind:dag}), kasF=!!(
 function vraagWaarom(k){ let C=null; try{ C=gripCyc(); }catch(_){}
   const s=C && C.OV && C.OV.A ? (C.sym||[]).find(x=>x.k===k && C.OV.A[x.id]) : null; if(!s) return null;
   const X=C.OV.A[s.id]; if(!(X.oorzaken||[]).length && !(X.bevestigd||[]).length) return null; return {s, X}; }
+/* ===== v520: VRAAG, DEEL 2 (zes soorten erbij: weekdag, tegenpartij, drempel, eenmalig, naOverschrijding, contantRitme) =====
+   Dezelfde vorm als deel 1: de AI vertaalt alleen, Minder rekent hier en tekent een zin met EEN vet getal, een kleine grafiek en
+   "Zo gerekend". Alleen feiten, geen advies, geen knop voor een afspraak. Er gaat niets extra van het toestel: de zoektermen van
+   tegenpartij komen VAN het model terug en worden hier lokaal gezocht (vraagBody() is ongewijzigd).
+   DE BRONNEN, een per soort (niets nieuw berekend):
+   - weekdag, tegenpartij en drempel lezen vraagUitgaven(): de boekingen van uitgegevenStand() over het venster (isUitgave, catOf,
+     geen eigen overboekingen, geen spaarstortingen), met per boeking vraagBedragTx(), precies de regels van de dag-vraag;
+   - tegenpartij zoekt op de schone naam (txNaam(), cleanMerch(): de naam die Recent en de boekingssheet tonen), nooit in de ruwe desc;
+   - eenmalig leest eenmaligLabel() (het label door jou, v453), per eenheid;
+   - naOverschrijding leest catSpendMap(ym) tegen maandPotjes(ym), en ALLEEN maanden met een bewaard potjebedrag (SET.budgetHist, v309);
+   - contantRitme leest isOpnameTx() (GEA, BETAALPAS / GELDMAAT, v258/v420): een kastelling is geen opname.
+   DE EENHEDEN zijn die van de app: historiePerioden() (kalendermaanden t/m november 1–23, daarna salarisperiodes). Zonder venster de
+   laatste drie afgesloten eenheden, behalve drempel (deze eenheid, periodeVan) en tegenpartij (de laatste 12 maanden). */
+const VRAAG_DAGEN=['maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag','zondag'];
+const VRAAG_NIET_GEVONDEN='Geen boekingen gevonden voor';
+const r2v=x=>Math.round((+x||0)*100)/100;
+function vraagAfgesloten(n){ const vd=vandaagYMD(); const L=historiePerioden(vd).filter(P=>P && P.soort!=='scheiding' && P.eind<vd); return L.slice(-n); }
+function vraagEenheden(o, n){ if(o && o.venster){ const V=vraagVenster(o.venster); if(!V) return null;
+    const L=historiePerioden(V.tot).filter(P=>P && P.soort!=='scheiding' && P.eind>=V.van && P.start<=V.tot).map(P=>Object.assign({}, P, {start:P.start<V.van?V.van:P.start, eind:P.eind>V.tot?V.tot:P.eind}));
+    return L.length?L:null; }
+  const L=vraagAfgesloten(n||3); return L.length?L:null; }
+function vraagEenheidNaam(P){ return P.soort==='periode'?periodeLabel(P.start, P.eind):(ymFull(P.ym)+(P.korteMaand?' (1–'+(+P.eind.slice(8,10))+')':'')); }
+function vraagEenhedenLabel(E){ const a=vraagEenheidNaam(E[0]), b=vraagEenheidNaam(E[E.length-1]); return E.length>1?`${a}–${b}`:a; }
+/* de uitgaven over een venster, per boeking, met dezelfde regels als de dag-vraag (vraagDag) */
+function vraagUitgaven(van, tot){ const U=uitgegevenStand({start:van, eind:tot}), kasF=!!(U.kas && U.per[CONTANT_CAT]!=null), R=[];
+  for(const g of ['vast','potjes','zonder','buiten','kasNieuw']) for(const t of (U.tx[g]||[])){ if(kasF && catOf(t)===CONTANT_CAT) continue; R.push({t, k:catOf(t), bedrag:r2v(vraagBedragTx(t))}); }
+  R.sort((a,b)=>a.t.date.localeCompare(b.t.date)); return {R, kas:kasF?(U.per[CONTANT_CAT]||0):0}; }
+/* ---- de kleine grafieken (tokens, geen kleur buiten --teal/--bar) ---- */
+function vraagStaafjes(L, accent){ const max=Math.max(...L.map(x=>Math.abs(x.v)), 0.01);
+  return `<div data-vraaggrafiek="staaf" style="display:flex;gap:4px;align-items:flex-end;height:64px;margin-top:10px">${L.map((x,i)=>`<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px"><div data-vraagstaaf="${x.v}" style="width:100%;height:${Math.max(Math.round(Math.abs(x.v)/max*48),x.v?2:0)}px;background:${i===accent?'var(--teal)':'var(--bar)'};border-radius:3px 3px 0 0"></div><div class="small muted" style="font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(x.l)}</div></div>`).join('')}</div>`; }
+function vraagParen(L){ const max=Math.max(...L.flatMap(x=>[x.a,x.b]), 0.01), h=v=>Math.max(Math.round(v/max*44),v?2:0);
+  return `<div data-vraaggrafiek="paren" style="display:flex;gap:10px;align-items:flex-end;height:64px;margin-top:10px">${L.map(x=>`<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="display:flex;gap:2px;align-items:flex-end;width:100%;height:46px"><div style="flex:1;height:${h(x.a)}px;background:var(--bar);border-radius:2px 2px 0 0"></div><div style="flex:1;height:${h(x.b)}px;background:${x.b>0?'var(--teal)':'var(--bar)'};border-radius:2px 2px 0 0"></div></div><div class="small muted" style="font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(x.l)}</div></div>`).join('')}</div>`; }
+function vraagLijn(L){ const W=300, H=56, max=Math.max(...L.map(x=>x.v), 0.01), n=Math.max(L.length-1,1);
+  const pts=L.map((x,i)=>`${Math.round(i/n*W)},${Math.round(H-4-x.v/max*(H-8))}`).join(' ');
+  return `<div data-vraaggrafiek="lijn" style="margin-top:10px"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block"><polyline points="${pts}" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="row small muted" style="justify-content:space-between;font-size:var(--fs-xs)"><span>${esc(L[0].l)}</span><span>${esc(L[L.length-1].l)}</span></div></div>`; }
+function vraagPuntjes(L, B){ return `<div data-vraaggrafiek="puntjes" style="position:relative;height:28px;margin-top:12px;border-bottom:1px solid var(--line)">${L.map(v=>`<span data-vraagpunt="${v}" style="position:absolute;bottom:4px;left:calc(${Math.min(Math.max(v/B,0),1)*100}% - 4px);width:8px;height:8px;border-radius:50%;background:var(--teal);opacity:.7"></span>`).join('')}</div><div class="row small muted" style="justify-content:space-between;font-size:var(--fs-xs)"><span>${euro(0)}</span><span>${euro(B)}</span></div>`; }
+function vraagTijdlijn(L, van, tot){ const n=Math.max(salDagenTussen(van, tot),1);
+  return `<div data-vraaggrafiek="tijdlijn" style="position:relative;height:24px;margin-top:12px;border-bottom:1px solid var(--line)">${L.map(d=>`<span data-vraagopname="${d}" style="position:absolute;bottom:3px;left:calc(${Math.min(Math.max(salDagenTussen(van,d)/n,0),1)*100}% - 4px);width:8px;height:8px;border-radius:50%;background:var(--teal)"></span>`).join('')}</div><div class="row small muted" style="justify-content:space-between;font-size:var(--fs-xs)"><span>${esc(dagKort(van))}</span><span>${esc(dagKort(tot))}</span></div>`; }
+/* ---- de zes rekensommen ---- */
+function vraagWeekdag(o){ const E=vraagEenheden(o, 3); if(!E) return null; const van=E[0].start, tot=E[E.length-1].eind;
+  const per=[0,0,0,0,0,0,0], regels=[]; const {R}=vraagUitgaven(van, tot);
+  for(const r of R){ if(o.potje && r.k!==o.potje) continue; const D=new Date(r.t.date+'T12:00'), i=(D.getDay()+6)%7; per[i]+=r.bedrag; regels.push(r); }
+  for(let i=0;i<7;i++) per[i]=r2v(per[i]);
+  const totaal=r2v(per.reduce((a,b)=>a+b,0)), volg=[0,1,2,3,4,5,6].sort((a,b)=>per[b]-per[a]||a-b);
+  return {E, van, tot, per, totaal, hoog:volg[0], tweede:volg[1], regels, label:vraagEenhedenLabel(E)}; }
+function vraagTermen(o){ return (o.zoektermen||[]).map(z=>String(z).toLowerCase().trim()).filter(Boolean); }
+function vraagSchoon(t){ return String(txNaam(t)||'').toLowerCase(); }
+function vraagTreft(t, termen){ const n=vraagSchoon(t), c=n.replace(/\s+/g,''); return termen.some(z=>n.includes(z) || c.includes(z.replace(/\s+/g,''))); }
+function vraagTegenpartij(o){ let van, tot, label;
+  if(o.venster){ const V=vraagVenster(o.venster); if(!V) return null; van=V.van; tot=V.tot; label=V.label; }
+  else { tot=vandaagYMD(); let ym=tot.slice(0,7); for(let i=0;i<11;i++) ym=prevYM(ym); van=ym+'-01'; label='de laatste 12 maanden'; }
+  const termen=vraagTermen(o); if(!termen.length) return null;
+  const {R}=vraagUitgaven(van, tot), hits=R.filter(r=>r.bedrag>0 && vraagTreft(r.t, termen));
+  const groep=new Map(); for(const r of hits){ const n=txNaam(r.t); if(!groep.has(n)) groep.set(n, []); groep.get(n).push(r); }
+  const mnd=[]; let ym=van.slice(0,7); const eindYm=tot.slice(0,7); while(ym<=eindYm && mnd.length<14){ mnd.push(ym); ym=nextYM(ym); }
+  const totaal=r2v(hits.reduce((a,r)=>a+r.bedrag,0)); let cum=0;
+  const lijn=mnd.map(m=>{ cum+=hits.filter(r=>r.t.date.slice(0,7)===m).reduce((a,r)=>a+r.bedrag,0); return {l:MNAMES[+m.slice(5,7)-1], v:r2v(cum)}; });
+  return {van, tot, label, termen:o.zoektermen, hits, groep:[...groep.entries()].sort((a,b)=>b[1].length-a[1].length||a[0].localeCompare(b[0])), totaal,
+    perMaand:r2v(totaal/Math.max(mnd.length,1)), perKeer:hits.length?r2v(totaal/hits.length):0, maanden:mnd.length, lijn}; }
+function vraagDrempel(o){ const B=+o.bedrag; if(!(B>0)) return null; let V;
+  if(o.venster){ V=vraagVenster(o.venster); if(!V) return null; } else { const P=periodeVan(vandaagYMD()); V={van:P.start, tot:P.eind, label:P.soort==='periode'?'deze periode':'deze maand'}; }
+  const {R}=vraagUitgaven(V.van, V.tot), onder=R.filter(r=>r.bedrag>0 && r.bedrag<B), totaal=r2v(onder.reduce((a,r)=>a+r.bedrag,0));
+  const pot=vraagPotjes().map(p=>({k:p.k, naam:p.naam, b:+SET.budgets[p.k]||0})).filter(p=>p.b>0).sort((a,b)=>a.b-b.b||a.naam.localeCompare(b.naam))[0]||null;
+  return {B, V, onder, totaal, pot:(pot && pot.b<totaal)?pot:null}; }
+function vraagEenmalig(o){ const E=vraagEenheden(o, 3); if(!E) return null;
+  const rij=E.map(P=>{ const tx=telbareTx().filter(t=>t.date>=P.start && t.date<=P.eind && t.amount<0 && eenmaligLabel(t) && CATS[catOf(t)] && CATS[catOf(t)].type==='expense');
+    return {P, tx, v:r2v(tx.reduce((a,t)=>a-t.amount,0))}; });
+  const totaal=r2v(rij.reduce((a,x)=>a+x.v,0)), n=rij.filter(x=>x.v>0).length;
+  return {E, rij, totaal, n, m:E.length, gem:r2v(totaal/E.length), label:vraagEenhedenLabel(E)}; }
+function vraagBoven(ym){ const H=maandPotjes(ym); if(H.bron!=='bewaard') return null; const S=catSpendMap(ym), uit=[];
+  for(const k in H.B){ const b=+H.B[k]||0; if(b>0 && Math.round(S[k]||0)>Math.round(b)) uit.push(k); } return uit; }
+function vraagNaOverschrijding(o){ const vd=vandaagYMD(); let M=historiePerioden(vd).filter(P=>P && P.soort==='maand' && !P.korteMaand && P.eind<vd).map(P=>P.ym);
+  if(o.venster){ const V=vraagVenster(o.venster); if(!V) return null; M=M.filter(ym=>ym+'-01'<=V.tot && ym+'-31'>=V.van).concat(M.filter(ym=>ym+'-01'>V.tot).slice(0,1)); }
+  else M=M.slice(-4);
+  const bewaard=M.filter(ym=>maandPotjes(ym).bron==='bewaard'), paren=[];
+  for(let i=0;i<M.length-1;i++){ const a=M[i], b=M[i+1]; if(nextYM(a)!==b) continue; const A=vraagBoven(a), Bb=vraagBoven(b); if(!A || !Bb) continue;
+    paren.push({a, b, boven:A, weer:A.filter(k=>Bb.includes(k))}); }
+  const N=paren.reduce((s,p)=>s+p.boven.length,0), K=paren.reduce((s,p)=>s+p.weer.length,0);
+  return {M, bewaard, paren, N, K}; }
+function vraagContantRitme(o){ const E=vraagEenheden(o, 3); if(!E) return null;
+  const alle=telbareTx().filter(t=>isOpnameTx(t) && !t.pending).sort((a,b)=>a.date.localeCompare(b.date)), gaps=[];
+  for(let i=1;i<alle.length;i++) gaps.push({van:alle[i-1].date, tot:alle[i].date, dagen:salDagenTussen(alle[i-1].date, alle[i].date)});
+  const van=E[0].start, tot=E[E.length-1].eind, inV=alle.filter(t=>t.date>=van && t.date<=tot);
+  const rij=E.map(P=>{ const g=gaps.filter(x=>x.tot>=P.start && x.tot<=P.eind), n=alle.filter(t=>t.date>=P.start && t.date<=P.eind).length;
+    return {P, n, gem:g.length?Math.round(g.reduce((a,x)=>a+x.dagen,0)/g.length):null}; });
+  const totaal=r2v(inV.reduce((a,t)=>a-t.amount,0));
+  return {E, van, tot, inV, gaps:gaps.filter(x=>x.tot>=van && x.tot<=tot), rij, totaal, gem:r2v(totaal/E.length)}; }
+/* ---- de zes antwoorden ---- */
+function vraagUitvoer520(o, kop){ const dk=d=>dagKort(d), gr=(t)=>`<div class="small muted" data-vraaggerekend style="margin-top:8px;line-height:1.45">Zo gerekend: ${t}</div>`;
+  const pct=(a,b)=>b>0?Math.round(a/b*100):0, wat=o.potje?(CATS[o.potje]||{}).name:'';
+  if(o.soort==='weekdag'){ const W=vraagWeekdag(o); if(!W) return null; if(!(W.totaal>0)) return kop('weekdag', `Geen uitgaven ${o.potje?'aan '+esc(wat)+' ':''}in ${esc(W.label)}.`)+gr(`${o.potje?'potje '+esc(wat):'alle uitgaven'} · ${esc(dk(W.van))}–${esc(dk(W.tot))}`)+'</div>';
+    const D=VRAAG_DAGEN, h=W.hoog, t2=W.tweede, naam=D[h].charAt(0).toUpperCase()+D[h].slice(1);
+    return kop('weekdag', `${naam}: <b data-vraaggetal="${W.per[h]}">${euro(W.per[h])}</b> in ${esc(W.label)}, ${pct(W.per[h],W.totaal)}% van ${o.potje?esc(wat.toLowerCase()):'alles'}. ${D[t2].charAt(0).toUpperCase()+D[t2].slice(1)} volgt met ${euro(W.per[t2])}.`)
+      +vraagStaafjes(W.per.map((v,i)=>({l:D[i].slice(0,2), v})), h)
+      +`<div data-vraagweekdagen style="display:none">${W.per.map((v,i)=>`<span data-vraagdag="${i}" data-bedrag="${v}"></span>`).join('')}</div>`
+      +gr(`${o.potje?'potje '+esc(wat):'alle uitgaven'} · ${esc(dk(W.van))}–${esc(dk(W.tot))} (${esc(W.label)}) · per dag van de week opgeteld (maandag t/m zondag) · zonder eigen overboekingen en spaarstortingen · samen ${euro(W.totaal)}`)+'</div>'; }
+  if(o.soort==='tegenpartij'){ const T=vraagTegenpartij(o); if(!T) return null; const zt=(T.termen||[]).map(z=>'"'+esc(z)+'"').join(', ');
+    if(!T.hits.length) return kop('tegenpartij', `<span data-vraagniets>${VRAAG_NIET_GEVONDEN} ${zt}.</span>`)+gr(`gezocht op ${zt} in de naam van de tegenpartij · ${esc(dk(T.van))}–${esc(dk(T.tot))}`)+'</div>';
+    const namen=T.groep.map(g=>g[0]), nm=namen.length>2?namen.slice(0,2).join(', ')+' en '+(namen.length-2)+' andere':namen.join(' en ');
+    return kop('tegenpartij', `<b data-vraaggetal="${T.totaal}">${euro(T.totaal)}</b> bij ${esc(nm)} in ${esc(T.label)}, gemiddeld ${euro(T.perMaand)} per maand of ${euro(T.perKeer)} per keer.`)
+      +vraagLijn(T.lijn)
+      +gr(`gezocht op ${zt} in de naam van de tegenpartij · ${esc(dk(T.van))}–${esc(dk(T.tot))} · ${T.maanden} maanden · ${T.hits.length} boekingen`)
+      +`<div data-vraaggevonden style="margin-top:6px">${T.groep.map(([n,L],gi)=>`<div class="row small" data-vraagtegenpartij="${esc(n)}" data-n="${L.length}" role="button" style="gap:8px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer" onclick="const e=document.querySelector('[data-vraagtpboek=\\'${gi}\\']');if(e)e.style.display=e.style.display==='none'?'block':'none'"><span style="flex:1;min-width:0">${esc(n)} · ${L.length}×</span><b>${euro(r2v(L.reduce((a,r)=>a+r.bedrag,0)))}</b></div><div data-vraagtpboek="${gi}" style="display:none">${L.map(r=>`<div class="row small muted" data-vraagregel="${r.bedrag}" role="button" style="gap:8px;padding:2px 0 2px 10px;cursor:pointer" onclick="openSheet('${esc(r.t.id)}')"><span style="flex:1">${esc(dk(r.t.date))}</span><span>${euro(r.bedrag)}</span></div>`).join('')}</div>`).join('')}</div></div>`; }
+  if(o.soort==='drempel'){ const Dr=vraagDrempel(o); if(!Dr) return null;
+    return kop('drempel', `${Dr.onder.length} betalingen onder ${euro(Dr.B)}, samen <b data-vraaggetal="${Dr.totaal}">${euro(Dr.totaal)}</b>${Dr.pot?`, meer dan je potje ${esc(Dr.pot.naam)} (${euro(Dr.pot.b)})`:''}.`)
+      +vraagPuntjes(Dr.onder.map(r=>r.bedrag), Dr.B)
+      +gr(`alle uitgaven ${esc(Dr.V.label)} (${esc(dk(Dr.V.van))}–${esc(dk(Dr.V.tot))}) · per betaling strikt onder ${euro(Dr.B)} · opgeteld${Dr.pot?` · vergeleken met je kleinste potje`:''}`)+'</div>'; }
+  if(o.soort==='eenmalig'){ const Em=vraagEenmalig(o); if(!Em) return null;
+    return kop('eenmalig', `In ${Em.n} van de ${Em.m} ${Em.E[0].soort==='periode'?'periodes':'maanden'} was er iets eenmaligs, gemiddeld <b data-vraaggetal="${Em.gem}">${euro(Em.gem)}</b> per ${Em.E[0].soort==='periode'?'periode':'maand'}.`)
+      +vraagStaafjes(Em.rij.map(x=>({l:x.P.soort==='periode'?dk(x.P.start):MNAMES[+x.P.ym.slice(5,7)-1], v:x.v})), -1)
+      +gr(`alleen boekingen die jij eenmalig noemde · ${esc(Em.label)} · samen ${euro(Em.totaal)} gedeeld door ${Em.m}`)
+      +`<div data-vraagregels style="margin-top:6px">${Em.rij.flatMap(x=>x.tx).map(t=>`<div class="row small" data-vraagregel="${r2v(-t.amount)}" role="button" style="gap:8px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openSheet('${esc(t.id)}')"><span style="flex:1;min-width:0">${esc(dk(t.date))} · ${esc(txNaam(t))}</span><b>${euro(-t.amount)}</b></div>`).join('')}</div></div>`; }
+  if(o.soort==='naOverschrijding'){ const Nv=vraagNaOverschrijding(o); if(!Nv) return null;
+    if(!Nv.paren.length) return kop('naOverschrijding', esc(VRAAG_ZIN_NIETS))+gr(`alleen maanden met een bewaard potjebedrag, en daarvan ${Nv.bewaard.length} van de ${Nv.M.length} · een paar vraagt twee zulke maanden na elkaar`)+'</div>';
+    return kop('naOverschrijding', `<b data-vraaggetal="${Nv.N}">${Nv.N} keer</b> zat je boven een potje. ${Nv.K} keer zat je de periode erna weer boven, met hetzelfde potje.`)
+      +vraagParen(Nv.paren.map(p=>({l:MNAMES[+p.a.slice(5,7)-1], a:p.boven.length, b:p.weer.length})))
+      +gr(`alleen maanden met een bewaard potjebedrag (${Nv.bewaard.length} van de ${Nv.M.length}) · boven = meer uitgegeven dan het potje van die maand · ${Nv.paren.map(p=>`${MNAMES[+p.a.slice(5,7)-1]}: ${p.boven.length?p.boven.map(k=>esc((CATS[k]||{}).name||k)).join(', '):'geen'}${p.weer.length?' → '+MNAMES[+p.b.slice(5,7)-1]+' weer '+p.weer.map(k=>esc((CATS[k]||{}).name||k)).join(', '):''}`).join(' · ')}`)+'</div>'; }
+  if(o.soort==='contantRitme'){ const C=vraagContantRitme(o); if(!C) return null; const nm=P=>vraagEenheidNaam(P).toLowerCase();
+    if(!C.inV.length) return kop('contantRitme', `Geen opnames in ${esc(vraagEenhedenLabel(C.E))}.`)+gr('opnames bij een geldautomaat (GEA, BETAALPAS of GELDMAAT); een kastelling is geen opname')+'</div>';
+    const deel=x=>x.gem!=null?`in ${esc(nm(x.P))} elke ${x.gem} dagen`:(x.n?`in ${esc(nm(x.P))} ${x.n} opname`:`in ${esc(nm(x.P))} geen opname`);
+    const a=C.rij[0], b=C.rij[C.rij.length-1], z=(C.rij.length>1?`${deel(a)}, ${deel(b)}`:deel(a));
+    return kop('contantRitme', `${z.charAt(0).toUpperCase()+z.slice(1)}. Je neemt gemiddeld <b data-vraaggetal="${C.gem}">${euro(C.gem)}</b> per ${C.E[0].soort==='periode'?'periode':'maand'} op.`)
+      +vraagTijdlijn(C.inV.map(t=>t.date), C.van, C.tot)
+      +gr(`opnames bij een geldautomaat (GEA, BETAALPAS of GELDMAAT); een kastelling is geen opname · ${esc(dk(C.van))}–${esc(dk(C.tot))} · samen ${euro(C.totaal)} gedeeld door ${C.E.length} · ${C.gaps.map(g=>`<span data-vraaggap="${g.dagen}">${esc(dk(g.tot))} (${g.dagen} dagen)</span>`).join(', ')}`)+'</div>'; }
+  return null; }
 function vraagAntwoordOnbekend(){ return `<div data-vraagantwoord="onbekend" style="margin-top:12px"><div style="font-weight:700">${VRAAG_ZIN_ONBEKEND}</div><div class="small muted" style="margin-top:4px">Probeer een van deze:</div>${vraagVoorbeeldenHtml()}</div>`; }
 function vraagUitvoer(o){ const dk=d=>new Date(d+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
   const kop=(soort, zin)=>`<div data-vraagantwoord="${soort}" style="margin-top:12px"><div style="font-size:var(--fs-md);line-height:1.4">${zin}</div>`;
@@ -22577,6 +22707,7 @@ function vraagUitvoer(o){ const dk=d=>new Date(d+'T12:00').toLocaleDateString('n
       +(X.bevestigd.length?`<div data-oorzaakbevestigd style="margin-top:8px">${X.bevestigd.map(b=>`<div class="row" data-bevestigd="${b.soort}" style="gap:8px;padding:4px 0"><span style="color:var(--green);font-weight:800">✓</span><span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:700">${esc(b.soort==='gevoel'||b.soort==='gewoonte'||b.soort==='gelegenheid'?(b.bewijs||OORZAAK_NAAM[b.soort]):OORZAAK_NAAM[b.soort])}</span>${gripSub(esc(oorzaakBronTxt(b)))}</span></div>`).join('')}</div>`:'')
       +`<div class="small muted" data-vraaggerekend style="margin-top:8px">Zo gerekend: dezelfde oorzaken als Begrijpen op Grip, niets erbij</div>
       <div class="small" data-vraagopen role="button" style="margin-top:6px;color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();go('maand');gripNaarSymptoom('${esc(W.s.id).replace(/'/g,"\\'")}')">open in Begrijpen ›</div></div>`; }
+  if(VRAAG_SOORTEN_APP.indexOf(o.soort)>=4){ const A=vraagUitvoer520(o, kop); if(A) return A; return vraagAntwoordOnbekend(); }
   if(o.soort==='koop'){ setTimeout(()=>openBuy({wat:o.wat, bedrag:o.bedrag, potje:o.potje}), 0); return kop('koop', 'Dat is een aankoop. Ik open de koopcheck; die rekent het uit.')+'</div>'; }
   }catch(_){}
   return vraagAntwoordOnbekend(); }
