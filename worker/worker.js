@@ -463,7 +463,7 @@ async function runCron(env, nowMs) {
 /* ===== v519: VRAAG — invoer, het verzoek aan het model en de validatie van de opdracht ===== */
 const VRAAG_MODEL_STANDAARD = 'claude-opus-5-5';
 const VRAAG_MAX_TEKENS = 300, VRAAG_MAX_POTJES = 60, VRAAG_MAX_DAGEN = 397;   // 13 maanden
-const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'rangTegenpartij', 'onbekend'];
+const VRAAG_SOORTEN = ['som', 'dag', 'waarom', 'koop', 'weekdag', 'tegenpartij', 'drempel', 'eenmalig', 'naOverschrijding', 'contantRitme', 'rangTegenpartij', 'inkomenVerdeling', 'onbekend'];   // v521: inkomenVerdeling
 const VRAAG_MAX_TERMEN = 5, VRAAG_MAX_TERM = 40, VRAAG_MIN_TERM = 3;   // v520: zoektermen voor tegenpartij (alleen die soort); v520b: korter dan 3 valt weg
 const VRAAG_VENSTERS = ['deze_week', 'deze_maand', 'deze_periode', 'vorige_periode'];
 const VRAAG_VELDEN = ['soort', 'potje', 'venster', 'dag', 'bedrag', 'wat', 'zoektermen', 'metVast', 'maat', 'top'];   // v520b: metVast (alleen weekdag), maat en top (alleen rangTegenpartij)
@@ -506,7 +506,8 @@ function vraagVerzoek(inv, model) {
     + '4 tekens), "drempel" (betalingen onder een bedrag; zet bedrag), '
     + '"eenmalig" (wat was er eenmalig per maand), "naOverschrijding" (zit ik na een overschrijding weer boven met hetzelfde potje), '
     + '"contantRitme" (hoe vaak neem ik contant op), "rangTegenpartij" (bij welke winkels of diensten het vaakst of het meest; maat "aantal" bij '
-    + 'vaakst of hoe vaak, "bedrag" bij meest uitgegeven; top 1 t/m 10, standaard 5; potje mag), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
+    + 'vaakst of hoe vaak, "bedrag" bij meest uitgegeven; top 1 t/m 10, standaard 5; potje mag), '
+    + '"inkomenVerdeling" (van elke euro inkomen, hoeveel gaf ik uit en hoeveel hield ik over; venster mag, of null voor de laatste 6 afgesloten maanden; potje null), anders "onbekend". zoektermen is null behalve bij tegenpartij. '
     + 'potje: de sleutel k uit de lijst, of null. venster: "deze_week", "deze_maand", "deze_periode", "vorige_periode", {van,tot} met datums, of null; '
     + '"dit jaar" is {van: 1 januari van dit jaar, tot: vandaag}, en tot ligt nooit na vandaag. metVast is null behalve bij weekdag; maat en top zijn null behalve bij rangTegenpartij. "afgelopen N maanden" is {van: vandaag min N maanden, tot: vandaag}. '
     + 'dag: YYYY-MM-DD, of null ("gisteren" en weekdagen reken je terug vanaf vandaag). Alles wat niet past is null. Twijfel je, dan "onbekend".';

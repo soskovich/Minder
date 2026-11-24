@@ -1806,3 +1806,15 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   PUNT 4 (zelfde ronde): de soort `rangTegenpartij` (`vraagRang()`): welke tegenpartijen het vaakst of het meest, maat aantal of bedrag,
   top 1–10, liggende staafjes met accent op nummer 1, per regel aantal en bedrag en een tik op de boekingen; vaste lasten tellen mee,
   eigen overboekingen niet. Schema `maat`/`top`, prompt met "afgelopen N maanden". Tests h en i (4 van 4 sabotages rood).
+- **v521: Vraag, inkomenVerdeling en de lijst vragen die Minder niet kon beantwoorden; geen enkel getal** (`minder-v521`, gevraagd door de
+  gebruiker, basis 9fbc05f). (1) Nieuwe soort `inkomenVerdeling` (`vraagInkomenVerdeling()`, `vraagIVMaanden()`, `vraagIVMaand()`): van elke
+  euro inkomen hoeveel uit en hoeveel over, standaard de 6 kalendermaanden voor de lopende (met boekingen), met een venster de afgesloten
+  maanden erin (hooguit 13); de lopende maand telt nooit mee. Inkomen = `maandInkomen(m).alles` (geen eigen overboekingen, geen terugbetaling
+  van uitgeleend geld, geen reiskosten), eenmalig = `.onregelmatig` apart; uitgegeven = `uitgegevenStand({m}).totaal` plus wat uit een
+  reservering betaald werd; over = inkomen − uitgegeven, netto, negatief heet tekort. Zin met en zonder eenmalig, bedragen, gestapelde staafjes
+  per maand met het gemiddelde als lijn, Zo gerekend (en de oude achternaam als het venster voor 2026 begint). (2) Een vraag die als onbekend
+  eindigt komt in IndexedDB `vraagNiet` (`vraagNietNoteer()`, hooguit 100, oudste eruit) met de reden model / validatie / onbereikbaar / uit /
+  reken (niet uit te rekenen); Diagnose toont hem bovenaan de blokken met een telling per reden en "Lijst leegmaken" met een bevestiging, en
+  blok 30 drukt hem af. Hij gaat niet naar de Worker en niet in de back-up. GEMETEN EN GEREPAREERD: diagSnelheid() (blok 28) zet de sheet
+  tijdens de diagnose terug uit een string, dus het blok wordt na de blokken opnieuw getekend. Worker: soort en prompt; opnieuw deployen.
+  Spec `v521.spec.js` (a, a2, b, c, d, e; 9 van 9 sabotages rood), fixture `v521-stand.js`, bedragen van 9fbc05f in `v521-voor.json`.

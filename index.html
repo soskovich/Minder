@@ -22498,18 +22498,23 @@ function renderVraag(){ const st=window._vraagStand||{}, veld=(document.getEleme
     ${sheetVoet(`<button class="btn" data-vraagstuur style="flex:1" onclick="vraagStuur()"${st.bezig?' disabled':''}>Vraag</button><button class="btn sec" onclick="closeSheet()">Sluiten</button>`, '')}</div>`; }
 async function vraagStuur(){
   const vraag=((document.getElementById('vraagVeld')||{}).value||'').trim(); if(!vraag) return;
-  if(!vraagKnopAan()){ window._vraagStand={vraag, antwoord:vraagAntwoordOnbekend()}; renderVraag(); return; }   // uit of offline: er gaat niets van het toestel
+  if(!vraagKnopAan()){ window._vraagStand={vraag, antwoord:vraagAntwoordOnbekend()}; renderVraag();   // uit of offline: er gaat niets van het toestel
+    vraagNietNoteer(vraag, (SET.vraagAan && psd2Ready())?'onbereikbaar':'uit'); return; }   // v521
   window._vraagStand={vraag, bezig:true}; renderVraag();
-  const body=vraagBody(vraag), c=psd2Cfg(); let o=null;
+  const body=vraagBody(vraag), c=psd2Cfg(); let o=null, reden=null;
   try{ const ac=(typeof AbortController!=='undefined')?new AbortController():null; const tm=ac?setTimeout(()=>ac.abort(), 20000):null;
     const r=await fetch(c.url+'/vraag', {method:'POST', headers:{'Authorization':'Bearer '+c.token, 'Content-Type':'application/json'}, body:JSON.stringify(body), signal:ac?ac.signal:undefined});
-    if(tm) clearTimeout(tm); if(r.ok) o=await r.json(); }catch(_){ o=null; }
-  window._vraagStand={vraag, antwoord:vraagUitvoer(vraagOpdracht(o, body.potjes))}; renderVraag(); }
+    if(tm) clearTimeout(tm); if(r.ok){ try{ o=await r.json(); }catch(_){ o=null; reden='validatie'; } } else reden=r.status===503?'uit':'onbereikbaar'; }catch(_){ o=null; reden='onbereikbaar'; }
+  /* v521: eindigt de vraag als onbekend, dan komt hij met de reden in de lijst op dit toestel (vraagNietNoteer) */
+  const opd=vraagOpdracht(o, body.potjes); if(!reden && opd.soort==='onbekend') reden=(o && o.soort==='onbekend')?'model':'validatie';
+  const antwoord=vraagUitvoer(opd); if(!reden && /data-vraagantwoord="onbekend"/.test(antwoord)) reden='reken';
+  if(reden) vraagNietNoteer(vraag, reden);
+  window._vraagStand={vraag, antwoord}; renderVraag(); }
 /* de app loopt de opdracht zelf nog eens na (de Worker doet het ook): alleen de bekende velden, een potje uit de meegestuurde lijst,
    een geldige datum. Klopt er iets niet, dan is het onbekend. */
 function vraagDagGeldig(d){ if(typeof d!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false; const [j,m,x]=d.split('-').map(Number), D=new Date(j,m-1,x); return D.getFullYear()===j && D.getMonth()===m-1 && D.getDate()===x; }
 const VRAAG_MIN_TERM=3;   // v520b: een zoekterm korter dan 3 tekens valt weg ("bo" vindt alles met bo)
-const VRAAG_SOORTEN_APP=['som','dag','waarom','koop','weekdag','tegenpartij','drempel','eenmalig','naOverschrijding','contantRitme','rangTegenpartij'];   // v520: zes erbij; v520b: rangTegenpartij
+const VRAAG_SOORTEN_APP=['som','dag','waarom','koop','weekdag','tegenpartij','drempel','eenmalig','naOverschrijding','contantRitme','rangTegenpartij','inkomenVerdeling'];   // v520: zes erbij; v520b: rangTegenpartij; v521: inkomenVerdeling
 function vraagOpdracht(o, potjes){ const ONB={soort:'onbekend'};
   if(!o || typeof o!=='object' || !VRAAG_SOORTEN_APP.includes(o.soort)) return ONB;
   const ks=new Set((potjes||vraagPotjes()).map(p=>p.k)), uit={soort:o.soort, potje:null, venster:null, dag:null, bedrag:null, wat:null};
@@ -22683,6 +22688,49 @@ function vraagContantRitme(o){ const E=vraagEenheden(o, 3); if(!E) return null;
     return {P, n, gem:g.length?Math.round(g.reduce((a,x)=>a+x.dagen,0)/g.length):null}; });
   const totaal=r2v(inV.reduce((a,t)=>a-t.amount,0));
   return {E, van, tot, inV, gaps:gaps.filter(x=>x.tot>=van && x.tot<=tot), rij, totaal, gem:r2v(totaal/E.length)}; }
+/* v521: INKOMENVERDELING. Van elke euro die binnenkwam: hoeveel ging er uit, en hoeveel bleef er over. Alleen AFGESLOTEN maanden (de
+   lopende maand of periode telt niet mee); standaard de laatste 6, met een venster de afgesloten maanden die erin vallen (hooguit 13).
+   INKOMEN is maandInkomen(m).alles: de bron van totals() en de maandkaart. Daarin zitten geen eigen overboekingen (intern), geen
+   terugbetaling van uitgeleend geld (Uitgeleend is intern) en geen reiskostenvergoeding (reisDeel, die gaat tegen haar potje). Eenmalig
+   (gevlagd onregelmatig, of het deel boven je vaste salaris) is maandInkomen(m).onregelmatig en staat apart.
+   UITGEGEVEN is uitgegevenStand({m}).totaal (vast, potjes, zonder potje, buiten je potjes en contant: de maandkaart op Inzichten) plus wat
+   je uit een reservering betaalde (dat haalt uitgaveNorm() er voor je potjes af; hier hoort het erbij, want het geld ging uit).
+   OVER is inkomen min uitgegeven, netto. Wat naar je spaarrekening ging telt niet: opnames en stortingen zijn eigen overboekingen. */
+const VRAAG_IV_MAANDEN=6;
+function vraagIVMaanden(o){ const nu=thisYM(), alle=months().filter(m=>m<nu);
+  if(o && o.venster){ const V=vraagVenster(o.venster); if(!V) return null; const a=V.van.slice(0,7), b=V.tot.slice(0,7); return alle.filter(m=>m>=a && m<=b).slice(-13); }
+  let van=nu; for(let i=0;i<VRAAG_IV_MAANDEN;i++) van=prevYM(van); return alle.filter(m=>m>=van); }   // de 6 kalendermaanden voor deze, met boekingen
+function vraagIVMaand(m){ const I=maandInkomen(m), U=uitgegevenStand({m}); let ur=0;
+  for(const g of ['vast','potjes','zonder','kasNieuw']) for(const t of (U.tx[g]||[])) ur+=uitReserveringBedrag(t);
+  const ink=r2v(I.alles), een=r2v(I.onregelmatig), uit=r2v(U.totaal+ur);
+  return {m, ink, een, ur:r2v(ur), uit, over:r2v(ink-uit)}; }
+function vraagInkomenVerdeling(o){ const M=vraagIVMaanden(o||{}); if(!M) return null;
+  const rij=M.map(vraagIVMaand), ink=r2v(rij.reduce((a,x)=>a+x.ink,0)), uit=r2v(rij.reduce((a,x)=>a+x.uit,0)), een=r2v(rij.reduce((a,x)=>a+x.een,0)), ur=r2v(rij.reduce((a,x)=>a+x.ur,0));
+  const over=r2v(ink-uit), perUit=ink>0?r2v(uit/ink):null, perOver=ink>0?r2v(1-uit/ink):null, perUitZonder=(ink-een)>0&&een>0?r2v(uit/(ink-een)):null;
+  return {M, rij, ink, uit, een, ur, over, perUit, perOver, perUitZonder, oud:!!(M.length && M[0]<'2026-01')}; }
+function vraagIVLabel(M){ const n=m=>ymFull(m)+(M[0].slice(0,4)!==M[M.length-1].slice(0,4)?' '+m.slice(0,4):'');
+  return M.length>1?`${n(M[0])}–${n(M[M.length-1])}${M[0].slice(0,4)===M[M.length-1].slice(0,4)?' '+M[0].slice(0,4):''}`:`${ymFull(M[0])} ${M[0].slice(0,4)}`; }
+/* per maand een gestapeld staafje op de schaal van een euro inkomen: onder uitgegeven (--bar), erboven over (--teal) of, bij een tekort,
+   wat er boven de euro uitging (--red); het gemiddelde over het venster is een lijn */
+function vraagIVStaafjes(rij, gem){ const H=56, sh=x=>x.ink>0?x.uit/x.ink:0, max=Math.max(1, ...rij.map(sh)), px=v=>Math.round(v/max*H);
+  return `<div data-vraaggrafiek="inkomenverdeling" style="position:relative;display:flex;align-items:flex-end;gap:4px;height:${H}px;margin-top:12px">${rij.map(x=>{ const s=sh(x);
+      return `<div data-vraagivmaand="${x.m}" data-ink="${x.ink}" data-uit="${x.uit}" data-over="${x.over}" style="flex:1;display:flex;flex-direction:column-reverse;height:100%"><span style="height:${px(Math.min(s,1))}px;background:var(--bar)"></span>${s<1?`<span style="height:${px(1-s)}px;background:var(--teal)"></span>`:`<span style="height:${px(s-1)}px;background:var(--red)"></span>`}</div>`; }).join('')}
+    ${gem!=null?`<span data-vraagivgem="${gem}" style="position:absolute;left:0;right:0;bottom:${px(gem)}px;border-top:2px dashed var(--txt);opacity:.6"></span>`:''}</div>
+    <div class="row small muted" style="gap:4px;font-size:var(--fs-xs)">${rij.map(x=>`<span style="flex:1;text-align:center">${MNAMES[+x.m.slice(5,7)-1]}</span>`).join('')}</div>`; }
+/* v521: NIET BEANTWOORDE VRAGEN. Een vraag die als onbekend eindigt komt in IndexedDB (minder/kv/vraagNiet): de dag, de vraag zoals je
+   hem typte en de reden. Hooguit VRAAG_NIET_MAX regels, de oudste valt eruit. Alleen op dit toestel: hij gaat niet naar de Worker
+   (vraagBody() draagt alleen vraag, potjes en vandaag) en niet in de back-up (exportBackup() leest geen IndexedDB). Een vraag die wel
+   beantwoord wordt komt er niet in. Niet in de voorbeeldweergave, die schrijft niets weg. */
+const VRAAG_NIET_MAX=100, VRAAG_NIET_KEY='vraagNiet';
+const VRAAG_NIET_REDEN={model:'model gaf onbekend', validatie:'validatie keurde af', onbereikbaar:'Worker niet bereikbaar', uit:'vragen staat uit', reken:'niet uit te rekenen'};
+let _vraagNietQ=Promise.resolve();
+function vraagNietNoteer(vraag, reden){ if(window._voorbeeld) return _vraagNietQ;
+  const r={op:Date.now(), dag:vandaagYMD(), vraag:String(vraag||'').trim().slice(0,300), reden:VRAAG_NIET_REDEN[reden]?reden:'reken'};
+  _vraagNietQ=_vraagNietQ.then(async()=>{ let L=null; try{ L=await idbGet(VRAAG_NIET_KEY); }catch(_){} if(!Array.isArray(L)) L=[];
+    L.push(r); if(L.length>VRAAG_NIET_MAX) L=L.slice(L.length-VRAAG_NIET_MAX); await idbSet(VRAAG_NIET_KEY, L); }).catch(()=>{});
+  return _vraagNietQ; }
+async function vraagNietLijst(){ try{ await _vraagNietQ; const L=await idbGet(VRAAG_NIET_KEY); return Array.isArray(L)?L:[]; }catch(_){ return []; } }
+function vraagNietLeeg(){ _vraagNietQ=_vraagNietQ.then(()=>idbSet(VRAAG_NIET_KEY, [])).catch(()=>{}); return _vraagNietQ; }
 /* ---- de zes antwoorden ---- */
 function vraagUitvoer520(o, kop){ const dk=d=>dagKort(d), gr=(t)=>`<div class="small muted" data-vraaggerekend style="margin-top:8px;line-height:1.45">Zo gerekend: ${t}</div>`;
   const pct=(a,b)=>b>0?Math.round(a/b*100):0, wat=o.potje?(CATS[o.potje]||{}).name:'';
@@ -22740,6 +22788,18 @@ function vraagUitvoer520(o, kop){ const dk=d=>dagKort(d), gr=(t)=>`<div class="s
     return kop('contantRitme', `${z.charAt(0).toUpperCase()+z.slice(1)}. Je neemt gemiddeld <b data-vraaggetal="${C.gem}">${euro(C.gem)}</b> per ${C.E[0].soort==='periode'?'periode':'maand'} op.`)
       +vraagTijdlijn(C.inV.map(t=>t.date), C.van, C.tot)
       +gr(`opnames bij een geldautomaat (GEA, BETAALPAS of GELDMAAT); een kastelling is geen opname · ${esc(dk(C.van))}–${esc(dk(C.tot))} · samen ${euro(C.totaal)} gedeeld door ${C.E.length} · ${C.gaps.map(g=>`<span data-vraaggap="${g.dagen}">${esc(dk(g.tot))} (${g.dagen} dagen)</span>`).join(', ')}`)+'</div>'; }
+  if(o.soort==='inkomenVerdeling'){ const I=vraagInkomenVerdeling(o); if(!I) return null;
+    const oud=I.oud?' · je venster gaat terug tot voor 2026: boekingen onder je oude achternaam tellen niet mee':'';
+    const reken=`inkomen = wat Minder als inkomen telt (categorie inkomen en rente), zonder eigen overboekingen, zonder terugbetaling van uitgeleend geld en zonder reiskostenvergoeding (die gaat tegen haar potje) · uitgegeven = vaste lasten, potjes, zonder potje, buiten je potjes en contant, zoals de maandkaart op Inzichten, plus wat je uit een reservering betaalde${I.ur>0?' ('+euro(I.ur)+')':''} · over = inkomen min uitgegeven, netto: wat naar of van je spaarrekening ging telt niet mee · alleen afgesloten maanden, de lopende telt niet mee`;
+    if(!I.M.length || !(I.ink>0)) return kop('inkomenVerdeling', esc(VRAAG_ZIN_NIETS))+gr(reken+(I.M.length?' · '+esc(vraagIVLabel(I.M)):' · er is nog geen afgesloten maand in dit venster')+oud)+'</div>';
+    const lab=vraagIVLabel(I.M), tekort=I.over<0;
+    const zin=`Van elke euro die binnenkwam gaf je <b data-vraaggetal="${I.perUit}">${euro(I.perUit)}</b> uit en ${tekort?`had je <span data-vraagivper="tekort">${euro(-I.perOver)}</span> tekort`:`hield je <span data-vraagivper="over">${euro(I.perOver)}</span> over`} (${esc(lab)}).`
+      +(I.perUitZonder!=null?` Zonder je eenmalige inkomen: <span data-vraagivzonder="${I.perUitZonder}">${euro(I.perUitZonder)}</span> uit.`:'');
+    return kop('inkomenVerdeling', zin)
+      +`<div class="small" data-vraagivbedragen data-ink="${I.ink}" data-uit="${I.uit}" data-over="${I.over}" data-een="${I.een}" style="margin-top:6px;line-height:1.5">Binnen ${euro(I.ink)}${I.een>0?` (waarvan eenmalig ${euro(I.een)})`:''} · uitgegeven ${euro(I.uit)} · ${tekort?'tekort '+euro(-I.over):'over '+euro(I.over)}</div>`
+      +vraagIVStaafjes(I.rij, I.perUit)
+      +`<div class="row small muted" style="gap:10px;margin-top:4px;font-size:var(--fs-xs)"><span><span style="display:inline-block;width:8px;height:8px;background:var(--bar)"></span> uitgegeven</span><span><span style="display:inline-block;width:8px;height:8px;background:var(--teal)"></span> over</span><span>- - gemiddeld</span></div>`
+      +gr(`${reken} · ${I.M.map(m=>MNAMES[+m.slice(5,7)-1]+' '+m.slice(0,4)).join(', ')} (${I.M.length} ${I.M.length===1?'maand':'maanden'})${oud}`)+'</div>'; }
   return null; }
 function vraagAntwoordOnbekend(){ return `<div data-vraagantwoord="onbekend" style="margin-top:12px"><div style="font-weight:700">${VRAAG_ZIN_ONBEKEND}</div><div class="small muted" style="margin-top:4px">Probeer een van deze:</div>${vraagVoorbeeldenHtml()}</div>`; }
 function vraagUitvoer(o){ const dk=d=>new Date(d+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.','');
@@ -37134,7 +37194,24 @@ const DIAG_BLOKKEN=[
   {titel:'snelheid: de tijd per actie op dit toestel en de duurste functies (alleen meten)', lees:diagSnelheid},
   {titel:'uitgegeven: een definitie, en elk totaal per scherm voor deze en vorige maand', lees:diagUitgegeven},
   {titel:'meldingen op je telefoon: wat dit toestel kan, en de snapshot voor de service worker', lees:diagMeldingen},
+  {titel:'vragen die Minder niet kon beantwoorden (alleen op dit toestel)', lees:diagVraagNiet},
 ];
+/* v521: ALLEEN LEZEN. De lijst niet beantwoorde vragen uit IndexedDB, nieuwste bovenaan, met een telling per reden. */
+function vraagNietTelling(L){ const t={}; for(const r of L) t[r.reden]=(t[r.reden]||0)+1; return Object.keys(VRAAG_NIET_REDEN).filter(k=>t[k]).map(k=>({k, naam:VRAAG_NIET_REDEN[k], n:t[k]})); }
+async function diagVraagNiet(){ const L=await vraagNietLijst(); if(!L.length) return ['geen: elke vraag kreeg een antwoord, of er is nog niets gevraagd'];
+  return [`${L.length} van hooguit ${VRAAG_NIET_MAX} · `+vraagNietTelling(L).map(x=>`${x.naam} ${x.n}`).join(' · '), ...L.slice().reverse().map(r=>`${controleDagTijd(r.op)} · ${r.vraag} · ${VRAAG_NIET_REDEN[r.reden]||r.reden}`)]; }
+async function vraagNietHtml(bevestig){ const L=(await vraagNietLijst()).slice().reverse();
+  const knop=!L.length?'':bevestig?`<div class="row" data-vraagnietbevestig style="gap:8px;margin-top:8px;align-items:center"><span class="small" style="flex:1">De lijst gaat weg van dit toestel. Zeker?</span><button class="btn sec" data-vraagnietja onclick="vraagNietLeegZet()">Ja, leegmaken</button><button class="btn sec" onclick="vraagNietToon(false)">Annuleer</button></div>`
+    :`<button class="btn sec" data-vraagnietleeg style="margin-top:8px" onclick="vraagNietToon(true)">Lijst leegmaken</button>`;
+  return `<div class="hlabel" style="margin:16px 0 6px">Vragen die Minder niet kon beantwoorden</div>
+    <div class="small muted" style="line-height:1.45">Alleen op dit toestel: de lijst gaat niet naar je backend en niet in een back-up. Hooguit ${VRAAG_NIET_MAX}, de oudste valt eruit.</div>
+    ${L.length?`<div class="small" data-vraagniettelling style="margin-top:6px">${vraagNietTelling(L).map(x=>`<span data-reden="${x.k}" data-n="${x.n}">${esc(x.naam)} ${x.n}</span>`).join(' · ')}</div>
+    <div data-vraagnietlijst style="margin-top:4px">${L.map(r=>`<div class="small" data-vraagniet="${esc(r.reden)}" style="padding:5px 0;border-top:1px solid var(--line)"><div style="overflow-wrap:anywhere">${esc(r.vraag)}</div><div style="color:var(--mut);font-size:var(--fs-xs)">${esc(controleDagTijd(r.op))} · ${esc(VRAAG_NIET_REDEN[r.reden]||r.reden)}</div></div>`).join('')}</div>`
+      :'<div class="small muted" data-vraagnietleegstand style="margin-top:6px">Geen: elke vraag kreeg een antwoord, of er is nog niets gevraagd.</div>'}${knop}`; }
+/* het element pas opzoeken NA het lezen: diagSnelheid() (blok 28) zet de sheet tijdens de diagnose terug uit een string, en een element
+   dat vooraf werd opgezocht hangt dan los van de pagina */
+async function vraagNietToon(bevestig){ let h=''; try{ h=await vraagNietHtml(bevestig); }catch(_){ return; } const el=document.getElementById('diagVraagNiet'); if(el) el.innerHTML=h; }
+async function vraagNietLeegZet(){ await vraagNietLeeg(); await vraagNietToon(false); try{ toast(`${ICON('check')} Lijst leeggemaakt`); }catch(_){} }
 /* v516: ALLEEN LEZEN. Welke van Notification, showNotification, PushManager en periodicSync dit toestel heeft, of Minder als
    geïnstalleerde app draait, de toestemmingen, of de periodieke sync geregistreerd staat, en wat de snapshot en de laatste melding
    in IndexedDB zeggen. Schrijft niets (v244): idbGet, permissions.query en getTags lezen alleen. */
@@ -37500,6 +37577,7 @@ async function diagOpen(){
     <div class="small muted" style="margin-bottom:8px;line-height:1.5">Een uitlezing van wat de app op dit toestel meet. Dit scherm leest alleen: er verandert niets aan je gegevens door te kijken. De uitvoer bevat je eigen bedragen en blijft op dit toestel, tenzij je hem zelf ergens plakt.</div>
     ${(function(){ try{ return voorbeeldKies(); }catch(e){ return ''; } })()}
     ${(function(){ try{ return controleDiagHtml(); }catch(e){ return '<div class="small muted">controles: '+esc(e.message)+'</div>'; } })()}
+    <div id="diagVraagNiet"></div>
     <div class="hlabel" style="margin:16px 0 6px">Alle blokken</div>
     <textarea id="diagUit" readonly onclick="this.select()" style="width:100%;height:46vh;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);line-height:1.45;white-space:pre;overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px">Bezig met lezen...</textarea>
     <div class="row" style="margin-top:10px;gap:8px">
@@ -37507,8 +37585,10 @@ async function diagOpen(){
       <button class="btn sec" id="diagDeel20" data-deelblok20 onclick="diagDeelBlok20()" style="flex:1">Blok 20 delen als bestand</button>
     </div>`;
   showSheetBg();
+  vraagNietToon(false);   // v521
   let t; try{ t=await diagTekst(); }catch(e){ t='FOUT bij het lezen: '+e.message; }
   const el=$('#diagUit'); if(el) el.value=t;
+  await vraagNietToon(false);   // v521: opnieuw na de blokken, want blok 28 zet de sheet tussendoor terug
 }
 /* v423: BLOK 20 ALS BESTAND. Een lange tekst kwam via kopieren afgekapt aan; een .txt via het deelmenu van de telefoon
    draagt alles. Alleen dat ene blok, met de kop van het diagnosescherm, en de regel "deel 1 van 1 · N regels" bovenaan het
