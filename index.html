@@ -7135,8 +7135,13 @@ function maandRegels(){
          status, de eenheid en de gevolgzin lezen hem (v104). Sinds v323 is dat alleen nog de
          kalender: een post in de lopende maand is een beslissing, elke latere post aandacht. */
       const DD = D.gat ? dekkingDichten(D) : null;
-      const opTempo = !D.gat || !!(DD && DD.teDichten);
-      const norm = !D.gat && !(D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk);
+      /* v521c: DE INLEG TELT MEE. Dekt je pot plus je inleg (SET.salVerdeling.reserveringen, resInlegPerMaand) elke post op zijn
+         vervaldatum (D.inlegDekt.ok), dan is de regel in orde: geen tekort en geen keuze. Gemeld: pot EUR 0, Laserbehandeling EUR 159 in
+         april en EUR 36 per periode naar je reserveringen bleef 'let op' met "EUR 159 tekort", en de acceptatie daarop kwam terug als
+         keuze. Zonder inleg is het de pot alleen, zoals sinds v131. */
+      const inlOk = !!(D.inlegDekt && D.inlegDekt.ok);
+      const opTempo = !D.gat || inlOk || !!(DD && DD.teDichten);
+      const norm = inlOk || (!D.gat && !(D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk));
       const st = !D.volledig ? 'onbekend' : norm ? 'ok' : opTempo ? 'let op' : 'tekort';
       const komt = D.regels.some(r=>r.soort==='post');   // valt er dit jaar iets binnen de horizon?
       /* v314: DE EERSTVOLGENDE POST EN WAT ER NA HEM OVERBLIJFT. `D.regels` is al gesorteerd op
@@ -7164,10 +7169,11 @@ function maandRegels(){
          oordeel dat uit de waardekolom is gehaald - het percentage, of waarom er geen is. */
       eenheid: !D.volledig ? 'niet te beoordelen'
         : (!D.gat && over1!=null) ? `in je pot · ${euro0(over1)} blijft over`
+        : inlOk ? `in je pot · gedekt met je inleg van ${euro0(D.inlegDekt.inleg)}`
         /* v322: bij een gat dat te dichten is noemt de eenheid wat dat per maand vraagt, met de maand
            erbij. ALLEEN DE MAANDNAAM: de horizon is twaalf maanden en een voorkomen ligt op een offset
            onder de twaalf, dus 'november' wijst binnen dit venster precies een maand aan. */
-        : (st==='let op' && DD && DD.perMaand!=null) ? `in je pot · ${euro0(DD.perMaand)} per maand tot ${resMaandKort(D.gat.maand)}`
+        : (st==='let op' && DD && DD.perMaand!=null) ? `in je pot · ${euro0(DD.perMaand)} per maand${DD.extra?' extra':''} tot ${resMaandKort(DD.maand)}`
         : D.graad!=null ? `in je pot · ${graadTekst(D.graad,'wat nu nodig is')}`
         : (D.gat && D.gat.gedektPct!=null) ? `in je pot · ${graadTekst(D.gat.gedektPct,'de eerstvolgende post')}`
         : D.gat ? `in je pot · ${euro0(D.gat.tekort)} tekort`
@@ -7188,6 +7194,7 @@ function maandRegels(){
           /* v344: zonder gat zegt de tegel tot wanneer je gedekt bent en niet wat de eerste post kost:
              "EUR 299 nodig in november" boven een pot van EUR 299 las als een eis die er niet is. */
           : (!D.gat && eerstePost && D.gedektTot) ? `gedekt t/m ${resMaandKort(D.gedektTot)}`
+          : (inlOk && eerstePost) ? 'gedekt met je inleg'
           : eerstePost ? `${euro0(eerstePost.bedrag)} nodig in ${resMaandKort(eerstePost.maand)}` : (komt ? 'er hoeft nu niets opzij' : 'niets aankomend dit jaar'),
         benodigdeStand: D.volledig?D.benodigdeStand:null,
         gatMaand: D.gat?D.gat.maand:null,   // v390: de maand van het eerste gat, voor de Beleggen-meter
@@ -7198,7 +7205,8 @@ function maandRegels(){
         // v344: de zin over wat het gat per maand vraagt staat sindsdien IN dekkingTekst(), zodat de
         // sheet van de lijst en deze regel hetzelfde zeggen.
         gevolg: dekkingTekst(D),
-        perMaandTot: (DD && DD.perMaand!=null) ? {bedrag:DD.perMaand, maand:D.gat.maand} : null,
+        perMaandTot: (DD && DD.perMaand!=null) ? {bedrag:DD.perMaand, maand:DD.maand} : null,
+        inlegOk: inlOk,   // v521c: dekt je inleg alles, dan noemt geen weergave een tekort (maandTekort)
         /* v226: opTempo staat alleen op de rij als de norm óók niet gehaald wordt. Bij 'ok' zou het
            veld de suggestie en de gespreksingang onderdrukken die er toch al niet zijn, en dan
            draagt het een betekenis die het niet heeft. De gevolgzin blijft dekkingTekst(): die
@@ -7752,7 +7760,7 @@ function maandDot(st){
 function maandTekort(r){
   if(!r || r.structureel) return null;
   const t=Math.max(Math.round(+r.tekortPerMaand||0),0);
-  if(r.key==='dekking') return t>0?{bedrag:t, soort:'stand'}:null;
+  if(r.key==='dekking') return (t>0 && !r.inlegOk)?{bedrag:t, soort:'stand'}:null;   // v521c: met je inleg gedekt is geen tekort
   if(r.key==='doel')    return t>0?{bedrag:t, soort:'maand'}:null;
   if(r.key==='buffer'){
     // v305: de derde lezer van de teller, en hij gaat mee met de andere twee (v104).
@@ -9062,7 +9070,7 @@ const afDag=d=>{ try{ return new Date(String(d)+'T00:00:00').toLocaleDateString(
 /* Waaraan de app de afspraak meet, in een zin. */
 function afspraakMeetZin(a){
   const c=CATS[a.cat]; const cn=c?c.name:'';
-  if(a.soort==='storting') return 'gemeten aan wat er per maand op je reserveringsrekening bijkomt';
+  if(a.soort==='storting') return 'gemeten aan wat je per periode naar je reserveringsrekening stort (een betaling uit de pot telt niet)';
   if(a.soort==='grens') return `gemeten aan je uitgaven in ${cn} tot het eind van ${afMnd(a.tot)}`;
   if(a.soort==='potje') return a.bedrag>0 ? `gemeten aan je uitgaven in ${cn} in ${afMnd(a.van)}` : `gemeten in ${afMnd(a.van)}: komen er nog afschrijvingen in ${cn}?`;
   if(a.soort==='pauze') return `gemeten aan gekoppelde inleg naar ${a.naam||'je bezitting'} na ${afDag(a.op)}`;
@@ -9078,17 +9086,21 @@ function afspraakStand(a){
   const klaar=String(a.tot)<nu;   // de termijn is voorbij
   const c=CATS[a.cat]; const cn=c?c.name:'';
   if(a.soort==='storting'){
-    const b=Math.round(+a.bedrag||0); const ms=afspraakMaanden(a.van, a.tot).filter(m=>m<=nu);
-    if(!ms.length) return {status:'loopt', feit:`gemeten vanaf ${afMnd(a.van)}`, af:false};
-    const per=ms.map(m=>{ const g=Math.round(resThisMonth(m)||0); return {m, g, s: g>=b*(1-AFSPRAAK_MARGE)?'gezien':g>0?'deels':'niet'}; });
-    const niet=per.filter(x=>x.s!=='gezien');
+    /* v521c: GEMETEN AAN WAT ER NAAR JE RESERVERINGSREKENING GAAT, PER SALARISPERIODE. Tot v521c was dit het netto verschil op die
+       rekening per kalendermaand (resThisMonth), dus de advocaat die uit de pot werd betaald telde als een storting die niet kwam
+       (gemeld: "november -EUR 1.000 van EUR 27"). Nu telt alleen wat erbij komt (bijschrijvingen, geen pending), per eenheid uit
+       periodeVan() (een salarisperiode, voor de era een kalendermaand), vanaf de eenheid waarin je de afspraak maakte. Het vinkje gaat
+       aan zodra de stortingen in de eenheid het afgesproken bedrag halen. */
+    const b=Math.round(+a.bedrag||0), E=afspraakStortEenheden(a);
+    if(!E.length) return {status:'loopt', feit:`gemeten vanaf ${afMnd(a.van)}`, af:false};
+    const per=E.map(U=>{ const g=Math.round(resStortingen(U.start, U.tot)); return {m:U.label, label:U.label, start:U.start, eind:U.eind, g, s: g>=b*(1-AFSPRAAK_MARGE)?'gezien':g>0?'deels':'niet'}; });
+    const niet=per.filter(x=>x.s!=='gezien'), laatste=per[per.length-1];
     if(!niet.length){
-      if(klaar || a.tot===nu && per[per.length-1].s==='gezien' && ms.length===afspraakMaanden(a.van,a.tot).length)
-        return {status:'gezien', feit:ms.length===1?`storting in ${afMnd(ms[0])} gezien`:'alle stortingen gezien', af:true, per};
-      return {status:'gezien', feit:`storting in ${afMnd(nu)} gezien · ${afMnd(nextYM(nu))} volgt`, af:true, per};
+      if(klaar) return {status:'gezien', feit:per.length===1?`storting in ${laatste.label} gezien`:'alle stortingen gezien', af:true, per};
+      return {status:'gezien', feit:`storting in ${laatste.label} gezien · de volgende periode volgt`, af:true, per};
     }
     const x=niet[niet.length-1];
-    const feit = x.s==='deels' ? `${euro0(x.g)} van ${euro0(b)} in ${afMnd(x.m)} gezien` : `storting in ${afMnd(x.m)} nog niet gezien`;
+    const feit = x.s==='deels' ? `${euro0(x.g)} van ${euro0(b)} in ${x.label} gezien` : `storting in ${x.label} nog niet gezien`;
     const deels = x.s==='deels' || (klaar && per.some(y=>y.s==='gezien'));
     return {status: deels?'deels':'nietgezien', feit, af:false, per};
   }
@@ -9135,6 +9147,17 @@ function afspraakStand(a){
   }
   return null;
 }
+/* v521c: de eenheden waarin een stortingsafspraak wordt gemeten: vanaf de eenheid van de dag van de afspraak (periodeVan, de ene bron)
+   tot en met die van vandaag, niet na de laatste maand van de termijn. `tot` is de laatste dag die telt (vandaag in de lopende). */
+function afspraakStortEenheden(a){ const vandaag=vandaagYMD(), totD=String(a.tot||'')+'-31', uit=[];
+  let d=String(a.op||(a.van+'-01')).slice(0,10); if(String(a.van||'')+'-01'>d) d=String(a.van)+'-01';
+  for(let i=0;i<40;i++){ let P=null; try{ P=periodeVan(d); }catch(_){} if(!P || P.start>vandaag || P.start>totD) break;
+    uit.push({start:P.start, eind:P.eind, tot:P.eind<vandaag?P.eind:vandaag, label:P.label}); d=rekDag(P.eind,1); }
+  return uit; }
+/* v521c: wat er tussen twee dagen op je reserveringsrekening BIJKWAM (bijschrijvingen, geen pending). Een betaling uit de pot telt niet. */
+function resStortingen(van, tot){ const a=resAccId(); if(!a) return 0; let s=0;
+  for(const t of telbareTx()) if(t.acc===a && !t.pending && t.amount>0 && t.date>=van && t.date<=tot) s+=t.amount;
+  return s; }
 /* Wat er nog loopt: niet herzien en de termijn niet voorbij. */
 function afsprakenLopend(){ const nu=thisYM(); return afsprakenLijst().filter(a=>!afspraakHerzienVan(a) && String(a.tot)>=nu); }
 /* De afspraken die bij de afsluiting van maand M horen: wat er nog loopt, wat in M of daarna
@@ -9168,7 +9191,7 @@ function renderAfspraakSheet(id){
   const a=afsprakenLijst().find(x=>x.id===id); if(!a){ closeSheet(); return; }
   const S=afspraakStand(a)||{};
   const termijn = a.van===a.tot ? afMnd(a.van) : `${afMnd(a.van)} tot en met ${afMnd(a.tot)}`;
-  const per=(S.per||[]).map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small">${esc(afMnd(x.m))}</span><span class="small" style="font-weight:700">${euro0(x.g)} van ${euro0(a.bedrag)}</span></div>`).join('');
+  const per=(S.per||[]).map(x=>`<div class="row" data-afper="${esc(x.start||x.m)}" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small">${esc(x.label||afMnd(x.m))}</span><span class="small" style="font-weight:700">${euro0(x.g)} van ${euro0(a.bedrag)}</span></div>`).join('');
   const kan=!afspraakHerzienVan(a);
   const aanpas = !kan ? '' : a.soort==='storting'
     ? `<div style="margin-top:12px" data-afaanpas><label class="fld">Per maand (€)</label><input id="afBedrag" type="text" min="0" inputmode="decimal" value="${Math.round(+a.bedrag||0)}" style="width:100%">
@@ -12369,12 +12392,28 @@ function coachGekozenStand(){
     let r=null; try{ r=maandRegels().find(x=>x.key===c.regel); }catch(_){}
     if(!r || r.status==='ok' || r.status==='onbekend') return null;   // er valt niets (meer) te accepteren
     const st=maandAcceptStatus(c.regel, r);
-    if(!st || !st.geldig) return {c, op, open:true, regel:r, reden:st?st.reden:'geen'}; }
+    if(!st || !st.geldig){
+      /* v521c: EEN KEUZE VOOR DEZELFDE REGEL NA DE ACCEPTATIE SLUIT HEM. Gemeld: na "Je afspraak" (EUR 27 per maand tot april) en na
+         "Dekking reserveringen aanpassen" bleef "accepteren of oplossen" open, want deze functie las alleen het gesprek. Voor de
+         dekkingsregel telt een stortingsafspraak (SET.afspraken, ook als hij later is aangepast of gestopt: dat telt als afgerond) of
+         een wijziging van je reserveringen (SET.resGewijzigd), beide na het moment van de acceptatie. */
+      const V=acceptVervangen(c);
+      if(V) return {c, op, open:false, vervangen:V, regel:r};
+      return {c, op, open:true, regel:r, reden:st?st.reden:'geen'}; } }
   return {c, op, open:false};
 }
+function acceptVervangen(c){ if(!c || c.regel!=='dekking') return null; const ts=+c.ts||0;
+  let a=null; try{ a=afsprakenLijst().filter(x=>x.soort==='storting' && (+x.ts||0)>ts).sort((x,y)=>(y.ts||0)-(x.ts||0))[0]||null; }catch(_){}
+  if(a) return {soort:'afspraak', a, op:a.op||ymdVan(new Date(a.ts))};
+  const g=+SET.resGewijzigd||0; if(g>ts) return {soort:'reserveringen', op:ymdVan(new Date(g))};
+  return null; }
 function gripAfsprakenHtml(){
   const m=thisYM(); let af='';
-  try{ const G=coachGekozenStand(); if(G && !G.open) af+=`<div class="row" data-afspraak="coach" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(G.c.text||'')}</span><span class="small" data-afspraakop="${esc(G.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(G.op))} · Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
+  try{ const G=coachGekozenStand();
+    /* v521c: is de acceptatie vervangen door een latere keuze, dan staat die keuze hier, met haar eigen ingang */
+    if(G && G.vervangen){ const V=G.vervangen, isA=V.soort==='afspraak';
+      af+=`<div class="row" data-afspraak="${isA?'storting':'reserveringen'}" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${isA?`openAfspraak('${esc(V.a.id)}')`:'openReserveringen()'}">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(isA?(V.a.wat||''):'Dekking reserveringen aangepast')}</span><span class="small" data-afspraakop="${esc(V.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(V.op))} · ${isA?'Je afspraak':'je reserveringen'} · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }
+    else if(G && !G.open) af+=`<div class="row" data-afspraak="coach" data-kiesstand="gekozen" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('gezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(G.c.text||'')}</span><span class="small" data-afspraakop="${esc(G.op)}" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">● gekozen op ${esc(dagKort(G.op))} · Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
   return af;
 }
 /* ===== v428: GRIP ALS CYCLUS, FASE 1 (gevraagd door de gebruiker, mockup "Grip compleet v423") =====
@@ -15213,7 +15252,9 @@ function gripKiezenNieuw(C){
   let Tp=null; try{ Tp=gripTerugblikGemeten(); }catch(_){}
   const meeR=C.mee.map(x=>`<div class="row" data-kiesmee="${esc(x.soort)}" data-letop="${esc(x.soort)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">${nr(0,'↩')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(x.naam)}</span>${gripSub(esc(x.sub||''))}</span>${gripPijl}</div>`).join('');
   /* v430: "Klopte de oorzaak?" van vorige maand komt hier bovenaan mee (wat je meeneemt naar deze maand) */
-  const meeTC=(C.TC||[]).map(t=>`<div class="row" data-kiesmee="oorzaakcheck" data-terugcheck="${esc(t.id)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripKiesTab('terugblik')">${nr(0,'↩')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(t.naam)}</span>${gripSub(`${esc(t.wat)}: ${euro0(t.voor)} in ${esc(t.voorL||f3MN(t.voorM))} → ${euro0(t.nu)} in ${esc(t.prevL||f3MN(t.prev))} · ${t.lijkt?'lijkt te kloppen':t.antwoord?(t.antwoord==='ja'?'oorzaak klopte':'oorzaak klopte niet, opnieuw bepalen'):'Klopte de oorzaak? (Terugblik)'}`)}</span>${gripPijl}</div>`).join('');
+  /* v521c: een terugcheck die klopt (lijkt te kloppen, of door jou bevestigd) is geen keuze en staat alleen in de Terugblik; hier staat
+     hij alleen als hij niet klopt, met de vraag of het iets anders was. */
+  const meeTC=(C.TC||[]).filter(t=>!t.lijkt && t.antwoord!=='ja').map(t=>`<div class="row" data-kiesmee="oorzaakcheck" data-terugcheck="${esc(t.id)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripKiesTab('terugblik')">${nr(0,'↩')}<span style="flex:1;min-width:0"><span style="display:block;font-weight:700">${esc(t.naam)}</span>${gripSub(`${esc(t.wat)}: ${euro0(t.voor)} in ${esc(t.voorL||f3MN(t.voorM))} → ${euro0(t.nu)} in ${esc(t.prevL||f3MN(t.prev))} · ${t.antwoord==='nee'?'oorzaak klopte niet, opnieuw bepalen':'Was het iets anders?'}`)}</span>${gripPijl}</div>`).join('');
   const eraP=eraEenheidNu();   // v499 (punt 6): in de era heten de koppen "vorige periode" en "deze periode", en de gemeten eenheid draagt haar eigen label (november (1–23))
   const mee=`<div class="card" id="gripMee"><div class="hlabel" style="margin:0 0 4px">${eraP?'Mee uit vorige periode':'Mee uit vorige maand'}</div>${meeTC}${Tp?`<div class="small" data-meegemeten${Tp.U?` data-meeeenheid="${esc(Tp.label)}"`:''}>${esc(Tp.U?Tp.label:ymFull(Tp.ym))} ${gripScoreTekst(Tp)} · <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="gripKiesTab('terugblik')">Terugblik ›</span></div>`:`<div class="small muted" data-meegemeten>Nog geen afgesloten ${eraP?'periode':'maand'} gemeten.</div>`}${meeR}</div>`;
   /* b. Te kiezen: elke rij is de keuze en de reden eronder; de tik opent de sheet die er al was */
@@ -15255,7 +15296,8 @@ function gripKiezenNieuw(C){
   return mee+over+onr+te+ligt+wacht+al; }
 /* v430: "Klopte de oorzaak?" in de Terugblik: per keuze van vorige maand het symptoom voor en nu */
 function gripKlopteOorzaakHtml(){ const C=gripCyc(), TC=C.TC||[]; if(!TC.length) return '';
-  return `<div class="card" id="gripKlopteOorzaak"><div class="hlabel" style="margin:0 0 4px">Klopte de oorzaak?</div>${TC.map(t=>`<div data-terugcheck="${esc(t.id)}" data-terugcheckstand="${t.stand}" style="padding:8px 0;border-top:1px solid var(--line)"><div class="small" style="font-weight:700">${esc(t.naam)}</div>${gripSub(`${esc(t.wat)}: ${euro0(t.voor)} in ${esc(t.voorL||f3MN(t.voorM))} → ${euro0(t.nu)} in ${esc(t.prevL||f3MN(t.prev))} (${t.kleiner>=0?t.kleiner+'% kleiner':(-t.kleiner)+'% groter'})`)}
+  /* v521c: een oorzaak die lijkt te kloppen is een regel in gewone taal: "<gekozen oorzaak> hielp: <symptoom> EUR X minder (<maand> → <maand>)" */
+  return `<div class="card" id="gripKlopteOorzaak"><div class="hlabel" style="margin:0 0 4px">Klopte de oorzaak?</div>${TC.map(t=>t.stand==='lijkt'?`<div data-terugcheck="${esc(t.id)}" data-terugcheckstand="lijkt" data-lijktkloppen style="padding:8px 0;border-top:1px solid var(--line)"><div class="small">${esc(OORZAAK_NAAM[t.soort]||t.naam)} hielp: ${esc(t.wat)} ${euro0(Math.max(t.voor-t.nu,0))} minder (${esc(t.voorL||f3MN(t.voorM))} → ${esc(t.prevL||f3MN(t.prev))})</div></div>`:`<div data-terugcheck="${esc(t.id)}" data-terugcheckstand="${t.stand}" style="padding:8px 0;border-top:1px solid var(--line)"><div class="small" style="font-weight:700">${esc(t.naam)}</div>${gripSub(`${esc(t.wat)}: ${euro0(t.voor)} in ${esc(t.voorL||f3MN(t.voorM))} → ${euro0(t.nu)} in ${esc(t.prevL||f3MN(t.prev))} (${t.kleiner>=0?t.kleiner+'% kleiner':(-t.kleiner)+'% groter'})`)}
     ${t.stand==='lijkt'?`<div class="small" data-lijktkloppen style="margin-top:4px;color:var(--green);font-weight:700">lijkt te kloppen</div>`
       :t.stand==='beantwoord'?`<div class="small" style="margin-top:4px">${t.antwoord==='ja'?'Je zei: de oorzaak klopte':'Je zei: de oorzaak klopte niet · de vraag staat weer in Begrijpen'}</div>`
       :t.stand==='later'?`<div class="small" style="margin-top:4px;color:var(--mut2)">vraag in ${MNAMES[+nextYM(thisYM()).slice(5,7)-1]}</div>`
@@ -16136,7 +16178,7 @@ function dekking(maanden){
                  intervalM:x.intervalM, cat:x.cat, opgebouwd:Math.round(opgebouwd)});
   }
   benodigdeStand=Math.round(benodigdeStand);
-  let gedektTot=null, gat=null, graad=null, tekort=0, nodigPerMaand=null, laagste=null; const reeks=[];
+  let gedektTot=null, gat=null, graad=null, tekort=0, nodigPerMaand=null, laagste=null, inlegDekt=null; const reeks=[];
   if(stand!=null){
     /* v344: WAT ER NOG PER MAAND BIJ MOET, NA WAT ER AL IN DE POT STAAT. De bruto som die hier tot v347
        stond telde per voorkomen `bedrag / maanden tot` op en keek niet naar de pot. GEMELD: pot EUR 299 en
@@ -16167,7 +16209,17 @@ function dekking(maanden){
     { const inl=resInlegPerMaand(); let min=null;
       for(let m=0;m<H;m++){ const uit=V.filter(x=>x.offset<=m).reduce((a,x)=>a+x.bedrag,0), st=Math.round((stand+inl.bedrag*m-uit)*100)/100;
         reeks.push({maand:resYmPlus(m), offset:m, stand:st}); if(min==null || st<min.stand) min={maand:resYmPlus(m), offset:m, stand:st}; }
-      laagste=min?Object.assign({inleg:inl.bedrag, inlegBron:inl.bron}, min):null; }
+      laagste=min?Object.assign({inleg:inl.bedrag, inlegBron:inl.bron}, min):null;
+      /* v521c: DEKT DE POT MET JE INLEG ELKE POST OP ZIJN VERVALDATUM? Dezelfde telling als de reeks hierboven (stand plus inleg vanaf
+         volgende maand, de lopende maand niet), maar per post op volgorde: per post wat er op die maand staat voordat hij betaald wordt
+         en of hij past. Dekt hij alles, dan is de regel Dekking in orde (maandRegels) en zegt de zin het met die ene aanname; past er
+         een niet, dan is `gat` de eerste die niet past, met het tekort na je inleg. Zonder inleg null: dan geldt de pot alleen (v131). */
+      if(inl.bedrag>0){ let cum=0, eerste=null, g=null;
+        for(const x of V){ const voor=stand+inl.bedrag*x.offset-cum; cum+=x.bedrag;
+          const rij={maand:x.maand, naam:x.naam, bedrag:x.bedrag, offset:x.offset, stand:Math.round(voor*100)/100};
+          if(!eerste) eerste=rij;
+          if(voor-x.bedrag< -0.005){ g=Object.assign(rij, {tekort:Math.round(x.bedrag-voor)}); break; } }
+        inlegDekt={inleg:inl.bedrag, ok:!g, gat:g, eerste}; } }
     graad = benodigdeStand>0 ? Math.round(stand/benodigdeStand*100) : null;
     tekort = Math.max(benodigdeStand-stand,0);
     regels.push({soort:'rekening', id:acc, naam:acctNiceName(acc), bedrag:stand});
@@ -16186,7 +16238,7 @@ function dekking(maanden){
   /* v345: dezelfde som met een lege pot, voor de tak zonder reserveringsrekening. Daar is de stand
      niet onbekend maar niet aangewezen, en de vraag is wat je lijst vraagt als er nog niets staat. */
   const nodigZonderPot=resNodigPerMaand(V, 0);
-  return {nodigPerMaand, nodigZonderPot, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort, reeks, laagste,
+  return {nodigPerMaand, nodigZonderPot, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort, reeks, laagste, inlegDekt,
           regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'),
           aantal:lijst.length, inVenster, horizon:H};
 }
@@ -16204,7 +16256,9 @@ function resNodigPerMaand(V, stand){
    (SET.salVerdeling.reserveringen). Zonder afspraak geen inleg en dat zegt de zin erbij (geen schatting, v59/v73). */
 function resInlegPerMaand(){ const v=SET.salVerdeling&&+SET.salVerdeling.reserveringen; return v>0?{bedrag:v, bron:'verdeling'}:{bedrag:0, bron:'geen'}; }
 function resLaagsteZin(D){ const L=D&&D.laagste; if(!L) return '';
-  return ` Laagste stand ${euro0(L.stand)} in ${resMaandLabel(L.maand)}${L.inleg>0?`, met je inleg van ${euro0(L.inleg)} per maand meegerekend`:', zonder inleg (je verdeling noemt geen bedrag voor je reserveringen)'}.`; }
+  return ` Laagste stand ${euro0(L.stand)} in ${resMaandLabel(L.maand)}${L.inleg>0?`, met je inleg van ${euro0(L.inleg)} ${resInlegEenheid()} meegerekend`:', zonder inleg (je verdeling noemt geen bedrag voor je reserveringen)'}.`; }
+/* v521c: je inleg komt uit de salarisverdeling, dus in de era is hij per salarisperiode; daarvoor per maand. Alleen het woord. */
+function resInlegEenheid(){ let e=null; try{ e=eraEenheidNu(); }catch(_){} return e?'per periode':'per maand'; }
 function resMaandLabel(ym){ const m=+String(ym||'').slice(5,7); return m?(MFULL[m-1]+' '+String(ym).slice(0,4)):''; }
 /* v510 punt 2: DE KORTE VORM MET JAARTAL ("okt 2027"). Gemeld: "EUR 1.000 gedekt t/m oktober" op 2 november, bedoeld oktober 2027 (de
    horizon van twaalf maanden). Elke dekking of horizon die een maand noemt draagt het jaartal: resMaandLabel() in een zin, deze in een
@@ -16233,6 +16287,17 @@ function dekkingTekst(D){
      Grip), en alleen als de posten NA het gat meer vragen het bedrag voor het hele jaar, netto van
      de pot (`nodigPerMaand`). Gelijk aan het gat-bedrag zou dezelfde eis twee keer zijn (v91). */
   if(!D.gat) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. Er is niets meer nodig tot de volgende post.${resLaagsteZin(D)}`;
+  /* v521c: MET INLEG IS ER EEN AANNAME, EN DAT IS DE INLEG. Gemeld: "Je pot dekt de eerstvolgende post nu al niet ... tekort" (zonder
+     inleg) naast "Laagste stand EUR 0, met je inleg meegerekend" in dezelfde zin. De zin zonder inleg staat alleen nog als er geen
+     inleg is. */
+  const IL=D.inlegDekt;
+  if(IL){ const per=resInlegEenheid();
+    if(IL.ok){ const e=D.gat;   // de post die je pot alleen niet dekt
+      const r=(IL.eerste && e && IL.eerste.maand===e.maand)?IL.eerste:null;
+      const stand=r?r.stand:(D.werkelijkeStand||0)+IL.inleg*(doelMaandenTot(e.maand)||0);
+      return `Met je inleg van ${euro0(IL.inleg)} ${per} staat er in ${resMaandLabel(e.maand)} ${euro0(stand)}; ${e.naam} van ${euro0(e.bedrag)} is gedekt. Er is niets extra nodig.${resLaagsteZin(D)}`; }
+    const g=IL.gat, DDi=dekkingDichten(D);
+    return `Met je inleg van ${euro0(IL.inleg)} ${per} staat er in ${resMaandLabel(g.maand)} ${euro0(g.stand)}; daar komt ${g.naam} van ${euro0(g.bedrag)} en dan kom je ${euro0(g.tekort)} tekort. ${dekkingDichtenZin(DDi, D)}${resLaagsteZin(D)}`; }
   const tot=D.gedektTot?`Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}.`:'Je pot dekt de eerstvolgende post nu al niet.';
   const DD=dekkingDichten(D);
   const jaar=(D.nodigPerMaand>0 && !(DD && DD.perMaand!=null && D.nodigPerMaand<=DD.perMaand))
@@ -16255,18 +16320,22 @@ function dekkingTekst(D){
    euro tekort is nog steeds tekort. */
 function dekkingDichten(D){
   if(!D || !D.gat) return null;
-  const k0=doelMaandenTot(D.gat.maand);
-  const tekort=Math.max(Math.round(+D.gat.tekort||0),0);
-  if(k0==null || k0<=0) return {maanden:k0, perMaand:null, teDichten:false, dezeMaand:true};
+  /* v521c: met inleg is het gat dat van je pot PLUS je inleg (D.inlegDekt): dekt die alles, dan is er geen gat om te dichten, en
+     anders gaat het over de eerste post die ook met je inleg niet past, met het tekort daarna (wat er extra bij moet). */
+  const IL=D.inlegDekt; if(IL && IL.ok) return null;
+  const G=(IL && IL.gat)?IL.gat:D.gat;
+  const k0=doelMaandenTot(G.maand);
+  const tekort=Math.max(Math.round(+G.tekort||0),0);
+  if(k0==null || k0<=0) return {maanden:k0, perMaand:null, teDichten:false, dezeMaand:true, maand:G.maand, extra:!!IL};
   const k=k0+1;   // de lopende maand telt mee
-  return {maanden:k, perMaand:Math.ceil(tekort/k), teDichten:true, dezeMaand:false};
+  return {maanden:k, perMaand:Math.ceil(tekort/k), teDichten:true, dezeMaand:false, maand:G.maand, extra:!!IL};
 }
 // de zin achter dekkingTekst(): wat het gat per maand vraagt (v322/v323)
 function dekkingDichtenZin(DD, D){
   if(!DD) return '';
   if(DD.dezeMaand) return 'Die post valt deze maand, dus er is geen maand meer om dat bij te leggen.';
-  const mnd=resMaandLabel(D.gat.maand);   // v510 punt 2: maand + jaar
-  return `Dat is ${euro0(DD.perMaand)} per maand tot ${mnd}, deze maand meegeteld.`;
+  const mnd=resMaandLabel(DD.maand||D.gat.maand);   // v510 punt 2: maand + jaar; v521c: met inleg de maand van het gat na je inleg
+  return `Dat is ${euro0(DD.perMaand)} per maand${DD.extra?' extra':''} tot ${mnd}, deze maand meegeteld.`;
 }
 /* v344: HIER STOND DE KAART "RESERVERINGEN" VAN PLAN (resDekkingCard() en resPostTelling()). Hij
    dubbelde de tegel op Grip en de sheet erachter, en Plan rekende er niet mee: benodigdPerMaand zit
@@ -16345,7 +16414,7 @@ function openResAccPick(){
     <div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>`;
   showSheetBg();
 }
-function resAccSet(a){ if(a) SET.resAcc=a; else delete SET.resAcc; save(); render(); renderResSheet(); }
+function resAccSet(a){ if(a) SET.resAcc=a; else delete SET.resAcc; SET.resGewijzigd=Date.now(); save(); render(); renderResSheet(); }
 function openReservering(id){
   window._resEdit=id||''; window._benoemRes=null;   // v424: alleen benoemResVoorstel() zet hem na het openen
   const v=id?resLijst().find(x=>x.id===id):null;
@@ -16483,10 +16552,11 @@ function saveReservering(id){
   SET.reserveringen=resLijst().slice();
   const i=SET.reserveringen.findIndex(x=>x.id===id);
   if(i>=0) SET.reserveringen[i]=g; else SET.reserveringen.push(g);
+  SET.resGewijzigd=Date.now();   // v521c: een keuze voor de dekkingsregel (sluit een open acceptatie, coachGekozenStand)
   save(); render(); renderResSheet(); toast(`${ICON('check')} Verplichting opgeslagen`);
 }
 function deleteReservering(id){
-  SET.reserveringen=resLijst().filter(x=>x.id!==id);
+  SET.reserveringen=resLijst().filter(x=>x.id!==id); SET.resGewijzigd=Date.now();   // v521c
   if(SET.resBetaald) delete SET.resBetaald[id];   // v268: geen vlag zonder post; ids worden nooit hergebruikt, dus dit laat niets achter
   save(); render(); renderResSheet(); toast('Verplichting verwijderd');
 }
@@ -16540,7 +16610,7 @@ function resNaarDoel(id){
               Zonder dat zou het streepje op nul starten en las je "je loopt voor" op dag één. */
            startDatum:vandaagYMD(), startStand:Math.max(Math.round(Math.min(gespaard,bedrag)),0)};
   SET.goals=(SET.goals||[]).concat([g]);
-  SET.reserveringen=resLijst().filter(x=>x.id!==id);
+  SET.reserveringen=resLijst().filter(x=>x.id!==id); SET.resGewijzigd=Date.now();   // v521c
   if(SET.resBetaald) delete SET.resBetaald[id];   // v268: de post verdwijnt hier ook, dus de vlag gaat mee
   save(); render(); renderResSheet();
   toast(`${ICON('check')} ${g.naam} staat nu bij je doelen`);

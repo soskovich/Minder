@@ -1836,3 +1836,17 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   Vermogensreis houdt `bezitReisPer()`. (b) Zonder gekoppelde boeking telt een bezitting pas mee met een gekozen rekening (`a.perAcc`, nieuw in
   de bezittingseditor, niets voorgeselecteerd) en startmaand (`a.perVanaf`); tot dan de regel "Niet meegeteld" onder de verdeling, die de editor
   opent. (c) De opbouw noemt elke bezitting apart. Spec `v521b.spec.js` (g, h, i; samen met v521a 10 van 10 sabotages rood).
+- **v521c: Kiezen › Dekking reserveringen gaat dicht, en de stortingsafspraak wordt goed gemeten** (`minder-v521c`, tak `werk/v521c` vanaf
+  82e517c). Gemeten op een stand naar de melding van 24 nov (pot EUR 0, Laserbehandeling EUR 159 april 2027, ANWB EUR 123 november 2027, inleg
+  EUR 36 per periode, de acceptatie van 6 nov): de regel stond op 'let op' omdat `dekking()` het gat op de pot alleen rekende; de zin zei
+  "Je pot dekt de eerstvolgende post nu al niet ... EUR 159 tekort" naast "Laagste stand EUR 0, met je inleg meegerekend"; "Je afspraak" en
+  "aanpassen" schreven SET.afspraken en SET.reserveringen, en `coachGekozenStand()` las alleen het gesprek; de opvolging was het netto verschil
+  per kalendermaand (`resThisMonth`), dus de advocaat uit de pot telde als niet nagekomen. (1) `dekking().inlegDekt`: per post op volgorde de
+  pot plus je inleg (`resInlegPerMaand`, dezelfde telling als de laagste stand); dekt hij alles, dan is de regel ok, geen tekort (`maandTekort`
+  leest `r.inlegOk`) en geen keuze, en zegt de zin "Met je inleg van EUR 36 per periode staat er in april 2027 EUR 180; Laserbehandeling van
+  EUR 159 is gedekt." Past er een niet, dan is het gat dat na je inleg (`dekkingDichten`, "per maand extra"). (2) `acceptVervangen()`: een
+  stortingsafspraak (ook aangepast of gestopt) of een wijziging van je reserveringen (`SET.resGewijzigd`) na de acceptatie sluit hem; Al gekozen
+  toont die keuze. (3) `afspraakStortEenheden()` en `resStortingen()`: per eenheid uit `periodeVan()`, alleen bijschrijvingen. (4) Een
+  terugcheck die klopt staat alleen in de Terugblik ("Gevoel hielp: Vices boven budget EUR X minder (sep → okt)"); in Kiezen alleen als hij niet
+  klopt, met "Was het iets anders?". Geen bedrag op Home, Inzichten, Grip, Plan en Vermogen veranderd (`v521c-voor.json`). Spec `v521c.spec.js`
+  (7 tests, 7 van 7 sabotages rood).
