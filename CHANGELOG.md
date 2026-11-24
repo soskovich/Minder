@@ -1830,3 +1830,9 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   EUR X in deze periode" opent de posten (naam, maand, doel, al gereserveerd, per periode), afgerond met `brugAfronden` op het getal van de
   regel. De rekenregel van `rekReserveringen()` is niet aangeraakt. Spec `v521a.spec.js` (7 tests, 6 van 6 sabotages rood), stand
   `v521a-stand.js`, de bedragen van 9fbc05f in `v521a-voor.json`.
+- **v521b: de salarisverdeling rekent met je ingestelde inleg, en niets stil aangenomen** (`minder-v521b`, tak `werk/v521b`, v521a herbaseerd
+  op 467cd64). Gemeten op de export van 24 nov: opzij daalde EUR 302-308 in plaats van EUR 200, want de verdeling las het gemeten gemiddelde
+  (Saxo 33, Kayani 75) en zette het pensioen zonder boeking als EUR 200 op de salarisrekening. (a) `rekBelegBedrag()`: `a.per` gaat voor, de
+  Vermogensreis houdt `bezitReisPer()`. (b) Zonder gekoppelde boeking telt een bezitting pas mee met een gekozen rekening (`a.perAcc`, nieuw in
+  de bezittingseditor, niets voorgeselecteerd) en startmaand (`a.perVanaf`); tot dan de regel "Niet meegeteld" onder de verdeling, die de editor
+  opent. (c) De opbouw noemt elke bezitting apart. Spec `v521b.spec.js` (g, h, i; samen met v521a 10 van 10 sabotages rood).

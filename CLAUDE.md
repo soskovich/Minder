@@ -130,6 +130,16 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **v521b: DE SALARISVERDELING REKENT MET JE INGESTELDE INLEG, EN EEN BEZITTING ZONDER BOEKING TELT PAS MEE ALS JIJ REKENING EN
+  STARTMAAND KIEST** (`v521b`, gevraagd door de gebruiker, tak `werk/v521b`: v521a herbaseerd op 467cd64 (v521)). GEMETEN op de export van
+  24 nov: opzij daalde EUR 302-308 in plaats van EUR 200 (Saxo `bezitReisPer` 33, Kayani 75, pensioen 200 aangenomen op de salarisrekening).
+  (a) `rekBelegBedrag(a)`: het ingestelde maandbedrag `a.per`, alleen zonder `a.per` het gemiddelde van `bezitReisPer()`; de Vermogensreis
+  houdt `bezitReisPer()`. (b) `rekBelegAcc(a, set)`: de rekening die JIJ koos (`a.perAcc`, chips in de bezittingseditor, alleen `rekBetaal()`,
+  niets voorgeselecteerd) gaat voor die van de nieuwste gekoppelde boeking; zonder boeking telt hij alleen met rekening EN `a.perVanaf`, op de
+  1e van elke maand vanaf die maand. Tot dan staat hij in `rekBelegNiet()` en onder de verdeling (sheet en kaart) als "Niet meegeteld: <naam>
+  EUR X per maand · nog geen boeking gekoppeld · kies rekening en startmaand ›" (`data-salvbelegniet`, tik opent `openAsset()`). De
+  aanname "salarisrekening" (`aangenomen`) bestaat niet meer. (c) `rekUitlegRij()` zegt "beleggen: Saxo EUR 100 + Peaks (Kayani) EUR 100".
+  Spec `v521b.spec.js` (g, h, i) op `v521a-stand.js` `{ gebruiker: true }`; v521a a/b aangepast. Cache `minder-v521b`.
 - **v521a: DE SALARISVERDELING REKENT DE LOPENDE BELEGGINGSINLEG MEE, EEN BETAALDE VASTE LAST BLIJFT VAST, EN DE RESERVERINGEN HEBBEN EEN
   LIJST** (`v521a`, gevraagd door de gebruiker, tak `werk/v521a` vanaf 9fbc05f). (1) `rekBelegInleg(start, eind, set, salAcc)`: per bezitting
   met `grow` en zonder `pauze` het maandbedrag `bezitReisPer()` (gemeten gemiddeld, anders `a.per`, dezelfde bron als de Vermogensreis), op de

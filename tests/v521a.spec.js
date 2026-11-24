@@ -21,7 +21,7 @@ test.describe('v521a', () => {
     expect(r.belS).toBe(200);
     expect(r.laten - r.laten0).toBe(200);
     expect(r.opzij0 - r.opzij).toBe(200);
-    expect(r.tekst).toContain('beleggen €200');
+    expect(r.tekst).toContain('beleggen: Saxo €100 + Peaks Kayani €100');   // v521b fix c
     expect(r.tekst.indexOf('vaste lasten')).toBeLessThan(r.tekst.indexOf('beleggen'));
     expect(r.som).toBe(r.nodig);   // de delen tellen op tot nodig
   });
@@ -35,11 +35,11 @@ test.describe('v521a', () => {
   test('b: het pensioen met start januari telt niet in 24 nov – 23 dec en wel in 24 dec – 23 jan', async ({ page }) => {
     await B.boot(page);
     const r = await page.evaluate(() => { const P = rekVoorstel(), set = new Set(P.BR);
-      return { nu: P.beleg.map((x) => x.id), start: P.start, eind: P.eind,
-        volgend: rekBelegInleg('2026-12-24', '2027-01-23', set, P.salAcc).map((x) => [x.id, x.data, x.totaal, x.aangenomen]) }; });
+      return { bet: [...set].find((a) => SET.assets.find((x) => x.id === 'pens').perAcc === a), nu: P.beleg.map((x) => x.id), start: P.start, eind: P.eind,
+        volgend: rekBelegInleg('2026-12-24', '2027-01-23', set, P.salAcc).map((x) => [x.id, x.data, x.totaal, x.bron, x.acc]) }; });
     expect([r.start, r.eind]).toEqual(['2026-11-24', '2026-12-23']);
     expect(r.nu).not.toContain('pens');
-    expect(r.volgend).toContainEqual(['pens', ['2027-01-01'], 200, true]);
+    expect(r.volgend).toContainEqual(['pens', ['2027-01-01'], 200, 'keuze', r.bet]);
   });
 
   test('c: beleggen telt bij de rekening waar de gekoppelde boekingen vandaan komen', async ({ page }) => {

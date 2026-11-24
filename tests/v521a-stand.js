@@ -3,7 +3,8 @@
    (de boekingen van het toestel staan alleen daar):
    - Saxo en Peaks Kayani, elk EUR 100 per maand, met gekoppelde boekingen (v332) vanaf de Betaalrekening: Saxo op 25 aug/sep/okt, Peaks op
      28 aug/sep/okt. De volgende termijnen (25 en 28 nov) vallen in de periode. Met { peaksAcc: 'LEEF' } komt Peaks van Leefgeld (test c).
-   - Pensioen EUR 200 per maand zonder gekoppelde boeking, met een startmaand januari 2027 (a.perVanaf).
+   - Pensioen EUR 200 per maand zonder gekoppelde boeking, met een startmaand januari 2027 (a.perVanaf) en (v521b) de Betaalrekening
+     gekozen (a.perAcc); zonder die keuze telt hij niet mee (tests/v521b.spec.js).
    - een potje Abonnementen van EUR 9 met een incasso van EUR 9 op de 24e (aug t/m nov), dus op de startdag van de periode al geboekt.
    - twee reserveringen op een bijna lege reserveringsrekening (EUR 37): Verzekering jaar EUR 600 in december (jaarlijks) en een boete
      EUR 299 in februari (eenmalig). */
@@ -19,12 +20,23 @@ async function boot(page, o) {
       for (const m of ['2026-08', '2026-09', '2026-10', '2026-11']) add(BET, m + '-24', -9, 'Spotify', 'SEPA Incasso Spotify ' + m, 'abonnement');
       SET.budgets = Object.assign({}, SET.budgets, { abonnement: 9 });
     }
-    if (o.beleg !== false) {
+    if (o.gebruiker) {   // v521b: de getallen van de export van 24 nov (GECONSTRUEERD naar de meting)
+      SET.assets = [
+        { id: 'saxo', naam: 'Saxo Belegging', waarde: 1000, waardeOp: '2026-07-01', grow: true, rend: 5, per: 100 },
+        { id: 'kayani', naam: 'Peaks (Kayani)', waarde: 620, waardeOp: '2026-07-01', grow: true, rend: 5, per: 100 },
+        { id: 'pens', naam: 'Peaks (pensioen)', waarde: 1500, waardeOp: '2026-07-01', grow: true, rend: 5, per: 200 },
+      ];
+      SET.bezitKoppel = Object.assign({}, SET.bezitKoppel);
+      // Saxo: EUR 100 in september en november, niet in oktober (gemeten gemiddeld over aug-okt: 33)
+      for (const d of ['2026-09-10', '2026-11-10']) SET.bezitKoppel[add(BET, d, -100, 'Saxo Bank', 'SEPA Overboeking Saxo Bank inleg ' + d, 'sparen').id] = 'saxo';
+      // Kayani: aug EUR 25, sep en okt EUR 100 (gemeten gemiddeld 75)
+      for (const [d, b] of [['2026-08-28', 25], ['2026-09-28', 100], ['2026-10-28', 100]]) SET.bezitKoppel[add(BET, d, -b, 'Stichting Peaks', 'SEPA Overboeking Stichting Peaks Kayani ' + d, 'sparen').id] = 'kayani';
+    } else if (o.beleg !== false) {
       const peaksAcc = o.peaksAcc === 'LEEF' ? LEEF : BET;
       SET.assets = [
         { id: 'saxo', naam: 'Saxo', waarde: 1000, waardeOp: '2026-07-01', grow: true, rend: 5, per: 100 },
         { id: 'peaks', naam: 'Peaks Kayani', waarde: 620, waardeOp: '2026-07-01', grow: true, rend: 5, per: 100 },
-        { id: 'pens', naam: 'Pensioen', waarde: 0, waardeOp: '2026-07-01', grow: true, rend: 5, per: 200, perVanaf: '2027-01' },
+        { id: 'pens', naam: 'Pensioen', waarde: 0, waardeOp: '2026-07-01', grow: true, rend: 5, per: 200, perVanaf: '2027-01', perAcc: BET },   // v521b: rekening gekozen
       ];
       SET.bezitKoppel = Object.assign({}, SET.bezitKoppel);
       for (const m of ['2026-08', '2026-09', '2026-10']) {
