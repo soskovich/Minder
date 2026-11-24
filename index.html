@@ -13101,7 +13101,7 @@ function periodeBudgetFp(ym, start){ let base={}; try{ base=budgetVoorMaand(ym)|
      de sync, of in het voorbeeld voor de salarisschakelaar) een budget zonder salaris vast, en dat bleef staan. Met het salaris erbij wordt
      hij een keer opnieuw vastgelegd, als de stand van de eerste dag (periodeBudgetOpStart), en daarna niet meer. */
   let sal=false; if(start){ const tot=rekDag(start, 6); sal=TX.some(t=>!t.pending && t.amount>0 && String(t.date).slice(0,10)>=start && String(t.date).slice(0,10)<=tot && (CATS[catOf(t)]||{}).type==='income'); }
-  return JSON.stringify([base, SET.potWekelijks||{}, SET.vastDatum||{}, SET.vastVerwacht||[], sal]); }
+  return JSON.stringify([base, SET.potWekelijks||{}, SET.vastDatum||{}, SET.vastVerwacht||[], sal, 'v521a']); }   // v521a: een betaalde termijn blijft vast, dus een vastlegging van daarvoor wordt een keer opnieuw bepaald
 function periodeBudgetOpStart(start){ if(!start || start===vandaagYMD() && !TX.some(t=>String(t.date).slice(0,10)>start)) return null;
   const wasTX=TX, wasDag=window._voorbeeldDag; let R=null;
   /* _dataGen mee: telbareTx() hangt aan _dataGen en zou anders de volle TX teruggeven (gemeten) */
@@ -13124,6 +13124,26 @@ function periodeBudget(P){ let pb=periodeBudgetKern(P); if(!pb) return pb;
   const ks=Object.keys(V).sort(); while(ks.length>PB_VAST_MAX) delete V[ks.shift()];
   try{ save(true); }catch(_){}
   pb.vastgelegd=vandaag; return pb; }
+/* v521a (punt 2): EEN VASTE LAST DIE AL IN DE PERIODE IS BETAALD BLIJFT VAST. GEMETEN (deel 0b): vastCur komt uit rekTermijnen vanaf de
+   LAATSTE betaling, dus zodra een incasso van deze periode geboekt is (een abonnement van EUR 9 op de 24e) valt zijn termijn uit de lijst en
+   schoof het potje in periodeBudget van vast naar potjes (vast 1746 → 1737, potjes 1578 → 1587 op de fixture). Wat periodeBudget vastlegde
+   hing daarmee af van het moment van de vastlegging: voor of na de sync. De rest van de app (maandSplitsing, periodeVooruitKern: fBet plus
+   vastNog) telt een betaalde termijn als vast. Hier ook: per post de betalingen van die post in de periode tot vandaag (dezelfde toets als
+   betaaldN in periodeVooruitKern: recurKey of de gesimuleerde termijn) komen erbij als termijn. Alleen voor de lopende periode (vastCur);
+   een woning (genW) heeft zijn eigen generator en blijft zoals hij was. */
+function periodeVastLijst(P, start, eind){
+  const cur=!!(P.SP && P.SP.cur && P.SP.cur.start===start && Array.isArray(P.vastCur));
+  if(!cur) return P.vast||[];
+  const vandaag=vandaagYMD(), tot=eind<vandaag?eind:vandaag; if(!(start<=tot)) return P.vastCur;
+  let perTx=[]; try{ perTx=eenheidTx({start, eind:tot}).filter(t=>t.amount<0 && !t.pending); }catch(_){}
+  const uit=P.vastCur.map(x=>Object.assign({}, x)), per={}; for(const x of uit) per[x.key]=x;
+  for(const x of (P.vastAlle||[])){ if(!x || !x.key || x.genW) continue;
+    const betaald=perTx.filter(t=>t.vbVast===x.key || recurKey(t)===x.key).map(t=>String(t.date).slice(0,10)).filter(d=>d>=start && d<=tot);
+    if(!betaald.length) continue;
+    const y=per[x.key]||(per[x.key]=Object.assign({}, x, {data:[], orig:{}, n:0, bedrag:0}), uit.push(per[x.key]), per[x.key]);
+    const ds=new Set((y.data||[]).map(d=>String(d).slice(0,10)));
+    for(const d of betaald){ if(ds.has(d)) continue; ds.add(d); y.data=(y.data||[]).concat([d]).sort(); y.n=(+y.n||0)+1; y.bedrag=(+y.bedrag||0)+(+x.termijn||0); y.betaald=(y.betaald||0)+1; } }
+  return uit; }
 function periodeBudgetKern(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return null;
   /* De periode die je bevestigt is die van periodeMoment (de lopende/komende era-periode), niet per se rekVoorstel().per0: op de
      salarisdag vallen die samen, een paar dagen later wijst rekVoorstel al naar het VOLGENDE salaris. Het budget leest dus de
@@ -13137,7 +13157,7 @@ function periodeBudgetKern(P){ P=P||rekVoorstel(); if(!P||!P.ok||!P.per0) return
      budgetVoorPeriode.split, de vaste lasten in die categorie uit P.vast)), zodat ook een niet-SEPA last (de woning in Huur) bij vast
      telt. potjes is de REST (totaal − vast − Contant), dus de herindeling verschuift geld tussen de potten zonder het totaal te raken
      (test c/d, in centen). */
-  const PVL=(P.SP && P.SP.cur && P.SP.cur.start===start && Array.isArray(P.vastCur))?P.vastCur:(P.vast||[]);   // v506: de vaste lasten van de periode van het moment
+  const PVL=periodeVastLijst(P, start, eind);   // v506: de vaste lasten van de periode van het moment; v521a: met de termijnen die al betaald zijn
   const vasteLasten=PVL.filter(x=>!((+base[x.cat]||0)>0));
   const vlSom=vasteLasten.reduce((a,x)=>a+Math.round(+x.bedrag||0),0);
   const vastPerCat={}; for(const x of PVL){ const c=x.cat||''; vastPerCat[c]=(vastPerCat[c]||0)+(+x.bedrag||0); }
@@ -13566,6 +13586,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      voorstel (gemeten: krap 307 tegen voorstel 0). Nu is de daling voor ELKE dag kasRestNu gelijk verdeeld over de dagen tot
      SP.cur.eind, dus de som over de periode is kasRestNu (= kS − wat er deze maand al gepind is) en gelijk aan het voorstel. */
   const kasDagenOver=Math.max(salDagenTussen(vandaag, SP.cur.eind), 1);
+  let BELEG=[]; try{ BELEG=rekBelegInleg(start, eind, set, salAcc); }catch(_){ BELEG=[]; }   // v521a
   rvSpan('rv:potExp', _rvT); _rvT=performance.now();
   const rek=BR.map(acc=>{
     const vp=vast.filter(x=>x.acc===acc), vS=vp.reduce((a,x)=>a+x.bedrag,0);
@@ -13579,6 +13600,9 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
         afMaanden:af.slice(), grossAf:af.map(ym=>Math.round(((((naPer[p.k]||{})[acc]||{})[ym])||0)+((((eenmPer[p.k]||{})[acc]||{})[ym])||0))), eenmAf:af.map(ym=>Math.round((((eenmPer[p.k]||{})[acc]||{})[ym])||0))}; }).filter(Boolean);
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
+    /* v521a: de lopende beleggingsinleg die van deze rekening afgaat (rekBelegInleg), los van verwacht: hij telt niet in de buffer en
+       niet in de afronding op EUR 50, maar komt er na de afronding bij, zodat opzij met precies dit bedrag daalt */
+    const bel=BELEG.filter(x=>x.acc===acc), belS=bel.reduce((a,x)=>a+x.totaal,0);
     /* (2c) buffer: p75 min mediaan van de werkelijke uitgaven per maand over 6 afgeronde maanden, vanaf de eerste maand met een boeking */
     const eerste=(eersteMaandPerAcc[acc])||af[0];   // v492 (punt 1): eerste boekingmaand per rekening, één keer geïndexeerd i.p.v. TX.filter per rekening
     /* v441 (1e): de buffer over hetzelfde venster als het aandeel (af) */
@@ -13586,9 +13610,10 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const vals=bm.map(x=>x.v), p75=rekKwantiel(vals, REKV.kwantiel), med=mediaan(vals);
     /* v433: p75 min mediaan, minstens EUR 50 en hoogstens 20% van verwacht */
     const bufMax=verwacht*REKV.bufferMaxDeel, buffer=Math.max(Math.min(p75-med, bufMax), REKV.bufferMin);
-    const laten0=rekPlus50(verwacht+buffer);
+    const laten0=rekPlus50(verwacht+buffer)+belS;
     /* (2e) saldolijn: vaste lasten op hun datum, potjes gelijk over de dagen, contant op dag N na je salaris (anders gelijk) */
     const termijnen=[]; for(const x of vp) for(const d of x.data) termijnen.push({date:d, bedrag:x.termijn, naam:x.naam});
+    for(const x of bel) for(const d of x.data) termijnen.push({date:d, bedrag:x.bedrag, naam:x.naam, beleg:true});   // v521a
     const kasDag=kp.dag==null?null:rekDag(start, Math.min(kp.dag, dagen-1));
     const perDag=(pS+(kasDag?0:kS))/Math.max(dagen,1), lijn=(L)=>{ let b=L, laagst=L, dag=start; for(let i=0;i<dagen;i++){ const d=rekDag(start,i); b-=perDag; if(kasDag===d) b-=kS; for(const tm of termijnen) if(tm.date===d) b-=tm.bedrag; if(b<laagst-1e-9){ laagst=b; dag=d; } } return {laagst, dag, eind:b}; };
     let Lz=lijn(laten0), laten=laten0, tekort=0; if(Lz.laagst<0){ tekort=-Lz.laagst; laten=rekPlus50(laten0+tekort); Lz=lijn(laten); }
@@ -13638,10 +13663,10 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     /* (3) overboeken rekent alleen op de dag van de werkelijke storting, met het dan bekende saldo; daarvoor het verwachte saldo op de
        verwachte storting */
     let verwachtSaldo=null; if(!nu && saldo!=null){ verwachtSaldo=saldo; for(let d=rekDag(vandaag,1); d<start; d=rekDag(d,1)) verwachtSaldo-=uitDag(d); }
-    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, kasNaSalBron:kasNaSal?(kasKennis?'kennis':'patroon'):null, uitDagDelen, termAlle, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer), termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand, potZelden}; });
+    return {acc, naam:rekNaam(acc), sal:acc===salAcc, vast:vp, vastBuiten:vastBuiten.filter(x=>x.acc===acc), vastS:vS, potDelen:pd, potS:pS, kasAandeel:kf, kasS:kS, kasMaand:kM, kasPatroon:kp, kasDag, kasNu, kasNaSal, kasNaSalBron:kasNaSal?(kasKennis?'kennis':'patroon'):null, uitDagDelen, termAlle, verwacht, bufMaanden:bm, p75, med, bufMax, buffer, laten0, afronding:laten0-(verwacht+buffer+belS), beleg:bel, belS, termijnen, laagst:Lz.laagst, laagstDag:Lz.dag, eindSaldo:Lz.eind, tekort, laten, saldo, overboeken:(nu && saldo!=null)?laten-saldo:null, verwachtSaldo, lijn, uitDag, restNu, pMaand, potZelden}; });
   /* een rekening zonder verwachte uitgaven en zonder vaste last laat niets staan: die valt buiten het voorstel */
   rvSpan('rv:perRek', _rvT); _rvT=performance.now();
-  const actief=rek.filter(r=>r.vastS+r.potS+r.kasS>0.5 || r.sal);
+  const actief=rek.filter(r=>r.vastS+r.potS+r.kasS+r.belS>0.5 || r.sal);
   /* v441 sectie 2: de reserveringen staan tussen de rekeningen en opzij; opzij (naar je spaarrekening) is wat daarna overblijft */
   const RES=rekReserveringen(), reserveringen=RES.totaal;
   const som=actief.reduce((a,r)=>a+r.laten,0), opzij=salaris-som-reserveringen;
@@ -13653,12 +13678,32 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
      daardoor alle vaste lasten van 24 nov – 23 dec weg (de schakelaar maakte de periode mooier). Dezelfde generator als termAlle. */
   const vastCur=[]; try{ if(SP.cur && SP.cur.start && SP.cur.eind) for(const x of vastAlle){ const ds=x.genW?x.genW(SP.cur.start, SP.cur.eind):rekTermijnen(x.s, x.last, SP.cur.start, SP.cur.eind); if(!ds || !ds.length) continue;
       vastCur.push(Object.assign({}, x, {data:Array.from(ds), orig:ds.orig||{}, n:ds.length, bedrag:x.termijn*ds.length})); } }catch(_){}
-  return {ok:true, vastCur, venster:eraW?{van:rekDag(vandaag,1), tot:SP.cur.eind, dagen:venW}:null, gat:gapDagen?{van:gapVan, tot:vandaag, dagen:gapDagen, dataTot}:null, salaris, salAcc, salDatum:d0, nu, SP, per0, start, eind, dagen, dimStart, schaal, plan, rek:actief, rekAlle:rek, vast, vastAlle, vastBuiten, vastNiet, potExp, kas, kasP, kasMed, kasBud, kasStand, kasStandKey, kasStandBron, kasStandDatum, kasSchat, kasBron, kasMaand, kasAandeel, kasPatroon, opnPer, paar, som, opzij, reserveringen, resRijen:RES.rijen, resOk:RES.ok, resStand:RES.stand, resAcc:RES.acc, totVast, totPot,
+  return {ok:true, beleg:BELEG, vastCur, venster:eraW?{van:rekDag(vandaag,1), tot:SP.cur.eind, dagen:venW}:null, gat:gapDagen?{van:gapVan, tot:vandaag, dagen:gapDagen, dataTot}:null, salaris, salAcc, salDatum:d0, nu, SP, per0, start, eind, dagen, dimStart, schaal, plan, rek:actief, rekAlle:rek, vast, vastAlle, vastBuiten, vastNiet, potExp, kas, kasP, kasMed, kasBud, kasStand, kasStandKey, kasStandBron, kasStandDatum, kasSchat, kasBron, kasMaand, kasAandeel, kasPatroon, opnPer, paar, som, opzij, reserveringen, resRijen:RES.rijen, resOk:RES.ok, resStand:RES.stand, resAcc:RES.acc, totVast, totPot,
     totVerwacht:actief.reduce((a,r)=>a+r.verwacht,0), BR, af, af6, potMaand:cur}; }
 function rekTermijnen(s, last, start, eind){ const out=[]; if(!s || !last) return out;
   if(s.cadans==='4w'){ let stap=VAST_4W_DAGEN; try{ stap=vierStap(s).stap; }catch(_){} let d=last; for(let i=0;i<40;i++){ d=rekDag(d, stap); if(d>eind) break; if(d>=start) out.push(d); } return out; }
   const iv=s.cadans==='maand'?1:Math.max(+s.intervalM||1,1); for(let n=1;n<80;n++){ const d=rekMaandPlus(last, n*iv); if(d>eind) break; if(d>=start) out.push(d); }
   return out; }
+/* ===== v521a: DE LOPENDE BELEGGINGSINLEG IN DE SALARISVERDELING =====
+   GEMETEN (deel 0a): de inleg naar een bezitting (v332, gekoppelde boekingen op Sparen & beleggen) kende rekVoorstelRuw niet, dus de
+   rekening waar hij van afgaat kreeg hem niet mee en opzij stond er met hetzelfde bedrag te hoog. Per bezitting die groeit en niet op
+   pauze staat: het maandbedrag is bezitReisPer() (gemeten gemiddeld over drie afgeronde maanden, anders je ingevulde inleg, dezelfde bron
+   als de Vermogensreis); de rekening is die van de NIEUWSTE gekoppelde boeking, en alleen als dat een betaalrekening is (een inleg vanaf
+   je spaarrekening gaat niet van een betaalrekening af). Zonder gekoppelde boeking is de rekening niet bekend en rekent het voorstel met
+   je salarisrekening (`aangenomen`, en dat staat er in "Hoe berekend" bij). Omgerekend naar de periode zoals de vaste lasten: een termijn
+   per maand, vanaf de laatste gekoppelde boeking (rekMaandPlus, dezelfde stap als rekTermijnen), anders op de 1e van de maand; een inleg
+   met een startmaand (a.perVanaf) telt pas vanaf die maand. */
+function rekBelegInleg(start, eind, set, salAcc){ const uit=[];
+  for(const a of (SET.assets||[])){ if(!a || !a.grow || a.pauze) continue;
+    let bedrag=0; try{ bedrag=bezitReisPer(a); }catch(_){ bedrag=Math.max(Math.round(+a.per||0),0); } if(!(bedrag>0)) continue;
+    let tx=[]; try{ tx=bezitGekoppeld(a.id).filter(t=>t.amount<0); }catch(_){}
+    const last=tx.length?tx[tx.length-1]:null, acc=last?last.acc:salAcc; if(!acc || !set.has(acc)) continue;
+    const vanaf=/^\d{4}-\d{2}$/.test(String(a.perVanaf||''))?a.perVanaf:null, data=[];
+    if(last){ for(let n=1;n<40;n++){ const d=rekMaandPlus(last.date, n); if(d>eind) break; if(d>=start && (!vanaf || d.slice(0,7)>=vanaf)) data.push(d); } }
+    else { for(let ym=String(start).slice(0,7); ym<=String(eind).slice(0,7); ym=nextYM(ym)){ const d=ym+'-01'; if(d>=start && d<=eind && (!vanaf || ym>=vanaf)) data.push(d); } }
+    if(!data.length) continue;
+    uit.push({id:a.id, naam:a.naam||'Bezitting', acc, bedrag, data, n:data.length, totaal:bedrag*data.length, vanaf, aangenomen:!last}); }
+  return uit; }
 /* v441 sectie 2: RESERVERINGEN IN DE VERDELING. Per reservering wat er deze salarisperiode naar de reserveringsrekening gaat:
    (doel − saldo) / aantal salarisperiodes tot de vervaldatum (de lopende periode meegeteld, als maanden). Het saldo van de ENE
    reserveringsrekening wordt op VERVALDATUM-VOLGORDE aan de reserveringen toegerekend (zoals dekking()'s waterval): wat er voor de
@@ -13707,25 +13752,43 @@ function salVoorstelNu(){ let P=null; try{ P=rekVoorstel(); }catch(_){} if(!P ||
    bedragen per rekening en de reserveringen van dat moment vast; het voorstel van nu rekent met het salaris van nu, de voorstellen per
    rekening en de reserveringen die in de komende periode worden toegerekend (rekReserveringen). Elke term die afwijkt staat erbij; wat
    overblijft is afronding. GEMETEN op het toestel (26 nov): verdeling 1.766 tegen voorstel 1.752, en de 14 waren reserveringen. */
-function salOpzijVerschil(N){ const SV=SET.salVerdeling||{}, P=N.P, delen=[]; let verklaard=0;
+function salOpzijVerschil(N){ const SV=SET.salVerdeling||{}, P=N.P, delen=[]; let verklaard=0, resIdx=-1;
   const dS=Math.round(P.salaris)-Math.round(+SV.salaris||P.salaris); if(dS){ delen.push(`salaris ${euro0(+SV.salaris||0)} → ${euro0(P.salaris)}`); verklaard+=dS; }
   for(const x of N.rek){ if(x.afspraak==null || x.voorstel===x.afspraak) continue; delen.push(`${x.naam} ${euro0(x.afspraak)} → ${euro0(x.voorstel)}`); verklaard-=x.voorstel-x.afspraak; }
-  const rN=Math.round(P.reserveringen||0), rS=Math.round(+SV.reserveringen||0); if(rN!==rS){ delen.push(`reserveringen ${rS?`${euro0(rS)} → `:''}${euro0(rN)} in deze periode`); verklaard-=rN-rS; }
+  const rN=Math.round(P.reserveringen||0), rS=Math.round(+SV.reserveringen||0); if(rN!==rS){ resIdx=delen.length; delen.push(`reserveringen ${rS?`${euro0(rS)} → `:''}${euro0(rN)} in deze periode`); verklaard-=rN-rS; }
   const totaal=N.opzij-Math.round(+SV.opzij||0), rest=totaal-verklaard;
   /* een afspraak waarvan rekeningen + reserveringen + opzij niet optellen tot het salaris (een oudere afspraak, of een met de hand gezette
      opzij): dat gat is dan de rest, en heet zo in plaats van "niet herleid" */
   const somSV=Object.values(SV.rek||{}).reduce((a,v)=>a+(+v||0),0), gatSV=Math.round((+SV.salaris||P.salaris)-somSV-(+SV.reserveringen||0)-(+SV.opzij||0));
   if(Math.abs(rest)>=1) delen.push(`${Math.abs(rest)<=1?'afronding':Math.abs(rest-gatSV)<1?'je afspraak telde niet op':'niet herleid'} ${rest>0?'+':'−'}${euro0(Math.abs(rest))}`);
-  return {totaal, delen}; }
+  return {totaal, delen, resIdx}; }
+/* v521a (punt 3): DE LIJST ACHTER "reserveringen EUR X in deze periode". Dezelfde rijen als de verdeling (rekVoorstel().resRijen, uit
+   rekReserveringen, de rekenregel is niet aangeraakt): per post naam, maand, doel, wat er op vervaldatum-volgorde al voor staat en wat er
+   per periode bij moet. De bedragen per periode zijn afgerond met brugAfronden op het getal van de regel, dus de lijst telt er per
+   constructie tot op (v104). Openen schrijft niets. */
+function resPeriodeRijen(P){ const R=(P&&P.resRijen)||[], tot=Math.round(+(P&&P.reserveringen)||0);
+  const A=brugAfronden(R.map((x,i)=>({k:'r'+i, v:+x.per||0})), tot);
+  return R.map((x,i)=>Object.assign({}, x, {perR:A['r'+i]||0})); }
+function openResPeriode(){ let P=null; try{ P=rekVoorstel(); }catch(_){} if(!P || !P.ok || !P.resOk) return;
+  const R=resPeriodeRijen(P), e=euro0, mn=ym=>`${MNAMES[+String(ym).slice(5,7)-1]} ${String(ym).slice(0,4)}`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="resPeriode" data-resperiode data-restotaal="${Math.round(P.reserveringen)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Reserveringen · ${e(P.reserveringen)} in deze periode</div>
+    <div class="small muted" style="margin-top:2px">${esc(dagKort(P.start))} t/m ${esc(dagKort(P.eind))} · op je reserveringsrekening staat ${e(P.resStand)}</div>
+    <div class="row small" style="gap:8px;padding:6px 0 2px;color:var(--mut2);font-size:var(--fs-xs)"><span style="flex:1">post · maand</span><span style="width:58px;text-align:right">doel</span><span style="width:58px;text-align:right">al gereserveerd</span><span style="width:58px;text-align:right">per periode</span></div>
+    ${R.length?R.map(x=>`<div class="row small" data-resperioderij="${esc(x.id)}" data-per="${x.perR}" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(x.naam)}</b><br><span style="color:var(--mut2)">${esc(mn(x.datum))} · ${x.periodes} ${x.periodes===1?'periode':'periodes'}</span></span><span style="width:58px;text-align:right">${e(x.doel)}</span><span style="width:58px;text-align:right">${e(x.saldo)}</span><span style="width:58px;text-align:right;font-weight:700">${e(x.perR)}</span></div>`).join(''):'<div class="small muted" style="padding:6px 0">Geen reservering met een termijn in de komende maanden.</div>'}
+    <div class="row small" style="gap:8px;padding:6px 0;border-top:2px solid var(--line);font-weight:800"><span style="flex:1">Samen</span><span data-resperiodesom="${R.reduce((a,x)=>a+x.perR,0)}">${e(R.reduce((a,x)=>a+x.perR,0))}</span></div>
+    <div class="small" style="color:var(--mut2);margin-top:4px;line-height:1.45">Per post: (doel − wat er op volgorde van vervaldatum al voor staat) ÷ het aantal salarisperiodes tot de maand van de post, deze periode meegeteld.</div>
+    <div class="row" style="gap:8px;margin-top:10px"><button class="btn sec" onclick="closeSheet()">Sluiten</button></div></div>`;
+  showSheetBg(); }
 /* v500 (punt 1): DE UITLEG PER REKENING IS EEN REKENSOM DIE KLOPT: nodig tot <eind> = vaste lasten + potjes (+ contant) + buffer (+ afronding
    en laagste punt) − saldo nu = erbij, naast je afspraak. In hele euro's; de afronding neemt de rest op zodat de delen optellen tot nodig. */
-function rekUitlegRij(P, r, afspraak){ const e=v=>Math.round(+v||0), vast=e(r.vastS), pot=e(r.potS), kas=e(r.kasS), buf=e(r.buffer), nodig=e(r.laten), afr=nodig-vast-pot-kas-buf;
+function rekUitlegRij(P, r, afspraak){ const e=v=>Math.round(+v||0), vast=e(r.vastS), bel=e(r.belS), pot=e(r.potS), kas=e(r.kasS), buf=e(r.buffer), nodig=e(r.laten), afr=nodig-vast-bel-pot-kas-buf;
   let saldo=null; try{ saldo=accBalance(r.acc); }catch(_){} const s=saldo==null?null:e(saldo), erbij=s==null?null:nodig-s;
-  const delen=[`vaste lasten ${euro0(vast)}`, `potjes ${euro0(pot)}`].concat(kas>0?[`contant ${euro0(kas)}`]:[]).concat([`buffer ${euro0(buf)}`]).concat(afr!==0?[`${r.tekort>0.5?'laagste punt en afronding':'afronding'} ${afr<0?'−':''}${euro0(Math.abs(afr))}`]:[]);
+  const delen=[`vaste lasten ${euro0(vast)}`].concat(bel>0?[`beleggen ${euro0(bel)}`]:[]).concat([`potjes ${euro0(pot)}`]).concat(kas>0?[`contant ${euro0(kas)}`]:[]).concat([`buffer ${euro0(buf)}`]).concat(afr!==0?[`${r.tekort>0.5?'laagste punt en afronding':'afronding'} ${afr<0?'−':''}${euro0(Math.abs(afr))}`]:[]);
   const tekst=`nodig tot ${dagKort(P.eind)} ${euro0(nodig)} (${delen.join(' + ')})${s==null?' · saldo nu onbekend':` − saldo nu ${euro0(s)} = ${erbij>=0?`${euro0(erbij)} erbij`:`${euro0(-erbij)} over`}`}${afspraak!=null?` · je afspraak ${euro0(afspraak)}`:''}`;
-  return {nodig, vast, pot, kas, buf, afronding:afr, saldo:s, erbij, afspraak, tekst}; }
+  return {nodig, vast, beleg:bel, pot, kas, buf, afronding:afr, saldo:s, erbij, afspraak, tekst}; }
 function rekUitlegHtml(P, x){ const U=rekUitlegRij(P, x.r, x.afspraak);
-  return `<div class="small" data-rekuitleg="${esc(x.acc)}" data-nodig="${U.nodig}" data-saldo="${U.saldo==null?'':U.saldo}" data-erbij="${U.erbij==null?'':U.erbij}" data-afspraak="${U.afspraak==null?'':U.afspraak}" style="color:var(--mut2);line-height:1.45;margin-top:2px"><b>${esc(x.naam)}</b>: ${esc(U.tekst)}</div>`; }
+  return `<div class="small" data-rekuitleg="${esc(x.acc)}" data-nodig="${U.nodig}" data-beleg="${U.beleg}" data-saldo="${U.saldo==null?'':U.saldo}" data-erbij="${U.erbij==null?'':U.erbij}" data-afspraak="${U.afspraak==null?'':U.afspraak}" style="color:var(--mut2);line-height:1.45;margin-top:2px"><b>${esc(x.naam)}</b>: ${esc(U.tekst)}</div>`; }
 function rekBedragen(P, eigen){ const o={}; let N=null; if(!eigen){ try{ N=salVoorstelNu(); }catch(_){} }   // v500: zonder eigen bedragen het ene voorstel (met de dekkingsregel)
   for(const r of P.rek) o[r.acc]=(eigen && eigen[r.acc]!=null)?+eigen[r.acc]:((N && N.bed[r.acc]!=null)?N.bed[r.acc]:r.laten); return o; }
 /* (3) HET BEWIJS IN BEGRIJPEN: de onttrekkingen per ontvangende rekening per maand, en per rekening wat er na je salaris naartoe ging
@@ -13770,6 +13833,7 @@ function salHoeHtml(P, r){ const e=euro0, pc=v=>Math.round(v*100)+'%', R=P.SP.R,
     <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:2px">${rij('<b>Verwacht</b>', `<b>${e(r.verwacht)}</b>`, 'data-salvhoeverwacht')}
     ${rij(`Buffer: p75 ${e(r.p75)} − mediaan ${e(r.med)} = ${e(r.p75-r.med)}, minstens ${e(REKV.bufferMin)}, hoogstens 20% (${e(r.bufMax)})`, e(r.buffer), 'data-salvhoebuffer')}
     ${rij('Afronding (op €50 naar boven)', `+${e(r.afronding)}`, 'data-salvhoeafronding')}
+    ${(r.beleg||[]).map(x=>rij(`Beleggen: ${esc(x.naam)}${x.n>1?` · ${x.n}× ${e(x.bedrag)}`:''} · ${x.data.map(dagKort).join(', ')}${x.aangenomen?' · geen gekoppelde boeking, op je salarisrekening gerekend':''}${x.vanaf?` · vanaf ${esc(ymFull(x.vanaf))}`:''}`, `+${e(x.totaal)}`, `data-salvhoebeleg="${esc(x.id)}"`)).join('')}
     ${r.tekort>0.5?rij(`Laagste punt ${e(-r.tekort)}: bedrag omhoog`, `+${e(r.laten-r.laten0)}`, 'data-salvhoetekort'):''}
     ${rij('<b>Laten staan</b>', `<b>${e(r.laten)}</b>`, 'data-salvhoelaten')}</div>
     <div data-salvaannames style="margin-top:6px;color:var(--mut2)">Periode ${dagKort(P.start)} t/m ${dagKort(P.eind)} (${P.dagen} dagen): ${P.nu?'je salaris kwam vandaag':`verwachte storting ${dagKort(P.start)}`}, regel ${esc(salRegelTekst(R))}${P.per0.regel && P.per0.regel.includes('→')?` (${esc(P.per0.regel)})`:''}${R.bron==='boekingen'?', uit je boekingen':', door jou'}.<br>
@@ -14139,7 +14203,7 @@ function salVoorstelKaartHtml(){ let P=null; try{ P=rekVoorstel(); }catch(_){} i
   let imp=''; try{ const Li=importTotYmd(); if(Li && (window._voorbeeld || (P.start && String(Li)<String(P.start)))) imp=`saldi van de laatste import (${dagKort(Li)})${!window._voorbeeld?' · uitgaven daarna ontbreken':''}`; }catch(_){}   // v500 (punt 2): dezelfde bron als de noot op Inzichten (zonder voorbeeldboekingen)
   return `<div class="card" id="salVoorstelKaart" data-salvoorstel="${esc(P.start||'')}" data-salvopzijbron="voorstel" data-salvkaartopzij="${opzijN}"${afsprOpzij!=null?` data-salvverdeling="${afsprOpzij}"`:''}${laat?' data-salvlaat':''} role="button" style="padding:10px 14px;cursor:pointer" onclick="openSalVerdeling('salverdeling')"><div class="row" style="justify-content:space-between;gap:8px"><span class="hlabel" style="margin:0">Je salarisverdeling</span><span style="color:var(--teal);font-weight:700">›</span></div>
     <div class="small" data-salvoorstelrijen style="line-height:1.45;margin-top:2px">Voorstel klaar voor ${esc(dag)}${laat?' (salaris nog niet binnen)':''}: ${rijen} · ${opzijTxt}</div>
-    ${VS?`<div class="small" data-salvopzijverschil="${opzijN-afsprOpzij}" style="line-height:1.45;margin-top:4px;color:var(--mut2)">volgens je verdeling ${euro0(afsprOpzij)} · ${opzijN>afsprOpzij?'+':'−'}${euro0(Math.abs(opzijN-afsprOpzij))}${VS.delen.length?`: ${esc(VS.delen.join(' · '))}`:''}${afwRijen.length?':':''}</div>`:''}
+    ${VS?`<div class="small" data-salvopzijverschil="${opzijN-afsprOpzij}" style="line-height:1.45;margin-top:4px;color:var(--mut2)">volgens je verdeling ${euro0(afsprOpzij)} · ${opzijN>afsprOpzij?'+':'−'}${euro0(Math.abs(opzijN-afsprOpzij))}${VS.delen.length?`: ${VS.delen.map((d,i)=>i===VS.resIdx?`<span data-salvreslink role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="event.stopPropagation();openResPeriode()">${esc(d)} ›</span>`:esc(d)).join(' · ')}`:''}${afwRijen.length?':':''}</div>`:''}
     ${afwRijen.map(x=>rekUitlegHtml(P, x)).join('')}
     ${dekRijen.map(x=>`<div class="small" data-salvdekking="${esc(x.acc)}" data-gedekttot="${esc(x.tot||'')}" style="color:var(--mut2);line-height:1.45;margin-top:2px"><b>${esc(x.naam)}</b>: nog niet te beoordelen · gegevens t/m ${x.tot?esc(dagKort(x.tot)):'onbekend'} · je afspraak ${euro0(x.afspraak)} blijft</div>`).join('')}
     ${imp?`<div class="small" data-salvoorstelimport style="color:var(--mut2);margin-top:2px">${esc(imp)}</div>`:''}
@@ -19662,6 +19726,8 @@ function openAsset(id, naamVoorstel){
         <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="text" inputmode="decimal" value="${a.per||''}" placeholder="0" style="width:100%"></div>
       </div>
       ${a0?bezitPerRegel(a0):''}
+      <label class="fld" style="margin-top:8px">Inleg start in (maand, leeg = loopt al)</label><input id="aPerVanaf" type="month" value="${esc(/^\d{4}-\d{2}$/.test(String(a.perVanaf||''))?a.perVanaf:'')}" style="width:100%">
+      <div class="small muted" style="font-size:var(--fs-xs);margin-top:4px">De salarisverdeling rekent je inleg pas mee vanaf deze maand.</div>
       <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Rendement is niet gegarandeerd, en dit is geen advies. Inflatie en de horizon gelden voor je hele reis en stel je in bij "Rendement &amp; inflatie".</div>
       <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
@@ -19688,7 +19754,8 @@ function saveAsset(id){
      saveAsset() bouwt het object opnieuw op, dus een bestaande bezitting verliest die velden zodra
      je hem bewerkt, en tot die tijd staan ze er zonder iets te doen (dat deden ze al). Ze actief
      uit SET halen zou een stille schrijfactie op jouw data zijn zonder dat er iets mee verandert. */
-  if(grow){ a.rend=numIn(v('aRend'))||0; a.per=Math.round(numIn(v('aPer'))||0); }
+  if(grow){ a.rend=numIn(v('aRend'))||0; a.per=Math.round(numIn(v('aPer'))||0);
+    const pv=String(v('aPerVanaf')||'').slice(0,7); if(/^\d{4}-\d{2}$/.test(pv)) a.perVanaf=pv; }   // v521a: de startmaand van de inleg
   /* v332: saveAsset() bouwt het object opnieuw op (v214), dus de keuze over de voorwaarden en een
      pauze zouden bij elke bewerking stil verdwijnen. Die twee zijn keuzes van jou en geen invoer van
      dit formulier, dus ze gaan mee. */
