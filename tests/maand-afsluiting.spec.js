@@ -111,7 +111,8 @@ test('c. een storting naar de reserveringsrekening vinkt de afspraak af', async 
   expect(dek.status).toBe('gezien');
   expect(dek.box).toBe('aan');
   expect(dek.tekst).toContain('storting in oktober gezien');
-  expect(dek.tekst).toContain('november volgt');
+  // v521c: de opvolging telt per eenheid uit periodeVan(); in deze stand is de volgende eenheid de korte november voor de era
+  expect(dek.tekst).toMatch(/november( \(1–\d+\))? volgt/);
   // de rest van de stand verandert niet
   expect(k.afspraken.find((a) => a.tekst.includes('Abonnementen')).status).toBe('loopt');
 });

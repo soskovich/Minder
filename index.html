@@ -9097,7 +9097,8 @@ function afspraakStand(a){
     const niet=per.filter(x=>x.s!=='gezien'), laatste=per[per.length-1];
     if(!niet.length){
       if(klaar) return {status:'gezien', feit:per.length===1?`storting in ${laatste.label} gezien`:'alle stortingen gezien', af:true, per};
-      return {status:'gezien', feit:`storting in ${laatste.label} gezien · de volgende periode volgt`, af:true, per};
+      let vol='de volgende periode'; try{ vol=periodeVan(rekDag(laatste.eind,1)).label||vol; }catch(_){}
+      return {status:'gezien', feit:`storting in ${laatste.label} gezien · ${vol} volgt`, af:true, per};
     }
     const x=niet[niet.length-1];
     const feit = x.s==='deels' ? `${euro0(x.g)} van ${euro0(b)} in ${x.label} gezien` : `storting in ${x.label} nog niet gezien`;
