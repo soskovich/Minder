@@ -1806,3 +1806,15 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   PUNT 4 (zelfde ronde): de soort `rangTegenpartij` (`vraagRang()`): welke tegenpartijen het vaakst of het meest, maat aantal of bedrag,
   top 1–10, liggende staafjes met accent op nummer 1, per regel aantal en bedrag en een tik op de boekingen; vaste lasten tellen mee,
   eigen overboekingen niet. Schema `maat`/`top`, prompt met "afgelopen N maanden". Tests h en i (4 van 4 sabotages rood).
+- **v521a: de salarisverdeling rekent de beleggingsinleg mee, en een getal voor vaste lasten en potjes** (`minder-v521a`, tak `werk/v521a`
+  vanaf 9fbc05f, gevraagd door de gebruiker na 24 nov). (1) `rekBelegInleg()`: per bezitting die groeit en niet op pauze staat de lopende
+  inleg (`bezitReisPer()`), op de rekening van de nieuwste gekoppelde boeking (alleen een betaalrekening), een termijn per maand vanaf die
+  boeking (`rekMaandPlus`, zoals de vaste lasten), vanaf de startmaand `a.perVanaf` (nieuw veld in de bezittingseditor). Zonder gekoppelde
+  boeking: de salarisrekening, gemarkeerd als aangenomen. In `rekVoorstelRuw` komt `belS` NA de afronding op EUR 50 bij laten staan, dus opzij
+  daalt met precies dat bedrag; de saldolijn trekt de termijnen af; `rekUitlegRij` zegt "vaste lasten + beleggen + potjes + ..."; "Hoe
+  berekend" toont de posten. (2) `periodeVastLijst()`: een vaste last die deze periode al betaald is blijft vast in `periodeBudgetKern`
+  (gemeten: een incasso van EUR 9 op de startdag schoof na de sync van vast naar potjes, 1746/1578 tegen 1737/1587); de vingerafdruk van de
+  vastlegging draagt 'v521a', zodat een oude vastlegging een keer opnieuw wordt bepaald. (3) `openResPeriode()`: een tik op "reserveringen
+  EUR X in deze periode" opent de posten (naam, maand, doel, al gereserveerd, per periode), afgerond met `brugAfronden` op het getal van de
+  regel. De rekenregel van `rekReserveringen()` is niet aangeraakt. Spec `v521a.spec.js` (7 tests, 6 van 6 sabotages rood), stand
+  `v521a-stand.js`, de bedragen van 9fbc05f in `v521a-voor.json`.

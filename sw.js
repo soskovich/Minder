@@ -2,7 +2,7 @@
    Network-first voor de app-pagina (altijd verse versie als je online bent),
    cache-first voor statische assets (iconen). Werkt offline via de cache.
    v3: backend-/cross-origin-aanroepen (PSD2) NOOIT cachen — altijd live van het netwerk. */
-const CACHE='minder-v520b';
+const CACHE='minder-v521a';
 const ASSETS = [
   './',
   './index.html',
