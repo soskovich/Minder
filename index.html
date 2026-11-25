@@ -3844,13 +3844,19 @@ function recurVastBoeking(t, meta){ meta=meta||CATS[catOf(t)]||{};
    "<sleutel>~<eerste bedrag van de band>" (stabiel: de eerste betaling verandert niet als er een bijkomt). DE BEDRAGEN BLIJVEN WAAR ZE WAREN:
    het schema (recurringSchedule) is niet gesplitst; alleen de status leest de reeksen (postStatusMap). */
 const POST_BAND_FACTOR=2;
-let _postRks=null, _postRksGen=-1;
-function postReeksenAlle(){ if(_postRks && _postRksGen===_dataGen) return _postRks;
+/* onderhoud1b: een band telt pas als eigen reeks met minstens POST_REEKS_MIN betaaldagen EN een laatste betaling in de laatste
+   POST_REEKS_MAANDEN maanden. Gemeten op de export van 25 nov: zonder die eis werden twee betalingen in april (Zilveren Kruis) en een
+   reeks van mei (Ml Macnack) een eigen reeks met een eigen "gestopt?". Een band die het niet haalt is geen reeks: geen sleutel, geen
+   signaal; zijn betalingen horen bij geen reeks. Blijft er minder dan twee over, dan wordt de partij niet gesplitst. */
+const POST_REEKS_MIN=3, POST_REEKS_MAANDEN=6;
+let _postRks=null, _postRksGen='';
+function postReeksenAlle(){ const sl=_dataGen+'|'+vandaagYMD(); if(_postRks && _postRksGen===sl) return _postRks;
+  const nu=new Date(), grensYmd=ymdVan(new Date(nu.getFullYear(), nu.getMonth()-POST_REEKS_MAANDEN, nu.getDate()));
   const per={}; for(const t of TX){ if(t.pending || !(t.amount<0)) continue; if(!recurVastBoeking(t)) continue; const k=recurKey(t); if(!k) continue; (per[k]=per[k]||[]).push(t); }
   const M={};
   for(const k in per){ const L=per[k].slice().sort((a,b)=>Math.abs(a.amount)-Math.abs(b.amount)); const bands=[];
     for(const t of L){ const v=Math.abs(t.amount), B=bands[bands.length-1]; if(B && v<=B.max*POST_BAND_FACTOR){ B.tx.push(t); B.max=v; } else bands.push({tx:[t], max:v}); }
-    const echt=bands.filter(B=>new Set(B.tx.map(t=>String(t.date).slice(0,10))).size>=2);
+    const echt=bands.filter(B=>{ const D=[...new Set(B.tx.map(t=>String(t.date).slice(0,10)))].sort(); return D.length>=POST_REEKS_MIN && D[D.length-1]>=grensYmd; });
     if(echt.length<2) continue;
     const R=echt.map(B=>{ const tx=B.tx.slice().sort((a,b)=>a.date.localeCompare(b.date)); return {tx, som:tx.reduce((s,t)=>s-t.amount,0), eerste:Math.abs(tx[0].amount)}; })
       .sort((a,b)=>b.som-a.som || a.eerste-b.eerste);
@@ -3860,7 +3866,7 @@ function postReeksenAlle(){ if(_postRks && _postRksGen===_dataGen) return _postR
       return {key:i===0?k:`${k}~${Math.round(r.eerste*100)/100}`, basis:k, hoofd:i===0, name:laatste.name, cat:catOf(laatste), type:'fixed',
         amount:Math.abs(laatste.amount), lastDate:laatste.date, afstand:af, cadans:af<=10?'week':(af>=VAST_4W.min&&af<=VAST_4W.max?'4w':(af<=45?'maand':null)),
         intervalM:af<=45?1:af<=135?3:af<=225?6:12, datums:dat, reeks:true, n:dat.length}; }); }
-  _postRks=M; _postRksGen=_dataGen; return M; }
+  _postRks=M; _postRksGen=sl; return M; }
 function postReeksen(key){ return (postReeksenAlle()[key])||[]; }
 /* de reeks achter een sleutel (een hoofdreeks op de sleutel van de partij, of "<sleutel>~<bedrag>"); null als die partij niet gesplitst is */
 function postReeksVan(key){ const k=String(key||''), b=k.split('~')[0]; return postReeksen(b).find(r=>r.key===k)||null; }
@@ -4961,12 +4967,19 @@ function postStatusMap(){
   const M={}, v=new Date(); v.setHours(0,0,0,0);
   let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){}
   /* onderhoud1 (punt 2): een gesplitste partij krijgt een status per reeks (postReeksen); de hoofdreeks houdt de sleutel van de partij */
-  for(const s of R){ const RK=postReeksen(s.key); if(RK.length<2){ M[s.key]=postStatusVan(s, v); continue; }
+  /* onderhoud1b: is de PARTIJ gestopt (door jou beantwoord, of gemeten verlopen), dan wordt ze niet gesplitst: de partij houdt haar
+     ene status (zoals op bc2bafd) en een deelreeks erft die (postStatus()). Gemeten op de export van 25 nov: Travelcard stond op
+     "gestopt" en de splitsing gaf een nieuw "Travelcard (EUR 9) gestopt?". Een antwoord op de partij geldt zo voor alle reeksen. */
+  for(const s of R){ const RK=postReeksen(s.key); const P=postStatusVan(s, v);
+    if(RK.length<2 || P.status==='gestopt' || P.status==='verlopen'){ M[s.key]=P; continue; }
     for(const r of RK) M[r.key]=postStatusVan(r, v); }
   _postSt=M; _postStSleutel=sl; return M; }
 /* het schema-item van een post, of zijn reeks (onderhoud1), voor wie de naam, het bedrag en de laatste betaling wil */
 function postItem(key){ let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){} const R=postReeksVan(key); return R||s; }
 function postStatus(key){ const M=postStatusMap(); if(M[key]) return M[key];
+  /* onderhoud1b: een deelreeks ("<partij>~<bedrag>") zonder eigen status erft de status van de partij zodra die gestopt is */
+  const ks=String(key||''); if(ks.includes('~')){ const E0=(SET.postStatus||{})[ks]; const Pb=M[ks.split('~')[0]];
+    if(!(E0 && E0.status) && Pb && (Pb.status==='gestopt' || Pb.status==='verlopen')) return Object.assign({}, Pb, {key:ks, geerfd:true}); }
   const E=(SET.postStatus||{})[key]; if(E && E.status==='afloop') return {key, status:(E.tot||postBetalingenNa(key, E.laatste||E.op||'').length)?'gestopt':'afloop', door:'jij', op:E.op||'', laatste:E.laatste||'', afloop:true};
   return E && E.status==='gestopt' ? {key, status:'gestopt', door:'jij', op:E.op||'', laatste:E.laatste||''} : {key, status:'actief'}; }
 function postTelt(key){ const st=postStatus(key).status; return st==='actief' || st==='afloop'; }   // v421: een post die afloopt wordt nog een keer verwacht

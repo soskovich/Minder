@@ -11,7 +11,7 @@ const { execSync } = require('child_process');
 const { test, expect } = require('../klok');
 const { pinDatum } = require('../vaste-dag');
 const R = require('../repetitie-meten');
-const OPZIJ = { '2026-11-23': 1590, '2026-11-24': 1503, '2026-11-26': 953, '2026-12-01': 1203 };
+const OUD_HTML = () => execSync('git show bc2bafd:index.html', { cwd: __dirname + '/../..', maxBuffer: 64 * 1024 * 1024 }).toString();
 async function laad(page, html, data, dag, contant) {
   await page.route('**/sw.js', r => r.abort());
   if (html) await page.route('**/index.html', r => r.fulfill({ status: 200, contentType: 'text/html', body: html }));
@@ -31,7 +31,7 @@ test('deel 0: bc2bafd tegen nu op je export', async ({ browser }) => {
   test.setTimeout(180000);
   const pad = process.env.MINDER_EXPORT; if (!pad) test.skip();
   const data = JSON.parse(fs.readFileSync(pad, 'utf8')), dag = process.env.REPETITIE_DAG || new Date().toISOString().slice(0, 10);
-  const oudHtml = execSync('git show bc2bafd:index.html', { cwd: __dirname + '/../..', maxBuffer: 64 * 1024 * 1024 }).toString();
+  const oudHtml = OUD_HTML();
   const p1 = await browser.newPage(), p2 = await browser.newPage();
   await laad(p1, oudHtml, data, dag); await laad(p2, null, data, dag);
   const oud = await p1.evaluate(MEET), nu = await p2.evaluate(MEET), f = x => JSON.stringify(x);
@@ -41,12 +41,17 @@ test('deel 0: bc2bafd tegen nu op je export', async ({ browser }) => {
   const af = []; for (const k in oud.bedragen) { const a = f(oud.bedragen[k]), b = f(nu.bedragen[k]); L.push(`  ${k}: ${a === b ? 'gelijk' : 'OUD ' + a + '\n      NU  ' + b}`); if (a !== b) af.push(k); }
   fs.writeFileSync(process.env.ONDERHOUD1_OUT || '/tmp/onderhoud1.txt', L.join('\n'));
   expect(af).toEqual([]);
+  expect(nu.lo.filter(x => !oud.lo.includes(x))).toEqual([]);   // onderhoud1b: geen "gestopt?" die op bc2bafd niet bestond
 });
-test('repetitie: opzij op 23 nov, 24 nov, 26 nov en 1 dec', async ({ page }) => {
-  test.setTimeout(180000);
+test('repetitie: opzij op 23 nov, 24 nov, 26 nov en 1 dec is gelijk aan bc2bafd op dezelfde export', async ({ browser }) => {
+  test.setTimeout(360000);
   const pad = process.env.MINDER_EXPORT; if (!pad) test.skip();
-  const data = JSON.parse(fs.readFileSync(pad, 'utf8'));
-  await laad(page, null, data, process.env.REPETITIE_DAG || new Date().toISOString().slice(0, 10), process.env.CONTANT ? +process.env.CONTANT : null);
-  const M = await R.meetAlle(page), uit = {}; for (const d of R.DAGEN) uit[d] = M[d].opzij.advies;
-  expect(uit).toEqual(OPZIJ);
+  const data = JSON.parse(fs.readFileSync(pad, 'utf8')), dag = process.env.REPETITIE_DAG || new Date().toISOString().slice(0, 10);
+  const p1 = await browser.newPage(), p2 = await browser.newPage();
+  await laad(p1, OUD_HTML(), data, dag);
+  await laad(p2, null, data, dag, process.env.CONTANT ? +process.env.CONTANT : null);
+  const opzij = async (p) => { const M = await R.meetAlle(p), uit = {}; for (const d of R.DAGEN) uit[d] = M[d].opzij.advies; return uit; };
+  const oud = await opzij(p1), nu = await opzij(p2);
+  expect(Object.values(oud).every(v => typeof v === 'number')).toBe(true);   // invoermeting: bc2bafd gaf vier bedragen
+  expect(nu).toEqual(oud);
 });

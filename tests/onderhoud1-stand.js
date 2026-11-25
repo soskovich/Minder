@@ -22,6 +22,8 @@ function data(o) {
   for (const m of M) if (!o.servStop || m <= o.servStop) add('pk3-' + m, m + (o.melding ? '-05' : '-03'), -2.99, 'Stichting Beheer Derdengelden', 'SEPA INCASSO STICHTING BEHEER DERDENGELDEN SERVICE');
   for (let d = new Date(2026, 4, 4); d <= new Date(2026, 7, 31); d.setDate(d.getDate() + 7)) { const s = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     add('pkw-' + s, s, -10, 'Stichting Beheer Derdengelden', 'SEPA INCASSO STICHTING BEHEER DERDENGELDEN WEEK'); }
+  /* onderhoud1b: o.extra zet een extra band van EUR 25 bij dezelfde partij op deze dagen (een deelreeks met te weinig of te oude betalingen) */
+  for (const d of (o.extra || [])) add('pk25-' + d, d, -25, 'Stichting Beheer Derdengelden', 'SEPA INCASSO STICHTING BEHEER DERDENGELDEN EXTRA');
   for (const m of M) add('bf-' + m, m + '-05', -30, 'Basic Fit', 'SEPA INCASSO BASIC FIT');
   if (o.diffuus) { for (const n of ['Ziggo', 'Vattenfall', 'Lebara']) for (const d of ['2026-10-14', '2026-11-14']) add('df-' + n + d, d, -40, n, 'SEPA INCASSO ' + n.toUpperCase()); }
   else { add('pj-2026-10', '2026-10-27', -100, 'Peaks Jelani', 'SEPA INCASSO JELANI'); add('pj-2026-11', '2026-11-20', -100, 'Peaks Jelani', 'SEPA INCASSO JELANI'); }
