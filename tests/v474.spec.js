@@ -35,19 +35,19 @@ test.describe('1 · de mediaan van Na je salaris en blok 20', () => {
     expect(r.t).toContain('van €4.007 naar €5.216');
     expect(r.t).toContain('mediaan van mei €4.007 · jun €4.007 · jul €3.990 · aug €4.007 · sep €4.100 tegen mediaan van okt €5.216');
   });
-  test('b. blok 20 splitst elke storting in salaris, reiskosten en eenmalig, en de reiskosten staan niet bij de overige inkomsten', async ({ page }) => {
+  test('b. blok 20 splitst elke storting in salaris, vergoedingen en eenmalig (v522: vergoedingen zijn vast inkomen en zitten in het salaris van blok 20)', async ({ page }) => {
     await boot(page);
     const b20 = await page.evaluate(async () => { const b = DIAG_BLOKKEN.find((x) => x.lees === diagSalarisVerdeling); const L = await b.lees(); return Array.isArray(L) ? L.join('\n') : String(L); });
-    expect(b20).toContain('storting 24-09 5493.00 = salaris 5216.00 + reiskosten 277.00 + eenmalig 0.00 · regel a (automatisch)');
-    expect(b20).toContain('storting 26-10 7693.00 = salaris 5216.00 + reiskosten 0.00 + eenmalig 2477.00 · regel b (nog niet gesplitst)');
+    expect(b20).toContain('storting 24-09 5493.00 = salaris 5216.00 + vergoedingen 277.00 + eenmalig 0.00 · regel a (automatisch)');
+    expect(b20).toContain('storting 26-10 7693.00 = salaris 5216.00 + vergoedingen 0.00 + eenmalig 2477.00 · regel b (nog niet gesplitst)');
     const sep = b20.split('\n').find((l) => /^\s+sep: salaris/.test(l));
-    expect(sep).toContain('salaris 5216');
+    expect(sep).toContain('salaris 5493');   // v522: het salarisdeel draagt de vergoedingen
     const ov = b20.split('\n').slice(b20.split('\n').indexOf(sep) + 1, b20.split('\n').indexOf(sep) + 4).join('\n');
     expect(ov).not.toContain('eenmalig 277');
     expect(ov).not.toContain('ontvangst bij een lening');
     expect(b20).not.toContain('SLUIT NIET');
-    /* de reiskosten staan op je betaalrekening en zijn een eigen term in de controle; zonder die term VERSCHILT elke maand met +277 */
-    expect(b20).toContain('sep: 0 + 0 + 0 + 0 + 5493 = 5493 tegen 5216 + 277 + 0 + 0 + 0 = 5493: klopt');
+    /* v522: de vergoedingen zitten in het salaris, de term reiskosten is 0; de controle sluit nog steeds */
+    expect(b20).toContain('sep: 0 + 0 + 0 + 0 + 5493 = 5493 tegen 5493 + 0 + 0 + 0 + 0 = 5493: klopt');
     expect(b20).not.toMatch(/VERSCHILT \+277/);
     expect(b20).toContain('CONTROLE eenmalig inkomen niet in salaris: okt');
     expect(b20).not.toMatch(/CONTROLE eenmalig inkomen niet in salaris:[^\n]*VERSCHILT/);
@@ -71,34 +71,35 @@ test.describe('2 · de hint bij de bovengrens', () => {
 });
 
 test.describe('3 · Instellingen › Inkomen › Je salaris', () => {
-  test('e. vast salaris intikken en meteen de schakelaar aantikken: Bovengrens en Potje staan er, de pagina blijft open en op zijn plek', async ({ page }) => {
+  test('e. vast salaris intikken en meteen de schakelaar aantikken: de Bovengrens staat er (v522: geen potje meer), de pagina blijft open en op zijn plek', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 });
     await boot(page, { cfg: false });
     await page.evaluate(() => openSetSub('inkomen'));
     await page.fill('[data-salsplitvast]', '5216');
-    await page.click('[data-salsplitreisaan] + .sl');   // de tik op de schakelaar laat eerst het vaste salaris los (onchange)
-    const r = await page.evaluate(() => ({ sub: window._setSub, aan: SET.salSplit.reisAan, vast: SET.salSplit.vast, max: !!document.querySelector('[data-salsplitmax]'),
-      pot: !!document.querySelector('[data-salsplitpot]'), check: document.querySelector('[data-salsplitreisaan]').checked }));
-    expect(r).toMatchObject({ sub: 'inkomen', aan: true, vast: 5216, max: true, pot: true, check: true });
+    await page.click('[data-salsplitvergaan] + .sl');   // de tik op de schakelaar laat eerst het vaste salaris los (onchange)
+    const r = await page.evaluate(() => ({ sub: window._setSub, aan: SET.salSplit.vergAan, vast: SET.salSplit.vast, max: !!document.querySelector('[data-salsplitmax]'),
+      pot: !!document.querySelector('[data-salsplitpot]'), check: document.querySelector('[data-salsplitvergaan]').checked }));
+    expect(r).toMatchObject({ sub: 'inkomen', aan: true, vast: 5216, max: true, pot: false, check: true });
     /* de scrollpositie: gemeten rond de herbouw zelf (een klik van Playwright scrolt het doel eerst in beeld en meet dus niet de app) */
-    const y = await page.evaluate(() => { const el = document.querySelector('[data-salsplitreisaan]'); el.scrollIntoView({ block: 'center' }); const y0 = scrollY;
-      el.checked = false; el.dispatchEvent(new Event('change')); const y1 = scrollY; const el2 = document.querySelector('[data-salsplitreisaan]');
+    const y = await page.evaluate(() => { const el = document.querySelector('[data-salsplitvergaan]'); el.scrollIntoView({ block: 'center' }); const y0 = scrollY;
+      el.checked = false; el.dispatchEvent(new Event('change')); const y1 = scrollY; const el2 = document.querySelector('[data-salsplitvergaan]');
       el2.checked = true; el2.dispatchEvent(new Event('change')); return { y0, y1, y2: scrollY, max: !!document.querySelector('[data-salsplitmax]') }; });
     expect(y.y0).toBeGreaterThan(0);                     // de pagina scrolt echt, anders meet dit niets
     expect(y).toMatchObject({ y1: y.y0, y2: y.y0, max: true });
   });
-  test('f. het potje kiezen en de bovengrens invullen houden het blok open en de waarde staat', async ({ page }) => {
+  test('f. de bovengrens en de marge invullen houden het blok open en de waarde staat (v522: geen potje meer)', async ({ page }) => {
     await boot(page, { cfg: false });
     await page.evaluate(() => openSetSub('inkomen'));
     await page.fill('[data-salsplitvast]', '5216');
-    await page.click('[data-salsplitreisaan] + .sl');
-    await page.selectOption('[data-salsplitpot]', 'vervoer');
+    await page.click('[data-salsplitvergaan] + .sl');
+    await page.fill('[data-salsplitmarge]', '25');
     await page.fill('[data-salsplitmax]', '300');
     await page.click('[data-salsplitvast]');            // laat de bovengrens los
-    const r = await page.evaluate(() => ({ C: SET.salSplit, pot: document.querySelector('[data-salsplitpot]').value, max: document.querySelector('[data-salsplitmax]').value,
+    const r = await page.evaluate(() => ({ C: SET.salSplit, pot: document.querySelector('[data-salsplitmarge]').value, max: document.querySelector('[data-salsplitmax]').value,
       vast: document.querySelector('[data-salsplitvast]').value, part: document.querySelector('[data-salsplitpartij]').innerText }));
-    expect(r.C).toMatchObject({ vast: 5216, reisAan: true, reisPot: 'vervoer', reisMax: 300 });
-    expect(r.pot).toBe('vervoer');
+    expect(r.C).toMatchObject({ vast: 5216, vergAan: true, vergMax: 300, marge: 25 });
+    expect(r.C.reisPot).toBeUndefined();
+    expect(r.pot).toBe('25');
     expect(r.max).toBe('300');
     expect(r.vast).toBe('5216');
     expect(r.part).toContain('Partij: Werkgever');

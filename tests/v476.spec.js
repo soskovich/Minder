@@ -80,8 +80,8 @@ test.describe('Instellingen › Inkomen', () => {
     await page.click('[data-overigtoevoegen]');
     await page.fill('[data-overigvast] [data-overignaam]', 'Toeslag');
     await page.fill('[data-overigvast] [data-overigbedrag]', '150');
-    await page.click('[data-salsplitreisaan] + .sl');   // de tik laat het bedrag los (onchange) en de schakelaar moet daarna nog werken
-    const r = await page.evaluate(() => ({ som: inkomenHandmatig(), t: document.querySelector('[data-inkomenpermaand]').textContent, aan: SET.salSplit.reisAan, ov: SET.overigVast }));
+    await page.click('[data-salsplitvergaan] + .sl');   // de tik laat het bedrag los (onchange) en de schakelaar moet daarna nog werken
+    const r = await page.evaluate(() => ({ som: inkomenHandmatig(), t: document.querySelector('[data-inkomenpermaand]').textContent, aan: SET.salSplit.vergAan, ov: SET.overigVast }));
     expect(r).toMatchObject({ som: 5366, t: '€5.366', aan: true, ov: [{ naam: 'Toeslag', bedrag: 150 }] });
     expect(await page.evaluate(() => ({ b: baseIncome(), t: totals(thisYM()).income, s: SET.income }))).toEqual({ b: 5366, t: 5366, s: 5216 });   // SET.income blijft staan en wordt niet gelezen
     await page.click('[data-overigweg]');

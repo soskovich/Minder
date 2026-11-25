@@ -30,18 +30,18 @@ async function bootSplit(page, o) {
     SET.salSplit = { vast: 5216, key: recurKey(t), naam: 'Werkgever', reisAan: true, reisMax: 300, reisPot: 'vervoer' }; save(); });
 }
 
-test('a. rekVoorstel().salaris is het salarisdeel (storting − eenmalig − reiskosten) = 5216', async ({ page }) => {
+test('a. rekVoorstel().salaris is het salarisdeel (storting − eenmalig; v522: vergoedingen horen erbij) = 5503', async ({ page }) => {
   await bootSplit(page);
   /* oktober 7692,98 = 5216 vast + 287 reiskosten + 2189,98 eenmalig (de bonus beantwoord als 287 reiskosten) */
   await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 287));
   const sp = await page.evaluate(() => { const t = TX.find((x) => String(x.date).startsWith('2026-10') && /SALARIS/.test(x.desc)); return salSplitsing(t); });
-  expect(sp.salaris).toBe(5216); expect(sp.reis).toBe(287); expect(Math.round(sp.eenmalig * 100) / 100).toBe(2189.98);
+  expect(sp.salaris).toBe(5216); expect(sp.verg).toBe(287); expect(Math.round(sp.eenmalig * 100) / 100).toBe(2189.98);
   const P = await page.evaluate(() => { const Pv = rekVoorstel(); return { ok: Pv.ok, salaris: Math.round(Pv.salaris) }; });
   expect(P.ok).toBe(true);
-  expect(P.salaris).toBe(5216);   // sabotage (reiskosten niet aftrekken) → 5493/5503
-  /* salarisData leest dezelfde bron: het salarisdeel per maand is 5216 */
+  expect(P.salaris).toBe(5503);   // v522: salaris 5216 + vergoedingen 287 (vast inkomen); tot v522 5216 (reiskosten afgetrokken)
+  /* salarisData leest dezelfde bron: het salarisdeel per maand is 5216 + 277 vergoedingen (v522) */
   const sd = await page.evaluate(() => { const S = salarisData(); const r = S.R.find((x) => x.ym === '2026-09'); return r ? r.salaris : null; });
-  expect(sd).toBe(5216);
+  expect(sd).toBe(5493);
 });
 
 /* --- b: "Al gekozen" toont de bevroren afspraak, niet de live herberekening --- */

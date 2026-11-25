@@ -31,29 +31,30 @@ test.describe('regels a, b, c', () => {
   test('a. meerdere binnen de bovengrens en geen verwachte eenmalige ontvangst: alles reiskosten, automatisch', async ({ page }) => {
     await boot(page, { bonus: false });
     const S = await split(page, '2026-09');
-    expect(S).toMatchObject({ regel: 'a', salaris: 5216, reis: 277, eenmalig: 0, auto: true, vraag: false });
+    expect(S).toMatchObject({ regel: 'a', salaris: 5216, verg: 277, eenmalig: 0, auto: true, vraag: false });
     const m = await page.evaluate(() => maandInkomen('2026-09'));
-    expect(Math.round(m.alles)).toBe(5216);             // reiskosten zijn geen inkomen
+    expect(Math.round(m.alles)).toBe(5493);             // v522: vergoedingen zijn vast inkomen (tot v522 5216: reiskosten waren geen inkomen)
+    expect(Math.round(m.norm)).toBe(5493);
   });
   test('b. meerdere boven de bovengrens: een vraag, niets voorgekozen, tot het antwoord alles eenmalig "nog niet gesplitst"', async ({ page }) => {
     await boot(page);
     const S = await split(page, '2026-10');
-    expect(S).toMatchObject({ regel: 'b', reis: 0, eenmalig: 2477, vraag: true, nietGesplitst: true });
+    expect(S).toMatchObject({ regel: 'b', verg: 0, eenmalig: 2477, vraag: true, nietGesplitst: true });
     const r = await page.evaluate(() => { go('dash'); renderDash(); const v = document.querySelector('[data-salsplitvraag="' + _sid('2026-10') + '"]'); const t = v ? v.innerText : ''; v.click();
       const sh = document.querySelector('#salSplitSheet'); return { t, sec: [...sh.querySelectorAll('button')].every((b) => b.classList.contains('sec')),
-        vorig: +(sh.querySelector('[data-salsplitreis]') || {}).dataset.salsplitreis, ander: !!sh.querySelector('[data-salsplitander]'), geen: !!sh.querySelector('[data-salsplitgeen]') }; });
+        vorig: +(sh.querySelector('[data-salsplitverg]') || {}).dataset.salsplitverg, ander: !!sh.querySelector('[data-salsplitander]'), geen: !!sh.querySelector('[data-salsplitgeen]') }; });
     expect(r.t).toContain('nog niet gesplitst');
     expect(r.sec).toBe(true);
     expect(r).toMatchObject({ vorig: 277, ander: true, geen: true });
-    await page.evaluate(() => document.querySelector('[data-salsplitreis]').click());
+    await page.evaluate(() => document.querySelector('[data-salsplitverg]').click());
     const na = await split(page, '2026-10');
-    expect(na).toMatchObject({ reis: 277, eenmalig: 2200, beantwoord: true });
+    expect(na).toMatchObject({ verg: 277, eenmalig: 2200, beantwoord: true });
     expect(na.nietGesplitst).toBeFalsy();
     const log = await page.evaluate(() => SET.salSplitLog.slice(-1)[0]);
     expect(log.id).toBe(await page.evaluate(() => _sid('2026-10')));
-    expect(log).toMatchObject({ actie: 'gesplitst', reis: 277, eenmalig: 2200 });
+    expect(log).toMatchObject({ actie: 'gesplitst', verg: 277, eenmalig: 2200 });
     await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 100));   // achteraf te wijzigen, en gelogd
-    expect(await split(page, '2026-10')).toMatchObject({ reis: 100, eenmalig: 2377 });
+    expect(await split(page, '2026-10')).toMatchObject({ verg: 100, eenmalig: 2377 });
     expect(await page.evaluate(() => SET.salSplitLog.length)).toBe(2);
   });
   test('b2. binnen de bovengrens maar een verwachte eenmalige ontvangst open: toch een vraag', async ({ page }) => {
@@ -70,25 +71,23 @@ test.describe('regels a, b, c', () => {
   });
 });
 
+/* v522: VERVOER IS BRUTO (besluit van de gebruiker, 25 nov). De vergoeding verlaagt het potje niet meer en is vast inkomen; d en e
+   droegen tot v522 de aftrek ("vergoeding −€277", "vergoeding over") en toetsen nu het omgekeerde. */
 test.describe('punt 2 · Vervoer', () => {
-  test('d. de vergoeding verlaagt het potje: "vergoeding −€277"', async ({ page }) => {
+  test('d. de vergoeding verlaagt het potje niet: Vervoer is wat je tankt', async ({ page }) => {
     await boot(page, { okt: 5216 + 277, bonus: false });
-    const r = await page.evaluate(() => ({ cs: catSpendMap('2026-10').vervoer, ruw: catSpendMapRuw('2026-10').vervoer, R: reisStand('2026-10') }));
+    const r = await page.evaluate(() => ({ cs: catSpendMap('2026-10').vervoer, ruw: catSpendMapRuw('2026-10').vervoer }));
     expect(r.ruw).toBe(400);
-    expect(r.cs).toBe(123);
-    expect(r.R).toMatchObject({ bedrag: 277, af: 277, over: 0 });
-    const sh = await page.evaluate(() => { openInsPotje('vervoer'); const e = document.querySelector('[data-vergoeding]'); return { v: e ? +e.dataset.vergoeding : null, t: e ? e.innerText : '', over: !!document.querySelector('[data-vergoedingover]') }; });
-    expect(sh).toMatchObject({ v: 277, over: false });
-    expect(sh.t).toContain('vergoeding −€277');
+    expect(r.cs).toBe(400);
+    const sh = await page.evaluate(() => { openInsPotje('vervoer'); return { v: !!document.querySelector('[data-vergoeding]'), over: !!document.querySelector('[data-vergoedingover]') }; });
+    expect(sh).toEqual({ v: false, over: false });
   });
-  test('e. nooit onder 0: het overschot is "vergoeding over" en geen inkomen', async ({ page }) => {
+  test('e. een vergoeding hoger dan de tankkosten: het potje blijft het bruto bedrag en de vergoeding is inkomen', async ({ page }) => {
     await boot(page, { okt: 5216 + 277, bonus: false, tank: 100 });
-    const r = await page.evaluate(() => ({ cs: catSpendMap('2026-10').vervoer || 0, R: reisStand('2026-10'), inc: maandInkomen('2026-10').alles }));
-    expect(r.cs).toBe(0);
-    expect(r.R).toMatchObject({ af: 100, over: 177 });
-    expect(Math.round(r.inc)).toBe(5216);
-    const sh = await page.evaluate(() => { openInsPotje('vervoer'); const e = document.querySelector('[data-vergoedingover]'); return e ? e.innerText : ''; });
-    expect(sh).toContain('vergoeding over €177');
+    const r = await page.evaluate(() => ({ cs: catSpendMap('2026-10').vervoer || 0, inc: maandInkomen('2026-10') }));
+    expect(r.cs).toBe(100);
+    expect(Math.round(r.inc.alles)).toBe(5493);
+    expect(Math.round(r.inc.verg)).toBe(277);
   });
 });
 
@@ -97,7 +96,7 @@ test.describe('punt 3, 4 en 5', () => {
     await boot(page);
     await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 277));
     const r = await page.evaluate(() => { const D = salarisData(6); return D.R.map((x) => [x.ym, Math.round(x.salaris)]); });
-    for (const [ym, s] of r) if (ym >= '2026-05') expect([ym, s]).toEqual([ym, 5216]);
+    for (const [ym, s] of r) if (ym >= '2026-05') expect([ym, s]).toEqual([ym, 5493]);   // v522: het salarisdeel draagt de vergoedingen (vast inkomen)
     const kies = await page.evaluate(() => { try { window._gripCyc = null; } catch (_) {} const C = gripCyclus(); return C.kies.map((k) => k.naam); });
     /* v501 (punt 3): eerst meten. In deze stand ging er sinds de storting €300 boven je afspraak naar opzij, dus de keuze zegt dat dat deel
        al verdeeld lijkt (klopt / niet) in plaats van "verdelen"; het eenmalige deel blijft een eigen keuze */
@@ -124,12 +123,12 @@ test.describe('punt 3, 4 en 5', () => {
     const tv = await page.evaluate(() => { salSplitTochVast(_sid('2026-10')); return { vast: SET.salSplit.vast, sheet: !!document.querySelector('#salSplitVast') }; });
     expect(tv).toEqual({ vast: 5216, sheet: true });     // eerst het gevolg, niets geschreven
     const ins = await page.evaluate(() => { SET.salSplit = { key: SET.salSplit.key }; save(); document.body.insertAdjacentHTML('beforeend', '<div id="tst">' + salSplitInstelHTML() + '</div>'); const d = document.querySelector('#tst');
-      return { vast: d.querySelector('[data-salsplitvast]').value, aan: d.querySelector('[data-salsplitreisaan]').checked }; });
+      return { vast: d.querySelector('[data-salsplitvast]').value, aan: d.querySelector('[data-salsplitvergaan]').checked }; });
     expect(ins).toEqual({ vast: '', aan: false });
     const b20 = await page.evaluate(async () => { SET.salSplit = { vast: 5216, key: recurKey(_sal('2026-10')), reisAan: true, reisMax: 300, reisPot: 'vervoer' }; save();
       const b = DIAG_BLOKKEN.find((x) => x.lees === diagSalarisVerdeling); return String(await b.lees()); });
-    expect(b20).toContain('SALARISSPLITSING (v473)');
-    expect(b20).toContain('2026-10-26: €7.693 = salaris €5.216 + reiskosten €277 + eenmalig €2.200');
+    expect(b20).toContain('SALARISSPLITSING (v522)');
+    expect(b20).toContain('2026-10-26: €7.693 = salaris €5.216 + vergoedingen €277 + eenmalig €2.200');
     expect(b20).not.toContain('SLUIT NIET');
   });
 });
