@@ -23,7 +23,14 @@ async function bedragen(page) {
     const re = /-?€\s?[\d.]+(?:,\d{2})?/g, uit = {};
     const lees = (id) => ((document.getElementById(id) || {}).innerText || '').match(re) || [];
     go('dash'); renderDash(); uit.home = lees('s-dash');
-    go('ins'); renderIns(); uit.ins = lees('s-ins');
+    go('ins'); renderIns();
+    /* onderhoud1: de kop van Verschuivingen noemt sinds die ronde ook Vast ("Vast +EUR X", met de oorzaak eronder); op de commits van
+       de goldens sloeg hij Vast over. Alleen in dat geval gaat die toevoeging buiten de vergelijking, en ze komt apart terug
+       (uit.insVastKop) zodat de spec eist dat het de stap van Vast is en geen ander getal. Elke andere kop blijft gewoon meetellen. */
+    uit.insVastKop = null; const kopG = document.querySelector('#s-ins [data-verschkopg]'), oorz = document.querySelector('#s-ins [data-verschoorzaak]');
+    const bewaar = []; if (kopG && /· Vast /.test(kopG.innerText)) { const m = kopG.innerText.match(/· Vast [+−-]?€[\d.]+/); uit.insVastKop = m ? m[0] : null;
+      bewaar.push([kopG, kopG.innerHTML]); kopG.innerHTML = kopG.innerHTML.replace(/ · Vast <b[^>]*>.*?<\/b>/, ''); if (oorz) { bewaar.push([oorz, oorz.innerHTML]); oorz.innerHTML = ''; } }
+    uit.ins = lees('s-ins'); for (const [e, h] of bewaar) e.innerHTML = h;
     go('maand'); for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { try { gripKiesTab(t); } catch (_) {} uit['grip-' + t] = lees('s-maand'); }
     go('vooruit'); renderVooruit(); uit.plan = lees('s-vooruit');
     /* Vermogen zonder de kaart die v518 weghaalt: op 3faf02b haalt de generator hem uit de DOM voor het lezen */
@@ -34,6 +41,8 @@ async function bedragen(page) {
     uit.salv = (document.getElementById('sheet').innerText.match(re) || []);
     uit.gepland = {}; for (const el of document.querySelectorAll('[data-salvhoe]')) uit.gepland[el.dataset.salvhoe] = [...el.querySelectorAll('[data-salvhoevast]')].map(x => x.innerText.split('·')[0].trim());
     closeSheet();
+    try { if (uit.insVastKop) { const P = verschuivingParen(), af = P.map((p, i) => i).filter(i => P[i].b < thisYM()), i = af.length ? af[af.length - 1] : P.length - 1, V = verschuiving(P[i].a, P[i].b);
+      uit.insVastStap = V.grootste && V.grootste.k === '~vast' ? V.grootste.waarde : null; } } catch (_) {}
     return uit;
   });
 }

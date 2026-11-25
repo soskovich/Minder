@@ -68,6 +68,7 @@ test('f. alle bedragen op Home, Inzichten, Grip, Plan, Vermogen en in de salaris
   await B.boot(page);
   const n = await B.bedragen(page);
   for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'plan', 'vermogen']) expect(n[k], k).toEqual(VOOR[k]);
+  expect(n.insVastKop, 'onderhoud1: de kop noemt Vast met de stap').toBe(`· Vast +€${n.insVastStap}`);   // onderhoud1: de enige toevoeging op Inzichten
   expect(n.vermKaart).toBe(false);
   expect([...n.salv].sort(), 'salv').toEqual([...VOOR.salv].sort());   // dezelfde bedragen; de volgorde van Gepland verschuift (punt 2)
 });

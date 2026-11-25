@@ -147,5 +147,6 @@ test('k. met vragen aan zijn alle bedragen op de schermen byte-gelijk aan f1e0d7
   expect(await page.evaluate(() => vraagKnopAan())).toBe(true);
   const nu = await B.bedragen(page);
   for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'plan', 'vermogen', 'salv']) expect(nu[k], k).toEqual(VOOR[k]);
+  expect(nu.insVastKop, 'onderhoud1: de kop noemt Vast met de stap').toBe(`· Vast +€${nu.insVastStap}`);   // onderhoud1: de enige toevoeging op Inzichten
   expect(nu.gepland).toEqual(VOOR.gepland);
 });
