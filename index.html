@@ -3781,7 +3781,7 @@ function recurringScheduleKern(metOud){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
-    else if(meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (!_SIM419 && (SET.fixOvrM||{})[recurKey(t)]==='fixed'))) type='fixed'; else continue;   // v420: ook wat jij per partij op vast zette (Nikki)   // vaste last = herkende terugkerende betaling (incasso OF periodieke overboeking), niet de betaalvorm
+    else if(recurVastBoeking(t, meta)) type='fixed'; else continue;   // v420: ook wat jij per partij op vast zette (Nikki)   // vaste last = herkende terugkerende betaling (incasso OF periodieke overboeking), niet de betaalvorm
     const key=recurKey(t); if(!key) continue;
     const m=(map[key]=map[key]||{name:t.name,cat:c,type,occ:[],inc:0,per:0,tot:0});
     m.occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7), acc:t.acc});
@@ -3829,6 +3829,41 @@ function recurringScheduleKern(metOud){
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
 }
+/* de toets van het schema op een vaste last (incasso, periodieke overboeking of door jou op vast gezet); een plek, twee lezers:
+   recurringScheduleKern() en postReeksen() (onderhoud1). */
+function recurVastBoeking(t, meta){ meta=meta||CATS[catOf(t)]||{};
+  return meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (!_SIM419 && (SET.fixOvrM||{})[recurKey(t)]==='fixed')); }
+/* onderhoud1 (punt 2): EEN TEGENPARTIJ KAN MEER REEKSEN DRAGEN. Gemeld: onder Stichting Beheer Derdengelden (Peaks) vallen de inleg van
+   EUR 100 eind van de maand, de servicekosten van EUR 2,99 rond de 3e en een gestopte wekelijkse inleg. recurKey() kent alleen de naam,
+   dus het schema maakt er EEN post van, en de status ("gestopt?") las dan een reeks die niet bestaat. postReeksen() splitst de vaste
+   boekingen van een partij op BEDRAGBAND: de bedragen gesorteerd, en een nieuwe band zodra een bedrag meer dan POST_BAND_FACTOR keer het
+   vorige is (een prijsverhoging of een wisselende rekening blijft zo een band; 2,99 naast 10 naast 100 niet). Een band telt als reeks bij
+   minstens twee betalingen. Met een reeks verandert er niets (de partij blijft een post). De dag van de maand volgt per reeks uit zijn
+   eigen betalingen (de afstand), dus hij hoeft niet in de splitsing. DE SLEUTELS: de reeks met het hoogste totaal houdt de sleutel van
+   de partij (zodat SET.postStatus, SET.fixDueExcl en wat er verder op die sleutel staat bij die reeks blijft), elke andere reeks krijgt
+   "<sleutel>~<eerste bedrag van de band>" (stabiel: de eerste betaling verandert niet als er een bijkomt). DE BEDRAGEN BLIJVEN WAAR ZE WAREN:
+   het schema (recurringSchedule) is niet gesplitst; alleen de status leest de reeksen (postStatusMap). */
+const POST_BAND_FACTOR=2;
+let _postRks=null, _postRksGen=-1;
+function postReeksenAlle(){ if(_postRks && _postRksGen===_dataGen) return _postRks;
+  const per={}; for(const t of TX){ if(t.pending || !(t.amount<0)) continue; if(!recurVastBoeking(t)) continue; const k=recurKey(t); if(!k) continue; (per[k]=per[k]||[]).push(t); }
+  const M={};
+  for(const k in per){ const L=per[k].slice().sort((a,b)=>Math.abs(a.amount)-Math.abs(b.amount)); const bands=[];
+    for(const t of L){ const v=Math.abs(t.amount), B=bands[bands.length-1]; if(B && v<=B.max*POST_BAND_FACTOR){ B.tx.push(t); B.max=v; } else bands.push({tx:[t], max:v}); }
+    const echt=bands.filter(B=>new Set(B.tx.map(t=>String(t.date).slice(0,10))).size>=2);
+    if(echt.length<2) continue;
+    const R=echt.map(B=>{ const tx=B.tx.slice().sort((a,b)=>a.date.localeCompare(b.date)); return {tx, som:tx.reduce((s,t)=>s-t.amount,0), eerste:Math.abs(tx[0].amount)}; })
+      .sort((a,b)=>b.som-a.som || a.eerste-b.eerste);
+    M[k]=R.map((r,i)=>{ const dat=[...new Set(r.tx.map(t=>String(t.date).slice(0,10)))].sort();
+      const gaps=[]; for(let j=1;j<dat.length;j++) gaps.push(Math.round((new Date(dat[j])-new Date(dat[j-1]))/86400000)); gaps.sort((a,b)=>a-b);
+      const af=gaps[Math.floor(gaps.length/2)]||30, laatste=r.tx[r.tx.length-1];
+      return {key:i===0?k:`${k}~${Math.round(r.eerste*100)/100}`, basis:k, hoofd:i===0, name:laatste.name, cat:catOf(laatste), type:'fixed',
+        amount:Math.abs(laatste.amount), lastDate:laatste.date, afstand:af, cadans:af<=10?'week':(af>=VAST_4W.min&&af<=VAST_4W.max?'4w':(af<=45?'maand':null)),
+        intervalM:af<=45?1:af<=135?3:af<=225?6:12, datums:dat, reeks:true, n:dat.length}; }); }
+  _postRks=M; _postRksGen=_dataGen; return M; }
+function postReeksen(key){ return (postReeksenAlle()[key])||[]; }
+/* de reeks achter een sleutel (een hoofdreeks op de sleutel van de partij, of "<sleutel>~<bedrag>"); null als die partij niet gesplitst is */
+function postReeksVan(key){ const k=String(key||''), b=k.split('~')[0]; return postReeksen(b).find(r=>r.key===k)||null; }
 const VAST_CLUSTER_DAGEN=7, VAST_4W={min:26, max:29}, VAST_MAAND={min:30, max:32};
 const VAST_4W_DAGEN=28;   // v409: 13 termijnen per jaar, vooruit gerekend (teRuimTermijnen())
 const VAST_4W_MIN_AFSTANDEN=4;   // v410: vanaf zoveel gemeten afstanden rekent hij met de gemeten mediaan
@@ -4889,7 +4924,7 @@ function oudePostenAlleGestopt(){ const L=postOudLijst(); if(!L.length) return; 
   for(const P of L) SET.postStatus[P.key]={status:'gestopt', op:vandaagYMD(), laatste:P.laatste||''};
   save(); keuzeKlaar(`${L.length} oude post${L.length===1?'':'en'} gestopt`, herstel); }
 /* v413: de cadans in woorden, voor de regel in Let op ("EUR 31 per kwartaal"). */
-function postCadansTxt(s){ if(!s) return ''; if(s.cadans==='4w') return 'per 4 weken'; if(s.cadans==='maand') return 'per maand';
+function postCadansTxt(s){ if(!s) return ''; if(s.cadans==='4w') return 'per 4 weken'; if(s.cadans==='maand') return 'per maand'; if(s.cadans==='week') return 'per week';
   const iv=+s.intervalM||1; return ({1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'})[iv]||`per ${iv} maanden`; }
 function postTolerantie(s){ if(s.cadans==='4w') return POST_TOL.vier; const iv=+s.intervalM||1; return iv>=12?POST_TOL.jaar:iv>=3?POST_TOL.kwartaal:POST_TOL.maand; }
 function postVerwachtNa(s){ if(!s || !/^\d{4}-\d{2}-\d{2}/.test(String(s.lastDate||''))) return null;
@@ -4898,9 +4933,12 @@ function postVerwachtNa(s){ if(!s || !/^\d{4}-\d{2}-\d{2}/.test(String(s.lastDat
 function postStatusVan(s, vandaag){
   const E=(SET.postStatus||{})[s.key]||null, laatste=String(s.lastDate||'').slice(0,10);
   const vn=postVerwachtNa(s), tol=postTolerantie(s);
-  const grens=vn?new Date(vn.getFullYear(), vn.getMonth(), vn.getDate()+tol):null;
+  /* onderhoud1 (punt 2): een reeks van een gesplitste partij heet pas verlopen als hij ZELF twee verwachte data miste (de tweede plus de
+     bestaande speling); een andere reeks van dezelfde partij doet er niet toe. */
+  const vn2=s.reeks&&vn?(s.cadans?new Date(vn.getFullYear(), vn.getMonth(), vn.getDate()+(+s.afstand||30)):new Date(vn.getFullYear(), vn.getMonth()+(+s.intervalM||1), vn.getDate())):vn;
+  const grens=vn2?new Date(vn2.getFullYear(), vn2.getMonth(), vn2.getDate()+tol):null;
   const verlopen=!!grens && vandaag.getTime()>grens.getTime();
-  const basis={key:s.key, naam:titleCase(cleanMerch(s.name)||s.name||'')||String(s.key||''), laatste, verwachtNa:vn?ymdVan(vn):'', tol,
+  const basis={key:s.key, naam:(titleCase(cleanMerch(s.name)||s.name||'')||String(s.key||''))+(s.reeks?` (${euro0(Math.round(+s.amount||0))})`:''), laatste, verwachtNa:vn?ymdVan(vn):'', tol, reeks:!!s.reeks,
     bedrag:Math.round(+s.amount||0), cadansTxt:postCadansTxt(s),
     oud6:!!laatste && laatste<ymdVan(new Date(vandaag.getFullYear(), vandaag.getMonth()-POST_OUD_MAANDEN, vandaag.getDate()))};
   if(E && E.status==='gestopt') return Object.assign(basis, {status:'gestopt', door:'jij', op:E.op||'', weerBetaald:!!laatste && laatste>String(E.laatste||E.op||'')});
@@ -4915,14 +4953,19 @@ function postStatusVan(s, vandaag){
   return Object.assign(basis, {status:'actief', bevestigd:!!(E && E.status==='actief')});
 }
 /* v421: de betaaldagen van een post na een dag, oud naar nieuw (de boekingen zelf, niet het schema) */
-function postBetalingenNa(key, na){ return [...new Set(TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===key && t.date.slice(0,10)>String(na||'')).map(t=>t.date.slice(0,10)))].sort(); }
+function postBetalingenNa(key, na){ const R=postReeksVan(key); if(R) return R.datums.filter(d=>d>String(na||''));   // onderhoud1: een reeks telt alleen zijn eigen betalingen
+  return [...new Set(TX.filter(t=>!t.pending && t.amount<0 && recurKey(t)===key && t.date.slice(0,10)>String(na||'')).map(t=>t.date.slice(0,10)))].sort(); }
 let _postSt=null, _postStSleutel='';
 function postStatusMap(){
   const sl=_dataGen+'|'+vandaagYMD(); if(_postSt && _postStSleutel===sl) return _postSt;
   const M={}, v=new Date(); v.setHours(0,0,0,0);
   let R=[]; try{ R=recurringSchedule(true).filter(s=>s.type==='fixed'); }catch(_){}
-  for(const s of R) M[s.key]=postStatusVan(s, v);
+  /* onderhoud1 (punt 2): een gesplitste partij krijgt een status per reeks (postReeksen); de hoofdreeks houdt de sleutel van de partij */
+  for(const s of R){ const RK=postReeksen(s.key); if(RK.length<2){ M[s.key]=postStatusVan(s, v); continue; }
+    for(const r of RK) M[r.key]=postStatusVan(r, v); }
   _postSt=M; _postStSleutel=sl; return M; }
+/* het schema-item van een post, of zijn reeks (onderhoud1), voor wie de naam, het bedrag en de laatste betaling wil */
+function postItem(key){ let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){} const R=postReeksVan(key); return R||s; }
 function postStatus(key){ const M=postStatusMap(); if(M[key]) return M[key];
   const E=(SET.postStatus||{})[key]; if(E && E.status==='afloop') return {key, status:(E.tot||postBetalingenNa(key, E.laatste||E.op||'').length)?'gestopt':'afloop', door:'jij', op:E.op||'', laatste:E.laatste||'', afloop:true};
   return E && E.status==='gestopt' ? {key, status:'gestopt', door:'jij', op:E.op||'', laatste:E.laatste||''} : {key, status:'actief'}; }
@@ -4930,7 +4973,7 @@ function postTelt(key){ const st=postStatus(key).status; return st==='actief' ||
 const POST_STATUS_TXT={actief:'actief', gestopt:'gestopt door jou', verlopen:'verlopen, niet meegeteld', afloop:'opgezegd, loopt af'};
 function postZet(key, status, terug, tot){
   if(!key) return; SET.postStatus=SET.postStatus||{};
-  let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
+  let s=null; try{ s=postItem(key); }catch(_){}
   const laatste=s?String(s.lastDate||'').slice(0,10):(((SET.postStatus[key]||{}).laatste)||'');
   const herstel=setSnap(['postStatus','fixDueExcl','uitResAntw']);
   if(status==='gestopt' || status==='actief') SET.postStatus[key]={status, op:vandaagYMD(), laatste};
@@ -4945,10 +4988,10 @@ function postZet(key, status, terug, tot){
 }
 /* De sheet van een post: de status, de laatste betaling, en de handeling die past. Openen schrijft niets. */
 function openPostStatus(key, terug){
-  let s=null; try{ s=recurringSchedule(true).find(x=>x.key===key); }catch(_){}
+  let s=null; try{ s=postItem(key); }catch(_){}
   const P=postStatus(key), nm=P.naam||(s?titleCase(cleanMerch(s.name)||s.name||''):key);
   const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,'');
-  const cad=s?(s.cadans==='4w'?'4-wekelijks':s.cadans==='maand'?'per maand':(INTERVAL_TXT[s.intervalM]||`elke ${s.intervalM} maanden`)):'';
+  const cad=s?(s.cadans==='4w'?'4-wekelijks':s.cadans==='maand'?'per maand':s.cadans==='week'?'per week':(INTERVAL_TXT[s.intervalM]||`elke ${s.intervalM} maanden`)):'';
   const knop=(st,l,sec,tot)=>`<button class="btn${sec?' sec':''}" data-postzet="${st}${tot?'-tot':''}" onclick="postZet('${kk}','${st}','${tt}'${tot?`,'${tot}'`:''})">${l}</button>`;
   let uitleg='', knoppen='';
   if(P.status==='gestopt' && P.weerBetaald){ uitleg=`Je zette ${esc(nm)} op gestopt${P.op?` op ${dagKort(P.op)}`:''}, en er kwam daarna weer een betaling (${dagKort(P.laatste)}).${P.afloop?'':' Was dat de laatste betaling na het opzeggen, kies dan "Opgezegd, dit was de laatste".'}`;
@@ -24326,23 +24369,29 @@ function openCategory(k, m){
   const bron = m ? txOfMonth(m) : periodTx();   // v284: was een tweede uitdrukking van txOfMonth() en kende de uitsluiting dus niet (v104)
   const items=bron.filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
   if(!items.length) return; const c=CATS[k];
-  const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
   /* v269: het bedrag boven blijft het GELD, want het is de som van de rijen eronder. Deze sheet
      moet dan wel zeggen welk deel uit een reservering kwam, anders wijkt hij af van het potje op
      Inzichten zonder dat er staat waarom. Uit dezelfde items, dus geen tweede meting. */
   const uitRes=Math.round(items.reduce((sm,x)=>sm+uitReserveringBedrag(x),0));
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${c.icon}</div>
-      <div style="font-weight:800;font-size:var(--fs-lg)">${c.name}</div>
-      <div class="muted small">${items.length} transacties · ${esc(m?monthLabel(m):periodLabel())}</div>
-      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
-    ${geenNorm(k)&&JARGON[k]?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">${JARGON[k]}</div>`:''}
+  catLijstSheet({icon:c.icon, name:c.name, label:m?monthLabel(m):periodLabel(), items, k,
+    extra:`${geenNorm(k)&&JARGON[k]?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">${JARGON[k]}</div>`:''}
     ${uitRes>0?`<div class="small" style="color:var(--mut2);margin:0 2px 10px;line-height:1.5">Waarvan ${euro0(uitRes)} uit een reservering betaald, dus buiten je potjes.</div>`:''}
-    ${catSparkline(k)}
-    ${items.map(t=>`<div class="tx" style="cursor:default">
-      <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
+    ${catSparkline(k)}`});
+}
+/* onderhoud1 (punt 1): DE SHEET VAN EEN LIJST BOEKINGEN, die openCategory() altijd al tekende; nu ook de rij van een verschuiving
+   (openVerschRij), zodat die geen eigen scherm krijgt. Kop: icoon, naam, aantal en periode, het netto bedrag (de som van de rijen). */
+function catLijstSheet(o){ const items=(o.items||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center"${o.attr||''} data-catlijsttot="${Math.round(tot*100)/100}" data-catlijstn="${items.length}" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${o.icon||''}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(o.name)}</div>
+      <div class="muted small">${items.length} transacties · ${esc(o.label)}</div>
+      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
+    ${o.extra||''}
+    ${items.map(t=>{ const c=CATS[catOf(t)]||{}; return `<div class="tx" data-catlijstrij style="cursor:default">
+      <div class="ava" style="background:var(--card2)">${o.k?o.icon:(c.icon||'')}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}${OWN.length>1?' · '+esc(accShort(t.acc)):''}${o.k?'':' · '+esc(c.name||'')}</div></div>
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`; }).join('')}`;
   showSheetBg();
 }
 /* v208: dit deed renderIns() en ging er dus van uit dat elke uitklap op Inzichten staat, precies
@@ -27871,7 +27920,7 @@ function verschuivingParen(){
 function verschuiving(a, b){
   const nu=thisYM(), lopend=b===nu, dag=lopend?daysElapsed(nu).elapsed:null;
   /* v505 (punt 2): dezelfde bron als het totaal op Inzichten (uitgegevenStand), dus "okt t/m 31" is het Inzichten-totaal van oktober */
-  const som=m=>{ const U=uitgegevenStand(dag!=null?{m, totDag:dag}:{m}); return {per:U.per, tot:U.totaal}; };
+  const som=m=>{ const U=uitgegevenStand(dag!=null?{m, totDag:dag}:{m}); return {per:U.per, tot:U.totaal, U}; };
   const A=som(a), B=som(b);
   const keys=new Set([...Object.keys(A.per), ...Object.keys(B.per)]);
   /* Een categorie die per saldo niet verschoof (op hele euro's) staat niet los: een regel van EUR 0 zegt niets. */
@@ -27882,9 +27931,44 @@ function verschuiving(a, b){
   const R=brugAfronden(rauw, eind-begin);
   const naam=k=>k==='~vast'?'Vast':(k==='~rest'?'Overige potjes':((CATS[k]||{name:k}).name));
   const stappen=rauw.map(x=>({k:x.k, label:naam(x.k), waarde:R[x.k]}));
-  const pot=d.filter(x=>x.k!=='~vast')[0]||null;
-  return {a, b, lopend, dag, begin, eind, stappen, grootste:pot?{label:naam(pot.k), waarde:Math.round(pot.v)}:null};
+  /* onderhoud1 (punt 1): de kop noemt de rij met de grootste absolute verschuiving in euro's, OOK als dat Vast is (tot hier sloeg hij
+     Vast over en noemde hij het grootste potje). d is al op absolute euro's gesorteerd, dus d[0] is die rij. Is het Vast, dan zegt
+     vastOorzaak() in een zin welke vaste post het verschil maakt, of niets als dat niet vast te stellen is (niet raden). */
+  const top=d[0]||null; let oorzaak=null; if(top && top.k==='~vast'){ try{ oorzaak=vastOorzaak(A.U, B.U, a, top.v); }catch(_){ oorzaak=null; } }
+  return {a, b, lopend, dag, begin, eind, stappen, grootste:top?{k:top.k, label:naam(top.k), waarde:Math.round(top.v)}:null, oorzaak};
 }
+/* onderhoud1 (punt 1): DE OORZAAK VAN DE VERSCHUIVING BIJ VAST, uit de vaste-lastenboekingen van de twee periodes (uitgegevenStand().tx.vast,
+   dezelfde bron als de stap), per post (recurKey). De post met het grootste verschil in dezelfde richting als de stap is de oorzaak, maar
+   alleen als hij minstens de helft van de stap draagt (VERSCH_OORZAAK_DEEL); anders is er geen zin (geen post verklaart het, en dan raden we
+   niet). Nieuw in de tweede periode: "valt deze periode" als de post al eerder betaald werd (een kwartaal- of jaarpost), anders "EUR X nieuw";
+   weg in de tweede periode: "valt deze periode niet"; anders "EUR X -> EUR Y". */
+const VERSCH_OORZAAK_DEEL=0.5;
+function vastOorzaak(UA, UB, a, stap){ if(!UA || !UB || !(Math.abs(stap)>=1)) return null;
+  const per=(U)=>{ const o={}; for(const t of (U.tx&&U.tx.vast)||[]){ const k=recurKey(t)||t.name||''; (o[k]=o[k]||{som:0, t}).som+=-t.amount; } return o; };
+  const PA=per(UA), PB=per(UB), ks=new Set([...Object.keys(PA), ...Object.keys(PB)]); let best=null;
+  for(const k of ks){ const va=PA[k]?PA[k].som:0, vb=PB[k]?PB[k].som:0, v=vb-va; if(Math.sign(v)!==Math.sign(stap)) continue;
+    if(!best || Math.abs(v)>Math.abs(best.v)) best={k, v, va, vb, t:(PB[k]||PA[k]).t}; }
+  if(!best || Math.abs(best.v)<VERSCH_OORZAAK_DEEL*Math.abs(stap) || Math.round(Math.abs(best.v))<1) return null;
+  const nm=txNaam(best.t), r=x=>Math.round(x);
+  if(best.va<0.005){ const eerder=telbareTx().some(t=>t.amount<0 && recurKey(t)===best.k && String(t.date).slice(0,7)<a);
+    return eerder?`${nm} valt deze periode`:`${nm} ${euro0(r(best.vb))} nieuw`; }
+  if(best.vb<0.005) return `${nm} valt deze periode niet`;
+  return `${nm} ${euro0(r(best.va))} \u2192 ${euro0(r(best.vb))}`; }
+/* onderhoud1 (punt 1): een tik op een rij opent de boekingen van die rij in de tweede periode (de periode na de pijl), in de sheet van een
+   categorie (catLijstSheet, dezelfde als openCategory). Vast: de vaste-lastenboekingen; Overige potjes: de categorieen in die stap; een
+   begin- of eindrij: alle boekingen van die maand die in het totaal tellen. De lopende maand stopt bij vandaag, zoals de stap. */
+function openVerschRij(k, a, b, kant){ const nu=thisYM(), lopend=b===nu, dag=lopend?daysElapsed(nu).elapsed:null, m=kant==='a'?a:b;
+  const U=uitgegevenStand(dag!=null?{m, totDag:dag}:{m}), alle=[].concat(U.tx.vast, U.tx.potjes, U.tx.zonder, U.tx.buiten, U.tx.kasNieuw);
+  const losK=new Set(verschuiving(a, b).stappen.map(s=>s.k)), vast=new Set(U.tx.vast);
+  const past=t=>k==='~alle'?true:k==='~vast'?vast.has(t):k==='~rest'?(!vast.has(t) && !losK.has(catOf(t))):(!vast.has(t) && catOf(t)===k);
+  const items=alle.filter(past);
+  let ander=null; if(k!=='~alle'){ const o=kant==='a'?b:a, UO=uitgegevenStand(dag!=null?{m:o, totDag:dag}:{m:o}), vo=new Set(UO.tx.vast);
+    const po=t=>k==='~vast'?vo.has(t):k==='~rest'?(!vo.has(t) && !losK.has(catOf(t))):(!vo.has(t) && catOf(t)===k);
+    ander={m:o, som:[].concat(UO.tx.vast, UO.tx.potjes, UO.tx.zonder, UO.tx.buiten, UO.tx.kasNieuw).filter(po).reduce((s,t)=>s-t.amount,0)}; }
+  const nm=k==='~vast'?'Vast':k==='~rest'?'Overige potjes':k==='~alle'?'Uitgegeven':((CATS[k]||{name:k}).name), icon=k==='~vast'?ICON('lock'):((CATS[k]||{}).icon||ICON('cart'));
+  const mn=ym=>MNAMES[+String(ym).slice(5,7)-1], tot=dag!=null?` t/m ${dag}`:'';
+  catLijstSheet({icon, name:nm, label:monthLabel(m)+tot, items, attr:` data-verschrij="${esc(k)}" data-verschrijm="${m}"`,
+    extra:ander?`<div class="small muted" data-verschrijander="${Math.round(ander.som)}" style="margin:0 2px 10px;line-height:1.5">In ${esc(mn(ander.m))}${tot}: ${euro0(Math.round(ander.som))}</div>`:''}); }
 function verschuivingKies(i){ window._verschPaar=i; window._verschOpen=true; const el=document.getElementById('insVersch'); if(el) el.outerHTML=insVerschuiving(); }
 function verschuivingToggle(){ window._verschOpen=!window._verschOpen; const el=document.getElementById('insVersch'); if(el) el.outerHTML=insVerschuiving(); }
 function insVerschuiving(){
@@ -27894,7 +27978,8 @@ function insVerschuiving(){
   const i=window._verschPaar!=null&&P[window._verschPaar]?window._verschPaar:(af.length?af[af.length-1]:P.length-1);
   const V=verschuiving(P[i].a, P[i].b), mn=ym=>MNAMES[+String(ym).slice(5,7)-1];
   const kopG=V.grootste?` · ${esc(V.grootste.label)} <b style="color:${V.grootste.waarde>0?'var(--red)':'var(--green)'}">${V.grootste.waarde>0?'+':'−'}${euro0(Math.abs(V.grootste.waarde))}</b>`:'';
-  const kop=`<div class="row" style="gap:8px;align-items:center;cursor:pointer" role="button" data-verschkop onclick="verschuivingToggle()"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Verschuivingen</span><span class="small" style="display:block;color:var(--mut)">${mn(V.a)} → ${mn(V.b)}${kopG}</span></span><span style="color:var(--teal);font-weight:700">${window._verschOpen?'‹':'›'}</span></div>`;
+  const oorz=V.oorzaak?`<span class="small" data-verschoorzaak style="display:block;color:var(--mut)">Vast: ${esc(V.oorzaak)}</span>`:'';
+  const kop=`<div class="row" style="gap:8px;align-items:center;cursor:pointer" role="button" data-verschkop onclick="verschuivingToggle()"><span style="flex:1;min-width:0"><span class="hlabel" style="margin:0">Verschuivingen</span><span class="small" data-verschkopg style="display:block;color:var(--mut)">${mn(V.a)} → ${mn(V.b)}${kopG}</span>${oorz}</span><span style="color:var(--teal);font-weight:700">${window._verschOpen?'‹':'›'}</span></div>`;
   if(!window._verschOpen) return `<div class="card" id="insVersch" data-versch="dicht" style="padding:11px 13px">${kop}</div>`;
   const knop=P.map((p,j)=>`<span class="${j===i?'on':''}" data-verschpaar="${p.a}:${p.b}" onclick="verschuivingKies(${j})">${mn(p.a)} → ${mn(p.b)}</span>`).join('');
   let run=V.begin; const lv=[V.begin, V.eind]; for(const s of V.stappen){ run+=s.waarde; lv.push(run); }
@@ -27903,11 +27988,13 @@ function insVerschuiving(){
   const sx=v=>((v-basis)/(hi-basis)*100);
   const balk=(van,tot,kl)=>{ const l=Math.min(sx(van),sx(tot)), w=Math.max(Math.abs(sx(tot)-sx(van)),0.8); return `<i style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;background:${kl}"></i>`; };
   let r=V.begin;
-  const rij=(lab,bar,v,attr)=>`<div class="ins-bw"${attr}><span class="n">${lab}</span><span class="t">${bar}</span><span class="a">${v}</span></div>`;
-  let h=rij(esc(mn(V.a)), balk(basis, V.begin, 'var(--mut2)'), euro0(V.begin), ` data-verschbegin="${V.begin}"`);
+  /* onderhoud1 (punt 1): elke rij is een tikdoel met een zichtbare chevron; de tik opent de boekingen van die rij (openVerschRij) */
+  const tik=(k,kant)=>` role="button" style="cursor:pointer" onclick="openVerschRij('${esc(k).replace(/'/g,"\\'")}','${V.a}','${V.b}'${kant?`,'${kant}'`:''})"`;
+  const rij=(lab,bar,v,attr)=>`<div class="ins-bw"${attr}><span class="n">${lab} <span style="color:var(--teal);font-weight:700">›</span></span><span class="t">${bar}</span><span class="a">${v}</span></div>`;
+  let h=rij(esc(mn(V.a)), balk(basis, V.begin, 'var(--mut2)'), euro0(V.begin), ` data-verschbegin="${V.begin}"`+tik('~alle','a'));
   for(const s of V.stappen){ const v0=r; r+=s.waarde;
-    h+=rij(esc(s.label), balk(v0, r, s.waarde>0?'var(--red)':(s.waarde<0?'var(--green)':'var(--mut2)')), s.waarde===0?'±'+euro0(0):`${s.waarde>0?'+':'−'}${euro0(Math.abs(s.waarde))}`, ` data-verschstap="${s.waarde}" data-verschk="${esc(s.k)}"`); }
-  h+=rij(esc(mn(V.b))+(V.lopend?` t/m ${V.dag}`:''), balk(basis, V.eind, 'var(--mut2)'), euro0(V.eind), ` data-verscheind="${V.eind}"`);
+    h+=rij(esc(s.label), balk(v0, r, s.waarde>0?'var(--red)':(s.waarde<0?'var(--green)':'var(--mut2)')), s.waarde===0?'±'+euro0(0):`${s.waarde>0?'+':'−'}${euro0(Math.abs(s.waarde))}`, ` data-verschstap="${s.waarde}" data-verschk="${esc(s.k)}"`+tik(s.k)); }
+  h+=rij(esc(mn(V.b))+(V.lopend?` t/m ${V.dag}`:''), balk(basis, V.eind, 'var(--mut2)'), euro0(V.eind), ` data-verscheind="${V.eind}"`+tik('~alle'));
   return `<div class="card" id="insVersch" data-versch="open" style="padding:11px 13px">${kop}
     <div class="ins-tog" style="margin:10px 0 8px">${knop}</div>${h}
     <div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.45">Rood = meer uitgegeven dan de maand ervoor · groen = minder${basis>0?` · de as begint bij ${euro0(basis)}`:''}${V.lopend?` · ${mn(V.b)} tot en met vandaag tegen dezelfde dagen van ${mn(V.a)}`:''}</div></div>`;
@@ -31104,6 +31191,7 @@ function kennisWijzig(id){ const [s, ...r]=id.split(':'), k=r.join(':');
     if(E.soort==='holding'){ const t=TX.find(u=>recurKey(u)===E.key); if(t) openSheet(t.id); return; }
     if(E.soort==='lening'){ openLoan(E.loanId); return; }
     if(E.soort==='post'){ openPostStatus(E.key); return; }
+    if(E.soort==='woning' && E.ja){ openWoningWijzig(k.slice(7),'kennis'); return; }   // onderhoud1: wijzigen bewaart de woning (tot hier vergat hij hem)
     if(E.soort==='oorzaak'){ delete SET.kennis[k]; save(); closeSheet(); go('maand'); gripNaarSymptoom(E.symId||''); return; }   // v429: wijzigen is de vraag opnieuw, in Begrijpen
     kennisVergeetKern(id); try{ applyOwnAccounts(); }catch(_){} save(); try{ render(); }catch(_){}
     const q=gegevensVragen().find(v=>v.qkey===k || (k.startsWith('benoem|') && v.soort==='benoem' && 'benoem|'+v.key===k));
@@ -39834,9 +39922,57 @@ function vvSectie(){ const L=vvLijst(); const rij=x=>{ const T=vvAlleTermijnen(x
     <div class="small muted">${euro0(vvBedrag(x))} ${VV_RITME[x.ritme]||''}${!x.koppel&&x.schatting!==false?' · schatting':''} · vanaf ${esc(dagKort(x.eerste))}${x.laatste?` t/m ${esc(dagKort(x.laatste))}`:''}${x.rest?` · nog ${euro0(x.rest)}`:''}${vol?` · volgende ${esc(dagKort(vol))}`:''}${x.koppel?' · gekoppeld':''}</div></div><span class="small" style="color:var(--teal)">›</span></div>`; };
   return `<div data-vvsectie style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Verwacht vanaf een datum</div>${L.map(rij).join('')}
     <button class="cp-add" data-vvtoevoegen style="margin-top:8px" onclick="openVastVerwacht()">+ Verwachte vaste last toevoegen</button>`; }
+/* onderhoud1 (punt 3): DE WONING ALS RIJ IN VASTE LASTEN. Uit de kennis van de actieve woning (kennisWoningKey, met een bedrag), met de
+   rekening van de laatste betaling aan de woning. Rekent niets: de woning telt al
+   in je vaste lasten (woningForecast, isFixed via woningPaymentIds); deze rij laat hem alleen zien. De rekening is die van de laatste
+   boeking die woningBetaling() bij de woning rekent (dezelfde toets als woningForecast). */
+function woningVasteRij(){ const wk=kennisWoningKey(); if(!wk) return null; const E=kennisGet('woning|'+wk)||{}; const bedrag=Math.round(+E.bedrag||0); if(!(bedrag>0)) return null;
+  let acc=null; try{ const wp=TX.filter(t=>woningBetaling(t, wk, E)).sort((a,b)=>b.date.localeCompare(a.date)); acc=wp.length?wp[0].acc:null; }catch(_){}
+  return {key:wk, naam:E.partij||'Woonhuur', bedrag, dag:Math.max(+E.dag||1,1), vanaf:E.vanaf||'', acc}; }
+function woningVasteRijHtml(W){ const kk=String(W.key).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<div class="row" data-vastwoning="${W.bedrag}" style="padding:9px 0;border-top:1px solid var(--line);gap:10px;align-items:flex-start">
+      <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md)">${(CATS.huur||{}).icon||''} ${esc(W.naam)}</div>
+        <div class="small muted">${euro0(W.bedrag)} per maand · dag ${W.dag} · ${W.acc?esc(accLabel(W.acc)):'rekening onbekend'} · woning</div>
+        <div class="small" style="color:var(--mut2)">je woning${W.vanaf?` · vanaf ${esc(monthLabel(W.vanaf))}`:''} <span data-woningwijzig style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openWoningWijzig('${kk}','vaste')">Wijzigen \u203a</span> <span data-woningvergeet style="color:var(--mut2);cursor:pointer;margin-left:8px" onclick="openWoningVergeet('${kk}','vaste')">Vergeten</span></div></div></div>`; }
+/* Wijzigen opent bedrag en dag (de rekening volgt je laatste betaling en staat er ter info) en BEWAART de post; tot onderhoud1 riep
+   Wijzigen in Wat Minder van jou weet de vergeet-route aan (kennisWijzig: vergeten en de vraag opnieuw), dus de post was weg. */
+function openWoningWijzig(key, terug){ const W=woningVasteRij(), E=kennisGet('woning|'+key); if(!E) return;
+  const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,'');
+  const acc=W&&W.key===key?W.acc:null;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="woningWijzig" data-woningkey="${esc(key)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(E.partij||'Woonhuur')} wijzigen</div>
+    <div class="small muted" style="margin:2px 0 10px;line-height:1.5">Je woning als vaste last. Bedrag en dag gelden vanaf nu; je boekingen veranderen niet.</div>
+    <label class="small" style="display:block;margin-top:6px">Bedrag per maand<input id="wwBedrag" data-wwbedrag type="text" inputmode="decimal" value="${esc(numUit(+E.bedrag||''))}" style="width:100%;margin-top:4px"></label>
+    <label class="small" style="display:block;margin-top:8px">Dag van de maand<input id="wwDag" data-wwdag type="number" min="1" max="31" value="${Math.max(+E.dag||1,1)}" style="width:100%;margin-top:4px"></label>
+    <div class="small" style="margin-top:8px;color:var(--mut2)">Rekening: ${acc?esc(accLabel(acc)):'onbekend'} · volgt je laatste betaling aan de woning</div>
+    <div class="small" data-wwreden style="color:var(--mut2);margin-top:8px"></div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-woningbewaar onclick="woningWijzigZet('${kk}', document.getElementById('wwBedrag').value, document.getElementById('wwDag').value, '${tt}')">Bewaren</button><button class="btn sec" onclick="${tt==='vaste'?'openVasteLasten()':'openKennis()'}">Terug</button></div></div>`;
+  showSheetBg(); }
+function woningWijzigZet(key, bedrag, dag, terug){ const E=kennisGet('woning|'+key); if(!E) return false;
+  const b=Math.round(numIn(bedrag)*100)/100, d=Math.round(+dag);
+  const reden=!(b>0)?'Vul een bedrag in':!(d>=1&&d<=31)?'Kies een dag van 1 tot en met 31':'';
+  if(reden){ const el=document.querySelector('[data-wwreden]'); if(el) el.textContent=reden; return false; }
+  E.bedrag=b; E.dag=d; E.gewijzigd=vandaagYMD(); save(); window._rekV=null; try{ runMemoVergeten(); }catch(_){} try{ render(); }catch(_){}
+  if(terug==='vaste') openVasteLasten(); else if(terug==='kennis') openKennis(); else closeSheet();
+  toast(`${ICON('check')} ${esc(E.partij||'Woonhuur')} · ${euro0(Math.round(b))} per maand, dag ${d}`); return true; }
+/* Vergeten haalt de woning weg, na een bevestiging in de app (geen confirm()), met wat er wegvalt. Annuleren laat alles staan. */
+function openWoningVergeet(key, terug){ const E=kennisGet('woning|'+key); if(!E) return;
+  const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,''), terugAct=tt==='vaste'?'openVasteLasten()':'openKennis()';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="woningVergeet" data-woningkey="${esc(key)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(E.partij||'Woonhuur')} vergeten?</div>
+    <div class="small" data-woningvergeettekst style="margin:6px 0 12px;line-height:1.5">Wat er wegvalt: je woonhuur van ${euro0(Math.round(+E.bedrag||0))} per maand${E.dag?` (dag ${+E.dag})`:''} uit je vaste lasten, uit wat er deze maand nog te betalen is en uit Tot je volgende salaris. Je boekingen blijven staan, en Minder kan je daarna opnieuw vragen wat je woning is.</div>
+    <div class="row" style="gap:8px"><button class="btn" data-woningvergeetzet onclick="woningVergeetZet('${kk}','${tt}')">Vergeten</button><button class="btn sec" data-woningvergeetterug onclick="${terugAct}">Annuleren</button></div></div>`;
+  showSheetBg(); }
+function woningVergeetZet(key, terug){ const E=kennisGet('woning|'+key); if(!E) return; const nm=E.partij||'Woonhuur';
+  kennisVergeetKern('k:woning|'+key); try{ applyOwnAccounts(); }catch(_){} save(); window._rekV=null; try{ runMemoVergeten(); }catch(_){} try{ render(); }catch(_){}
+  if(terug==='vaste') openVasteLasten(); else if(terug==='kennis') openKennis(); else closeSheet();
+  toast(`${ICON('check')} ${esc(nm)} vergeten`); }
 function openVasteLasten(){
-  const L=vasteLasten(true); const oudL=L.filter(s=>s.oud && !postTelt(s.key)), Lr=L.filter(s=>!oudL.includes(s)); const actief=Lr.filter(s=>!s.opgezegd), weg=Lr.filter(s=>s.opgezegd);
-  const tot=actief.reduce((a,s)=>a+(+s.monthlyEq||0),0);
+  /* onderhoud1 (punt 3): de woning staat hier zoals elke andere vaste last. Hij komt niet uit het schema (een Tikkie of iDEAL is geen incasso),
+     maar uit je antwoord (woningVasteRij); een schema-rij met de sleutel van een woning-betaling staat er niet nog eens naast, zodat hij een keer telt. */
+  const W=woningVasteRij(), wrk=W?woningRecurKeys():new Set();
+  const L=vasteLasten(true).filter(s=>!wrk.has(s.key)); const oudL=L.filter(s=>s.oud && !postTelt(s.key)), Lr=L.filter(s=>!oudL.includes(s)); const actief=Lr.filter(s=>!s.opgezegd), weg=Lr.filter(s=>s.opgezegd);
+  const tot=actief.reduce((a,s)=>a+(+s.monthlyEq||0),0)+(W?W.bedrag:0), nPost=actief.length+(W?1:0);
   const row=s=>{ const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px;align-items:flex-start${s.opgezegd?';opacity:.55':''}">
       <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md)">${c.icon||''} ${esc(s.name)}</div>
@@ -39846,8 +39982,8 @@ function openVasteLasten(){
       <button class="chip ${s.opgezegd?'on':''}" style="flex-shrink:0" data-uitreschip onclick="toggleFixDueExcl('${kk}','vaste')">${s.opgezegd?'Toch niet':'Uit reservering'}</button></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('repeat')} Vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:10px;line-height:1.5">${actief.length} ${actief.length===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent. Is een post gestopt, zet hem op gestopt; betaal je hem uit een reservering, zet hem op uit reservering: dan telt hij niet in nog te betalen.</div>
-    ${actief.map(row).join('')||'<div class="small muted">Nog geen vaste lasten herkend.</div>'}
+    <div class="small muted" data-vastsamen="${Math.round(tot)}" style="margin-bottom:10px;line-height:1.5">${nPost} ${nPost===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent${W?', plus je woning':''}. Is een post gestopt, zet hem op gestopt; betaal je hem uit een reservering, zet hem op uit reservering: dan telt hij niet in nog te betalen.</div>
+    ${W?woningVasteRijHtml(W):''}${actief.map(row).join('')||(W?'':'<div class="small muted">Nog geen vaste lasten herkend.</div>')}
     ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uit reservering</div>${weg.map(row).join('')}`:''}
     ${oudL.length?`<div data-vastoud style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Langer niet betaald · telt niet mee</div>${oudL.map(row).join('')}`:''}
     ${vvSectie()}
