@@ -145,7 +145,7 @@ genoemde versietag.)*
   overboeking die niet gezien is heet "nog niet binnen" vanaf `overboekLaatVanaf(dag)` = `OVERBOEK_LAAT_DAGEN` (3) werkdagen na de verwachte
   dag (`werkdagPlus()`), en de verwachte dag bij "dag erna" is `werkdagNa()`. Een werkdag (`isWerkdag()`) volgt de Algemene termijnenwet:
   geen za/zo, nieuwjaarsdag, tweede paasdag, hemelvaartsdag, tweede pinksterdag, beide kerstdagen, Koningsdag (27 april, op zondag 26 april)
-  en 5 mei (`nlFeestdag()`, Pasen uit `paasZondag()`); Goede Vrijdag telt als werkdag. Salaris 25 nov: verwacht 26 nov, melding 1 dec (was
+  en 5 mei (`nlFeestdag()`, Pasen uit `paasZondag()`); Goede Vrijdag telt als werkdag (sinds `v523c` niet meer: TARGET). Salaris 25 nov: verwacht 26 nov, melding 1 dec (was
   29 nov). GEMETEN EN BIJ `v523c` GEREPAREERD: in de era vergat `salPeriode()` een salaris dat EERDER kwam dan de regel zodra de verwachte dag
   voorbij is (salaris 23 dec, op 28 dec `cur.werkelijk` null, de periode start op 24 dec); dan is er ook geen verwachte overboeking. Spec
   `v523.spec.js` c, i (salaris op vrijdag) en j (25/26 dec), 4 van 4 sabotages rood. Cache `minder-v523b`.
