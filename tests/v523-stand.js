@@ -19,7 +19,9 @@ async function boot(page, o) {
     const add = (acc, d, a, n, ds, cat) => { const t = { id: 'v523' + acc.slice(-4) + d + n.replace(/\W/g, '') + Math.round(Math.abs(a) * 100), date: d, amount: a, acc, name: n, desc: ds, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; return t; };
     // het salaris van november op 25 nov
     for (let i = TX.length - 1; i >= 0; i--) if (TX[i].acc === MAIN && TX[i].amount === 5216 && String(TX[i].date).slice(0, 10) === '2026-11-24') TX.splice(i, 1);
-    add(MAIN, '2026-11-25', 5216, 'Werkgever', 'SALARIS LOON');
+    add(MAIN, o.salDag || '2026-11-25', 5216, 'Werkgever', 'SALARIS LOON');
+    if (o.salDec) add(MAIN, o.salDec, 5216, 'Werkgever', 'SALARIS LOON');
+    if (o.overboekDag) SET.overboekDag = Object.assign({}, SET.overboekDag, o.overboekDag);
     // inleg drie bezittingen, EUR 100 elk, van de Betaalrekening
     SET.assets = [
       { id: 'saxo', naam: 'Saxo', waarde: 1000, waardeOp: '2026-07-01', grow: true, rend: 5, per: 100 },

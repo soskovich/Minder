@@ -74,20 +74,51 @@ test.describe('v523', () => {
     expect(r).toEqual({ gezien: true, telDag: null, over: 0 });
   });
 
-  test('c: 29 nov, overboeking nog steeds niet gezien: melding "nog niet binnen"', async ({ page }) => {
-    await S.boot(page, { dag: '2026-11-29' });
+  test('c: 1 dec (3 werkdagen na de verwachte dag 26 nov), overboeking nog steeds niet gezien: melding "nog niet binnen"', async ({ page }) => {
+    await S.boot(page, { dag: '2026-12-01' });
     const r = await page.evaluate(({ BET }) => {
       const o = overboekVerwacht().find((x) => x.naar === BET), N = scoreNotifs().find((x) => String(x.key).startsWith('overboek-laat-' + BET));
       const T = salTekortData().find((x) => x.acc === BET);
-      return { laat: o.laat, telDag: o.telDag, melding: N ? N.l1 : null, krap: !!T, kaart: salKrapKaart() };
+      return { dag: o.dag, laat: o.laat, telDag: o.telDag, melding: N ? N.l1 : null, krap: !!T, kaart: salKrapKaart() };
     }, A);
+    expect(r.dag).toBe('2026-11-26');
     expect(r.laat).toBe(true);
     expect(r.telDag).toBe(null);
     expect(r.melding).toBe('Betaalrekening: je overboeking van €1.600 is nog niet binnen');
     expect(r.krap).toBe(true);
     expect(r.kaart).toContain('je overboeking van €1.600 is nog niet binnen');
-    const r28 = await (async () => { await S.boot(page, { dag: '2026-11-28' }); return page.evaluate(({ BET }) => overboekVerwacht().find((x) => x.naar === BET).laat, A); })();
-    expect(r28).toBe(false);
+    // 29 nov (zondag, 3 kalenderdagen) en 30 nov (2 werkdagen) is hij nog verwacht
+    for (const d of ['2026-11-29', '2026-11-30']) {
+      await S.boot(page, { dag: d });
+      const x = await page.evaluate(({ BET }) => { const o = overboekVerwacht().find((y) => y.naar === BET); const N = scoreNotifs().some((y) => String(y.key).startsWith('overboek-laat-' + BET)); return [o.laat, N]; }, A);
+      expect([d, x]).toEqual([d, [false, false]]);
+    }
+  });
+
+  test('i: salaris op vrijdag: de weekenddagen tellen niet als werkdag', async ({ page }) => {
+    // zelfde dag: verwacht vrijdag 27 nov, "nog niet binnen" pas woensdag 2 dec (ma, di, wo); met kalenderdagen was dat maandag 30 nov
+    const laat = async (dag, keuze) => { await S.boot(page, { salDag: '2026-11-27', dag, overboekDag: keuze ? { [S.BET]: keuze } : undefined });
+      return page.evaluate(({ BET }) => { const o = overboekVerwacht().find((y) => y.naar === BET); return [o.sal, o.dag, o.laat]; }, A); };
+    expect(await laat('2026-11-30', 'zelfde')).toEqual(['2026-11-27', '2026-11-27', false]);
+    expect(await laat('2026-12-01', 'zelfde')).toEqual(['2026-11-27', '2026-11-27', false]);
+    expect(await laat('2026-12-02', 'zelfde')).toEqual(['2026-11-27', '2026-11-27', true]);
+    // dag erna: verwacht maandag 30 nov, "nog niet binnen" donderdag 3 dec
+    expect(await laat('2026-12-02')).toEqual(['2026-11-27', '2026-11-30', false]);
+    expect(await laat('2026-12-03')).toEqual(['2026-11-27', '2026-11-30', true]);
+  });
+
+  test('j: 25 en 26 dec tellen niet als werkdag', async ({ page }) => {
+    // salaris donderdag 24 dec. Dag erna: de eerste werkdag is maandag 28 dec (niet vrijdag 25 dec), "nog niet binnen" pas 31 dec.
+    // Zelfde dag: verwacht 24 dec, "nog niet binnen" woensdag 30 dec (28, 29, 30); met kalenderdagen was dat zondag 27 dec.
+    const lees = async (dag, keuze) => { await S.boot(page, { salDec: '2026-12-24', dag, overboekDag: keuze ? { [S.BET]: keuze } : undefined });
+      return page.evaluate(({ BET }) => { const o = overboekVerwacht().find((y) => y.naar === BET); return [o.sal, o.dag, o.laat]; }, A); };
+    expect(await lees('2026-12-29', 'zelfde')).toEqual(['2026-12-24', '2026-12-24', false]);
+    expect(await lees('2026-12-30', 'zelfde')).toEqual(['2026-12-24', '2026-12-24', true]);
+    expect(await lees('2026-12-30')).toEqual(['2026-12-24', '2026-12-28', false]);
+    const r = await page.evaluate(() => ({ na: werkdagNa('2026-12-24'), plus: overboekLaatVanaf('2026-12-28'),
+      vrij: ['2026-12-25', '2026-12-26', '2027-01-01', '2026-04-27', '2026-05-05', '2026-04-06', '2026-05-14', '2026-05-25', '2027-04-27'].filter((d) => isWerkdag(d)),
+      werk: ['2026-04-03', '2026-12-24', '2026-12-28', '2027-04-26'].filter((d) => !isWerkdag(d)) }));
+    expect(r).toEqual({ na: '2026-12-28', plus: '2026-12-31', vrij: [], werk: [] });
   });
 
   test('d: de krap-zin noemt de eerste afschrijving die het tekort maakt, met datum', async ({ page }) => {
