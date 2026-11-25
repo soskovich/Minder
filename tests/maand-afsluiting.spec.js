@@ -112,7 +112,10 @@ test('c. een storting naar de reserveringsrekening vinkt de afspraak af', async 
   expect(dek.box).toBe('aan');
   expect(dek.tekst).toContain('storting in oktober gezien');
   // v521c: de opvolging telt per eenheid uit periodeVan(); in deze stand is de volgende eenheid de korte november voor de era
-  expect(dek.tekst).toMatch(/november( \(1–\d+\))? volgt/);
+  /* v523 (punt 6): weer EXACT, geen regex. De korte maand is 1 t/m de dag voor de era-start (periodeVanaf); deze fixture betaalt het salaris op
+     de 25e, dus de era begint 25 nov en de korte maand is (1–24). Met het salaris op de 24e (de stand van de gebruiker) is het (1–23). */
+  expect(await page.evaluate(() => periodeVanaf())).toBe('2026-11-25');
+  expect(dek.tekst).toContain('november (1–24) volgt');
   // de rest van de stand verandert niet
   expect(k.afspraken.find((a) => a.tekst.includes('Abonnementen')).status).toBe('loopt');
 });
