@@ -13,8 +13,9 @@ async function bevestig(page, opzij) {
     salVerdelingVeld(BET, '1700'); salVerdelingVeld(LEEF, '1695'); salVerdelingVeld('__res', '36'); salVerdelingVeld('__opzij', String(opzij));
     const on = [...document.querySelectorAll('#salVerdeling [data-salvoudnieuw]')].map((x) => [x.dataset.salvoudnieuw, x.dataset.oud, x.dataset.nieuw, x.textContent]);
     const rest = (document.querySelector('#salVerdeling [data-salvrest]') || {}).textContent || '';
+    const gevolg = (document.querySelector('#salVerdeling [data-salvgevolg]') || {}).textContent || '';
     document.querySelector('#salVerdeling [data-salvakkoord]').click();
-    return { vooraf, on, rest, SV: SET.salVerdeling };
+    return { vooraf, on, rest, gevolg, SV: SET.salVerdeling };
   }, Object.assign({ opzij }, A));
 }
 
@@ -30,6 +31,7 @@ test.describe('v523', () => {
     expect(bet[3]).toContain('€1.600 → €1.700');
     expect(r.on.find((x) => x[0] === '__opzij').slice(1, 3)).toEqual(['1766', '1500']);
     expect(r.rest).toContain('€285');   // 5216 − 1700 − 1695 − 36 − 1500
+    expect(r.gevolg).toContain('Opzij €1.500');   // het gevolg rekent met je eigen reserveringen, niet met het voorstel
     expect(r.SV.rek).toEqual({ [S.MAIN]: 285, [S.BET]: 1700, [S.LEEF]: 1695 });
     expect([r.SV.opzij, r.SV.reserveringen]).toEqual([1500, 36]);
     expect(r.SV.vorige.rek[S.BET]).toBe(1600);   // de oude afspraak verdwijnt niet stil
