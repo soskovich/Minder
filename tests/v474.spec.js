@@ -35,19 +35,19 @@ test.describe('1 · de mediaan van Na je salaris en blok 20', () => {
     expect(r.t).toContain('van €4.007 naar €5.216');
     expect(r.t).toContain('mediaan van mei €4.007 · jun €4.007 · jul €3.990 · aug €4.007 · sep €4.100 tegen mediaan van okt €5.216');
   });
-  test('b. blok 20 splitst elke storting in salaris, vergoedingen en eenmalig (v522: vergoedingen zijn vast inkomen en zitten in het salaris van blok 20)', async ({ page }) => {
+  test('b. blok 20 splitst elke storting in salaris, vergoedingen en eenmalig (v522b: vergoedingen zijn inkomen van hun maand, geen salaris)', async ({ page }) => {
     await boot(page);
     const b20 = await page.evaluate(async () => { const b = DIAG_BLOKKEN.find((x) => x.lees === diagSalarisVerdeling); const L = await b.lees(); return Array.isArray(L) ? L.join('\n') : String(L); });
     expect(b20).toContain('storting 24-09 5493.00 = salaris 5216.00 + vergoedingen 277.00 + eenmalig 0.00 · regel a (automatisch)');
     expect(b20).toContain('storting 26-10 7693.00 = salaris 5216.00 + vergoedingen 0.00 + eenmalig 2477.00 · regel b (nog niet gesplitst)');
     const sep = b20.split('\n').find((l) => /^\s+sep: salaris/.test(l));
-    expect(sep).toContain('salaris 5493');   // v522: het salarisdeel draagt de vergoedingen
+    expect(sep).toContain('salaris 5216');   // v522b: het salarisdeel zonder vergoedingen
     const ov = b20.split('\n').slice(b20.split('\n').indexOf(sep) + 1, b20.split('\n').indexOf(sep) + 4).join('\n');
     expect(ov).not.toContain('eenmalig 277');
     expect(ov).not.toContain('ontvangst bij een lening');
     expect(b20).not.toContain('SLUIT NIET');
-    /* v522: de vergoedingen zitten in het salaris, de term reiskosten is 0; de controle sluit nog steeds */
-    expect(b20).toContain('sep: 0 + 0 + 0 + 0 + 5493 = 5493 tegen 5493 + 0 + 0 + 0 + 0 = 5493: klopt');
+    /* v522b: de vergoedingen staan op je betaalrekening en zijn een eigen term in de controle (de term van v474) */
+    expect(b20).toContain('sep: 0 + 0 + 0 + 0 + 5493 = 5493 tegen 5216 + 277 + 0 + 0 + 0 = 5493: klopt');
     expect(b20).not.toMatch(/VERSCHILT \+277/);
     expect(b20).toContain('CONTROLE eenmalig inkomen niet in salaris: okt');
     expect(b20).not.toMatch(/CONTROLE eenmalig inkomen niet in salaris:[^\n]*VERSCHILT/);

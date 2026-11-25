@@ -1000,7 +1000,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(vastDatumOpruim485()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} let f=false; try{ f=inkomenMigreer476(); }catch(_){} let g=false; try{ g=salSplit522Migreer(); }catch(_){} if(a||b||c||d||e||f||g) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} try{ if(holdingCatMigreer()){ localStorage.setItem('minder_ovr',JSON.stringify(OVR)); localStorage.setItem('minder_set',JSON.stringify(SET)); } }catch(_){} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} try{ if(planInlegMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(opnameMigreer()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(vastDatumOpruim485()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(afloopTerug()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2DiagOpruim()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ if(psd2SessieHerstel()) localStorage.setItem('minder_set',JSON.stringify(SET)); }catch(_){} try{ const a=kennisMigreer(), b=kennisZaai(), c=holdingMigreer(), d=kennisSync(); let e=false; try{ e=salRegelZaai(); }catch(_){} let f=false; try{ f=inkomenMigreer476(); }catch(_){} let g=false; try{ g=salSplit522Migreer(); }catch(_){} let h=false; try{ h=salSplit522bMigreer(); }catch(_){} if(a||b||c||d||e||f||g||h) localStorage.setItem('minder_set',JSON.stringify(SET)); if(laserOvrGezet) localStorage.setItem('minder_ovr',JSON.stringify(OVR)); }catch(_){} try{ if(holdingCatMigreer()){ localStorage.setItem('minder_ovr',JSON.stringify(OVR)); localStorage.setItem('minder_set',JSON.stringify(SET)); } }catch(_){} _dataGen++; }
 /* v422: DE MIGRATIE VAN v421 IS TERUGGEDRAAID (besluit van de gebruiker op v421: niets stil omzetten). v421 zette bij het laden
    een gestopte post met precies een betaling daarna op "opgezegd, loopt af" (migr:'v421'). Die keuze was niet van jou, dus hij
    gaat terug naar gestopt zoals jij hem zette; de vraag staat in Zien onder "Kloppen mijn gegevens?" (postNaStopVragen()).
@@ -2618,8 +2618,6 @@ function maandInkomen(m){
     onregelmatig+=inkomenEenmalig(t);   // v438: ook een bonus die nog op je antwoord wacht is geen maandinkomen
     try{ verg+=vergDeel(t); }catch(_){}
   }
-  /* v522 deel 2: een toegewezen deel van de vergoedingen telt in de maand waar het bij hoort, niet in die van de bijschrijving */
-  if(m){ try{ for(const x of salSplitToew()){ if(x.van===m){ alles-=x.bedrag; verg-=x.bedrag; } if(x.ym===m){ alles+=x.bedrag; verg+=x.bedrag; } } }catch(_){} }
   alles=Math.round(alles*100)/100; verg=Math.round(verg*100)/100;
   /* v343: een cadeau of rente die met een lening meekwam is geld dat binnenkwam (alles) en onregelmatig,
      dus de norm en baseIncome() veranderen niet. Het staat niet in een boeking: bij contant is er geen, en
@@ -2733,7 +2731,7 @@ function baseIncome(metDetail){
   /* v259 liet deze lus met opzet staan naast maandInkomen(): hij is gemeten robuust en bleef op
      verzoek ongemoeid. Hij is hier alleen gesplitst zodat de maand bij zijn bedrag blijft; de
      optelling zelf is karakter voor karakter dezelfde. */
-  const perMaand=recent.map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return {m,inc:s};});
+  const perMaand=recent.map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income'){s+=Math.max(t.amount,0); try{ s-=vergDeel(t); }catch(_){} }}return {m,inc:s};});   // v522b: vergoedingen tellen niet in het verwachte maandinkomen
   const vals=perMaand.map(x=>x.inc).filter(v=>v>0).sort((a,b)=>a-b);
   if(!vals.length) return uit(0,'geen afgeronde maand met inkomen',recent,perMaand,null);
   const lower=vals.slice(0,Math.ceil(vals.length/2));
@@ -4411,8 +4409,9 @@ function salSplitStorting(t, C){ C=C||salSplitCfg(); return !!(C && t && t.amoun
    vergAan/vergMax zijn "vergoedingen verwacht" met een bovengrens (de oude reisAan/reisMax, reisPot vervalt; salSplit522Migreer()).
    MARGE: een storting binnen vast +/- marge is salaris, zonder vraag. Daaronder de vraag "lager dan je salaris" (regel c), daarboven de
    vraag over het meerdere boven vast. Je antwoord (SET.salSplitAntw[t.id]) draagt verg, optioneel eenmalig (dan is salaris = storting -
-   verg - eenmalig, en ligt dat onder vast - marge dan blijft de vraag "lager" open) en optioneel toew {ym, bedrag}: een deel van de
-   vergoedingen dat bij een eerdere maand hoort (salSplitToew()). */
+   verg - eenmalig, en ligt dat onder vast - marge dan blijft de vraag "lager" open). v522b: geen toewijzing meer, wel een notitie.
+   v522b: VERGOEDINGEN TELLEN IN DE MAAND WAARIN ZE BINNENKOMEN (maandInkomen alles, inkomenVerdeling) MAAR NIET IN HET VERWACHTE
+   MAANDINKOMEN: salarisDeel() is salaris zonder vergoedingen, de schatting voor de volgende periode (rekVoorstel) en baseIncome() ook. */
 function salSplitVergAan(C){ return !!(C && (C.vergAan!=null?C.vergAan:C.reisAan) && +(C.vergMax!=null?C.vergMax:C.reisMax)>0); }
 function salSplitVergMax(C){ return +(C && (C.vergMax!=null?C.vergMax:C.reisMax))||0; }
 function salSplitMarge(C){ return Math.max(+((C||{}).marge)||0, 0); }
@@ -4420,8 +4419,7 @@ function salSplitAntwVerg(A){ return A ? (A.verg!=null?A.verg:A.reis) : null; }
 function salSplitBonusOpen(ym){ try{ return irrGeldig().some(v=>v && v.id && v.ym===ym); }catch(_){ return false; } }
 function salSplitsing(t){ const C=salSplitCfg(); if(!salSplitStorting(t,C)) return null;
   const a=Math.round(t.amount*100), vast=Math.round(+C.vast*100), mg=Math.round(salSplitMarge(C)*100), A=(SET.salSplitAntw||{})[t.id]||null, ym=String(t.date).slice(0,7), AV=salSplitAntwVerg(A);
-  const uit=o=>{ const r=Object.assign({id:t.id, datum:String(t.date).slice(0,10), bedrag:a/100, vast:vast/100, marge:mg/100, salaris:0, verg:0, eenmalig:0, toew:null, regel:'', vraag:false, beantwoord:!!A, antw:A}, o);
-    if(r.verg>0 && A && A.toew && A.toew.ym && A.toew.ym!==ym && +A.toew.bedrag>0) r.toew={ym:A.toew.ym, bedrag:Math.round(Math.min(+A.toew.bedrag, r.verg)*100)/100};
+  const uit=o=>{ const r=Object.assign({id:t.id, datum:String(t.date).slice(0,10), bedrag:a/100, vast:vast/100, marge:mg/100, salaris:0, verg:0, eenmalig:0, regel:'', vraag:false, beantwoord:!!A, antw:A}, o);
     return r; };
   if(AV!=null && !(A && A.c)){ const r=Math.min(Math.max(Math.round(+AV*100),0), a);
     if(A.eenmalig!=null){ const e=Math.min(Math.max(Math.round(+A.eenmalig*100),0), a-r), sal=a-r-e, lager=sal<vast-mg;
@@ -4435,18 +4433,26 @@ function salSplitsing(t){ const C=salSplitCfg(); if(!salSplitStorting(t,C)) retu
   if(meer<=max && !open) return uit({regel:'a', salaris:vast/100, verg:meer/100, auto:true});
   return uit({regel:'b', salaris:vast/100, eenmalig:meer/100, vraag:true, nietGesplitst:true, open, boven:meer>max}); }
 function vergDeel(t){ const S=salSplitsing(t); return S?S.verg:0; }
-/* v522 deel 2: DE TOEWIJZING. Een deel van de vergoedingen van een storting hoort bij een eerdere maand ("waarvan voor september
-   EUR 122,45"). Het telt in die maand (inkomen, vergoedingen) en niet in de maand van de bijschrijving; de boeking en het banksaldo
-   veranderen niet. Leest SET.salSplitAntw rechtstreeks (geen salSplitsing: maandInkomen() leest deze lijst en salSplitsing() kan via
-   irrGeldig() weer bij inkomen uitkomen). Memo op _dataGen. */
-let _toewMemo={k:-1, L:[]};
-function salSplitToew(){ if(_toewMemo.k===_dataGen) return _toewMemo.L; const L=[]; const C=salSplitCfg(); const AW=SET.salSplitAntw||{};
-  const ids=Object.keys(AW).filter(id=>AW[id] && AW[id].toew && AW[id].toew.ym && +AW[id].toew.bedrag>0);
-  if(C && ids.length){ const byId=new Map(); for(const t of TX) if(ids.includes(t.id)) byId.set(t.id, t);
-    for(const id of ids){ const t=byId.get(id), A=AW[id]; if(!t || !salSplitStorting(t,C)) continue; const van=String(t.date).slice(0,7); if(A.toew.ym===van) continue;
-      const v=+salSplitAntwVerg(A)||0; const b=Math.round(Math.min(+A.toew.bedrag, v)*100)/100; if(b>0) L.push({id, van, ym:A.toew.ym, bedrag:b}); } }
-  _toewMemo={k:_dataGen, L}; return L; }
-function salarisDeel(t){ if(!t || !(t.amount>0)) return 0; return Math.round((t.amount-inkomenEenmalig(t))*100)/100; }   // v522: vergoedingen horen bij het salarisdeel (vast inkomen)
+/* v522b: GEEN TOEWIJZING AAN EEN ANDERE MAAND (besluit van de gebruiker na v522). Wat bij een eerdere maand hoort, staat als NOTITIE bij de
+   boeking (txNotitie()), alleen tekst, zonder effect op een bedrag. Een toewijzing uit v522 wordt een keer een notitie (salSplit522bMigreer). */
+/* ===== v522b: DE NOTITIE BIJ EEN BOEKING. Een vrij tekstveld per boeking (SET.txNotitie[t.id]={tekst, op}), zichtbaar in de boekingssheet,
+   in het salarisblok en als klein icoon in de lijst. Gaat mee in de back-up (SET), nooit naar de Worker (vraagBody() draagt alleen vraag,
+   potjes en vandaag). Raakt geen enkel bedrag. */
+const TXNOTITIE_MAX=300;
+function txNotitie(id){ const N=(SET.txNotitie||{})[id]; return N && N.tekst ? String(N.tekst) : ''; }
+function txNotitieZet(id, tekst){ const v=String(tekst||'').replace(/\s+$/,'').slice(0,TXNOTITIE_MAX); const N=Object.assign({}, SET.txNotitie||{});
+  if(v.trim()) N[id]={tekst:v, op:vandaagYMD()}; else delete N[id]; SET.txNotitie=N; save(); try{ renderTxList(); }catch(_){} }
+function txNotitieBlok(t){ const v=txNotitie(t.id), idq=esc(t.id).replace(/'/g,"\\'");
+  return `<div data-txnotitieblok style="padding:10px 0;border-top:1px solid var(--line);margin-top:8px"><label class="fld" style="margin:0 0 4px">Notitie <span class="small muted">· alleen tekst, verandert geen bedrag</span></label>
+    <textarea data-txnotitie rows="2" maxlength="${TXNOTITIE_MAX}" placeholder="bv. hoort bij september" onchange="txNotitieZet('${idq}', this.value)" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:var(--fs-sm)">${esc(v)}</textarea></div>`; }
+/* de migratie: een toewijzing uit v522 ({toew:{ym, bedrag}} op het antwoord) wordt een notitie met dezelfde tekst ("EUR 122,45 hoort bij
+   september"), een bestaande notitie blijft staan; de toewijzing verdwijnt van het antwoord. Een keer (SET.salSplit522b). */
+function salSplit522bMigreer(){ if(SET.salSplit522b) return false; const AW=SET.salSplitAntw||{}; const ids=Object.keys(AW).filter(id=>AW[id] && AW[id].toew);
+  if(!ids.length) return false; const N=Object.assign({}, SET.txNotitie||{}), NA=Object.assign({}, AW), voor={};
+  for(const id of ids){ const T=AW[id].toew; voor[id]=T; const tekst=`${euroC(+T.bedrag||0)} hoort bij ${ymFull(String(T.ym).slice(0,7))}`;
+    if(!(N[id] && N[id].tekst)) N[id]={tekst, op:vandaagYMD(), bron:'toewijzing v522'}; const B=Object.assign({}, AW[id]); delete B.toew; NA[id]=B; }
+  SET.txNotitie=N; SET.salSplitAntw=NA; SET.salSplit522b={op:vandaagYMD(), voor}; return true; }
+function salarisDeel(t){ if(!t || !(t.amount>0)) return 0; return Math.round((t.amount-inkomenEenmalig(t)-vergDeel(t))*100)/100; }   // v522b: het salaris zonder vergoedingen (het verwachte maandinkomen); vergoedingen tellen in maandInkomen().alles van hun maand
 /* de stortingen van je salaris in de laatste n dagen, nieuwste eerst (Home, blok 20, de instelling) */
 function salSplitStortingen(dagen){ const C=salSplitCfg(); if(!C) return []; const grens=ymdVan(new Date(Date.now()-(dagen||200)*864e5));
   return TX.filter(t=>String(t.date).slice(0,10)>=grens && salSplitStorting(t,C)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(salSplitsing); }
@@ -4464,28 +4470,25 @@ function salSplitHoogsteMeer(vast){ const C=SET.salSplit||{}; if(!(+vast>0) || !
   return L.length?Math.max(...L):null; }
 function salSplitLogZet(e){ SET.salSplitLog=(SET.salSplitLog||[]).concat([Object.assign({op:Date.now()}, e)]).slice(-60); }
 /* v522: het antwoord op de vraag. verg = vergoedingen; o.eenmalig (optioneel) = het eenmalige deel, dan is het salaris de rest en geldt de
-   marge; o.toewYm/o.toewBedrag (optioneel) = het deel van de vergoedingen dat bij een eerdere maand hoort. */
+   marge. v522b: geen toewijzing meer (een notitie bij de boeking). */
 function salSplitAntwoord(id, verg, o){ o=o||{}; const t=TX.find(x=>x.id===id), S=t&&salSplitsing(t); if(!S || (S.regel==='c' && !S.lager && !(S.antw && salSplitAntwVerg(S.antw)!=null))) return;
   const r2=x=>Math.round(x*100)/100, r=Math.max(r2(+verg||0),0), meer=r2(S.bedrag-S.vast);
   const e=o.eenmalig!=null && o.eenmalig!=='' ? Math.max(r2(+o.eenmalig||0),0) : null;
   if(e==null && r>meer+0.005){ toast(`Meer dan ${euroC(meer)} kan niet`); return; }
   if(e!=null && r+e>S.bedrag+0.005){ toast(`Meer dan ${euroC(S.bedrag)} kan niet`); return; }
-  let toew=null; const tb=r2(+o.toewBedrag||0); if(o.toewYm && tb>0){ if(tb>r+0.005){ toast(`Meer dan je vergoedingen (${euroC(r)}) kan niet`); return; } toew={ym:String(o.toewYm).slice(0,7), bedrag:tb}; }
-  const A={verg:r, regel:S.regel==='a'||S.regel==='e'?S.regel:'b', door:'jij', op:vandaagYMD()}; if(e!=null) A.eenmalig=e; if(toew) A.toew=toew;
+  const A={verg:r, regel:S.regel==='a'||S.regel==='e'?S.regel:'b', door:'jij', op:vandaagYMD()}; if(e!=null) A.eenmalig=e;
   SET.salSplitAntw=Object.assign({}, SET.salSplitAntw||{}, {[id]:A});
   const na=salSplitsing(t);
-  salSplitLogZet({id, datum:S.datum, bedrag:S.bedrag, actie:'gesplitst', verg:na.verg, eenmalig:na.eenmalig, salaris:na.salaris, toew:na.toew, voor:{verg:S.verg, eenmalig:S.eenmalig}});
+  salSplitLogZet({id, datum:S.datum, bedrag:S.bedrag, actie:'gesplitst', verg:na.verg, eenmalig:na.eenmalig, salaris:na.salaris, voor:{verg:S.verg, eenmalig:S.eenmalig}});
   save(); try{ render(); }catch(_){} closeSheet();
-  toast(`Gesplitst: salaris ${euroC(na.salaris)} + vergoedingen ${euroC(na.verg)} + eenmalig ${euroC(na.eenmalig)}${na.toew?` · ${euroC(na.toew.bedrag)} hoort bij ${ymFull(na.toew.ym)}`:''}`); }
+  toast(`Gesplitst: salaris ${euroC(na.salaris)} + vergoedingen ${euroC(na.verg)} + eenmalig ${euroC(na.eenmalig)}`); }
 function salSplitAntwC(id, keuze){ const t=TX.find(x=>x.id===id), S=t&&salSplitsing(t); if(!S || S.regel!=='c') return;
   SET.salSplitAntw=Object.assign({}, SET.salSplitAntw||{}, {[id]:{c:keuze, door:'jij', op:vandaagYMD()}});
   salSplitLogZet({id, datum:S.datum, bedrag:S.bedrag, actie:'lager', keuze});
   save(); try{ render(); }catch(_){}
   if(keuze==='aanpassen'){ go('set'); try{ openSetSub('inkomen'); }catch(_){} } }
-/* de maanden waaraan je een deel van de vergoedingen kunt toewijzen: de drie kalendermaanden voor die van de storting */
-function salSplitToewMaanden(ym){ const L=[]; let m=ym; for(let i=0;i<3;i++){ m=prevYM(m); L.push(m); } return L; }
 function salSplitAnderNaar(id){ const v=x=>{ const e=document.getElementById(x); return e?e.value:''; };
-  salSplitAntwoord(id, numIn(v('salSplitAnder'))||0, {eenmalig:v('salSplitEenmalig')===''?null:numIn(v('salSplitEenmalig')), toewYm:v('salSplitToewYm'), toewBedrag:numIn(v('salSplitToewBedrag'))||0}); }
+  salSplitAntwoord(id, numIn(v('salSplitAnder'))||0, {eenmalig:v('salSplitEenmalig')===''?null:numIn(v('salSplitEenmalig'))}); }
 function salSplitVraagSheet(id){ const t=TX.find(x=>x.id===id), S=t&&salSplitsing(t); if(!S){ closeSheet(); return; }
   const meer=Math.round((S.bedrag-S.vast)*100)/100, vor=salSplitVorigeVerg(t), idq=esc(id).replace(/'/g,"\\'"), ym=S.datum.slice(0,7);
   const opties=(S.regel==='c' && !S.lager)
@@ -4498,12 +4501,10 @@ function salSplitVraagSheet(id){ const t=TX.find(x=>x.id===id), S=t&&salSplitsin
        <div data-salsplitandervak style="padding:8px 0">
          <label class="fld">Vergoedingen (€)</label><input id="salSplitAnder" data-salsplitander type="text" inputmode="decimal" placeholder="ander bedrag" style="width:100%;padding:8px">
          <label class="fld" style="margin-top:6px">Waarvan eenmalig (€) <span class="small muted">· leeg: alles boven je salaris dat geen vergoeding is</span></label><input id="salSplitEenmalig" data-salspliteenmaligveld type="text" inputmode="decimal" placeholder="leeg" style="width:100%;padding:8px">
-         <label class="fld" style="margin-top:6px">Waarvan voor een eerdere maand <span class="small muted">· een vergoeding die later is uitbetaald</span></label>
-         <div class="row" style="gap:6px;align-items:center"><select id="salSplitToewYm" data-salsplittoewym style="flex:1;min-width:0"><option value="" selected>geen</option>${salSplitToewMaanden(ym).map(m=>`<option value="${m}">${esc(ymFull(m))}</option>`).join('')}</select><input id="salSplitToewBedrag" data-salsplittoewbedrag type="text" inputmode="decimal" placeholder="€" style="width:110px;padding:8px"></div>
          <button class="btn sec" data-salsplitanderknop style="margin-top:8px" onclick="salSplitAnderNaar('${idq}')">Ander bedrag</button></div>
        <button class="btn sec" data-salsplitgeen onclick="salSplitAntwoord('${idq}',0)">Geen</button>`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="salSplitSheet" data-regel="${S.regel}"><div style="font-weight:800;font-size:var(--fs-lg)">Je salaris van ${esc(dagKort(S.datum))}</div>${opties}
-    <div class="small muted" style="margin-top:10px">Nu: salaris ${euroC(S.salaris)}${S.verg>0?` + vergoedingen ${euroC(S.verg)}`:''}${S.eenmalig>0?` + eenmalig ${euroC(S.eenmalig)}`:''}${S.toew?` · ${euroC(S.toew.bedrag)} hoort bij ${esc(ymFull(S.toew.ym))}`:''}${S.nietGesplitst?' · nog niet gesplitst':''}</div></div>`;
+    <div class="small muted" style="margin-top:10px">Nu: salaris ${euroC(S.salaris)}${S.verg>0?` + vergoedingen ${euroC(S.verg)}`:''}${S.eenmalig>0?` + eenmalig ${euroC(S.eenmalig)}`:''}${S.nietGesplitst?' · nog niet gesplitst':''}</div></div>`;
   showSheetBg(); }
 /* "Toch vast": het eenmalige deel hoort bij je salaris. Eerst het gevolg, pas bevestigen schrijft (geen stille default). */
 function salSplitTochVast(id, bevestigd){ const t=TX.find(x=>x.id===id), S=t&&salSplitsing(t), C=salSplitCfg(); if(!S || !C) return;
@@ -4525,12 +4526,12 @@ function homeSalSplitKaart(){ let L=[]; try{ L=salSplitStortingen(45); }catch(_)
       rijen.push(`<div class="small" data-salspliteenmalig="${S.eenmalig}" style="padding:9px 10px;border-radius:10px;background:var(--card2);margin:0 0 6px"><div>${euroC(S.eenmalig)} van je salaris van ${esc(dagKort(S.datum))} telt als eenmalig.</div>
         <div class="row" style="gap:12px;margin-top:6px;flex-wrap:wrap"><span role="button" data-salsplittochvast style="color:var(--teal);font-weight:700;cursor:pointer" onclick="salSplitTochVast('${idq}')">Toch vast ›</span><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openMeevaller(${Math.round(S.eenmalig)},'salaris')">Eenmalig ${euro0(S.eenmalig)} verdelen ›</span><span role="button" style="color:var(--mut);cursor:pointer" onclick="salSplitGezien('${idq}')">gezien</span></div></div>`); }
   return rijen.length?`<div id="homeSalSplit" style="margin:0 0 8px">${rijen.join('')}</div>`:''; }
-/* de regel in de boekingssheet: hoe de storting gesplitst is, met een tik om vergoedingen en eenmalig opnieuw in te vullen; v522: een
-   toegewezen deel staat erbij ("EUR 122,45 hoort bij september") */
+/* de regel in de boekingssheet: hoe de storting gesplitst is, met een tik om vergoedingen en eenmalig opnieuw in te vullen; v522b: de
+   notitie bij de boeking staat erbij ("EUR 122,45 hoort bij september ..."), als tekst */
 function salSplitBlok(t){ const S=salSplitsing(t); if(!S) return '';
   const delen=`salaris ${euroC(S.salaris)}${S.verg>0?` + vergoedingen ${euroC(S.verg)}`:''}${S.eenmalig>0?` + eenmalig ${euroC(S.eenmalig)}`:''}`;
   return `<div class="small" data-salsplitblok="${S.regel}" style="padding:10px 0;border-top:1px solid var(--line);margin-top:8px;line-height:1.5"><div>${euroC(S.bedrag)} = ${delen}${S.nietGesplitst?' <span class="muted">· nog niet gesplitst</span>':''}${S.auto?' <span class="muted">· automatisch (binnen je bovengrens)</span>':''}${S.binnenMarge?' <span class="muted">· binnen je marge</span>':''}</div>
-    ${S.toew?`<div data-salsplittoew="${S.toew.ym}" data-bedrag="${S.toew.bedrag}">${euroC(S.toew.bedrag)} hoort bij ${esc(ymFull(S.toew.ym))}</div>`:''}
+    ${txNotitie(t.id)?`<div data-salsplitnotitie class="muted" style="white-space:pre-wrap">${ICON('pen')} ${esc(txNotitie(t.id))}</div>`:''}
     ${S.regel!=='c'||S.lager?`<span role="button" data-salsplitwijzig style="color:var(--teal);font-weight:700;cursor:pointer" onclick="salSplitVraagSheet('${esc(t.id).replace(/'/g,"\\'")}')">splitsing wijzigen ›</span>`:''}</div>`; }
 /* v522: de reiskostenvergoeding gaat niet meer af van een potje (Vervoer is bruto). reisVanMaand() en reisStand() zijn vervallen. */
 /* v522: de migratie, een keer. reisAan/reisMax worden vergAan/vergMax, reisPot vervalt; een antwoord reis X wordt verg X. Wat er stond,
@@ -14747,6 +14748,7 @@ function eenheidSalarisRij(u){ let sk=null; try{ const D=fase3Sal(); sk=D?D.salB
   if(U){ vast=U.r.vast; pot=U.r.potjes+U.r.zonder; buiten=U.r.buiten+(U.r.kasNieuw||0); }
   const sal=salTx.reduce((a,t)=>a+salarisDeel(t),0);   // het salarisdeel (v480) van de stortingen van je salarisbron in het venster
   andere=andereTx.reduce((a,t)=>a+t.amount,0);   // v522: vergoedingen zijn inkomen
+  for(const t of salTx) andere+=vergDeel(t);   // v522b: de vergoedingen van een salarisstorting horen bij het inkomen van die periode, niet bij het salaris
   for(const t of salTx) andere+=inkomenEenmalig(t);   // het eenmalige deel van een salarisstorting hoort bij de andere inkomsten (v473)
   let OE=null; try{ OE=opzijEenheid(u); }catch(_){} const opzij=OE?OE.netto:0;   // v500 (punt 3): dezelfde bron als Afsluiten en de Terugblik
   /* v511 (punt 8): EEN VENSTER ZONDER SALARIS HEEFT GEEN REST. rest = salaris + andere − vast, potjes, buiten en opzij; november (1–23) wordt
@@ -22907,7 +22909,7 @@ function vraagContantRitme(o){ const E=vraagEenheden(o, 3); if(!E) return null;
 /* v521: INKOMENVERDELING. Van elke euro die binnenkwam: hoeveel ging er uit, en hoeveel bleef er over. Alleen AFGESLOTEN maanden (de
    lopende maand of periode telt niet mee); standaard de laatste 6, met een venster de afgesloten maanden die erin vallen (hooguit 13).
    INKOMEN is maandInkomen(m).alles: de bron van totals() en de maandkaart. Daarin zitten geen eigen overboekingen (intern), geen
-   terugbetaling van uitgeleend geld (Uitgeleend is intern); sinds v522 wel je vergoedingen (vast inkomen, met de toewijzing aan hun maand). Eenmalig
+   terugbetaling van uitgeleend geld (Uitgeleend is intern); sinds v522 wel je vergoedingen (inkomen van de maand waarin ze binnenkomen). Eenmalig
    (gevlagd onregelmatig, of het deel boven je vaste salaris) is maandInkomen(m).onregelmatig en staat apart.
    UITGEGEVEN is uitgegevenStand({m}).totaal (vast, potjes, zonder potje, buiten je potjes en contant: de maandkaart op Inzichten) plus wat
    je uit een reservering betaalde (dat haalt uitgaveNorm() er voor je potjes af; hier hoort het erbij, want het geld ging uit).
@@ -24347,7 +24349,7 @@ function renderTxList(){
     const dub=csvDubbel(t)||mt940Dubbel(t), dwg=dubbelWeg(t), vwg=vorautWeg(t);   // v288/v293: een bevestigde dubbele kant en een bevestigde reservering zeggen het hier om dezelfde reden
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${vwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als reservering</div>`:(dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))))}</div>
+      <div class="info"><div class="nm">${esc(t.name)}${txNotitie(t.id)?` <span data-txnotitieicoon title="${esc(txNotitie(t.id))}" style="color:var(--mut2)">${ICON('pen')}</span>`:''}</div>${vwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als reservering</div>`:(dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))))}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
@@ -28780,7 +28782,7 @@ function openSheet(id){
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
     ${CATS[cur].type==='expense'?`<label class="row" data-eenmaligrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)"><input type="checkbox" data-eenmaligtoggle ${(SET.eenmaligOk||{})[id]?'checked':''} onchange="eenmaligZet('${id}')"><span class="small"><b>Eenmalig</b> · telt niet in je potje en niet in je patroon</span></label>`:''}
     ${kennisBlok(t)}${salSplitsing(t)?salSplitBlok(t):onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
-    ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
+    ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}${txNotitieBlok(t)}
     <div id="catKeuzeDeel">${catKeuzeHTML(t,'')}</div>`;
   showSheetBg();
 }
@@ -29687,10 +29689,10 @@ function setIncome(){
   let h=`${inkVraagHTML()}
     <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
-      :inkHandmatigHTML()}
-    ${salSplitInstelHTML()}
-    ${inkVraagHTML('onder')}
+    <div id="jeInkomen" data-jeinkomen style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-weight:700;font-size:var(--fs-md)">Je inkomen</div>
+      ${salSplitInstelHTML()}
+      ${inkVraagHTML('onder')}
+      ${inkHandmatigHTML(dq)}</div>
     <label class="fld" style="margin-top:14px">Onregelmatig inkomen <span class="small muted">· vakantiegeld, dertiende maand, bonus</span></label>
     <div class="small muted" style="margin-bottom:2px">Deze bedragen tellen in hun eigen maand mee in je prognose, boven op je maandinkomen.</div>
     ${irrRijen()}
@@ -29705,11 +29707,11 @@ function setIncome(){
    vastgelegd zodra je het vaste salaris invult (salBron()). */
 function salSplitInstelHTML(){ const C=SET.salSplit||{}, vast=+C.vast||0, hoog=salSplitHoogsteMeer(vast), aan=salSplitVergAan(C)||!!(C.vergAan!=null?C.vergAan:C.reisAan), mx=salSplitVergMax(C);
   let bron=null; try{ bron=salBron(); }catch(_){}
-  return `<div id="salSplitInstel" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-weight:600">Je salaris</div>
+  return `<div id="salSplitInstel" style="margin-top:6px">
     <div class="small muted" data-salsplitpartij style="margin:2px 0 6px">${salSplitPartijTekst(C, bron)}</div>
     <label class="fld">Vast salaris (€)</label><input data-salsplitvast type="text" inputmode="decimal" value="${vast?numUit(vast):''}" placeholder="netto per maand" onchange="salSplitZet('vast',this.value)" style="width:100%">
     <label class="fld" style="margin-top:8px">Marge (€) <span class="small muted">· een storting binnen je salaris plus of min dit bedrag is salaris, zonder vraag</span></label><input data-salsplitmarge type="text" inputmode="decimal" value="${+C.marge>0?numUit(+C.marge):''}" placeholder="0" onchange="salSplitZet('marge',this.value)" style="width:100%">
-    <div class="toggle" style="margin-top:10px"><div><div style="font-weight:600">Vergoedingen verwacht</div><div class="small muted">reiskosten en thuiswerk, vast inkomen</div></div>
+    <div class="toggle" data-vergregel style="margin-top:10px"><div><div style="font-weight:600">Vergoedingen</div><div class="small muted">reiskosten en thuiswerk · wisselend, tellen per maand als ze binnenkomen, niet in je inkomen per maand</div></div>
       <label class="sw"><input type="checkbox" data-salsplitvergaan ${aan?'checked':''} onchange="salSplitZet('vergAan',this.checked)"><span class="sl"></span></label></div>
     ${aan?`<label class="fld" style="margin-top:8px">Bovengrens per maand (€)</label><input data-salsplitmax type="text" inputmode="decimal" value="${mx>0?numUit(mx):''}" placeholder="${salSplitMaxPlaats(hoog)}" onchange="salSplitZet('vergMax',this.value)" style="width:100%">
       <div data-salsplithoogvak>${salSplitHoogHTML(hoog)}</div>`:''}</div>`; }
@@ -29719,23 +29721,27 @@ function salSplitInstelHTML(){ const C=SET.salSplit||{}, vast=+C.vast||0, hoog=s
    Een veld schrijft bij het verlaten (onchange) en bouwt de pagina niet opnieuw op (v474): alleen de som en de vraag worden bijgewerkt,
    toevoegen en weghalen bouwen alleen de lijst (#inkOverigLijst). */
 function inkSomTekst(){ const O=inkOnbevestigd();
-  return `= vast salaris ${inkEuro(inkVast())} + overig vast ${inkEuro(overigVastSom())}${O?` - ${inkEuro(O.af)} nog niet bevestigd`:''}`; }
+  return `vast salaris ${inkEuro(inkVast())} + overig vast ${inkEuro(overigVastSom())}${O?` - ${inkEuro(O.af)} nog niet bevestigd`:''}`; }
 /* De opbouw staat in een eigen blok, zodat de regel over wat nog niet meetelt met de som mee verschijnt en verdwijnt (inkSomHerteken). */
 function inkOpbouwHTML(){ const O=inkOnbevestigd();
-  return `<div id="inkOpbouw"><div class="small muted" data-inkomenopbouw>${inkSomTekst()} · vast salaris stel je in bij Je salaris</div>${
+  return `<div id="inkOpbouw"><div class="small muted" data-inkomenopbouw>${inkSomTekst()} · een uitkomst, geen invoer</div>${
     O?`<div class="small muted" data-inkonbevestigd="${O.af}" style="margin-top:3px">${inkEuro(O.af)} van je overig vast is nog niet bevestigd en telt nog niet mee.</div>`:''}</div>`; }
 function inkOverigRij(x){ const id=esc(x.id).replace(/'/g,"\\'");
   return `<div class="row" data-overigvast="${esc(x.id)}" style="gap:6px;align-items:center;margin-top:6px">
     <input data-overignaam type="text" value="${esc(x.naam||'')}" placeholder="omschrijving" onchange="overigVastZet('${id}','naam',this.value)" style="flex:1;min-width:0">
     <input data-overigbedrag type="text" inputmode="decimal" value="${+x.bedrag>0?numUit(+x.bedrag):''}" placeholder="€ per maand" onchange="overigVastZet('${id}','bedrag',this.value)" style="width:110px">
     <span class="small" role="button" data-overigweg style="color:var(--mut);cursor:pointer;padding:6px" onclick="overigVastWeg('${id}')">weg</span></div>`; }
-function inkHandmatigHTML(){
-  return `<div id="inkHandmatig" style="margin-top:8px"><label class="fld">Inkomen per maand</label>
-    <div style="font-size:var(--fs-lg);font-weight:700" data-inkomenpermaand="${inkomenHandmatig()}">${inkEuro(inkomenHandmatig())}</div>
-    ${inkOpbouwHTML()}
+/* v522b: het blok "Je inkomen" eindigt op de som, zichtbaar een uitkomst en geen tweede invoer: vast salaris + overig vast. Met detectie aan
+   rust je budget op baseIncome() (je bijschrijvingen, zonder vergoedingen) en staat dat getal er. */
+function inkHandmatigHTML(dq){
+  const auto=!!SET.autoIncome; let bi=0; if(auto){ try{ bi=baseIncome(); }catch(_){} }
+  return `<div id="inkHandmatig" style="margin-top:8px">
     <label class="fld" style="margin-top:10px">Overig vast <span class="small muted">· ander vast inkomen per maand</span></label>
     <div id="inkOverigLijst">${overigVastLijst().map(inkOverigRij).join('')||'<div class="small muted" data-overigleeg>Geen overig vast inkomen.</div>'}</div>
-    <button class="btn sec" data-overigtoevoegen style="margin-top:8px" onclick="overigVastNieuw()">${ICON('plus')} Overig vast toevoegen</button></div>`; }
+    <button class="btn sec" data-overigtoevoegen style="margin-top:8px" onclick="overigVastNieuw()">${ICON('plus')} Overig vast toevoegen</button>
+    <div data-inksom style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div class="small muted">Inkomen per maand (waar je budget op rust)</div>
+    ${auto?`<div style="font-size:var(--fs-lg);font-weight:700" data-inkomenauto="${bi}">= ${inkEuro(bi)}</div><div class="small muted">automatisch uit je bijschrijvingen (zonder vergoedingen)${dq?` · gedetecteerd deze maand ${euro(dq.detectedIncome)}`:''}</div>`
+      :`<div style="font-size:var(--fs-lg);font-weight:700">= <span data-inkomenpermaand="${inkomenHandmatig()}">${inkEuro(inkomenHandmatig())}</span></div>${inkOpbouwHTML()}`}</div></div>`; }
 /* De vraag over je vaste salaris staat bovenaan; de vraag over overig vast staat ONDER Je salaris, want hij verschijnt op het moment dat
    je je vaste salaris invult, en boven de schakelaar zou hij die onder je vinger verschuiven (gemeten: de tik ging verloren, v474). */
 function inkVraagHTML(plek){ plek=plek||'boven'; const id=plek==='boven'?'inkVraag476':'inkVraag476z'; let Q=inkVraag476();
@@ -35836,7 +35842,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
     const opn=tx.filter(t=>t.amount<0 && isOpnameTx(t)), opnSom=opn.reduce((a,t)=>a-t.amount,0);
     for(const t of tx){ const c=catOf(t), meta=CATS[c]||{};
       if(!opzijRek(t.acc)) betaal+=t.amount;
-      if(meta.type==='income'){ const v=Math.max(t.amount,0), een=inkomenEenmalig(t), rs=0, o=een+rs;   // v522: vergoedingen zijn inkomen en zitten in het salarisdeel (rs blijft 0)   // v438: ook een bonus die nog op je antwoord wacht; v473: reiskosten zijn geen salaris
+      if(meta.type==='income'){ const v=Math.max(t.amount,0), een=inkomenEenmalig(t), rs=vergDeel(t), o=een+rs;   // v522b: vergoedingen zijn inkomen van hun maand maar geen salaris: een eigen term in de controle (de term reiskosten van v474)   // v438: ook een bonus die nog op je antwoord wacht; v473: reiskosten zijn geen salaris
         /* v474: de reiskosten staan niet bij de overige inkomsten (ze zijn geen inkomen, maandInkomen() telt ze niet), alleen het eenmalige deel */
         reis+=rs;   // v474: de reiskostenvergoeding staat op je betaalrekening en is geen inkomen: een eigen term in de controle
         if(isSal(t) && v-o>0.005){ salaris+=salarisDeel(t); salTx.push(t); if(een>0) overTx.push({t, v:een, onr:true}); } else if(v-rs>0.005) overTx.push({t, v:v-rs, onr:een>0}); continue; }   // v480: salarisData leest salarisDeel (de ene bron), net als rekVoorstel
@@ -35863,7 +35869,7 @@ function salarisData(nAf){ nAf=nAf==null?DIAG_SAL_MAANDEN:nAf;
        kasTelSom de tellingboekingen van voor de grens die geen uitgave meer zijn (ze staan nog in je betaalrekeningen-som) */
     const kasCat=+potjes[CONTANT_CAT]||0, kasTelSom=tx.filter(t=>t.kasTel && catOf(t)!==CONTANT_CAT).reduce((a,t)=>a+t.amount,0), KMx=KM&&KM[ym];
     if(KMx && KMx.uitgegeven!=null) potjes[CONTANT_CAT]=+KMx.uitgegeven||0;
-    const MI=maandInkomen(ym), overige=MI.alles-salaris;
+    const MI=maandInkomen(ym), overige=MI.alles-salaris-reis;   // v522b: de vergoedingen (reis) zijn een eigen term, niet bij de overige inkomsten
     let VI={totaal:null, delen:[]}; try{ VI=vermogensInleg(ym); }catch(_){}
     const deel=k=>{ const d=(VI.delen||[]).find(x=>x.key===k); return d&&d.bedrag!=null?+d.bedrag:0; };
     /* v419: EEN ONTTREKKING IS GELD VAN JE SPAAR- OF RESERVERINGSREKENING NAAR EEN BETAALREKENING (besluit van de gebruiker).
@@ -35991,8 +35997,8 @@ function diagMaandBudget(V, vk, D){ const m=thisYM(), L=['', 'MAANDBUDGET (v436/
       if(SET.salSplit522) L.push(`    migratie v522 op ${SET.salSplit522.op}: ${Object.keys(SET.salSplit522.voor.antw||{}).length} antwoord(en) reis X -> vergoedingen X${SET.salSplit522.voor.cfg&&SET.salSplit522.voor.cfg.reisPot?', potje '+SET.salSplit522.voor.cfg.reisPot+' vervalt':''}`);
       const St=salSplitStortingen(200); if(!St.length) L.push('    geen storting van die partij in de laatste 200 dagen');
       for(const S of St){ const som=Math.round((S.salaris+S.verg+S.eenmalig)*100)/100;
-        L.push(`    ${S.datum}: ${euroC(S.bedrag)} = salaris ${euroC(S.salaris)} + vergoedingen ${euroC(S.verg)} + eenmalig ${euroC(S.eenmalig)} · regel ${S.regel}${S.auto?' (automatisch)':''}${S.binnenMarge?' (binnen de marge)':''}${S.nietGesplitst?' · NOG NIET GESPLITST':''}${S.beantwoord?' · door jou':''}${S.regel==='c'?' · lager dan vast':''}${S.toew?` · ${euroC(S.toew.bedrag)} hoort bij ${S.toew.ym}`:''} → ${Math.abs(som-S.bedrag)<0.005||(S.regel==='c'&&!S.lager)?'sluit':'SLUIT NIET'}`); }
-      const TW=salSplitToew(); for(const x of TW) L.push(`    toewijzing: ${euroC(x.bedrag)} van de storting in ${x.van} telt in ${x.ym} (maandInkomen ${x.ym} vergoedingen ${euroC(maandInkomen(x.ym).verg)}, ${x.van} ${euroC(maandInkomen(x.van).verg)})`);
+        L.push(`    ${S.datum}: ${euroC(S.bedrag)} = salaris ${euroC(S.salaris)} + vergoedingen ${euroC(S.verg)} + eenmalig ${euroC(S.eenmalig)} · regel ${S.regel}${S.auto?' (automatisch)':''}${S.binnenMarge?' (binnen de marge)':''}${S.nietGesplitst?' · NOG NIET GESPLITST':''}${S.beantwoord?' · door jou':''}${S.regel==='c'?' · lager dan vast':''}${txNotitie(S.id)?' · notitie':''} → ${Math.abs(som-S.bedrag)<0.005||(S.regel==='c'&&!S.lager)?'sluit':'SLUIT NIET'}`); }
+      if(SET.salSplit522b) L.push(`    migratie v522b op ${SET.salSplit522b.op}: ${Object.keys(SET.salSplit522b.voor||{}).length} toewijzing(en) werd(en) een notitie, geen bedrag verschoven`);
       const Lg=(SET.salSplitLog||[]).slice(-5); if(Lg.length) L.push('    log: '+Lg.map(e=>`${ymdVan(new Date(e.op))} ${e.actie}${e.verg!=null?' vergoedingen '+e.verg:e.reis!=null?' reis '+e.reis:''}`).join(' · ')); } }
   /* v476: INKOMEN PER MAAND = vast salaris + overig vast. De overzetting van SET.income, voor en na, en de stand nu. */
   { const R=SET.inkomen476, r=(t,x)=>`    ${t}: SET.income ${euroC(x.income)} · vast salaris ${euroC(x.vast)} · overig vast ${euroC(x.overig)} · som (vast + overig vast) ${euroC(x.som)}`;

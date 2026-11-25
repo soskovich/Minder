@@ -96,7 +96,7 @@ test.describe('punt 3, 4 en 5', () => {
     await boot(page);
     await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 277));
     const r = await page.evaluate(() => { const D = salarisData(6); return D.R.map((x) => [x.ym, Math.round(x.salaris)]); });
-    for (const [ym, s] of r) if (ym >= '2026-05') expect([ym, s]).toEqual([ym, 5493]);   // v522: het salarisdeel draagt de vergoedingen (vast inkomen)
+    for (const [ym, s] of r) if (ym >= '2026-05') expect([ym, s]).toEqual([ym, 5216]);   // v522b: het salarisdeel is zonder vergoedingen (inkomen van de maand, niet het verwachte salaris)
     const kies = await page.evaluate(() => { try { window._gripCyc = null; } catch (_) {} const C = gripCyclus(); return C.kies.map((k) => k.naam); });
     /* v501 (punt 3): eerst meten. In deze stand ging er sinds de storting €300 boven je afspraak naar opzij, dus de keuze zegt dat dat deel
        al verdeeld lijkt (klopt / niet) in plaats van "verdelen"; het eenmalige deel blijft een eigen keuze */

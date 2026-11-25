@@ -30,7 +30,7 @@ async function bootSplit(page, o) {
     SET.salSplit = { vast: 5216, key: recurKey(t), naam: 'Werkgever', reisAan: true, reisMax: 300, reisPot: 'vervoer' }; save(); });
 }
 
-test('a. rekVoorstel().salaris is het salarisdeel (storting − eenmalig; v522: vergoedingen horen erbij) = 5503', async ({ page }) => {
+test('a. rekVoorstel().salaris is het salarisdeel (storting − eenmalig − vergoedingen; v522b: het verwachte salaris) = 5216', async ({ page }) => {
   await bootSplit(page);
   /* oktober 7692,98 = 5216 vast + 287 reiskosten + 2189,98 eenmalig (de bonus beantwoord als 287 reiskosten) */
   await page.evaluate(() => salSplitAntwoord(_sid('2026-10'), 287));
@@ -38,10 +38,10 @@ test('a. rekVoorstel().salaris is het salarisdeel (storting − eenmalig; v522: 
   expect(sp.salaris).toBe(5216); expect(sp.verg).toBe(287); expect(Math.round(sp.eenmalig * 100) / 100).toBe(2189.98);
   const P = await page.evaluate(() => { const Pv = rekVoorstel(); return { ok: Pv.ok, salaris: Math.round(Pv.salaris) }; });
   expect(P.ok).toBe(true);
-  expect(P.salaris).toBe(5503);   // v522: salaris 5216 + vergoedingen 287 (vast inkomen); tot v522 5216 (reiskosten afgetrokken)
-  /* salarisData leest dezelfde bron: het salarisdeel per maand is 5216 + 277 vergoedingen (v522) */
+  expect(P.salaris).toBe(5216);   // v522b: het salaris zonder vergoedingen (v522 las 5503: de vergoedingen in de schatting)
+  /* salarisData leest dezelfde bron: het salarisdeel per maand is 5216 (v522b: zonder vergoedingen) */
   const sd = await page.evaluate(() => { const S = salarisData(); const r = S.R.find((x) => x.ym === '2026-09'); return r ? r.salaris : null; });
-  expect(sd).toBe(5493);
+  expect(sd).toBe(5216);
 });
 
 /* --- b: "Al gekozen" toont de bevroren afspraak, niet de live herberekening --- */
