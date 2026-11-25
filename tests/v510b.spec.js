@@ -68,7 +68,7 @@ test('v510b b: de categorie Holding vervalt; maandtotalen, opzij, budget en de C
   const na = await page.evaluate(H.METEN);
   const controle = await H.CONTROLE(page);
   // het bakje in totals().byCat heet nu intern: Holding en Eigen rekening samengenomen zijn gelijk
-  const voeg = R => { const o = JSON.parse(JSON.stringify(R)); for (const m of Object.values(o.maand)) { const b = m.totals.byCat || {}; if (b.holding != null) { b.intern = (b.intern || 0) + b.holding; delete b.holding; } if (b.intern === 0) delete b.intern; } return o; };
+  const voeg = R => { const o = JSON.parse(JSON.stringify(R)); for (const m of Object.values(o.maand)) { const b = m.totals.byCat || {}; if (b.holding != null) { b.intern = (b.intern || 0) + b.holding; delete b.holding; } if (b.intern === 0) delete b.intern; if (m.inkomen && m.inkomen.verg === 0) delete m.inkomen.verg; } return o; };   // v522: maandInkomen() draagt sinds v522 ook verg; in deze stand (geen salarissplitsing) is dat 0 en geen bedrag dat verschuift
   expect(voeg(na)).toEqual(voeg(VOOR.voor));
   expect(controle.length).toBe(VOOR.controle.length);
   expect(controle).toEqual(VOOR.controle);
