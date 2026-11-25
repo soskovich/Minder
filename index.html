@@ -3656,7 +3656,8 @@ function savedTxRange(van, tot){ const sav=new Set(n26SavingsAccounts()); if(!sa
    spaarrekening herkend. Reserveringen en beleggen staan hier niet in: die zijn een eigen regel. */
 function opzijEenheid(U){ if(!U) return null; const vandaag=vandaagYMD(), tot=String(U.eind)<vandaag?String(U.eind):vandaag;
   if(U.soort==='maand' && !U.korteMaand){ let net=null; try{ net=savedNet(U.ym); }catch(_){} if(net==null) return null; let erin=Math.max(Math.round(net),0), uit=0; try{ const S=spaarStortStand(U.ym); uit=Math.round(S.uit); erin=Math.round(S.erin); }catch(_){} return {erin, uit, netto:Math.round(net)}; }
-  let net=null, tx=[]; try{ net=savedNetRange(U.start, tot); tx=savedTxRange(U.start, tot); }catch(_){} if(net==null) return null;
+  const OV=opzijVenster(U), tot2=String(OV.eind)<vandaag?String(OV.eind):vandaag;   // v523c: vanaf de dag van een vroeg salaris
+  let net=null, tx=[]; try{ net=savedNetRange(OV.start, tot2); tx=savedTxRange(OV.start, tot2); }catch(_){} if(net==null) return null;
   return {erin:Math.round(tx.filter(t=>t.amount>0).reduce((a,t)=>a+t.amount,0)), uit:Math.round(-tx.filter(t=>t.amount<0).reduce((a,t)=>a+t.amount,0)), netto:Math.round(net)}; }
 function opzijEenheidTekst(O){ return O?`gestort ${euro0(O.erin)} · eruit ${euro0(O.uit)} · netto ${euro0(O.netto)}`:'niet gemeten (geen spaarrekening herkend)'; }
 function maandEenheid(ym){ const dim=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate(); return {soort:'maand', ym, start:ym+'-01', eind:ym+'-'+String(dim).padStart(2,'0'), dagen:dim, korteMaand:false, label:ymFull(ym)}; }
@@ -13080,7 +13081,11 @@ function salPeriode(vandaag){ vandaag=vandaag||vandaagYMD(); const B=salBron(); 
   if(pv && vandaag>=pv){ const P=periodeVan(vandaag);
     if(P && P.soort==='periode'){ era=true;
       const inRange=(a,b)=>Object.keys(S).map(k=>S[k]).find(d=>d>=a && d<=b)||null;
-      const werk=inRange(P.start, P.eind);
+      /* v523c: een salaris dat VOOR de vaste dag binnenkwam (salStortingMaand: de verwachte dag die het dichtst bij ligt, hetzelfde venster
+         dat vóór de vaste dag "Je salaris is er al" geeft) is na de vaste dag nog steeds het salaris van DEZE periode. Tot v523c zocht dit
+         alleen tussen start en eind van de periode, dus een storting van 21 dec viel op 27 dec weg en las de periode "nog niet binnen". */
+      const vroegW=(S[P.ym] && S[P.ym]<P.start && S[P.ym]<=vandaag)?S[P.ym]:null;
+      const werk=vroegW||inRange(P.start, P.eind);
       /* het salaris van DEZE periode is nog niet binnen: de lopende periode is periodeVan (de regel), niet de vorige die liep, dus
          opzij/tempo/budget/moment schuiven niet terug en de melding "salaris nog niet binnen" staat erbij. Is het salaris wel binnen
          (op tijd of eerder, zoals rond de feestdagen), dan bepaalt de oude logica de periode vanaf de werkelijke storting (v435). */
@@ -13091,6 +13096,16 @@ function salPeriode(vandaag){ vandaag=vandaag||vandaagYMD(); const B=salBron(); 
     }
   }
   return {B, R, S, cur, volg, stil, laat, afwijk, vandaag, era}; }
+/* v523c: HET OPZIJ-VENSTER VAN EEN SALARISPERIODE. De periode zelf begint op de regel (besluit 23 okt), maar wat er na een salaris dat eerder
+   binnenkwam al naar opzij ging hoort bij de periode van DAT salaris: het venster begint op de dag van het salaris, en de periode ervoor
+   telt tot de dag ervoor (geen dubbeltelling). Alleen een salaris binnen de era (niet in de korte maand). Gelezen door opzijEenheid,
+   gripSpaardoelEenheid en opzijPlanO; opzijPeriode leest salPeriode().cur, die met een vroeg salaris al op de dag van het salaris begint. */
+function salVroegVoor(ym){ return periodeMemo('salVroeg', String(ym), ()=>{ const B=salBron(); if(!B) return null; const R=salRegel(B); if(!R) return null;
+  const S=salStortingen(B, R), d=S[ym], v=salarisVerwacht(ym, R), pv=periodeVanaf(); return (d && v && pv && d<v.datum && d>=pv)?d:null; }); }
+function opzijVenster(U){ if(!U || U.soort!=='periode') return {start:U?U.start:null, eind:U?U.eind:null};
+  let s=String(U.start), e=String(U.eind); const v=salVroegVoor(U.ym); if(v && v<s) s=v;
+  let N=null; try{ N=periodeVan(rekDag(e,1)); }catch(_){} const vn=(N && N.soort==='periode')?salVroegVoor(N.ym):null; if(vn && vn<=e) e=rekDag(vn,-1);
+  return {start:s, eind:e}; }
 /* de periode van een maand ym (voor een eerdere afspraak): van de werkelijke storting (of de verwachte) tot de dag voor de volgende
    storting (de werkelijke als die eerder kwam, anders de verwachte) */
 function salPeriodeVan(ym){ const B=salBron(); if(!B) return null; const R=salRegel(B); if(!R) return null; const S=salStortingen(B, R);
@@ -14176,7 +14191,11 @@ function paasZondag(j){ const a=j%19, b=Math.floor(j/100), c=j%100, d=Math.floor
 function nlFeestdag(ymd){ const j=+String(ymd).slice(0,4), md=String(ymd).slice(5,10); if(['01-01','05-05','12-25','12-26'].includes(md)) return true;
   const kd=(new Date(j+'-04-27T12:00').getDay()===0)?'04-26':'04-27'; if(md===kd) return true;
   const p=paasZondag(j); return [1,39,50].some(n=>rekDag(p,n)===ymd); }
-function isWerkdag(ymd){ const w=new Date(ymd+'T12:00').getDay(); return w!==0 && w!==6 && !nlFeestdag(ymd); }
+/* v523c: de TARGET-sluitingsdagen (1 jan, Goede Vrijdag, paasmaandag, 1 mei, 25 en 26 dec): banken verwerken dan geen overboekingen tussen
+   banken. Een werkdag is de unie van de Algemene termijnenwet en deze dagen. */
+function targetSluiting(ymd){ const j=+String(ymd).slice(0,4), md=String(ymd).slice(5,10); if(['01-01','05-01','12-25','12-26'].includes(md)) return true;
+  const p=paasZondag(j); return rekDag(p,-2)===ymd || rekDag(p,1)===ymd; }
+function isWerkdag(ymd){ const w=new Date(ymd+'T12:00').getDay(); return w!==0 && w!==6 && !nlFeestdag(ymd) && !targetSluiting(ymd); }
 function werkdagNa(d){ let x=rekDag(d,1); for(let i=0;i<14 && !isWerkdag(x);i++) x=rekDag(x,1); return x; }
 function werkdagPlus(d, n){ let x=d; for(let i=0;i<n;i++) x=werkdagNa(x); return x; }
 /* de dag waarop een niet geziene overboeking "nog niet binnen" heet: OVERBOEK_LAAT_DAGEN werkdagen na de verwachte dag */
@@ -15932,7 +15951,8 @@ function gripSpaardoelEenheid(U){ const vandaag=vandaagYMD(), tot=String(U.eind)
   if(U.korteMaand){ const O=opzijEenheid(U); if(!O) return {s:'onbekend', t:'niet gemeten: geen spaarrekening herkend', overgang:true};
     return {s:'overgang', t:`${opzijEenheidTekst(O)} · overgangsmaand · geen doel`, netto:O.netto, overgang:true}; }
   let doel=null; try{ const SV=SET.salVerdeling; if(SV && SV.rek && SV.opzij!=null) doel=Math.round(+SV.opzij||0); }catch(_){}
-  let net=null, tx=[]; try{ net=savedNetRange(U.start, tot); tx=savedTxRange(U.start, tot); }catch(_){}
+  const OV=opzijVenster(U), tot2=String(OV.eind)<vandaag?String(OV.eind):vandaag;   // v523c
+  let net=null, tx=[]; try{ net=savedNetRange(OV.start, tot2); tx=savedTxRange(OV.start, tot2); }catch(_){}
   let plan=0; try{ plan=Math.round(monthlySavingTarget()||0); }catch(_){}
   if(!(doel>0)) return {s:'onbekend', t:'niet gemeten: geen opzij volgens je verdeling voor deze periode', doel, plan};
   if(net==null) return {s:'onbekend', t:'niet gemeten: geen spaarrekening herkend', doel, plan};
@@ -19108,9 +19128,9 @@ function planSchema(P,TL,K){
    verdeling") blijft dat van opzijPeriode(). */
 function opzijPlanO(){
   const O=opzijPeriode(); let E=null; try{ E=eraEenheidNu(); }catch(_){} if(!E) return O;
-  const vandaag=vandaagYMD(), tot=String(E.eind)<vandaag?String(E.eind):vandaag;
+  const vandaag=vandaagYMD(), OV=opzijVenster(E), tot=String(OV.eind)<vandaag?String(OV.eind):vandaag;   // v523c: vanaf de dag van een vroeg salaris
   let OE=null; try{ OE=opzijEenheid({soort:'periode', ym:E.ym, start:E.start, eind:E.eind}); }catch(_){}
-  let tx=[], netto=null; if(O.meetbaar){ try{ netto=savedNetRange(E.start, tot); tx=savedTxRange(E.start, tot); }catch(_){} }
+  let tx=[], netto=null; if(O.meetbaar){ try{ netto=savedNetRange(OV.start, tot); tx=savedTxRange(OV.start, tot); }catch(_){} }
   const nettoExact=netto==null?null:Math.round(tx.reduce((a,t)=>a+Math.round((+t.amount||0)*100),0))/100;
   return Object.assign({}, O, {ok:true, start:E.start, eind:E.eind, ym:E.ym, netto, nettoExact, tx, eenheid:E, OE,
     pct:(O.doel>0 && netto!=null)?Math.max(Math.round(netto/O.doel*100),0):null});
