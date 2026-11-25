@@ -172,7 +172,9 @@ test.describe('v435 · 4/5/6. de momenten', () => {
     await expect(page.locator('[data-salmoment1]')).toHaveCount(0);
   });
   test('4b. komt het laagste punt onder nul, dan staat erbij wat je moet overboeken', async ({ page }) => {
-    await boot(page, { dag: '2026-10-28', set: { salVerdeling: SV(), manualBal: { [MAIN]: 1190, [LEEF]: 100 } } });
+    /* v523: op 28 okt telt de afgesproken overboeking naar Leefgeld (nog niet gezien, verwacht 27 okt) als bijschrijving; op 30 okt is hij
+       OVERBOEK_LAAT_DAGEN te laat, telt niet meer, en dan zakt het laagste punt onder nul (moment 1 loopt t/m dag 4) */
+    await boot(page, { dag: '2026-10-30', set: { salVerdeling: SV(), manualBal: { [MAIN]: 1190, [LEEF]: 100 } } });
     await add(page, [sal('2026-10-26')]);
     await page.evaluate(() => { go('maand'); renderMaand(); });
     expect(await page.locator(`[data-m1rek="${LEEF}"] [data-m1gevolg]`).innerText()).toMatch(/laagste saldo wordt dan -€[\d.]+ op .* · boek €\d+ over/);

@@ -14193,7 +14193,7 @@ function salEersteTekort(r, saldo, tot){ let b=saldo; const vandaag=vandaagYMD()
     if(u.vast-vs>0.005) items.push({naam:'vaste last', bedrag:u.vast-vs});
     for(const x of ((r.belNu||{})[d]||[])) items.push({naam:x.naam, bedrag:x.bedrag});
     if(u.over>0) items.push({naam:'je overboeking', bedrag:u.over});
-    if(u.pot+u.kas>0.005) items.push({naam:u.kas>0.005&&u.pot>0.005?'potjes en contant':(u.kas>0.005?'contant':'potjes'), bedrag:u.pot+u.kas});
+    if(u.pot+u.kas>0.005){ const kn=String((CATS[CONTANT_CAT]||{}).name||'').toLowerCase(); items.push({naam:u.kas>0.005&&u.pot>0.005?'potjes en '+kn:(u.kas>0.005?kn:'potjes'), bedrag:u.pot+u.kas}); }
     for(const it of items){ b-=it.bedrag; if(b<-0.005) return {naam:it.naam, bedrag:it.bedrag, datum:d}; } }
   return null; }
 function salProjectie(r, saldo, tot){ perfHit('salProjectie'); let b=saldo, laagst=saldo, dag=vandaagYMD(), nul=null; for(let d=rekDag(vandaagYMD(),1); d<=tot; d=rekDag(d,1)){ b-=r.uitDag(d); if(b<laagst-1e-9){ laagst=b; dag=d; } if(nul==null && b<-0.005) nul=d; } return {laagst, dag, nul, eind:b}; }

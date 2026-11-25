@@ -38,7 +38,7 @@ const lees = (page) => page.evaluate(({ LEEF }) => {
   o.teksten = { insTxt, zienTxt, kiesTxt, terugTxt, dashTxt };
   { const O = opzijPeriode(); o.opzijDoel = O.doel; o.opzijAfspraak = O.afspraak; o.opzijOvergang = !!O.overgang; }
   const D = totSalarisData(LEEF);
-  o.tot = D && { saldo: D.saldoExact, vast: D.vastExact, pot: D.potExact, kas: D.kasExact, eind: D.eindExact, venster: D.venster };
+  o.tot = D && { saldo: D.saldoExact, vast: D.vastExact, pot: D.potExact, kas: D.kasExact, bel: D.belExact, over: D.overExact, eind: D.eindExact, venster: D.venster };
   if (D) { openTotSalaris(LEEF); const el = document.getElementById('totSalaris'); o.totTxt = el ? el.innerText : ''; closeSheet(); }
   const W = insWeekTegelP(); o.week = W && { cur: W.cur, over: W.over, bedrag: W.bedrag, nog: W.nog, dagenTeGaan: W.dagenTeGaan, basis: W.basis };
   return o;
@@ -73,9 +73,10 @@ for (const dag of S.DAGEN) {
       /* Kiezen: de afspraak van je verdeling is het doel van opzij */
       /* v508 (punt 1/2): november (1–23) is de overgangsmaand, zonder doel; de afspraak blijft bewaard */
       if (ERA(dag)) expect(r.opzijDoel).toBe(1766); else { expect(r.opzijOvergang).toBe(true); expect(r.opzijDoel).toBe(null); expect(r.opzijAfspraak).toBe(1766); }
-      /* Tot je volgende salaris: saldo - vaste lasten - potjes - contant is de stand op de dag voor je salaris */
+      /* Tot je volgende salaris: saldo - vaste lasten - potjes - contant is de stand op de dag voor je salaris;
+         v523: min de inleg en min (of plus) je afgesproken overboeking die nog niet gezien is */
       expect(r.tot).not.toBeNull();
-      expect(Math.round((r.tot.saldo - r.tot.vast - r.tot.pot - r.tot.kas) * 100)).toBe(Math.round(r.tot.eind * 100));
+      expect(Math.round((r.tot.saldo - r.tot.vast - r.tot.pot - r.tot.kas - r.tot.bel - r.tot.over) * 100)).toBe(Math.round(r.tot.eind * 100));
       /* de weektegel: in de periode ligt de week binnen de periode */
       if (ERA(dag)) { expect(r.week.cur.van >= r.start && r.week.cur.tot <= r.eind).toBe(true); expect(Number.isFinite(r.week.bedrag)).toBe(true); }
       /* geen scherm toont een kapot getal */

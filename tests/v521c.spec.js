@@ -103,7 +103,10 @@ test.describe('v521c', () => {
     for (const [n, o] of [['inleg', {}], ['zonder', { inleg: 0 }]]) {
       await B.boot(page, o);
       const u = await bedragen(page);
-      for (const k of ['home', 'ins', 'insSplit', 'grip-zien', 'grip-begrijpen', 'gripSplit', 'plan', 'vermogen', 'salv', 'P']) expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]);
+      for (const k of ['home', 'ins', 'insSplit', 'grip-zien', 'grip-begrijpen', 'gripSplit', 'plan', 'vermogen']) expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]);
+      /* v523 (punt 4): de reserveringen tellen per salarisperiode tot de vervaldag; alleen dat bedrag (en opzij, salaris min de rest) verschuift,
+         de rekeningen niet, en opzij + reserveringen blijft gelijk */
+      expect([n, u.P.rek, u.P.som, u.P.opzij + u.P.res]).toEqual([n, VOOR[n].P.rek, VOOR[n].P.som, VOOR[n].P.opzij + VOOR[n].P.res]);
     }
   });
 });

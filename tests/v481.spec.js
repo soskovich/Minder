@@ -65,17 +65,20 @@ test('c. "Alleen deze keer later" geldt deze periode; de volgende periode staat 
   expect(r.data.every((d) => d.slice(8, 10) === '19')).toBe(true);  // op de vaste dag (19), niet salaris+3 (27) (sabotage: eenmalig blijft nasal → 27)
 });
 
-test('d. de pop-up toont tekort en leeg-datum apart, met de grootste post', async ({ page }) => {
+test('d. de pop-up toont tekort en leeg-datum apart, met de eerste afschrijving die het tekort maakt', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate((ACC) => {
     const h = salKrapKaart(); document.body.insertAdjacentHTML('beforeend', '<div id="tst">' + h + '</div>');
     const row = document.querySelector('#tst [data-saltekortrij="' + ACC + '"]');
-    return row ? { txt: row.innerText, leeg: row.getAttribute('data-leeg'), nodig: row.getAttribute('data-nodig') } : null;
+    const p = row && row.querySelector('[data-krappost]');
+    return row ? { txt: row.innerText, leeg: row.getAttribute('data-leeg'), nodig: row.getAttribute('data-nodig'), post: p ? p.dataset.krappost : null } : null;
   }, MAIN);
   expect(r).toBeTruthy();
   expect(r.txt).toMatch(/tekort €\d/);           // het laagste punt
   expect(r.txt).toMatch(/leeg vanaf/);           // de eerste dag onder nul, APART (sabotage: leeg-span weg)
   expect(r.leeg).toBeTruthy();                   // met een datum
-  expect(r.txt).toContain('Nathaniel Cathalina'); // de grootste post die het verschil maakt
-  expect(r.txt).toContain('300');
+  /* v523 (punt 3): niet meer de grootste post maar de eerste afschrijving die het tekort maakt, met zijn datum (= de leeg-datum) */
+  expect(r.txt).toContain('eerste afschrijving die het tekort maakt');
+  expect(r.txt).not.toContain('grootste post');
+  expect(r.post).toBe(r.leeg);
 });

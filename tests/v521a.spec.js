@@ -104,8 +104,11 @@ test.describe('v521a', () => {
     /* Begrijpen: dezelfde EUR 9 in de brug (vast-stap 309 → 300, de potjes samen +9: 127 → 128 en -960 → -952) en de indeling */
     expect(verschil(VOOR['grip-begrijpen'], NA['grip-begrijpen'])).toEqual({ weg: { '€1.737': 1, '€1.587': 1, '€309': 1, '€127': 1, '-€960': 1 }, bij: { '€1.746': 1, '€1.578': 1, '€300': 1, '€128': 1, '-€952': 1 } });
     /* de salarisverdeling: Betaalrekening 600 → 800, opzij 1460 → 1260, de twee regels beleggen (+EUR 100) en "overboeken" 199 meer → 1 erbij */
-    expect(verschil(VOOR.salv, NA.salv)).toEqual({ weg: { '€600': 4, '€1.460': 3, '€199': 1 }, bij: { '€800': 4, '€1.260': 3, '€1': 1, '€100': 2 } });
-    expect(NA.P.opzij).toBe(VOOR.P.opzij - 200);
-    expect(NA.P.res).toBe(VOOR.P.res);
+    /* v523 (punt 4): de reserveringen tellen sinds v523 per salarisperiode tot de vervaldag (de verzekering van december, zonder boeking op de 1e,
+       valt nu helemaal in 24 nov – 23 dec), dus de reserveringsregel en opzij verschuiven samen; de som opzij + reserveringen houdt de EUR 200 */
+    const vS = verschil(VOOR.salv, NA.salv);
+    expect(vS.weg['€600']).toBe(4); expect(vS.bij['€800']).toBe(4); expect(vS.bij['€100']).toBe(2);
+    expect(NA.P.rek).toEqual(VOOR.P.rek.map((x) => x.acc === B.BET ? Object.assign({}, x, { laten: x.laten + 200 }) : x));
+    expect(NA.P.opzij + NA.P.res).toBe(VOOR.P.opzij + VOOR.P.res - 200);
   });
 });
