@@ -4,8 +4,11 @@
    (standaard /tmp/onderhoud1.txt): per tegenpartij die door de splitsing anders uitkomt de reeksen en de status oud tegen nieuw,
    de signalen "gestopt?" oud tegen nieuw, en elk bedrag (Vaste lasten, nog te betalen, de vooruitblik, veilig te besteden) oud
    tegen nieuw. Hij faalt als een bedrag afwijkt (dat hoort gemeld voordat er verder gebouwd wordt).
-   Test 2 (de repetitie): opzij op 23 nov, 24 nov, 26 nov en 1 dec moet 1590 / 1503 / 953 / 1203 blijven.
-   SABOTAGE: CONTANT=631 zet het potje Contant op 631; de repetitie moet dan rood worden. */
+   Test 1 faalt ook op een "gestopt?" die op bc2bafd niet bestond.
+   Test 2 (de repetitie): opzij op 23 nov, 24 nov, 26 nov en 1 dec moet gelijk zijn aan bc2bafd op dezelfde export (geen vaste getallen).
+   SABOTAGE: CONTANT=0 zet het potje Contant (alleen aan de huidige kant) op 0; de repetitie moet dan rood worden. CONTANT=631 is
+   GEEN sabotage: gemeten door de gebruiker op zijn exports van 25 nov (dag 26 nov) en 11 nov valt 631 samen met wat Minder al
+   rekent en blijft de repetitie groen. CONTANT=0 en CONTANT=2000 worden daar rood. */
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { test, expect } = require('../klok');
