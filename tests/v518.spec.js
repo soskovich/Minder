@@ -67,7 +67,8 @@ test('e. een tik op een potje in de sheet geeft dezelfde verdeling als de oude i
 test('f. alle bedragen op Home, Inzichten, Grip, Plan, Vermogen en in de salarisverdeling gelijk aan 3faf02b', async ({ page }) => {
   await B.boot(page);
   const n = await B.bedragen(page);
-  for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'plan', 'vermogen']) expect(n[k], k).toEqual(VOOR[k]);
+  for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'vermogen']) expect(n[k], k).toEqual(VOOR[k]);   // v524: 'plan' is nu de lagen-invariant (zie onder)
+  expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toEqual(require('./plan-lagen-invariant').PLAN_LAGEN_OK);
   expect(n.insVastKop, 'onderhoud1: de kop noemt Vast met de stap').toBe(`· Vast +€${n.insVastStap}`);   // onderhoud1: de enige toevoeging op Inzichten
   expect(n.vermKaart).toBe(false);
   expect([...n.salv].sort(), 'salv').toEqual([...VOOR.salv].sort());   // dezelfde bedragen; de volgorde van Gepland verschuift (punt 2)

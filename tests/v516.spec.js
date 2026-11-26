@@ -112,12 +112,19 @@ test('v516 i: een snapshot van vorige week noemt alleen vorige week, met de dag 
 });
 
 test('v516 l: alle bedragen op Inzichten, Grip en Plan zijn gelijk aan c9f8a00 (twee fixtures, meldingen aan)', async ({ page }) => {
+  // v524: Plan is herzien (lagen-dashboard); de 'plan'-sleutel wordt na de back-upcontrole opnieuw vastgelegd (volgende ronde).
+  // Hier sluit Plan via de lagen-invariant (plan-lagen-invariant.js); de overige schermen blijven byte-gelijk aan c9f8a00.
+  const { planLagenInvariant, PLAN_LAGEN_OK } = require('./plan-lagen-invariant');
+  const zonderPlan = (o) => { const c = Object.assign({}, o); delete c.plan; return c; };
+  const goldenZonderPlan = (g) => { const c = Object.assign({}, g); delete c.plan; return c; };
   await K.boot(page, { set: MELD });
-  expect(await bedragen(page)).toEqual(VOOR.v516);
+  expect(zonderPlan(await bedragen(page))).toEqual(goldenZonderPlan(VOOR.v516));
+  expect(await planLagenInvariant(page)).toEqual(PLAN_LAGEN_OK);
   const p2 = await page.context().newPage();
   await p2.addInitScript(() => {}); await K515.boot(p2);
   await p2.evaluate(() => { SET.meldAan = true; SET.meldPotjes = { boodschappen: true }; save(); render(); });
-  expect(await bedragen(p2)).toEqual(VOOR.v515);
+  expect(zonderPlan(await bedragen(p2))).toEqual(goldenZonderPlan(VOOR.v515));
+  expect(await planLagenInvariant(p2)).toEqual(PLAN_LAGEN_OK);
 });
 
 test('v516 m: blok "meldingen" in het diagnosescherm leest het toestel en schrijft niets', async ({ page }) => {

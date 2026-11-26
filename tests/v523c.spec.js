@@ -64,11 +64,16 @@ test.describe('v523c', () => {
         out[dag] = await page.evaluate(() => { const SP = salPeriode(), nov = periodeVan('2026-12-01'), dec = periodeVan('2026-12-24');
           return { cur: SP.cur, volg: SP.volg, opzij: opzijPeriode().netto, plan: opzijPlanO().netto, nov: opzijEenheid(nov), dec: opzijEenheid(dec), moment: periodeMoment(), ov: overboekVerwacht().map((o) => [o.naar, o.dag, o.laat]) }; });
         out[dag].bedragen = await S.bedragen(page);
+        delete out[dag].bedragen.plan;   // v524: Plan is herzien (lagen-dashboard); de 'plan'-sleutel wordt na de back-upcontrole opnieuw vastgelegd (volgende ronde)
       }
       await page.close(); return out;
     };
     const oud = await lees(VOOR_HTML), nu = await lees(null);
     expect(JSON.stringify(nu)).toBe(JSON.stringify(oud));
+    // Plan sluit via de lagen-invariant op de huidige app (eb7932b heeft geen lagen-hero, dus los getoetst)
+    const { planLagenInvariant, PLAN_LAGEN_OK } = require('./plan-lagen-invariant');
+    const p = await browser.newPage(); await S.boot(p, { salDec: '2026-12-24', dag: '2026-12-22' });
+    expect(await planLagenInvariant(p)).toEqual(PLAN_LAGEN_OK); await p.close();
   });
 
   test('d: salaris 21 dec, overboeking nog niet gezien: verwacht 22 dec, "nog niet binnen" pas op 28 dec', async ({ page }) => {

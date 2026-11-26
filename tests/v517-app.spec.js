@@ -49,8 +49,13 @@ test('v517 app d: zonder betaalmelding draagt de snapshot geen sleutels', async 
 });
 
 test('v517 app e: alle bedragen op Inzichten, Grip en Plan zijn gelijk aan d5e115d (v516), ook met betaalmelding aan', async ({ page }) => {
+  // v524: Plan is herzien (lagen-dashboard); de 'plan'-sleutel wordt na de back-upcontrole opnieuw vastgelegd (volgende ronde).
+  // Hier sluit Plan via de lagen-invariant; de overige schermen blijven byte-gelijk aan d5e115d.
+  const { planLagenInvariant, PLAN_LAGEN_OK } = require('./plan-lagen-invariant');
   await K.boot(page, { set: { meldAan: true, meldBetaal: true, meldBetaalId: 'dev1', meldPotjes: { boodschappen: true } } });
-  expect(await bedragen(page)).toEqual(VOOR.v516);
+  const n = await bedragen(page); const g = Object.assign({}, VOOR.v516); delete n.plan; delete g.plan;
+  expect(n).toEqual(g);
+  expect(await planLagenInvariant(page)).toEqual(PLAN_LAGEN_OK);
 });
 
 /* ===== v517b ===== */

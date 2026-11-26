@@ -170,7 +170,8 @@ test('k. met vragen aan zijn alle bedragen op de schermen byte-gelijk aan dd83ba
   await B.boot(page);
   expect(await page.evaluate(() => vraagKnopAan())).toBe(true);   // de stand draagt het geval: vragen staat aan
   const nu = await B.bedragen(page);
-  for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'plan', 'vermogen', 'salv']) expect(nu[k], k).toEqual(VOOR[k]);
+  for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'vermogen', 'salv']) expect(nu[k], k).toEqual(VOOR[k]);   // v524: 'plan' is nu de lagen-invariant
+  expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toEqual(require('./plan-lagen-invariant').PLAN_LAGEN_OK);
   expect(nu.insVastKop, 'onderhoud1: de kop noemt Vast met de stap').toBe(`· Vast +€${nu.insVastStap}`);   // onderhoud1: de enige toevoeging op Inzichten
   expect(nu.gepland).toEqual(VOOR.gepland);
 });
