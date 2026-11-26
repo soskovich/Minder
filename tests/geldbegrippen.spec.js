@@ -50,7 +50,7 @@ test.describe('b · één term per begrip', () => {
     await boot(page, 'vooruit');
     const gezien = await page.evaluate(() => {
       const uit = [];
-      for (const s of ['dash', 'ins', 'vooruit', 'vermogen', 'set']) {   // v196: geen 'act' meer
+      for (const s of ['dash', 'ins', 'vooruit', 'vermogen', 'set', 'maand']) {   // v196: geen 'act'; v524: opzij staat op Grip (s-maand)
         go(s); const el = document.getElementById('s-' + s); if (el) uit.push(el.innerText);
       }
       // plus de sheets waar de term stond
@@ -59,7 +59,7 @@ test.describe('b · één term per begrip', () => {
       return uit.join('\n');
     });
     expect(gezien.toLowerCase()).not.toContain('spaarruimte');
-    expect(gezien.toLowerCase()).toContain('opzij');   // v440: de zichtbare spaarterm op Plan is "opzij" (Opzij deze periode); "spaarinleg" blijft de term in de uitleg/JARGON
+    expect(gezien.toLowerCase()).toContain('opzij');   // v440/v524: de zichtbare spaarterm is "opzij" (op Grip: "Opzij deze periode"); de opzij-tegel verhuisde van Plan naar blok 2 / Grip
   });
 
   test('de doel-editor en het noodfonds gebruiken dezelfde term', async ({ page }) => {
@@ -76,12 +76,13 @@ test.describe('b · één term per begrip', () => {
     expect(nf.toLowerCase()).not.toContain('spaarruimte');
   });
 
-  test('het plan-overzicht noemt opzij deze periode en legt het plan uit', async ({ page }) => {
+  test('het plan-overzicht legt het plan uit, en de termen blijven gedefinieerd', async ({ page }) => {
     await boot(page, 'vooruit');
+    // v524: "Opzij deze periode" (de opzij-tegel) en het uitlegteken (noteIcon('planUitleg')) stonden in de oude kop #planKpi,
+    // die niet meer wordt gerenderd; opzij verhuisde naar blok 2 / Grip, en de lagen-hero draagt "verdeling ⚙". De uitleg-INHOUD
+    // (NOTES.planUitleg) en de term-definitie (JARGON.spaarinleg) blijven ongewijzigd.
     const html = await page.evaluate(() => renderPlan());
-    expect(html).toContain('Opzij deze periode');                     // v440: de opzij-term op Plan (opzijPeriode)
-    expect(html).toContain('planUitleg');                             // het uitlegteken hangt in de kop
-    // de uitleg staat achter het uitlegteken, en dus in NOTES; de term spaarinleg blijft in JARGON gedefinieerd
+    expect(html).not.toContain('Opzij deze periode');                 // de tegel staat niet meer op Plan
     expect(await page.evaluate(() => NOTES.planUitleg)).toContain('gaat van boven naar beneden');
     expect(await page.evaluate(() => JARGON.spaarinleg)).toContain('per maand opzij');
   });

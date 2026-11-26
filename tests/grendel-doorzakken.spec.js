@@ -301,16 +301,19 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
 
   /* Het bedrag staat al bij de tak. Bij een dichte grendel is base altijd nul voor een doel, dus
      extra is gelijk aan alloc en zou "waarvan X doorgezakt" datzelfde getal herhalen.
-     v318: het staat NAAST de tak zolang de kolom breed is en anders in de eerste tekstregel, dus de
-     assertie leest beide helften samen. */
-  test('het doorgezakte bedrag staat er niet een tweede keer bij', async ({ page }) => {
+     v318: het staat NAAST de tak zolang de kolom breed is en anders in de eerste tekstregel.
+     v524 (punt 1): het increment "+EUR X deze maand" verliet de rij-sub; het doorgezakte bedrag staat nu als attribuut
+     data-rijdezemaand (één keer), en het woord "doorgezakt" staat er nog steeds niet bij. */
+  test('het doorgezakte bedrag staat er één keer, als attribuut, en niet als "doorgezakt"', async ({ page }) => {
     await boot(page, { kkMode: 'fixed', kkPer: 250 });
-    const t = await page.evaluate(() => {
+    const r = await page.evaluate(() => {
       const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
-      return tk.innerText.replace(/\s+/g, ' ');
+      const sub = tk.querySelector('[data-rijsub]');
+      return { tekst: tk.innerText.replace(/\s+/g, ' '), dezeMaand: sub ? +sub.dataset.rijdezemaand : null };
     });
-    expect(t).toContain('€466');
-    expect(t).not.toMatch(/doorgezakt/);
+    expect(r.dezeMaand).toBe(466);                  // het doorgezakte bedrag, één keer, als attribuut
+    expect(r.tekst).not.toMatch(/doorgezakt/);
+    expect(r.tekst).not.toMatch(/deze maand/);      // niet meer in de zichtbare sub
   });
 
   /* Het doel dat nog steeds nul krijgt verandert niet: dat wacht wél op de buffer. */
