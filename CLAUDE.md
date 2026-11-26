@@ -141,6 +141,13 @@ genoemde versietag.)*
   `overboekVerwacht()` `salPeriode().cur` lezen (start en werkelijk = 21 dec). Werkdag (`isWerkdag()`) is de unie van de Algemene termijnenwet en
   de TARGET-sluitingsdagen (`targetSluiting()`: 1 jan, Goede Vrijdag, paasmaandag, 1 mei, 25 en 26 dec). Salaris op de 24e: alles byte-gelijk aan
   eb7932b (spec c, met `git show`). Spec `v523c.spec.js` (a-e, 6 van 6 sabotages rood). Cache `minder-v523c`.
+  AANVULLING (gemeten door de gebruiker op 18cca84, back-up van 25 nov, dag 26 nov: "Salarisrekening · tekort EUR 3.481 · je overboeking van
+  EUR 1.750 (nog niet gezien) · je overboeking van EUR 1.700 (nog niet gezien)" bij een salarisrekening van EUR 11; `OVERBOEK_GEZIEN_DEEL` vroeg EEN
+  bijschrijving van 90%, en EUR 1.500 van 1.750 of 1.500 + 220 van 1.700 bleef zo "nog niet gezien"): `overboekVerwacht()` geeft per rekening
+  `binnen` (de SOM van de bijschrijvingen van eigen rekeningen sinds de salarisstorting: intern, of dezelfde afschrijving op een andere eigen
+  rekening binnen 3 dagen) en `nog` = max(0, afspraak − binnen); samen nooit meer dan saldo salarisrekening − afgesproken rest (`SV.rek[van]`),
+  anders naar rato. Gezien = nog onder EUR 0,50; het dagmodel (ovIn/ovUit), de krap-regel, "Tot je salaris" en de melding "nog niet binnen"
+  lezen `nog` ("EUR 11 van je overboeking van EUR 1.750"). `OVERBOEK_GEZIEN_DEEL` is vervallen. Tests k, l, m (3 van 3 sabotages rood).
 - **v523b: "NOG NIET BINNEN" TELT WERKDAGEN, NIET KALENDERDAGEN** (`v523b`, gevraagd door de gebruiker, tak `werk/v523`). Een afgesproken
   overboeking die niet gezien is heet "nog niet binnen" vanaf `overboekLaatVanaf(dag)` = `OVERBOEK_LAAT_DAGEN` (3) werkdagen na de verwachte
   dag (`werkdagPlus()`), en de verwachte dag bij "dag erna" is `werkdagNa()`. Een werkdag (`isWerkdag()`) volgt de Algemene termijnenwet:

@@ -85,4 +85,59 @@ test.describe('v523c', () => {
     const r = await page.evaluate(() => ({ gv26: isWerkdag('2026-04-03'), mei26: isWerkdag('2026-05-01'), gv27: isWerkdag('2027-03-26'), na: werkdagNa('2026-04-02'), mei: werkdagNa('2026-04-30'), do: isWerkdag('2026-04-02'), kerst: isWerkdag('2026-12-25'), konings: isWerkdag('2026-04-27') }));
     expect(r).toEqual({ gv26: false, mei26: false, gv27: false, na: '2026-04-07', mei: '2026-05-04', do: true, kerst: false, konings: false });
   });
+  /* v523c (aanvulling): de verwachte overboeking telt de SOM van de bijschrijvingen van eigen rekeningen sinds de salarisstorting, en samen
+     nooit meer dan het saldo van de salarisrekening min de afgesproken rest. Stand naar de meting van de gebruiker op 26 nov (back-up van
+     25 nov): afspraak Betaalrekening EUR 1.750 en Leefgeld EUR 1.700, opzij EUR 1.766, rest op de salarisrekening EUR 0 (5.216 verdeeld). */
+  const zet = (page, o) => page.evaluate(({ MAIN, BET, LEEF, SPAAR, o }) => {
+    const add = (acc, d, a, n, cat) => { const t = { id: 'v523ck' + acc.slice(-4) + d + n.replace(/\W/g, '') + Math.round(Math.abs(a) * 100), date: d, amount: a, acc, name: n, desc: 'OVERBOEKING ' + n, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); if (cat) OVR[t.id] = cat; return t; };
+    const paar = (naar, d, b, n) => { add(MAIN, d, -b, 'Naar ' + n); add(naar, d, b, n); };
+    SET.salVerdeling = Object.assign({}, SET.salVerdeling, { rek: { [MAIN]: 0, [BET]: 1750, [LEEF]: 1700 }, opzij: 1766 });
+    for (const x of (o.in || [])) { if (x.paar) paar(x.acc, x.d, x.b, x.n); else add(x.acc, x.d, x.b, x.n, 'intern'); }
+    if (o.main != null) SET.manualBal = Object.assign({}, SET.manualBal, { [MAIN]: o.main });
+    /* zoals bij de gebruiker: de salarisrekening is een doorgeefrekening, de uitgaven gaan van de Betaalrekening */
+    if (o.mainDoor) for (const t of TX) if (t.acc === MAIN && t.amount < 0 && catOf(t) !== 'intern' && !String(t.id).startsWith('v523ck')) t.acc = BET;
+    TX.sort((a, b) => a.date.localeCompare(b.date)); save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {} window._rekV = null; window._salTek = null;
+  }, Object.assign({ o }, A));
+  const ov = (page) => page.evaluate(() => { const L = overboekVerwacht(); const T = salTekortData();
+    return { L: L.map((o) => ({ naar: o.naar, bedrag: o.bedrag, binnen: o.binnen, nog: o.nog, gezien: o.gezien, laat: o.laat })), som: L.reduce((a, o) => a + (o.nog || 0), 0), krap: T.map((x) => x.acc), kaart: salKrapKaart() }; });
+
+  test('k: de stand van de gebruiker (Betaalrekening 1.500 van 1.750, Leefgeld 1.500 + 220 van 1.700, salarisrekening EUR 11): geen krap-melding', async ({ page }) => {
+    await S.boot(page, { dag: '2026-11-26' });
+    await zet(page, { main: 11, mainDoor: true, in: [
+      { acc: S.BET, d: '2026-11-25', b: 1500, n: 'Betaalrekening', paar: true },
+      { acc: S.LEEF, d: '2026-11-25', b: 1500, n: 'Income Sorter' },
+      { acc: S.LEEF, d: '2026-11-26', b: 220, n: 'From Main to Leefgeld' },
+      { acc: S.SPAAR, d: '2026-11-25', b: 1766, n: 'Spaarrekening', paar: true }] });
+    const r = await ov(page);
+    const bet = r.L.find((x) => x.naar === S.BET), leef = r.L.find((x) => x.naar === S.LEEF);
+    expect([bet.binnen, leef.binnen, leef.gezien]).toEqual([1500, 1720, true]);
+    expect(r.som).toBeLessThanOrEqual(11);
+    expect(r.krap).not.toContain(S.MAIN);
+    // geen regel in de melding dat de volle afspraak nog moet komen; wat er nog verwacht wordt is hoogstens het saldo van de salarisrekening
+    expect(r.kaart).not.toContain('verwacht: je overboeking van €1.750');
+    expect(r.kaart).not.toContain('je overboeking van €1.700');
+    expect(r.kaart).not.toContain('data-krapnietbinnen');
+    const ns = [...r.kaart.matchAll(/data-krapverwacht="(\d+)"/g)].map((m) => +m[1]);
+    expect(ns.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(11);
+  });
+
+  test('l: twee delen die samen de afspraak halen: niets meer verwacht', async ({ page }) => {
+    await S.boot(page, { dag: '2026-11-27' });
+    await zet(page, { in: [{ acc: S.LEEF, d: '2026-11-25', b: 1500, n: 'Income Sorter' }, { acc: S.LEEF, d: '2026-11-26', b: 220, n: 'From Main to Leefgeld' }] });
+    const r = await ov(page), leef = r.L.find((x) => x.naar === S.LEEF);
+    expect(await page.evaluate(() => accBalance(SET.salVerdeling.salAcc))).toBe(6000);   // ruim genoeg: de grens speelt hier geen rol
+    expect([leef.binnen, leef.nog, leef.gezien]).toEqual([1720, 0, true]);
+  });
+
+  test('m: salarisrekening EUR 11, afspraak nog helemaal open: samen hoogstens EUR 11 verwacht', async ({ page }) => {
+    await S.boot(page, { dag: '2026-11-26' });
+    await zet(page, { main: 11 });
+    const r = await ov(page);
+    expect(r.L.every((x) => x.binnen === 0)).toBe(true);
+    expect(r.som).toBeGreaterThan(0);
+    expect(r.som).toBeLessThanOrEqual(11);
+    // naar rato: Betaalrekening 1.750 / Leefgeld 1.700 / opzij 1.766 van 5.216
+    const bet = r.L.find((x) => x.naar === S.BET);
+    expect(Math.abs(bet.nog - 11 * 1750 / 5216)).toBeLessThan(0.02);
+  });
 });

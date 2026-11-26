@@ -5878,7 +5878,7 @@ function scoreNotifs(opts){
     push({key:'rekgeld', h:'direct', score:88, t:'warn', ic:ICON('bank'), rekgeld:true, l1:kop, l2:det, act:'openKrapPopup()'}); } }catch(_){}
   /* v523 (punt 2): een afgesproken overboeking die OVERBOEK_LAAT_DAGEN werkdagen na zijn verwachte dag nog niet gezien is: een melding, in dezelfde groep */
   try{ if(salTekortActief()) for(const o of overboekVerwacht()){ if(!o.laat) continue; const aq=String(o.naar).replace(/'/g,"\\'");
-    push({key:'overboek-laat-'+o.naar+'|'+o.sal, h:'direct', score:87, t:'warn', ic:ICON('bank'), rekgeld:true, l1:`${rekNaam(o.naar)}: je overboeking van ${euro0(o.bedrag)} is nog niet binnen`, l2:`verwacht ${dagKort(o.dag)} · Minder verplaatst niets`, act:`openTotSalaris('${aq}')`}); } }catch(_){}
+    push({key:'overboek-laat-'+o.naar+'|'+o.sal, h:'direct', score:87, t:'warn', ic:ICON('bank'), rekgeld:true, l1:`${rekNaam(o.naar)}: ${Math.round(o.nog)<o.bedrag?euro0(Math.round(o.nog))+' van je overboeking van '+euro0(o.bedrag):'je overboeking van '+euro0(o.bedrag)} is nog niet binnen`, l2:`verwacht ${dagKort(o.dag)} · Minder verplaatst niets`, act:`openTotSalaris('${aq}')`}); } }catch(_){}
   /* v504 (punt 3): een onbetaalde termijn (de woning, WONING_TOL_DAGEN na zijn betaaldatum niet geboekt) is EEN melding in dezelfde groep */
   try{ for(const x of vastOnbetaaldLijst()){ const kq=String(x.key).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     push({key:'onbetaald-'+x.key+'|'+x.datum, h:'direct', score:87, t:'warn', ic:ICON('bank'), rekgeld:true, onbetaald:true, l1:`${x.naam} van ${dagKort(x.datum)} nog niet gezien · ${euro0(x.bedrag)}`, l2:'al betaald? / nog niet / niet meer', act:`openOnbetaald('${kq}','${x.datum}')`}); } }catch(_){}
@@ -13704,7 +13704,7 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   /* v523 (punt 2): JE AFGESPROKEN OVERBOEKING TELT ALS VERWACHT tot hij gezien is (overboekVerwacht, alleen met een afspraak voor deze
      periode). Per rekening een bijschrijving op zijn telDag, en op de salarisrekening dezelfde bedragen als afschrijving. */
   const ovIn={}, ovUit={}; try{ if(salTekortActief(SP)) for(const o of overboekVerwacht()){ if(!o.telDag) continue;
-    const a=ovIn[o.naar]=ovIn[o.naar]||{}; a[o.telDag]=(a[o.telDag]||0)+o.bedrag; const u=ovUit[o.van]=ovUit[o.van]||{}; u[o.telDag]=(u[o.telDag]||0)+o.bedrag; } }catch(_){}
+    const a=ovIn[o.naar]=ovIn[o.naar]||{}; a[o.telDag]=(a[o.telDag]||0)+o.nog; const u=ovUit[o.van]=ovUit[o.van]||{}; u[o.telDag]=(u[o.telDag]||0)+o.nog; } }catch(_){}
   rvSpan('rv:potExp', _rvT); _rvT=performance.now();
   const rek=BR.map(acc=>{
     const vp=vast.filter(x=>x.acc===acc), vS=vp.reduce((a,x)=>a+x.bedrag,0);
@@ -14178,9 +14178,9 @@ function salAfspraakPeriode(){ const SV=SET.salVerdeling; if(!SV || !SV.rek) ret
    (SET.salVerdeling: rek per rekening, reserveringen, opzij) als verwacht op de eerstvolgende werkdag na de storting, of op de dag zelf als
    je dat per rekening kiest (SET.overboekDag[acc] = 'zelfde' | 'erna', standaard 'erna'). GEZIEN = een bijschrijving op die rekening
    vanaf de salarisstorting van minstens OVERBOEK_GEZIEN_DEEL van het bedrag, met dezelfde afschrijving op de salarisrekening binnen 3 dagen
-   (of op intern). Niet gezien en OVERBOEK_LAAT_DAGEN werkdagen (v523b) na de verwachte dag voorbij: dan telt hij niet meer en zegt de melding "je
+   (of op intern). SINDS v523c: de SOM van de bijschrijvingen telt (delen tellen op), met een grens op het saldo van de salarisrekening. Niet gezien en OVERBOEK_LAAT_DAGEN werkdagen (v523b) na de verwachte dag voorbij: dan telt hij niet meer en zegt de melding "je
    overboeking van EUR X is nog niet binnen". Minder verplaatst niets. */
-const OVERBOEK_GEZIEN_DEEL=0.9, OVERBOEK_LAAT_DAGEN=3;
+const OVERBOEK_LAAT_DAGEN=3;   // v523c: OVERBOEK_GEZIEN_DEEL (90% in EEN bijschrijving) is vervallen; zie overboekVerwacht
 /* v523b: EEN WERKDAG volgt de Algemene termijnenwet: geen zaterdag of zondag, en geen nieuwjaarsdag, tweede paasdag, hemelvaartsdag,
    tweede pinksterdag, eerste en tweede kerstdag, Koningsdag (27 april, op zondag 26 april) en 5 mei. Goede Vrijdag staat niet in die wet en
    telt dus als werkdag. Tot v523b telde OVERBOEK_LAAT_DAGEN kalenderdagen: een overboeking die je op donderdag verwachtte heette dan
@@ -14208,13 +14208,22 @@ function overboekVerwacht(){ const SV=SET.salVerdeling; if(!SV || !SV.rek) retur
   const doel=[]; for(const [a,v] of Object.entries(SV.rek)){ const b=Math.round(+v||0); if(a===van || !(b>0)) continue; doel.push({naar:a, bedrag:b, soort:'rekening'}); }
   const res=Math.round(+SV.reserveringen||0), resAcc=SV.resAcc||resAccId(); if(res>0 && resAcc && resAcc!==van) doel.push({naar:resAcc, bedrag:res, soort:'reserveringen'});
   const opz=Math.round(+SV.opzij||0); if(opz>0){ let sp=null; try{ sp=n26SavingsAccounts().find(a=>a!==resAcc && a!==van)||null; }catch(_){} if(sp) doel.push({naar:sp, bedrag:opz, soort:'opzij'}); }
-  const salTx=TX.filter(t=>t.acc===van && !t.pending && t.amount<0 && String(t.date).slice(0,10)>=rekDag(sal,-3));
-  return doel.map(o=>{ const dag=overboekDagKeuze(o.naar)==='zelfde'?sal:werkdagNa(sal);
-    const gezien=TX.some(t=>{ if(t.acc!==o.naar || t.pending || !(t.amount>=o.bedrag*OVERBOEK_GEZIEN_DEEL)) return false; const d=String(t.date).slice(0,10); if(d<sal || d>vandaag) return false;
-      const c=Math.round(t.amount*100); return salTx.some(u=>Math.round(-u.amount*100)===c && Math.abs(salDagenTussen(String(u.date).slice(0,10), d))<=3) || catOf(t)==='intern'; });
+  /* v523c (aanvulling): NOG VERWACHT PER REKENING = afspraak min de SOM van alle bijschrijvingen van eigen rekeningen sinds de salarisstorting
+     (een overboeking in delen telt op). Een bijschrijving telt als hij intern is of als er op een andere eigen rekening binnen 3 dagen dezelfde
+     afschrijving staat. Daarna samen nooit meer dan het saldo van de salarisrekening min de afgesproken rest (SV.rek[van]); is dat kleiner,
+     dan naar rato van wat er per rekening nog verwacht werd. Een lege salarisrekening verwacht niets meer. Tot hier vroeg Minder EEN
+     bijschrijving van OVERBOEK_GEZIEN_DEEL (90%) van de afspraak, en een overboeking van 86% of in twee delen bleef "nog niet gezien". */
+  const eigenUit=TX.filter(t=>!t.pending && t.amount<0 && String(t.date).slice(0,10)>=rekDag(sal,-3));
+  const L=doel.map(o=>{ let binnen=0; for(const t of TX){ if(t.acc!==o.naar || t.pending || !(t.amount>0)) continue; const d=String(t.date).slice(0,10); if(d<sal || d>vandaag) continue;
+      const c=Math.round(t.amount*100); if(catOf(t)==='intern' || eigenUit.some(u=>u.acc!==o.naar && Math.round(-u.amount*100)===c && Math.abs(salDagenTussen(String(u.date).slice(0,10), d))<=3)) binnen+=t.amount; }
+    return {o, binnen:Math.round(binnen*100)/100, nog:Math.max(0, o.bedrag-binnen)}; });
+  const som=L.reduce((a,x)=>a+x.nog,0), sv=accBalance(van);
+  if(sv!=null && som>0){ const ruimte=Math.max(0, sv-Math.max(0, +SV.rek[van]||0)); if(ruimte<som){ const f=ruimte/som; for(const x of L) x.nog=Math.round(x.nog*f*100)/100; } }
+  return L.map(({o, binnen, nog})=>{ const dag=overboekDagKeuze(o.naar)==='zelfde'?sal:werkdagNa(sal);
+    const gezien=!(nog>=0.5);
     const laat=!gezien && vandaag>=overboekLaatVanaf(dag);
     const telDag=(gezien || laat)?null:(dag>vandaag?dag:rekDag(vandaag,1));
-    return Object.assign({van, dag, sal, gezien, laat, telDag}, o); }); }
+    return Object.assign({van, dag, sal, gezien, laat, telDag, binnen, nog:gezien?0:nog}, o); }); }
 /* v523 (punt 3): DE AFSCHRIJVING DIE HET TEKORT MAAKT. Dezelfde dagen en bedragen als salProjectie (r.uitDagDelen), binnen een dag eerst
    wat er binnenkomt (je overboeking), dan de vaste lasten op hun datum, de inleg en de potjes met contant; de post waarop het saldo onder
    nul gaat. Tot v523 noemde de melding de duurste vaste termijn van de hele periode ("grootste post"), en die las alsof hij op de dag van
@@ -14260,8 +14269,9 @@ function salTekortData(){ const s=rekVoorstelSleutel(); if(window._salTek && win
 /* v523: de afgesproken overboeking naar een rekening (alleen met een afspraak voor deze periode), voor de regels in de krap-melding */
 function salOverboekVan(acc){ try{ if(!salTekortActief()) return null; return overboekVerwacht().find(o=>o.naar===acc)||null; }catch(_){ return null; } }
 function salOverboekRegel(o){ if(!o || o.gezien) return '';
-  if(o.laat) return `<span class="muted" data-krapnietbinnen="${o.bedrag}" style="display:block;color:var(--amber)">je overboeking van ${euro0(o.bedrag)} is nog niet binnen (verwacht ${esc(dagKort(o.dag))})</span>`;
-  return `<span class="muted" data-krapverwacht="${o.bedrag}" style="display:block">verwacht: je overboeking van ${euro0(o.bedrag)} (nog niet gezien) · ${esc(dagKort(o.telDag||o.dag))}</span>`; }
+  const n=Math.round(o.nog), wat=n<o.bedrag?`${euro0(n)} van je overboeking van ${euro0(o.bedrag)}`:`je overboeking van ${euro0(o.bedrag)}`;   // v523c: wat er nog komt, delen tellen op
+  if(o.laat) return `<span class="muted" data-krapnietbinnen="${n}" style="display:block;color:var(--amber)">${wat} is nog niet binnen (verwacht ${esc(dagKort(o.dag))})</span>`;
+  return `<span class="muted" data-krapverwacht="${n}" style="display:block">verwacht: ${wat} (nog niet gezien) · ${esc(dagKort(o.telDag||o.dag))}</span>`; }
 function salTekortDataKern(){ const SP=salPeriode(); if(!SP || SP.stil || SP.laat) return []; const vandaag=vandaagYMD(), eind=SP.cur.eind; if(vandaag>=eind) return [];
   if(!salTekortActief(SP)) return [];
   const P=rekVoorstel(); if(!P || !P.ok) return []; const SV=SET.salVerdeling||{}, out=[];
@@ -14408,9 +14418,9 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
       <div class="row" data-totpot data-totpotcent="${Math.round((D.potExact||0)*100)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPot=!window._totsalPot;renderTotSalaris()"><span class="small" style="flex:1;color:var(--teal)">Potjes via deze rekening${D.venster?` <span data-totvenster="${esc(D.venster.van)}|${esc(D.venster.tot)}" style="color:var(--mut2)">· ${esc(dagKort(D.venster.van))} – ${esc(dagKort(D.venster.tot))}</span>`:''} ${potOpen?'‹':'›'}</span><span class="small" style="white-space:nowrap">−${e(D.pot)}</span></div>${potLijst}
       ${rij('Contant', `−${e(D.kas)}`, 'data-totkas')}
       ${D.belExact>0.005?rij('Beleggen (je inleg op zijn dag)', `−${e(D.bel)}`, `data-totbel="${Math.round(D.belExact*100)}"`):''}
-      ${D.overExact<-0.005?rij(`verwacht: je overboeking van ${e(-D.over)} (nog niet gezien)`, `+${e(-D.over)}`, `data-totoverboek="${Math.round(-D.overExact*100)}"`):''}
+      ${D.overExact<-0.005?rij(`verwacht: ${D.overboek && Math.round(D.overboek.nog)<D.overboek.bedrag?e(-D.over)+' van je overboeking van '+e(D.overboek.bedrag):'je overboeking van '+e(-D.over)} (nog niet gezien)`, `+${e(-D.over)}`, `data-totoverboek="${Math.round(-D.overExact*100)}"`):''}
       ${D.overExact>0.005?rij('je afgesproken overboekingen naar andere rekeningen (nog niet gezien)', `−${e(D.over)}`, `data-totoverboekuit="${Math.round(D.overExact*100)}"`):''}
-      ${D.overboek && D.overboek.laat?`<div class="small" data-totnietbinnen style="color:var(--amber);padding:2px 0">je overboeking van ${e(D.overboek.bedrag)} is nog niet binnen (verwacht ${esc(dagKort(D.overboek.dag))}) · telt niet mee</div>`:''}
+      ${D.overboek && D.overboek.laat?`<div class="small" data-totnietbinnen style="color:var(--amber);padding:2px 0">${Math.round(D.overboek.nog)<D.overboek.bedrag?e(Math.round(D.overboek.nog))+' van je overboeking van '+e(D.overboek.bedrag):'je overboeking van '+e(D.overboek.bedrag)} is nog niet binnen (verwacht ${esc(dagKort(D.overboek.dag))}) · telt niet mee</div>`:''}
       ${D.overboek && !D.overboek.gezien?(()=>{ const k=overboekDagKeuze(acc), aq=esc(acc).replace(/'/g,"\\'"), ch=(v,l)=>`<span class="chip${k===v?' on':''}" data-overboekdag="${v}" style="cursor:pointer" onclick="overboekDagZet('${aq}','${v}')">${l}</span>`;
         return `<div class="small" data-overboekdagkeuze style="padding:2px 0;color:var(--mut2)">Je overboeking komt <span class="chips" style="display:inline-flex;gap:4px;margin:0">${ch('zelfde','zelfde dag als je salaris')}${ch('erna','dag erna')}</span></div>`; })():''}
       <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:3px">${rij('<b>Stand dag voor je salaris</b>', `<b style="${D.eind<0?'color:var(--red)':''}">${e(D.eind)}</b>`, 'data-toteind')}</div>
