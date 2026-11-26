@@ -40,18 +40,23 @@ test.describe('a · de stand van het toestel na de drie keuzes', () => {
 
   test('nog te gaan is EUR 16.262: doel min verwachte stand, en niet doel min toewijzing', async ({ page }) => {
     await page.evaluate(() => go('vooruit'));
-    const r = await page.evaluate(() => { const P = allocatePlan(); return { se: planStandEind(P).nogTeGaan, tot: +document.getElementById('planKpi').dataset.nogtegaan,
+    // v524: de kop #planKpi (data-nogtegaan) wordt niet meer getoond; het getal erachter blijft de bron (planStandEind / planKpiData)
+    const r = await page.evaluate(() => { const P = allocatePlan(); return { se: planStandEind(P).nogTeGaan, kpi: planKpiData(P).nogTeGaan, kopWeg: !document.getElementById('planKpi'),
       toe: P.filter((p) => p.type !== 'aflossen').reduce((a, p) => a + Math.max(p.doel - p.gespaard - p.alloc, 0), 0) }; });
-    expect(r.se).toBe(16262); expect(r.tot).toBe(16262);
+    expect(r.se).toBe(16262); expect(r.kpi).toBe(16262); expect(r.kopWeg).toBe(true);
     expect(r.toe).not.toBe(16262);
   });
 
-  test('de rij zegt bijna vol, met wat er deze maand bijkomt en wat later nog terugkomt (v385)', async ({ page }) => {
+  test('de rij zegt bijna vol; het increment staat als attribuut en niet meer in de sub (v385 → v524 punt 1)', async ({ page }) => {
     await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => { const e = document.querySelector('.plan-item[data-id="noodfonds"]'); const b = e && e.querySelector('[data-rijsub]');
-      return { st: e && e.dataset.status, sub: b ? b.innerText.replace(/\s+/g, ' ').trim() : '' }; });
+      return { st: e && e.dataset.status, sub: b ? b.innerText.replace(/\s+/g, ' ').trim() : '', dezeMaand: b ? +b.dataset.rijdezemaand : null,
+        later: planStandEind(allocatePlan()).per.noodfonds.nogLater }; });
     expect(r.st).toBe('bijnavol');
-    expect(r.sub).toBe('+€1.050 deze maand · €100 later');
+    // v524 (punt 1): "+EUR X deze maand · EUR Y later" staat NIET meer in de sub; het bedrag (inleg+terug) staat als attribuut
+    expect(r.sub).not.toMatch(/deze maand/); expect(r.sub).not.toContain('later');
+    expect(r.dezeMaand).toBe(1050);   // 362 inleg + 688 terug, het getal dat de sub toonde
+    expect(r.later).toBe(100);        // het "later"-deel blijft gemeten in planStandEind
   });
 
   test('geen ongedekt verschil meer, dus geen melding', async ({ page }) => {

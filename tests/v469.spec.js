@@ -44,7 +44,7 @@ test.describe('1 · spaarrekening tegen Plan', () => {
       const doelen = [...sh.querySelectorAll('[data-spaardoel]')].reduce((a, e) => a + +e.dataset.geld, 0);
       const rek = [...sh.querySelectorAll('[data-spaarrek],[data-spaarextra]')].reduce((a, e) => a + num(e), 0);
       return { t, x: +sh.dataset.x, som: +sh.dataset.som, delen: Math.round(delen * 100) / 100, doelen, rek: Math.round(rek * 100) / 100, saldo: num(sh.querySelector('[data-spaarsaldo]')),
-        kop: +document.querySelector('#planKpi').dataset.kpigeld, noot: (sh.querySelector('[data-spaarnoot]') || {}).innerText || '' }; });
+        kop: planKpiData().geld, noot: (sh.querySelector('[data-spaarnoot]') || {}).innerText || '' }; });   // v524: de kop #planKpi is weg; "Gespaard voor je doelen" is planKpiData().geld (dezelfde bron)
     expect(r).not.toBeNull();
     expect(r.t).toContain('nog terug €349,80');
     expect(r.delen).toBe(r.som);                                // v472: de delen van het verschil (nog terug + niet toegewezen) zijn de regel
@@ -105,13 +105,15 @@ test.describe('2 · vol pas als het geld het doel haalt', () => {
 });
 
 test.describe('3 · opzij deze periode zegt "volgens je verdeling"', () => {
-  test('a. geen "doel" en geen percentage in de tegel', async ({ page }) => {
+  // v524: de opzij-tegel is met de kop vervallen (opzij verhuisde naar blok 2); "volgens je verdeling €1.766" staat niet
+  // meer op Plan maar op Grip/Zien. Hier blijft de eigenschap: het getal erachter (opzijPeriode().doel = je verdeling, pct
+  // berekenbaar) klopt nog, en de tegel is weg van Plan.
+  test('a. de opzij-tegel is weg van Plan; het getal erachter (doel = je verdeling) klopt nog', async ({ page }) => {
     await F.boot(page, 'nu');
-    const t = await page.evaluate(() => { SET.salVerdeling = Object.assign({}, SET.salVerdeling || {}, { opzij: 1766, rek: (SET.salVerdeling || {}).rek || {} }); save(); renderVooruit();
-      const O = opzijPeriode(); return { tile: document.querySelector('[data-kpiopzijperiode]').innerText, netto: O.netto, pct: O.pct }; });
-    expect(t.pct).not.toBeNull();                               // er IS een percentage uit te rekenen; de tegel toont het niet
-    expect(t.tile).toContain('volgens je verdeling €1.766');
-    expect(t.tile).not.toMatch(/%/);
-    expect(t.tile).not.toMatch(/doel/);
+    const t = await page.evaluate(() => { SET.salVerdeling = Object.assign({}, SET.salVerdeling || {}, { opzij: 1766, rek: (SET.salVerdeling || {}).rek || {} }); save(); render();
+      const O = opzijPeriode(); return { tegelWeg: !document.querySelector('#s-vooruit [data-kpiopzijperiode]'), doel: O.doel, netto: O.netto, pct: O.pct }; });
+    expect(t.tegelWeg).toBe(true);                              // de tegel is weg van Plan
+    expect(t.doel).toBe(1766);                                 // "volgens je verdeling" = je verdeling, nog altijd de bron
+    expect(t.pct).not.toBeNull();                              // er is nog steeds een percentage uit te rekenen (het scherm toont het niet)
   });
 });

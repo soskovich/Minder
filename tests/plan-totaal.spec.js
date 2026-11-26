@@ -15,7 +15,11 @@
 // v380: PLAN IS EEN DASHBOARD. planTotaal(), planKlaarMaand() en de regel onder de waterval zijn vervallen; wat ze droegen
 // staat in de kop (planKpi(), planKpiData()): het geld tegen de doelen, en "Alles vol" uit dezelfde projectie als de rijen.
 // "Nog te gaan" rekent sinds v380 vanaf de verwachte stand eind deze maand (planStandEind(), keuze D) en staat als
-// data-nogtegaan op de kop. Deze spec houdt dezelfde eigenschappen vast op dezelfde fixture.
+// data-nogtegaan op de kop.
+// v524 (blok 1): de kop #planKpi wordt NIET MEER gerenderd. planKpiData() blijft de bron (de data-tests hieronder zijn
+// ongemoeid). "Alles vol" verhuist naar de laag Doelen (lagenDoelenVolFlag: data-doelenvol / data-kpivol /
+// data-kpischemamnd, tekst "alles vol <datum>"); de lagen-hero ("Je geld in lagen · samen €X", #planLagenHero) staat boven
+// de doelenlijst. Voor elk gemigreerd DOM-geval: het concept is weg van de kop ÉN het getal erachter (planKpiData) klopt nog.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
 const { withOpzij } = require('./opzij-inject');
@@ -58,7 +62,10 @@ async function boot(page, o) {
   await page.waitForFunction(() => typeof planKpiData === 'function');
 }
 const T = (page) => page.evaluate(() => planKpiData());
-const kop = (page) => page.evaluate(() => { go('vooruit'); const e = document.getElementById('planKpi'); return e ? e.innerText.replace(/\s+/g, ' ').trim() : ''; });
+// v524: de oude kop #planKpi bestaat niet meer; "Alles vol" staat op de laag Doelen (data-kpivol, tekst "alles vol <vol>").
+const volTekst = (page) => page.evaluate(() => { go('vooruit'); const e = document.querySelector('#planLagenKaart [data-kpivol]'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : '(geen)'; });
+const kopWeg = (page) => page.evaluate(() => { go('vooruit'); return !document.getElementById('planKpi'); });
+const vooruitTekst = (page) => page.evaluate(() => { go('vooruit'); return document.getElementById('s-vooruit').innerText; });
 
 test.describe('a - de optelling telt op', () => {
   test('geld tegen de doelen, en nog te gaan vanaf de verwachte stand', async ({ page }) => {
@@ -81,7 +88,10 @@ test.describe('a - de optelling telt op', () => {
 
   test('het noodfonds telt mee', async ({ page }) => {
     await boot(page);
-    expect(await kop(page)).toContain('€2.500 van €21.334');
+    // v524: de kop "€2.500 van €21.334" is weg; het getal erachter (planKpiData, incl. noodfonds) klopt nog
+    expect(await kopWeg(page)).toBe(true);
+    const t = await T(page);
+    expect(t.geld).toBe(2500); expect(t.doel).toBe(21334);   // 5.334 noodfonds + 16.000 doel
   });
 
   test('een aflos-item telt niet mee: schuld is een andere vraag', async ({ page }) => {
@@ -108,7 +118,9 @@ test.describe('b - alles vol komt uit de projectie', () => {
     expect(r.K.allesVol).toBe(19);
     expect(r.K.allesVol).toBe(Math.max(...Object.values(r.vol)));   // de LAATSTE en niet de eerste
     expect(r.vol.noodfonds).toBe(3);
-    expect(await kop(page)).toContain(`Alles vol ${r.lbl}`);
+    // v524: "Alles vol" staat nu op de laag Doelen, tekst "alles vol <datum>", met data-doelenvol = allesVol
+    expect(await volTekst(page)).toContain(`alles vol ${r.lbl}`);
+    expect(await page.evaluate(() => +document.querySelector('#planLagenKaart [data-doelenvol]')?.dataset.doelenvol)).toBe(19);
   });
 
   test('met een aflos-item loopt de projectie uiteen met de vlakke deling', async ({ page }) => {
@@ -126,7 +138,8 @@ test.describe('b - alles vol komt uit de projectie', () => {
   test('zonder capaciteit staat er geen maand in plaats van een verzonnen tempo', async ({ page }) => {
     await boot(page, { set: { savingMode: 'amount', savingAmount: 0, salVerdeling: { rek: { 'NL01MAIN0000001111': 1 }, opzij: 0 } } });   // v440: gekozen opzij 0 -> geen capaciteit
     expect((await T(page)).allesVol).toBe(null);
-    expect(await kop(page)).toContain('Alles vol nog niet te zeggen');
+    expect((await volTekst(page)).toLowerCase()).toContain('alles vol nog niet te zeggen');
+    expect(await page.evaluate(() => document.querySelector('#planLagenKaart [data-doelenvol]')?.dataset.doelenvol)).toBe('');   // null → geen getal
   });
 });
 
@@ -165,30 +178,31 @@ test.describe('d - de randen', () => {
       set: { nfDoelVast: 2000, nfToegewezen: 2000, manualBal: { [MAIN]: 3000, [SPAAR]: 3000 } } });
     const t = await T(page);
     expect(t.nogTeGaan).toBe(0); expect(t.allesVol).toBe(null); expect(t.loopt).toBe(0);
-    const r = (await kop(page)).toLowerCase();
-    expect(r).toContain('alles is vol');
-    for (const w of ['goed bezig', 'gefeliciteerd', 'knap', 'mooi']) expect(r).not.toContain(w);
+    expect((await volTekst(page)).toLowerCase()).toContain('alles is vol');
+    const r = (await vooruitTekst(page)).toLowerCase();
+    for (const w of ['goed bezig', 'gefeliciteerd', 'knap', 'mooi']) expect(r, w).not.toContain(w);
   });
 });
 
 test.describe('e - een constatering, geen oordeel', () => {
   test('geen alarmkleur en geen advies in de kop', async ({ page }) => {
     await boot(page);
-    const h = await page.evaluate(() => { go('vooruit'); return document.getElementById('planKpi').outerHTML; });
-    expect(h).not.toContain('--amber'); expect(h).not.toContain('--red');
-    const r = (await kop(page)).toLowerCase();
+    // v524: de lagen-hero/kaart dragen laag-IDENTITEITSkleuren (amber = Reserveren, geen status: "paletten zijn identiteit,
+    // geen status"), dus een --amber/--red-check hoort hier niet. De constatering-eis leeft in de advies-woorden hieronder.
+    const r = (await vooruitTekst(page)).toLowerCase();
     for (const w of ['zet meer', 'verhoog', 'probeer', 'zou je', 'tip', 'advies', 'lukt het']) expect(r, w).not.toContain(w);
   });
 });
 
 test.describe('f - plaatsing en veilig-te-besteden', () => {
-  test('de kop staat boven de doelenlijst, en Plan draagt geen reserveringen', async ({ page }) => {
+  test('de lagen-hero staat boven de doelenlijst, en Plan draagt geen reserveringen', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit').innerText();
-    expect(t.indexOf('GESPAARD VOOR JE DOELEN') >= 0 || t.indexOf('Gespaard voor je doelen') >= 0).toBe(true);
-    expect(t.indexOf('Kosten Koper')).toBeGreaterThan(Math.max(t.indexOf('Gespaard voor je doelen'), t.indexOf('GESPAARD VOOR JE DOELEN')));
-    expect(t).not.toContain('Reserveringen');   // v344
+    // v524: de kop is de lagen-hero "Je geld in lagen" (text-transform:uppercase, dus case-ongevoelig lezen); die staat boven de doelenlijst
+    const t = (await page.locator('#s-vooruit').innerText()).toLowerCase();
+    expect(t.indexOf('je geld in lagen')).toBeGreaterThanOrEqual(0);
+    expect(t.indexOf('kosten koper')).toBeGreaterThan(t.indexOf('je geld in lagen'));
+    expect(t).not.toContain('reserveringen');   // v344
   });
 
   test('KRITIEK: veilig te besteden is niet geraakt door het doelbedrag', async ({ page }) => {

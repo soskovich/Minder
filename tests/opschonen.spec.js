@@ -211,7 +211,9 @@ test.describe('d · Inzichten', () => {
    in de kop van Plan, het terugzetdeel als chip in die kop ([data-kpiterug]), de gekozen stand gemarkeerd in "verdeling ⚙"
    (openPlanInstel()), en wat er per bron terug gaat in planStandEind().per[id].tb (de rij arceert terug en inleg samen). */
 const kop = (page) => page.evaluate(() => { go('vooruit'); const SE = planStandEind();
-  const r = { bedrag: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
+  // v524: de kop #planKpi (tegels "Deze maand opzij"/"Opzij deze periode" + terug-chip) is vervallen; opzij verhuisde naar
+  // blok 2. Het bedrag blijft de functie planToeMaand().teVerdelen (dat is wat de tegel toonde); kpiterug is daarmee null.
+  const r = { bedrag: planToeMaand().teVerdelen, opzij: planToeMaand().teVerdelen,
     kpiterug: (document.querySelector('#planKpi [data-kpiterug]') || { dataset: {} }).dataset.kpiterug || null,
     kaart: !!document.getElementById('terugzetKaart'), kopWeg: !document.getElementById('planKopBedrag'),
     save: safeToSpend().saveReserved, nf: SET.nfToegewezen,

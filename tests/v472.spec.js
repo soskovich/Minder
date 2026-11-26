@@ -127,8 +127,11 @@ async function opzijStand(page, o) {
   await page.waitForFunction(() => typeof opzijHerleiding === 'function' && typeof TX !== 'undefined' && TX.length > 0);
   await page.evaluate(() => { SET.goals = [{ id: 'g1', naam: 'Doel', doel: 5000, gespaard: 0, streefdatum: '2027-12' }]; save(); go('vooruit'); });
 }
-const tegel = (page) => page.evaluate(() => { const t = document.querySelector('[data-kpiopzijperiode]'); return t ? { netto: +t.dataset.kpiopzij, exact: +t.dataset.kpiopzijexact, txt: t.innerText, onv: !!t.querySelector('[data-kpionvolledig]') } : null; });
-const sheet = (page) => page.evaluate(() => { document.querySelector('[data-kpiopzijperiode]').click(); const sh = document.querySelector('#opzijSheet');
+// v524: de opzij-tegel (#planKpi [data-kpiopzijperiode]) is met de kop vervallen; opzij verhuisde naar blok 2. De bron
+// (opzijPeriode netto/exact, opzijHerleiding onvolledig) en de sheet (openOpzijHerleiding → #opzijSheet) zijn ongewijzigd.
+const tegel = (page) => page.evaluate(() => { const O = opzijPeriode(); if (!O || !O.ok) return null; const H = opzijHerleiding(O);
+  return { netto: O.netto, exact: O.nettoExact, onv: !!(H && H.onvolledig && H.onvolledig.length) }; });
+const sheet = (page) => page.evaluate(() => { openOpzijHerleiding(); const sh = document.querySelector('#opzijSheet');
   const rijen = [...sh.querySelectorAll('[data-opzijrij]')].map((e) => Math.round(+e.dataset.bedrag * 100));
   return { som: +sh.dataset.som, rijenC: rijen.reduce((a, b) => a + b, 0), n: rijen.length, gaten: [...sh.querySelectorAll('[data-opzijgat]')].map((e) => ({ v: +e.dataset.opzijgat, t: e.innerText })),
     begin: [...sh.querySelectorAll('[data-opzijbegin]')].map((e) => e.dataset.opzijbegin), onv: [...sh.querySelectorAll('[data-opzijonvolledig]')].map((e) => e.innerText), titel: sh.innerText.split('\n')[0] }; });
@@ -171,8 +174,7 @@ test.describe('3 · opzij deze periode herleidbaar', () => {
     expect((await tegel(page)).onv).toBe(false);
     await opzijStand(page, { txFout: true });
     const t = await tegel(page);
-    expect(t.onv).toBe(true);
-    expect(t.txt).toContain('onvolledig');
+    expect(t.onv).toBe(true);   // v524: de "onvolledig"-tekst stond op de tegel (nu weg); het getal erachter (opzijHerleiding.onvolledig) klopt, en de sheet toont welke rekening
     const s = await sheet(page);
     expect(s.onv.length).toBe(1);
     expect(s.onv[0]).toContain('19-10 21:05');

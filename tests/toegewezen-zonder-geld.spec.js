@@ -11,9 +11,10 @@ const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.
      blijft als signaal op Grip: toewijzingBovenSaldo() is de bron, en die draagt nog steeds spaarOver().zonder. */
   const O = spaarOver(); return { regel: r ? +r.dataset.spaarplannog : 0, tb: toewijzingBovenSaldo(), zonder: O.zonder, dekt: O.dekt, over: O.over,
     nf: SET.nfToegewezen, gat: (SET.terugzetGat || []).length,
-    /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen)
-       en als tegel "Deze maand opzij" in de kop van Plan ([data-kpiopzij]) */
-    kop: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
+    /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen).
+       v524: de tegel "Opzij deze periode" (#planKpi [data-kpiopzij]) is met de hele kop vervallen; opzij verhuisde naar
+       blok 2 (gestort). Geen enkele test hier leest dat veld, dus het is uit de helper gehaald; het bedrag blijft als functie. */
+    kop: planToeMaand().teVerdelen,
     kopWeg: !document.getElementById('planKopBedrag'),
     /* v472: de ene Plan-regel (#spaarPlanRegel) draagt nog terug uit planTerug(): wat er toegewezen staat en niet op je spaarrekening */
     terug: planTerug().totaal, verwacht: (() => { const R = planTerug(); return R.totaal >= 0.5 ? R.totaal : 0; })() }; });
