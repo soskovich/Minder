@@ -47,6 +47,25 @@ test('blok 1 rendert op de back-up (zonder keuzes)', async ({ page }) => {
   expect(Math.round(+b2.meer)).toBe(870);
   expect(Math.round(+b2.waarom)).toBe(870);       // test c: sluit tot op de euro
   expect(b2.extraNaar).toBe('beschermen');        // test l: surplus naar Beschermen zolang het noodfonds onder de norm staat
+  // v524 stop 2, punten 2-5 op de back-up (dag-robuust)
+  const p = await page.evaluate(() => ({
+    kop: (document.querySelector('[data-gestortkop]') || {}).textContent || '',
+    noot: (document.querySelector('[data-gestortopzijnoot]') || {}).textContent || '',
+    surplus: (document.querySelector('[data-waaromrij="surplus"]') || {}).textContent || '',
+    salrek: (document.querySelector('[data-waaromrij="salrek"]') || {}).textContent || '',
+    salsplitlink: !!document.querySelector('[data-salsplitlink]'),
+    periode: (document.getElementById('planGestort') || { dataset: {} }).dataset.gestortperiode,
+    venster: (document.getElementById('planGestort') || { dataset: {} }).dataset.gestortvenster,
+    dezeMaand: /deze maand/.test(document.getElementById('s-vooruit').innerText),
+  }));
+  expect(p.periode).toBe('2026-11-24|2026-12-23');            // punt 2: de kop toont de salarisperiode (de regel), niet het opzij-venster
+  expect(p.venster).toBe('2026-11-25|2026-12-23');            // gestort meet over het opzij-venster (vanaf de salarisdag)
+  expect(p.kop).toContain('24 nov – 23 dec');
+  expect(p.noot).toContain('gestort vanaf je salaris op 25 nov');
+  expect(p.surplus).toContain('nog niet gesplitst');         // punt 5: op de back-up is de splitsing nog niet gedaan
+  expect(p.salsplitlink).toBe(true);
+  expect(p.salrek).toContain('Salarisrekening hield');       // punt 4
+  expect(p.dezeMaand).toBe(false);                           // punt 1: geen "deze maand" op Plan
 });
 
 test('scenario e2: bron Noodfonds, Inrichting op 3000 (eind-standen in de data gebakken)', async ({ page }) => {

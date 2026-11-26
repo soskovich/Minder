@@ -18661,14 +18661,21 @@ const LAAG_KLEUR={beschermen:'var(--teal)', reserveren:'var(--amber)', doelen:'v
 const LAAG_NAAM={beschermen:'Beschermen', reserveren:'Reserveren', doelen:'Doelen', groeien:'Groeien'};
 /* De salarisperiode waarover blok 1 (gestort op de reserveringsrekening) en blok 2 rekenen: het opzij-venster van de
    lopende salarisperiode (opzijVenster, v523c: vanaf de dag van een vroeg salaris), met terugval op SET.salVerdeling. */
+/* v524 (punt 2): twee vensters. De KOP toont de salarisperiode (perStart–perEind, "24 nov – 23 dec · dag 3 van 30"), zoals elders.
+   GESTORT meet over het OPZIJ-VENSTER (opzijVenster, dat vanaf de salarisdag telt): start/eind. Ligt de salarisdag na de start van
+   de periode (salNa), dan zegt de kop in kleine tekst "gestort vanaf je salaris op <salDag>". */
 function lagenPeriode(){
-  let s=null, e=null, ym=null;
+  let s=null, e=null, ym=null, perS=null, perE=null;
   try{ const SP=salPeriode(); if(SP && SP.cur){ const OV=opzijVenster({soort:'periode', ym:SP.cur.ym, start:SP.cur.start, eind:SP.cur.eind}); s=OV.start; e=OV.eind; ym=SP.cur.ym; } }catch(_){}
+  try{ const PV=periodeVan(vandaagYMD()); if(PV && PV.soort==='periode'){ perS=String(PV.start); perE=String(PV.eind); if(!ym) ym=PV.ym; } }catch(_){}   // de salarisperiode voor de kop (de regel), zoals elders
   const SV=SET.salVerdeling;
   if(!s && SV && SV.start){ s=String(SV.start); e=String(SV.eind||rekDag(SV.start,29)); ym=s.slice(0,7); }
   if(!s) return null;
-  let dag=0, dagen=0; try{ dagen=salDagenTussen(s,e)+1; const vd=vandaagYMD(); dag=Math.min(Math.max(salDagenTussen(s,(vd<e?vd:e))+1,1),dagen); }catch(_){}
-  return {start:s, eind:e, ym, label:(function(){ try{ return periodeLabel(s,e); }catch(_){ return ''; } })(), dag, dagen};
+  if(!perS){ perS=s; perE=e; }
+  let dag=0, dagen=0; try{ dagen=salDagenTussen(perS,perE)+1; const vd=vandaagYMD(); dag=Math.min(Math.max(salDagenTussen(perS,(vd<perE?vd:perE))+1,1),dagen); }catch(_){}
+  const salNa=!!(perS && s && s>perS);
+  return {start:s, eind:e, ym, perStart:perS, perEind:perE, salDag:s, salNa,
+    label:(function(){ try{ return periodeLabel(perS,perE); }catch(_){ return ''; } })(), dag, dagen};
 }
 /* wat er in de periode op een rekening is bijgeschreven (bruto, de stortingen); voor "gestort" per laag. */
 function lagenGestortOp(acc, PW){ if(!acc || !PW) return 0; let c=0;
@@ -18803,14 +18810,20 @@ function lagenGestort(){
    betaalrekening het verschil tussen verdeling en werkelijke storting (>= EUR 10), en een sluitregel voor de rest. */
 function lagenWaaromRijen(G){
   const PW=G.PW, SV=G.SV||{}, rek=SV.rek||{}, salAcc=SV.salAcc||'';
-  const rijen=[]; if(G.surplus>0.5) rijen.push({lab:`Salaris boven je vaste ${euro0(G.vast)}`, sub:`vergoedingen ${euro0(G.extra.verg)} · eenmalig ${euro0(G.extra.eenmalig)}`, v:G.surplus, surplus:true});
+  const rijen=[];
+  /* punt 5: de surplus-regel. Nog niet gesplitst → "nog niet gesplitst ›" (tik naar salSplitVraagSheet); gesplitst → "vergoedingen X · eenmalig Y". */
+  if(G.surplus>0.5){ const niet=!(G.stort && G.stort.beantwoord), idq=G.stort?esc(G.stort.id).replace(/'/g,"\\'"):'';
+    rijen.push({lab:`${euro0(G.surplus)} boven je vaste salaris`, sub:niet?'nog niet gesplitst':`vergoedingen ${euro0(G.extra.verg)} · eenmalig ${euro0(G.extra.eenmalig)}`,
+      klik:(niet&&idq)?`salSplitVraagSheet('${idq}')`:'', v:G.surplus, surplus:true}); }
   let verklaard=G.surplus;
   for(const acc of Object.keys(rek)){ if(acc===salAcc) continue; const plan=Math.round(+rek[acc]||0), act=Math.round(lagenGestortOp(acc, PW)), d=plan-act;
-    if(Math.abs(d)>=10){ let nm=acc; try{ nm=accLabel(acc)||acc; }catch(_){} rijen.push({lab:`${esc(nm)} kreeg ${euro0(act)} in plaats van ${euro0(plan)}`, v:d}); verklaard+=d; } }
+    if(Math.abs(d)>=10){ let nm=acc; try{ nm=rekNaam(acc)||acc; }catch(_){} rijen.push({lab:`${esc(nm)} kreeg ${euro0(act)} in plaats van ${euro0(plan)}`, v:d}); verklaard+=d; } }   // punt 3: de vriendelijke rekeningnaam (rekNaam), niet de banknaam met IBAN
   { const plan=Math.round(+SV.reserveringen||0), act=Math.round((function(){ let r=0; try{ const ra=resAccId(); if(ra) r=lagenGestortOp(ra, PW); }catch(_){} return r; })());
     if(Math.abs(plan-act)>=10){ rijen.push({lab:`Reserveringen kregen ${euro0(act)} in plaats van ${euro0(plan)}`, v:plan-act}); verklaard+=plan-act; } }
-  const rest=Math.round((G.meer-verklaard)*100)/100;
-  if(Math.abs(rest)>=1) rijen.push({lab:'Overige verdeling (salarisrekening en afronding)', v:rest, rest:true});
+  /* punt 4: de rest is wat de salarisrekening overhield; de afronding is een eigen regel, maar alleen als die >= EUR 10 is. */
+  const rest=Math.round((G.meer-verklaard)*100)/100, salDeel=Math.round(rest), afr=Math.round((rest-salDeel)*100)/100;
+  if(Math.abs(salDeel)>=1) rijen.push({lab:`Salarisrekening hield ${euro0(Math.abs(salDeel))} ${salDeel>0?'minder':'meer'} over`, v:salDeel, salrek:true});
+  if(Math.abs(afr)>=10) rijen.push({lab:'Afronding', v:afr, afronding:true});
   return rijen;
 }
 function planGestortKaart(){
@@ -18824,11 +18837,15 @@ function planGestortKaart(){
   const W=lagenWaaromRijen(G);
   const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" style="padding:9px 14px 11px;margin-top:9px">
     <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
-    ${W.map(r=>`<div class="row small" data-waaromrij="${r.surplus?'surplus':r.rest?'rest':'rek'}" data-v="${r.v}" style="gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${r.lab}${r.sub?`<span class="small muted" style="display:block">${r.sub}</span>`:''}</span><span style="white-space:nowrap;font-weight:700;color:${col(r.v)}">${r.v>=0?'+':'−'}${euro0(Math.abs(r.v))}</span></div>`).join('')}
+    ${W.map(r=>{ const typ=r.surplus?'surplus':r.salrek?'salrek':r.afronding?'afronding':'rek';
+      const sub=r.sub?(r.klik?`<span class="small" data-salsplitlink role="button" onclick="event.stopPropagation();${r.klik}" style="display:block;color:var(--teal);font-weight:700;cursor:pointer">${r.sub} ›</span>`:`<span class="small muted" style="display:block">${r.sub}</span>`):'';
+      return `<div class="row small" data-waaromrij="${typ}" data-v="${r.v}" style="gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${r.lab}${sub}</span><span style="white-space:nowrap;font-weight:700;color:${col(r.v)}">${r.v>=0?'+':'−'}${euro0(Math.abs(r.v))}</span></div>`; }).join('')}
     <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div>`:'';
   const dagT=G.PW.dagen>0?`dag ${G.PW.dag} van ${G.PW.dagen}`:'';
-  return `<div class="card" id="planGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
-    <div class="row" style="padding:11px 0 1px;align-items:baseline"><span class="small" style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted">${dagT}</span>`:''}</div>
+  const salK=x=>{ try{ return new Date(x+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); }catch(_){ return x; } };
+  const opzijNoot=G.PW.salNa?`<div class="small muted" data-gestortopzijnoot style="margin-top:1px">gestort vanaf je salaris op ${salK(G.PW.salDag)}</div>`:'';
+  return `<div class="card" id="planGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
+    <div class="row" style="padding:11px 0 1px;align-items:baseline"><span class="small" data-gestortkop style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted" data-gestortdag>${dagT}</span>`:''}</div>${opzijNoot}
     ${G.lagen.map(rij).join('')}${extra}</div>${waarom}
     <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
 }
@@ -19641,15 +19658,16 @@ function planDoelRij(p,i,TL,SE,tints){
      Daarachter alleen "· EUR Y later" als er na deze maand nog terugzetdelen komen. Dat wint van elke status (ook bijna
      vol, waar tot v384 "vol <maand> · EUR Y komt nog terug" stond; de vol-datum staat rechts al). De opbouw (terug plus
      inleg) staat in de detailsheet. De termijn van een schuld zit in de balk en niet in deze regel. */
+  /* v524 (punt 1): de lijst toont per doel de STAND (regel 2) en de VOL-DATUM (regel 3); wat er deze periode bijkwam staat
+     ALLEEN in blok 2 (gestort naast plan), geen getal dubbel. "+EUR X deze maand" en "krijgt nu niets" zijn weg; de sub draagt
+     alleen nog een plan-feit (terug, streef/haalbaar, geen streefdatum). data-rijdezemaand blijft als attribuut: de som over de
+     doelen is wat de laag Doelen deze periode kreeg (de test toetst dat tegen blok 2). */
   const dezeMaand=Math.max(Math.round((+x.inleg||0)+(+x.tb||0)+(+x.tbGedaan||0)),0);
-  const sub=dezeMaand>0?`+${euro0(dezeMaand)} deze maand${x.nogLater>0?` · ${euro0(x.nogLater)} later`:''}`
-    :st.k==='gepauzeerd'?'krijgt nu niets'
-    :st.k==='vol'?'geen inleg meer nodig'
+  const sub=p.nfOnbekend||st.k==='onbekend'?'wat er al staat is niet bekend'
     :st.k==='terug'?`${euro0(Math.max(x.doel-x.geld,0))} moet nog terug op je spaarrekening`
-    :st.k==='onbekend'?'wat er al staat is niet bekend'
     :streef?`streef ${streef} · ${t.warn?'niet haalbaar':'haalbaar'}`
     :planDatumMist(p)?'geen streefdatum'
-    :(p.grendel?'wacht op je buffer':'krijgt deze maand niets');
+    :p.grendel?'wacht op je buffer':'';
   const nr=`<span class="plan-1${i===0?'':' n'}" data-rijnr>${i+1}</span>`;
   return `<div class="plan-item plan-rij2" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}"${t.warn?` data-planwaarschuwing="${p.id}"`:''} role="button" style="${i?'border-top:1px solid var(--line);':''}padding:9px 0 8px;cursor:pointer" onclick="openPlanDoel('${p.id}')">
     <div class="row" style="gap:8px;align-items:baseline">${nr}<span class="wf-naam" data-rijnaam style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>

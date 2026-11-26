@@ -79,16 +79,21 @@ test.describe('c · de rijen', () => {
     expect(r.geldregel).toBe(0); expect(r.rij).toBe(r.item);
   });
 
-  test('noodfonds: bijna vol, EUR 2.850 / EUR 4.000, vol dec 2026, en +EUR 1.050 deze maand met EUR 100 later (v385)', async ({ page }) => {
+  /* v524 (punt 1): "+EUR X deze maand" is weg uit de rij-sub; wat er deze periode bijkwam staat alleen in blok 2. De sub draagt
+     nog een plan-feit, en data-rijdezemaand houdt het bedrag als attribuut (de som over de doelen is wat de laag Doelen kreeg). */
+  test('noodfonds: bijna vol, EUR 2.850 / EUR 4.000, vol dec 2026, geen "deze maand" meer in de sub (v524)', async ({ page }) => {
     expect(await tekst(page, '[data-id="noodfonds"] [data-planstatus]')).toBe('bijna vol');
     expect(await tekst(page, '[data-id="noodfonds"] [data-rijgeld]')).toBe('€2.850 / €4.000');
     expect(await tekst(page, '[data-id="noodfonds"] [data-rijvol]')).toBe('vol dec 2026 ›');
-    expect(await tekst(page, '[data-id="noodfonds"] [data-rijsub]')).toBe('+€1.050 deze maand · €100 later');
+    expect(await tekst(page, '[data-id="noodfonds"] [data-rijsub]')).not.toMatch(/deze maand/);
+    expect(await page.evaluate(() => +document.querySelector('[data-id="noodfonds"] [data-rijdezemaand]').dataset.rijdezemaand)).toBe(1050);   // het bedrag blijft als attribuut
   });
 
-  test('inrichting: nu actief, +EUR 1.838 deze maand; kosten koper wacht vanaf november met haalbaarheid', async ({ page }) => {
+  test('inrichting: nu actief, geen "deze maand" in de sub; kosten koper wacht vanaf november met haalbaarheid', async ({ page }) => {
     expect(await tekst(page, '[data-id="iw"] [data-planstatus]')).toBe('nu actief');
-    expect(await tekst(page, '[data-id="iw"] [data-rijsub]')).toBe('+€1.838 deze maand');
+    expect(await tekst(page, '[data-id="iw"] [data-rijsub]')).not.toMatch(/deze maand/);
+    expect(await tekst(page, '[data-id="iw"] [data-rijsub]')).toMatch(/^streef mrt 2027 · (haalbaar|niet haalbaar)$/);
+    expect(await page.evaluate(() => +document.querySelector('[data-id="iw"] [data-rijdezemaand]').dataset.rijdezemaand)).toBe(1838);
     expect(await tekst(page, '[data-id="kk"] [data-planstatus]')).toBe('vanaf nov');
     expect(await tekst(page, '[data-id="kk"] [data-rijsub]')).toMatch(/^streef jun 2027 · (haalbaar|niet haalbaar)$/);
   });
