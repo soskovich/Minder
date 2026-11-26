@@ -18767,16 +18767,28 @@ function planScrollDoelen(){
   if(planWeergave()!=='lijst'){ SET.planWeergave='lijst'; save(); try{ render(); }catch(_){} }
   const el=document.getElementById('planLijst'); if(el){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ el.scrollIntoView(); }catch(__){} } }
 }
-/* v524 (blok 3, minimale vorm; de volle sheet met voorwaarden komt in stop 2): Groeien. */
+/* v524 (blok 3, volle vorm, mockup v10): Groeien. Per belegging de waarde (koers van je laatste invoer, met de datum) en de
+   inleg met startmaand; eronder de inleg per periode (nu, en wat er later bijkomt), en de voorwaarden voor beleggen. Die
+   gelden PER BELEGGING (jouw keuze, v332), dus de regel noemt de beleggingen waarvoor ze nog gelden en opent de volle
+   voorwaarden-sheet (buffer/dekking/doel staan daar, op één plek, v61). Minder schat geen koers.
+   De inleg per periode komt uit lagenGroeienInleg(), dezelfde bron als de laag-sub (v104); alleen de opmaak verschilt. */
+function lagenGroeienGated(){ return (SET.assets||[]).filter(a=>a && a.grow && a.voorwaarden!==true); }
 function openGroeien(){
-  const L=lagenData(); const rij=a=>{ const dd=(function(){ const m=/^(\d{4})-(\d{2})/.exec(String(a.waardeOp||'')); return m?`${MNAMES[+m[2]-1]} ${m[1]}`:''; })();
+  const L=lagenData(), PW=lagenPeriode(), I=lagenGroeienInleg(PW);
+  const rij=a=>{ const dd=(function(){ const m=/^(\d{4})-(\d{2})/.exec(String(a.waardeOp||'')); return m?`${MNAMES[+m[2]-1]} ${m[1]}`:''; })();
     const asset=(SET.assets||[]).find(x=>x.id===a.id)||{}, per=Math.max(Math.round(+asset.per||0),0), va=asset.perVanaf?String(asset.perVanaf).slice(0,7):null;
-    const inleg=per>0?(va && va>thisYM()?`inleg ${euro0(per)} vanaf ${MNAMES[+va.slice(5,7)-1]} ${va.slice(0,4)}`:`inleg ${euro0(per)} per maand`):(asset.voorwaarden===false?'voorwaarden voor beleggen gelden':'inleg niet ingesteld');
-    return `<div class="row small" data-groeibelegging="${esc(a.id)}" style="gap:8px;padding:8px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(a.naam)}</b><span class="small muted" style="display:block">${esc(inleg)}${dd?` · waarde van ${dd}`:''}</span></span><b style="white-space:nowrap">${euro0(a.waarde)}</b></div>`; };
+    const inleg=per>0?(va && va>thisYM()?`${euro0(per)} vanaf ${MNAMES[+va.slice(5,7)-1]} ${va.slice(0,4)}`:`${euro0(per)} per maand`):(asset.voorwaarden===false?'voorwaarden gelden':'inleg niet ingesteld');
+    return `<div class="row small" data-groeibelegging="${esc(a.id)}" style="gap:8px;padding:8px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(a.naam)}</b><span class="small muted" style="display:block">waarde van ${dd||'onbekend'}</span></span><span style="text-align:right;white-space:nowrap"><b>${euro0(a.waarde)}</b><span class="small muted" style="display:block;font-weight:500">inleg ${esc(inleg)}</span></span></div>`; };
+  const laterMnd=Object.keys(I.later).sort()[0], laterTot=laterMnd?I.nu+Object.values(I.later).reduce((a,b)=>a+b,0):0;
+  const totaalRij=(I.nu>0||laterMnd)?`<div class="row small" data-groeiinleg="${I.nu}" data-groeiinleglater="${laterTot}" style="gap:8px;padding:8px 0;border-top:2px solid var(--line);font-weight:700"><span style="flex:1">Inleg per periode</span><span style="text-align:right;white-space:nowrap">${euro0(I.nu)}${laterMnd?`<span class="small muted" style="display:block;font-weight:500">${euro0(laterTot)} vanaf ${MNAMES[+laterMnd.slice(5,7)-1]} ${laterMnd.slice(0,4)}</span>`:''}</span></div>`:'';
+  const gated=lagenGroeienGated(); let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){}
+  const vw=gated.length?`<div class="small" data-groeivoorwaarden="${gated.length}" style="margin-top:10px;line-height:1.5;color:var(--mut)">Voorwaarden voor beleggen gelden voor ${esc(gated.map(a=>a.naam).join(', '))} (jouw keuze per belegging).${(B && B.volledig && !B.klaar && B.blokkade)?` <span data-groeiblokkade="${esc(B.blokkade.key)}">Eerst ${esc(B.blokkade.naam)}.</span>`:''} <span class="chev" style="color:var(--teal);cursor:pointer" onclick="openBeleggenVoorwaarden()">Voorwaarden bekijken ›</span></div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="groeiSheet" data-groeien="${L.groeien}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Groeien · ${euro0(L.groeien)}</div>
-    <div class="small muted" style="margin:3px 0 6px">Je groeiende beleggingen, met de inleg en wanneer die begint. Minder schat geen koers; de waarde is wat je het laatst invoerde.</div>
+    <div class="small muted" style="margin:3px 0 6px">De waarde is de koers van je laatste invoer, met de datum erbij. Minder schat geen koers.</div>
     ${(L.belItems||[]).map(rij).join('')}
+    ${totaalRij}
+    ${vw}
     <div class="small muted" style="margin-top:8px"><span class="chev" style="color:var(--teal);cursor:pointer" onclick="closeSheet();go('vermogen')">Vermogensreis ›</span></div>
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
 }
