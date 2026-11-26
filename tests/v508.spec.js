@@ -182,7 +182,7 @@ test('v508 f2: de eerste echte afschrijving is een vraag, niet stil gekoppeld; n
     return { q: q && q.t.id === t.id, rij, voorselectie, stil, voorDec, bedrag: vvBedrag(SET.vastVerwacht[0]), jan: vvMaandItems('2027-01', '2026-12-30').map(x => x.amount), dec: vvMaandItems('2026-12', '2026-12-30').length, vraagNa: gegevensVragen().some(x => x.soort === 'vastverw') };
   }, { BET: S.BET });
   expect(r.q).toBe(true); expect(r.stil).toBe(true); expect(r.rij).toBe(true); expect(r.voorselectie).toBe(0);
-  expect(r.voorDec).toEqual([476]);   // onderhoud2 punt 4: ook zonder koppeling leest de vooruitblik de laatste matchende afschrijving (476,12) op naam, niet de schatting (480); de vraag staat er nog (r.q/r.stil)
+  expect(r.voorDec).toEqual([480]);
   expect(r.bedrag).toBe(476.12);
   expect(r.jan).toEqual([476]); expect(r.dec).toBe(0); expect(r.vraagNa).toBe(false);
 });

@@ -39895,26 +39895,9 @@ function vvKandidaatIds(){ const d=vandaagYMD(); if(_vvKand && _vvKandGen===_dat
 /* v511 (punt 7): de sleutels (recurKey) van de afschrijvingen die je aan een verwachte vaste last koppelde (vvKoppel), gelezen door isFixed() */
 function vvKoppelSleutels(){ const L=Array.isArray(SET.vastVerwacht)?SET.vastVerwacht:null; if(!L || !L.length) return new Set(); return new Set(L.filter(x=>x && x.koppel && x.koppel.key).map(x=>x.koppel.key)); }
 function vvYmPlus(ym, n){ const y=+ym.slice(0,4), m=+ym.slice(5,7)-1+n; const d=new Date(y, m, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
-/* onderhoud2 (punt 4): EEN VASTE LAST IS AL BETAALD ALS ER OP NAAM EEN AFSCHRIJVING VALT (gevraagd door de gebruiker). Een verwachte
-   vaste last (vvVast) die je nog niet koppelde gebruikte de schatting (het potjebedrag) en zag een al-betaalde termijn niet, want vvBetaald
-   en vvBedrag lazen alleen x.koppel. GEMETEN op de back-up van 25 nov: "Spotify · 22 dec · €9" bij de vaste lasten van 24 nov – 23 dec,
-   terwijl Spotify op 24 nov al €13,99 afschreef (22 dec = de dag van x.eerste in vvAlleTermijnen, €9 = de schatting in vvBedrag). De
-   naam-match (een woord uit de naam in de tegenpartij of omschrijving) is het signaal: hetzelfde naamOk als vvKandidaat, maar zonder de
-   bedragband (die Spotify's €13,99 tegen een schatting van €9 juist uitsloot). Een boeking die je op "Nee, iets anders" zette (x.nee) telt
-   niet mee, dus een verkeerde match draai je terug. */
-function vvNaamWoorden(x){ return String((x&&x.naam)||'').toUpperCase().split(/[^A-Z0-9]+/).filter(w=>w.length>=3); }
-function vvNaamMatch(x, t, woorden){ if(!t || t.pending || !(t.amount<0) || String(t.src)==='voorbeeld' || t.vbVast) return false;
-  if((x.nee||[]).includes(t.id)) return false; if((CATS[catOf(t)]||{}).type!=='expense') return false;
-  const W=woorden||vvNaamWoorden(x); if(!W.length) return false;
-  const tekst=String((t.name||'')+' '+(t.desc||'')).toUpperCase(); return W.some(w=>tekst.includes(w)); }
-/* de laatste matchende afschrijving (op of voor een eventuele dag tot) */
-function vvLaatsteMatch(x, tot){ const W=vvNaamWoorden(x); if(!W.length) return null; let t=null;
-  for(const y of telbareTx()){ if(tot && String(y.date).slice(0,10)>tot) continue; if(vvNaamMatch(x, y, W) && (!t || y.date>t.date)) t=y; } return t; }
-/* het bedrag per termijn: na je bevestiging de laatste echte afschrijving met dezelfde sleutel; zonder koppeling de laatste matchende
-   afschrijving op naam (onderhoud2 punt 4: het laatst betaalde bedrag, zoals elders in Vaste lasten); anders je schatting */
+/* het bedrag per termijn: na je bevestiging de laatste echte afschrijving met dezelfde sleutel, anders je schatting */
 function vvBedrag(x){ if(x.koppel && x.koppel.key){ let t=null; for(const y of telbareTx()) if(!y.pending && y.amount<0 && recurKey(y)===x.koppel.key && (!t || y.date>t.date)) t=y;
     if(t) return Math.round(-t.amount*100)/100; if(+x.koppel.bedrag>0) return +x.koppel.bedrag; }
-  else { const t=vvLaatsteMatch(x); if(t) return Math.round(-t.amount*100)/100; }
   return Math.round((+x.bedrag||0)*100)/100; }
 /* alle termijndatums vanaf de eerste (de dag van de eerste datum, in een korte maand de laatste dag), tot laatste en tot de rest op is */
 function vvAlleTermijnen(x, tot){ const out=[]; if(!x || !/^\d{4}-\d{2}-\d{2}$/.test(String(x.eerste||''))) return out;
@@ -39925,14 +39908,8 @@ function vvAlleTermijnen(x, tot){ const out=[]; if(!x || !/^\d{4}-\d{2}-\d{2}$/.
   return out; }
 /* is de termijn van datum d al betaald: na je bevestiging elke termijn tot en met de maand van de gekoppelde afschrijving, en elke
    termijn in een maand met een afschrijving onder dezelfde sleutel */
-function vvBetaald(x, d){ const K=x.koppel; if(K && K.key){ if(d.slice(0,7)<=String(K.datum).slice(0,7)) return true;
-    return telbareTx().some(t=>!t.pending && t.amount<0 && recurKey(t)===K.key && String(t.date).slice(0,7)===d.slice(0,7)); }
-  /* onderhoud2 (punt 4): zonder koppeling is een termijn op d al betaald als er sinds de VORIGE termijn (d min het ritme-interval) tot en
-     met d een matchende afschrijving op naam viel. Spotify op 24 nov (venster 22 nov – 22 dec) dekt zo de termijn op 22 dec van dezelfde
-     periode, ook al vallen ze in verschillende kalendermaanden. */
-  const W=vvNaamWoorden(x); if(!W.length) return false;
-  const r=Math.max(+x.ritme||1,1), vorige=rekMaandPlus(d, -r);
-  return telbareTx().some(t=>{ const td=String(t.date).slice(0,10); return td>vorige && td<=d && vvNaamMatch(x, t, W); }); }
+function vvBetaald(x, d){ const K=x.koppel; if(!K || !K.key) return false; if(d.slice(0,7)<=String(K.datum).slice(0,7)) return true;
+  return telbareTx().some(t=>!t.pending && t.amount<0 && recurKey(t)===K.key && String(t.date).slice(0,7)===d.slice(0,7)); }
 /* de termijnen in [van, tot] die nog verwacht worden (niet betaald), met .orig zoals de generator van de woning */
 function vvTermijnen(x, van, tot){ const A=vvAlleTermijnen(x, tot).filter(d=>d>=van && d<=tot && !vvBetaald(x, d)); A.orig={}; return A; }
 /* neemt het schema hem al over (dezelfde sleutel als de gekoppelde afschrijving)? dan telt hij hier niet */
