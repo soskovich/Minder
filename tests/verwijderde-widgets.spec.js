@@ -58,7 +58,7 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     /* v380: de zonebalk "Bestemmingen" is vervallen (vooruitZone()); wat er hoort te blijven is de kop van het
        dashboard en de rijen */
     expect(v).not.toContain('Bestemmingen');
-    expect(await page.locator('#s-vooruit #planKpi').count()).toBe(1);
+    expect(await page.locator('#s-vooruit #planLagenHero').count()).toBe(1);   // v524: de kop is de lagen-hero
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 
@@ -66,10 +66,10 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     await boot(page, 'vooruit');
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);                    // v144: alleen nog op Inzichten
-    /* v380: de kop "Te verdelen" is vervallen; de prioriteitenlijst draagt nu de kop van het dashboard
-       ("Gespaard voor je doelen", #planKpi) met de rijen eronder */
+    /* v380 → v524: de kop "Te verdelen" is vervallen; de prioriteitenlijst draagt nu de lagen-hero
+       ("Je geld in lagen") met de rijen eronder */
     expect(v).not.toContain('Te verdelen');
-    expect(v).toMatch(/gespaard voor je doelen/i);                // de kop staat in hoofdletters (CSS)
+    expect(v).toMatch(/je geld in lagen/i);                       // de kop staat in hoofdletters (CSS)
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 

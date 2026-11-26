@@ -63,7 +63,7 @@ test.describe('a · de lopende maand telt mee', () => {
      maand komt uit planTijdlijnData(), dezelfde bron als de kop. */
   test('Alles vol in de kop schuift mee', async ({ page }) => {
     await P.boot(page, { set: ORDE });
-    const r = await page.evaluate(() => { go('vooruit'); const vol = planTijdlijnData().per.kk.vol; const el = document.querySelector('#planKpi [data-kpivol]');
+    const r = await page.evaluate(() => { go('vooruit'); const vol = planTijdlijnData().per.kk.vol; const el = document.querySelector('#planLagenKaart [data-kpivol]');   // v524: "Alles vol" staat op de laag Doelen
       return { eta: vol, kk: etaDatum(vol), attr: el.dataset.kpivol, tekst: el.innerText, weg: typeof planTotaalRegel }; });
     expect(r.weg).toBe('undefined');
     expect(r.attr).toBe(String(r.eta));

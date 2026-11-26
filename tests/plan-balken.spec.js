@@ -131,9 +131,12 @@ test.describe('a · de grendel in beeld', () => {
   test('dichte grendel op de gemeten toestand: alleen de buffer krijgt deze maand iets', async ({ page }) => {
     await boot(page, dicht);
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
-    /* v380: de inlegbalk is vervallen; wat er deze maand heen gaat leest planStandEind(), en de rij zegt het */
+    /* v380 → v524 (punt 1): de inlegbalk is vervallen; wat er deze maand heen gaat leest planStandEind(). Het increment staat
+       niet meer in de rij-sub maar als attribuut (data-rijdezemaand); de rij-sub draagt alleen nog een plan-feit. */
     expect(await inleg(page)).toEqual({ noodfonds: 3000, [ID_KK]: 0, [ID_IW]: 0 });   // de andere twee krijgen niets
-    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] [data-rijsub]').innerText()).toBe('+€3.000 deze maand');
+    const nfSub = page.locator('#s-vooruit .plan-item[data-id="noodfonds"] [data-rijsub]');
+    expect((await nfSub.innerText())).not.toMatch(/deze maand/);
+    expect(await nfSub.getAttribute('data-rijdezemaand')).toBe('3000');
     for (const id of [ID_KK, ID_IW])
       expect(await page.locator(`#s-vooruit .plan-item[data-id="${id}"] [data-bijvat]`).count(), id).toBe(0);
     expect(await page.locator('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').count()).toBe(0);
@@ -511,14 +514,17 @@ test.describe('d · de balk en de takken', () => {
     expect(new Set(r.map((x) => x.rij)).size).toBe(r.length);
   });
 
-  /* v380: geen "/mnd" meer op de rij; wat er deze maand bijkomt staat een keer, in de grijze regel */
-  test('het bedrag van deze maand staat een keer per rij', async ({ page }) => {
+  /* v380 → v524 (punt 1): geen "/mnd" op de rij, en "+EUR X deze maand" staat NIET meer in de rij-tekst; het bedrag van
+     deze maand staat een keer, als attribuut data-rijdezemaand (het increment verliet de sub). */
+  test('het bedrag van deze maand staat een keer per rij, als attribuut', async ({ page }) => {
     await boot(page, twee);
-    const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
+    const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, Math.round(p.alloc)])));
     for (const id of [ID_KK, ID_IW]) {
-      const tk = await page.locator(`#s-vooruit .plan-item[data-id="${id}"]`).innerText();
-      expect(tk.split('+' + alloc[id] + ' deze maand').length - 1, id).toBe(1);
+      const rij = page.locator(`#s-vooruit .plan-item[data-id="${id}"]`);
+      const tk = await rij.innerText();
+      expect(tk, id).not.toMatch(/deze maand/);
       expect(tk, id).not.toMatch(/\/mnd/);
+      expect(+(await rij.locator('[data-rijsub]').getAttribute('data-rijdezemaand')), id).toBe(alloc[id]);
     }
   });
 });
@@ -543,14 +549,15 @@ test.describe('e · de bediening en de omgeving', () => {
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
 
-  /* v380: de regel "Nog EUR X te gaan" onder de lijst is vervallen (planTotaalRegel() bestaat niet meer). Het getal
-     staat als data-nogtegaan op de kop en komt uit planStandEind(); zie ook plan-dashboard.spec.js a. */
-  test('de optelling staat niet meer onder de lijst, maar als attribuut op de kop', async ({ page }) => {
+  /* v380 → v524: de regel "Nog EUR X te gaan" onder de lijst is vervallen (planTotaalRegel() bestaat niet meer), en de
+     kop #planKpi (data-nogtegaan) wordt niet meer getoond. Het getal blijft de bron (planStandEind / planKpiData). */
+  test('de optelling staat niet meer onder de lijst, en de kop is vervallen; het getal blijft de bron', async ({ page }) => {
     await boot(page, drie);
-    const r = await page.evaluate(() => ({ t: document.getElementById('s-vooruit').innerText,
-      attr: +document.getElementById('planKpi').dataset.nogtegaan, se: planStandEind().nogTeGaan }));
+    const r = await page.evaluate(() => { go('vooruit'); return { t: document.getElementById('s-vooruit').innerText,
+      kopWeg: !document.getElementById('planKpi'), kpi: planKpiData().nogTeGaan, se: planStandEind().nogTeGaan }; });
     expect(r.t).not.toMatch(/te gaan|van je plan staat er nog niet/);
-    expect(r.attr).toBe(r.se);
+    expect(r.kopWeg).toBe(true);
+    expect(r.kpi).toBe(r.se);
     expect(r.se).toBeGreaterThan(0);
   });
 

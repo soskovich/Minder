@@ -193,13 +193,14 @@ test.describe('b · de streefdatum', () => {
     const g = P.find((x) => x.id === 'oud');
     expect(g).toBeTruthy();
     expect(g.alloc).toBeGreaterThan(0);                // telt gewoon mee in de verdeling
-    /* v380: de zin en de ingang staan in het datumpaar van de detailsheet. De kleine regel van de rij noemt bij een doel
-       dat deze maand iets krijgt eerst wat erbij komt ("+EUR 3.000 deze maand"); "geen streefdatum" staat daar alleen
-       bij een doel dat niets krijgt (planDoelRij()). */
-    const lees = () => page.evaluate(() => { const sub = document.querySelector('#s-vooruit .plan-item[data-id="oud"] [data-rijsub]').innerText.trim();
-      openPlanDoel('oud'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet(); return { sub, t }; });
+    /* v380 → v524 (punt 1): de rij-sub draagt niet meer "+EUR X deze maand". De sub is nu een plan-feit, en voor een doel
+       zonder streefdatum is dat "geen streefdatum" (ook als het deze maand geld krijgt). Het increment staat als attribuut
+       (data-rijdezemaand), en de zin "Streefdatum ontbreekt" + de ingang "datum zetten" staan in het datumpaar van de detailsheet. */
+    const lees = () => page.evaluate(() => { const sub = document.querySelector('#s-vooruit .plan-item[data-id="oud"] [data-rijsub]');
+      openPlanDoel('oud'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet(); return { sub: sub.innerText.trim(), dezeMaand: +sub.dataset.rijdezemaand, t }; });
     const v = await lees();
-    expect(v.sub).toBe('+€3.000 deze maand');
+    expect(v.sub).toBe('geen streefdatum');   // het plan-feit; het increment staat als attribuut
+    expect(v.dezeMaand).toBe(3000);
     expect(v.t).toMatch(/Streefdatum ontbreekt/);
     expect(v.t).toMatch(/datum zetten/);
     // en die ingang zet de datum alsnog

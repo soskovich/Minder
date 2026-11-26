@@ -81,7 +81,7 @@ test.describe('c · de verdeling aanpassen', () => {
     /* v380: de regel "Verdeling: op volgorde · aanpassen ›" ([data-verdelingregel]) is vervallen; de ingang is "verdeling ⚙"
        in de kop (openPlanInstel()), met de gekozen stand gemarkeerd, en een tik daar opent dezelfde sheet. */
     expect(await page.locator('[data-verdelingregel]').count()).toBe(0);
-    await page.click('#planKpi [data-planinstel]');
+    await page.click('#planLagenHero [data-planinstel]');   // v524: "verdeling ⚙" staat in de lagen-hero
     expect(await page.locator('[data-instelverdeel="volgorde"]').getAttribute('data-gekozen')).toBe('1');
     expect(await page.locator('[data-instelverdeel="zelf"]').getAttribute('data-gekozen')).toBe('0');
     await page.click('[data-instelverdeel="volgorde"]');

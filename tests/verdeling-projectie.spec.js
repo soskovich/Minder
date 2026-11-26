@@ -111,7 +111,7 @@ test.describe('c · Vooruitblik opent met het plan', () => {
     await openV(page, seed());
     expect(await page.locator('#s-vooruit').innerText()).not.toMatch(/nog deze maand/i);
     const idx = await page.evaluate(() => { const kids = [...document.getElementById('s-vooruit').children];
-      return { kpi: kids.findIndex((k) => k.id === 'planKpi'), zone: document.querySelectorAll('#s-vooruit [data-zone]').length, hero: kids.filter((k) => k.classList.contains('vooruit')).length }; });
+      return { kpi: kids.findIndex((k) => k.id === 'planLagenHero'), zone: document.querySelectorAll('#s-vooruit [data-zone]').length, hero: kids.filter((k) => k.classList.contains('vooruit')).length }; });   // v524: de kop is de lagen-hero
     expect(idx.kpi).toBe(0); expect(idx.zone).toBe(0); expect(idx.hero).toBe(0);
   });
 });

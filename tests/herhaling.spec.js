@@ -133,16 +133,16 @@ test.describe('b · waarschuwing en wachtuitleg zijn één regel', () => {
   /* v225: bij alleen de auto-werking stond hier een neutrale regel die uitlegde hoe auto werkt.
      Die is vervallen; er is niets mis, dus is er ook niets te melden. De eigenschap die deze test
      bewaakt blijft: de amber-stand is voorbehouden aan een echte overtoewijzing (v78/v93). */
-  test('alleen de auto-werking: geen melding, en zeker geen amber', async ({ page }) => {
+  test('alleen de auto-werking: geen melding, en zeker geen amber-STATUS', async ({ page }) => {
     await boot(page, metWachtenden(2));
     const r = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      return { warn: !!planAllocWarning(), n: d.querySelectorAll('#planWacht').length,
-        amber: /amber|251,191,36/.test(d.innerHTML) };
+      return { warn: !!planAllocWarning(), n: d.querySelectorAll('#planWacht').length };
     });
     expect(r.warn).toBe(false);                      // een auto-doel claimt niets
     expect(r.n).toBe(0);
-    expect(r.amber).toBe(false);
+    // v524: de amber-innerHTML-check is vervallen: de lagen-hero/kaart dragen amber als laag-IDENTITEIT (Reserveren),
+    // niet als status ("paletten zijn identiteit, geen status"). De overtoewijzing-eis leeft in planAllocWarning() hierboven.
   });
 
   test('niets aan de hand: geen regel, geen lege staat', async ({ page }) => {
@@ -211,7 +211,7 @@ test.describe('d · de plan-zone en het voorbehoud', () => {
     await boot(page, metWachtenden(2));
     await page.evaluate(() => go('vooruit'));
     expect(await page.locator('#s-vooruit [data-zone]').count()).toBe(0);
-    const t = await page.locator('#planKpi').innerText();
+    const t = await page.locator('#planLagenHero').innerText();   // v524: de kop is de lagen-hero
     expect(t).not.toMatch(/mijn plan|Bestemmingen/i);
     expect(t).not.toContain('Vakantie');
     expect(t).not.toMatch(/\+\d+ meer/);
@@ -224,7 +224,7 @@ test.describe('d · de plan-zone en het voorbehoud', () => {
     await boot(page, { set: { goals: [], planOrder: [], planPaused: { noodfonds: true } } });
     await page.evaluate(() => go('vooruit'));
     expect(await page.locator('#s-vooruit [data-zone]').count()).toBe(0);
-    const t = await page.locator('#planKpi').innerText();
+    const t = await page.locator('#planLagenHero').innerText();   // v524: de kop is de lagen-hero
     expect(t).not.toMatch(/mijn plan/i);
     expect(t.length).toBeGreaterThan(0);
   });

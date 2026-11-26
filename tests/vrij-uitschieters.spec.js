@@ -248,17 +248,24 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
     expect(r.laat).toBe(0);
   });
   for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }]) {
-    test(`de hoogte op ${vp.width}px, en op 390x844 staan alle doelen boven de vouw`, async ({ page }) => {
+    /* v524 (blok 1 + 2): Plan is een dashboard in lagen geworden (lagen-hero + per-laag stand + "gestort naast plan" +
+       doelenlijst). De doelenlijst zit daardoor BEWUST onder de vouw (je scrolt ernaartoe). Wat boven de vouw hoort te
+       passen is het PRIMAIRE antwoord: de lagen-hero ("Je geld in lagen") en de per-laag stand (#planLagenKaart). De oude
+       eis "alle doelen boven de vouw" meet de oude compacte dashboard-vorm en is daarmee vervallen; geen horizontale
+       overflow blijft. (Open punt voor de gebruiker: de doelenlijst staat nu onder de vouw.) */
+    test(`de hoogte op ${vp.width}px, en op 390x844 staat de per-laag stand boven de vouw`, async ({ page }) => {
       await O.boot(page);
       await page.setViewportSize(vp);
       await page.evaluate(() => go('vooruit'));
       const r = await page.evaluate(() => { const items = [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')];
         const kaart = items[0].closest('.card'); const nav = document.querySelector('nav, .nav, #nav');
-        return { kaart: Math.round(kaart.getBoundingClientRect().height), onder: Math.round(Math.max(...items.map((e) => e.getBoundingClientRect().bottom))),
+        const prim = document.getElementById('planLagenKaart');
+        return { kaart: Math.round(kaart.getBoundingClientRect().height), primBot: prim ? Math.round(prim.getBoundingClientRect().bottom) : null,
+          onder: Math.round(Math.max(...items.map((e) => e.getBoundingClientRect().bottom))),
           vouw: window.innerHeight - (nav ? nav.getBoundingClientRect().height : 0), over: document.documentElement.scrollWidth > window.innerWidth }; });
-      console.log(`plan ${vp.width}: kaart ${r.kaart}px, laatste doel ${r.onder} van ${r.vouw}`);
+      console.log(`plan ${vp.width}: kaart ${r.kaart}px, per-laag stand ${r.primBot}, laatste doel ${r.onder} van ${r.vouw}`);
       expect(r.over).toBe(false);
-      if (vp.width === 390) expect(r.onder).toBeLessThanOrEqual(r.vouw);
+      if (vp.width === 390) expect(r.primBot).toBeLessThanOrEqual(r.vouw);   // het primaire antwoord (lagen-hero + per-laag stand) past boven de vouw
     });
   }
 });

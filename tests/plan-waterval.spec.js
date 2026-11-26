@@ -78,9 +78,9 @@ test.describe('a · de kaart toont het mechanisme', () => {
     /* v380: het nummer staat in een eigen element, de naam draagt het niet meer */
     for (let i = 0; i < R.length; i++) { expect(R[i].nr).toBe(String(i + 1)); expect(R[i].naam).not.toMatch(/^\d/); }
     expect(R[0].naam).toBe('Kosten koper');
-    /* v380: de kop "Te verdelen" is vervallen; bovenaan staat de kop #planKpi, en die staat voor de lijst */
+    /* v380 → v524: de kop "Te verdelen" is vervallen; bovenaan staat de lagen-hero (#planLagenHero), en die staat voor de lijst */
     const r = await page.evaluate(() => {
-      const k = document.getElementById('planKpi'), l = document.getElementById('planLijst');
+      const k = document.getElementById('planLagenHero'), l = document.getElementById('planLijst');
       return { kop: !!k, lijst: !!l, voor: !!(k && l && (k.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING)),
         teVerdelen: /Te verdelen/.test(document.getElementById('s-vooruit').innerText) };
     });
@@ -92,12 +92,14 @@ test.describe('a · de kaart toont het mechanisme', () => {
      er terug gaat, hier zonder terugzetten dus planCapacity(), en planToeMaand() telt dezelfde verdeling op. */
   test('wat deze maand verdeeld wordt is planCapacity, en er staat geen inlegbalk meer', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 200 }]));
+    // v524: de opzij-tegel ("Opzij deze periode") is met de kop vervallen (opzij verhuisde naar blok 2); het getal erachter
+    // (planCapacity / planToeMaand) blijft de bron, en er staat nog steeds geen inlegbalk.
     const r = await page.evaluate(() => ({ cap: planCapacity(), toe: planToeMaand(),
-      kop: (document.querySelector('[data-kpiopzijperiode]') || {}).innerText || '',   // v440: de kop toont "Opzij deze periode" (opzijPeriode), geen inlegbalk
+      tegelWeg: !document.querySelector('#s-vooruit [data-kpiopzijperiode]'),
       balk: document.querySelectorAll('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').length }));
     expect(r.cap).toBe(CAP);
     expect(r.toe).toEqual({ toegewezen: CAP, teVerdelen: CAP });   // planToeMaand verdeelt de hele capaciteit
-    expect(r.kop.replace(/\s+/g, ' ')).toContain('Opzij deze periode');
+    expect(r.tegelWeg).toBe(true);
     expect(r.balk).toBe(0);
   });
 
@@ -108,15 +110,18 @@ test.describe('a · de kaart toont het mechanisme', () => {
     const r = await page.evaluate(() => {
       const e = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
       const x = planStandEind().per.gA, p = allocatePlan().find((y) => y.id === 'gA');
-      return { naam: e.querySelector('[data-rijnaam]').innerText.trim(), sub: e.querySelector('[data-rijsub]').innerText.trim(),
+      const sub = e.querySelector('[data-rijsub]');
+      return { naam: e.querySelector('[data-rijnaam]').innerText.trim(), sub: sub.innerText.trim(), dezeMaand: +sub.dataset.rijdezemaand,
         geld: e.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' ').trim(), heel: e.innerText,
-        alloc: p.alloc, inleg: x.inleg, tb: x.tb, verwachtGeld: euro0(x.geld) + ' / ' + euro0(9000), bij: euro0(x.inleg + x.tb) };
+        alloc: p.alloc, inleg: x.inleg, tb: x.tb, verwachtGeld: euro0(x.geld) + ' / ' + euro0(9000), bij: Math.round(x.inleg + x.tb) };
     });
     expect(r.naam).toBe('Kosten koper');
     // wat deze bestemming per maand krijgt: het bedrag uit de waterval, niet het ingestelde
     expect(r.inleg).toBe(r.alloc);
     expect(r.alloc).toBeGreaterThan(0);
-    expect(r.sub).toBe(`+${r.bij} deze maand`);
+    // v524 (punt 1): "+EUR X deze maand" staat NIET meer in de sub; het bedrag (inleg+terug) staat als attribuut
+    expect(r.sub).not.toMatch(/deze maand/);
+    expect(r.dezeMaand).toBe(r.bij);
     expect(r.geld).toBe(r.verwachtGeld);
     expect(r.heel).not.toMatch(/\/mnd|toegewezen/);
   });
@@ -209,13 +214,13 @@ test.describe('d · de uitleg staat achter het uitlegteken, de melding niet', ()
     expect(t).not.toMatch(/pakt nu alles wat er overblijft/);
   });
 
-  /* v380: NIET AANGEPAST. renderPlan() zet NOTES.planUitleg (met de zin "gaat van boven naar beneden") maar rendert
-     nergens een noteIcon('planUitleg'), dus de uitleg is niet meer te openen. Gemeld als vermoedelijke app-bug. */
-  test('een tik op het uitlegteken toont ze alsnog', async ({ page }) => {
+  /* v380 → v524: het uitlegteken (noteIcon('planUitleg')) stond in de oude kop #planKpi, die niet meer wordt gerenderd;
+     de lagen-hero draagt in plaats daarvan "verdeling ⚙" (openPlanInstel). De uitleg-INHOUD (NOTES.planUitleg, "gaat van
+     boven naar beneden") wordt nog steeds gezet door renderPlan(). Eigenschap: het teken is weg van Plan, de inhoud blijft. */
+  test('het uitlegteken is weg van Plan; de uitleg-inhoud (NOTES.planUitleg) blijft', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 200 }]));
-    await page.locator('#s-vooruit [onclick*="planUitleg"]').first().click();
-    await page.waitForSelector('#tipPop.show');
-    expect(await page.locator('#tipPop').innerText()).toMatch(/gaat van boven naar beneden/);
+    expect(await page.locator('#s-vooruit [onclick*="planUitleg"]').count()).toBe(0);
+    expect(await page.evaluate(() => { renderVooruit(); return (NOTES.planUitleg || ''); })).toMatch(/gaat van boven naar beneden/);
   });
 
   /* Een amber-melding achter een uitlegteken is geen melding meer: die blijft staan waar hij stond
@@ -300,7 +305,9 @@ test.describe('f · de controlelijst', () => {
     });
     expect(r.status).toBe('gepauzeerd');
     expect(r.st).toBe('gepauzeerd');
-    expect(r.sub).toBe('krijgt nu niets');
+    // v524 (punt 1): "krijgt nu niets" staat niet meer in de sub (het increment verliet de rij-sub); de status zegt
+    // gepauzeerd en de detailsheet draagt de zin nog (d.dat hieronder). Er gaat niets heen, dus geen groei-segment.
+    expect(r.sub).not.toMatch(/deze maand/);
     expect(r.seg).toBe(0);
     expect(r.bij, 'geen groei-segment, want er gaat niets heen').toBe(0);
     expect(r.fills.length).toBe(1);
@@ -322,7 +329,8 @@ test.describe('f · de controlelijst', () => {
     });
     expect(r.status).toBe('vol');
     expect(r.st).toBe('vol');
-    expect(r.sub).toBe('geen inleg meer nodig');
+    // v524 (punt 1): "geen inleg meer nodig" staat niet meer in de sub; de status "vol" zegt het, en de detailsheet draagt "Bereikt" (d.dat)
+    expect(r.sub).not.toMatch(/deze maand|op dit tempo/);
     expect(r.vol).toBe('vol ›');
     expect(r.geld).toBe(r.verwachtGeld);
     expect(r.tekst).not.toMatch(/op dit tempo|rond /);
@@ -341,7 +349,7 @@ test.describe('f · de controlelijst', () => {
     const r = await page.evaluate(() => {
       const v = document.getElementById('s-vooruit');
       return { ids: [...v.querySelectorAll('#planLijst .plan-item[data-id]')].map((e) => e.dataset.id),
-        naam: (v.querySelector('[data-rijnaam]') || {}).innerText, kop: !!document.getElementById('planKpi'),
+        naam: (v.querySelector('[data-rijnaam]') || {}).innerText, kop: !!document.getElementById('planLagenHero'),   // v524: de kop is de lagen-hero
         leeg: /Nog geen bestemmingen/.test(v.innerText), t: v.innerText };
     });
     expect(r.ids).toEqual(['noodfonds']);

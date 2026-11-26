@@ -58,10 +58,10 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
   test('de plan-zone en de dekkingskaart blijven, in die volgorde', async ({ page }) => {
     await boot(page, 'vooruit');
     const idx = await page.evaluate(() => {
-      /* v380: de zonebalk (data-zone="vooruitDoelOpen") is vervallen; Plan opent op de kop van het dashboard
-         (#planKpi). De eigenschap blijft: het plan staat bovenaan en de voetregel eronder. */
+      /* v380: de zonebalk (data-zone="vooruitDoelOpen") is vervallen; Plan opent op de kop van het dashboard.
+         v524: die kop is de lagen-hero (#planLagenHero). De eigenschap blijft: het plan staat bovenaan en de voetregel eronder. */
       const kids = [...document.getElementById('s-vooruit').children];
-      const plan = kids.findIndex((k) => k.id === 'planKpi');
+      const plan = kids.findIndex((k) => k.id === 'planLagenHero');
       return { voor: kids.slice(0, Math.max(plan, 0)).map((k) => k.className + ' ' + (k.id === 'planWacht' ? 'plan-wacht' : '')), plan, zone: document.querySelectorAll('#s-vooruit [data-zone]').length,
                foot: kids.findIndex((k) => k.classList.contains('scr-foot')) };
     });
