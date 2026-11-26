@@ -18732,11 +18732,11 @@ function lagenDoelenVolFlag(L){
   const schema=SCH?` · <span data-kpischema="${na?'laat':'ok'}" data-kpischemamnd="${SCH.verschil}"${na?' data-kpischemaamber':''}${klik?' role="button" onclick="event.stopPropagation();openPlanTijdlijn()" style="cursor:pointer;text-decoration:underline"':''}>${SCH.tekst}</span>`:'';
   return `<div class="small" data-doelenvol="${K.allesVol!=null?K.allesVol:''}" style="color:var(--mut);padding-left:18px;margin-top:2px"><span data-kpivol="${K.allesVol!=null?K.allesVol:''}">alles vol ${esc(vol)}</span>${schema}</div>`; }
 /* Groeien: de inleg per periode is de som van wat er NU inlegt (perVanaf null of <= deze periode); wat later start staat apart. */
-function lagenGroeienInleg(PW){ const ym=(PW&&PW.ym)||thisYM(); let nu=0; const later={};
+function lagenGroeienInleg(PW){ const ym=(PW&&PW.ym)||thisYM(); let nu=0; const later={}, nuNamen=[], laterNamen={};
   for(const a of (SET.assets||[])){ if(!a || !a.grow) continue; const per=Math.max(Math.round(+a.per||0),0); if(!(per>0)) continue;
-    const va=a.perVanaf?String(a.perVanaf).slice(0,7):null;
-    if(!va || va<=ym) nu+=per; else later[va]=(later[va]||0)+per; }
-  return {nu, later}; }
+    const va=a.perVanaf?String(a.perVanaf).slice(0,7):null, nm=a.naam||'Bezitting';
+    if(!va || va<=ym){ nu+=per; nuNamen.push(nm); } else { later[va]=(later[va]||0)+per; (laterNamen[va]=laterNamen[va]||[]).push(nm); } }
+  return {nu, later, nuNamen, laterNamen}; }
 function lagenGroeienSub(L, PW){ const n=(L.belItems||[]).length, I=lagenGroeienInleg(PW);
   let s=`${n} belegging${n===1?'':'en'}`; if(I.nu>0) s+=` · inleg ${euro0(I.nu)} per periode`;
   const lm=Object.keys(I.later).sort()[0]; if(lm){ const tot=I.nu+Object.values(I.later).reduce((a,b)=>a+b,0); s+=`, ${euro0(tot)} vanaf ${MNAMES[+lm.slice(5,7)-1]} ${lm.slice(0,4)}`; }
@@ -18796,7 +18796,7 @@ function lagenGestort(){
   const lagen=[{k:'beschermen', plan:planBesch, gestort:gBesch, sub:'noodfonds'},
     {k:'doelen', plan:planTerug, gestort:gTerug, sub:planTerug>0?'terugzetten':''},
     {k:'reserveren', plan:planRes, gestort:gRes, sub:''},
-    {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:(L=>L.join(' · '))((lagenData().belItems||[]).filter(b=>b.per>0).map(b=>b.naam)), later:(gGroei<=0.004 && groeiI.nu>0)}];
+    {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:groeiI.nuNamen.join(' · '), later:(gGroei<=0.004 && groeiI.nu>0)}];   // v524: alleen de beleggingen waarvan de inleg in deze periode valt (perVanaf <= periode); het pensioen komt vanaf januari
   // Extra (surplus) naar de eerste laag die niet vol is
   const L=lagenData(); let extraNaar='beschermen';
   const nfVol=L.beschermenDoel>0 && L.beschermen>=L.beschermenDoel-0.5;
