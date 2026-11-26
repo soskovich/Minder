@@ -3692,16 +3692,37 @@ function savedNet(ym){
   const r=savedNetRange(ym+'-01', ym+'-31'); if(r!=null) return r;
   const cat=txOfMonth(ym).filter(t=>catOf(t)==='sparen');
   if(!cat.length) return null;
-  let net=0; for(const t of cat) if(t.amount<0) net+=-t.amount;
+  let net=0; for(const t of cat) if(t.amount<0 && !isVerschuiving(t)) net+=-t.amount;   // v524: een verschuiving tussen lagen telt niet als opname
   return Math.round(net);
 }
 /* v440: DE ENE OPTELLING OVER JE SPAARREKENING, over een datumvenster [van, tot] (telbareTx, zonder pending). savedNet
    (kalendermaand) en opzijPeriode (salarisperiode) lezen allebei deze functie, zodat er maar een bron is die bedragen op je
    spaarrekening optelt (spaarinleg-netto). null = geen spaarrekening herkend (dan telt savedNet de categorie 'sparen'). */
+/* v524 (onderdeel 5, mockup geldstroom sectie 5): VERSCHUIVING TUSSEN LAGEN. Een afschrijving van je spaarrekening (Beschermen) met
+   binnen VERSCHUIF_DAGEN dagen een bijschrijving van (vrijwel) hetzelfde bedrag op je reserveringsrekening (Reserveren) is geen
+   opname: het geld bleef in je lagen. Minder telt hem niet als opname (savedNetRange laat hem weg, dus "nog terug" verdwijnt) en
+   vraagt of het noodfonds het terug moet krijgen (SET.verschuiving[txid]={kant, keuze:'nee'|'3'|'6'}); een eigen keuze (kant) wint.
+   AUTO-DETECTIE, want de mockup laat "nog terug" verdwijnen zodra Minder de verschuiving ziet; de goldens blijven byte-gelijk omdat
+   geen fixture een spaarrekening-afschrijving heeft die binnen 3 dagen door een reserveringsrekening-bijschrijving wordt gedekt. */
+const VERSCHUIF_DAGEN=3;
+function verschuivingNaar(t){
+  if(!t || !(t.amount<0)) return null;
+  let sav; try{ sav=new Set(n26SavingsAccounts()); }catch(_){ return null; }
+  if(!sav.has(t.acc)) return null;
+  let ra=''; try{ ra=resAccId(); }catch(_){}
+  if(!ra || ra===t.acc) return null;
+  const bedrag=Math.round(-t.amount*100)/100, dt=new Date(String(t.date).slice(0,10)+'T00:00:00');
+  for(const x of (TX||[])){ if(!x || x.acc!==ra || !(x.amount>0)) continue;
+    if(Math.abs(Math.round(x.amount*100)/100-bedrag)>=0.01) continue;
+    if(Math.abs((new Date(String(x.date).slice(0,10)+'T00:00:00')-dt)/86400000)<=VERSCHUIF_DAGEN) return 'reserveren'; }
+  return null;
+}
+function verschuivingVan(t){ const e=(SET.verschuiving||{})[t&&t.id]; if(e && e.kant) return e.kant; return verschuivingNaar(t); }
+function isVerschuiving(t){ return !!verschuivingVan(t); }
 function savedNetRange(van, tot){ const sav=new Set(n26SavingsAccounts()); if(!sav.size) return null;
-  let net=0; for(const t of telbareTx()){ const d=t.date.slice(0,10); if(d>=van && d<=tot && sav.has(t.acc)) net+=t.amount; } return Math.round(net); }
+  let net=0; for(const t of telbareTx()){ const d=t.date.slice(0,10); if(d>=van && d<=tot && sav.has(t.acc) && !isVerschuiving(t)) net+=t.amount; } return Math.round(net); }   // v524: een verschuiving telt niet als opzij of opname
 /* De boekingen achter savedNetRange, voor een sheet (geen optelling: de som loopt via savedNetRange). */
-function savedTxRange(van, tot){ const sav=new Set(n26SavingsAccounts()); if(!sav.size) return []; return telbareTx().filter(t=>sav.has(t.acc) && t.date.slice(0,10)>=van && t.date.slice(0,10)<=tot); }
+function savedTxRange(van, tot){ const sav=new Set(n26SavingsAccounts()); if(!sav.size) return []; return telbareTx().filter(t=>sav.has(t.acc) && !isVerschuiving(t) && t.date.slice(0,10)>=van && t.date.slice(0,10)<=tot); }
 /* v500 (punt 3): ÉÉN OPZIJ PER EENHEID. Wat er naar je spaarrekening ging in een eenheid (een volle maand, de korte november of een
    salarisperiode): gestort (erop), eruit (eraf) en netto, voor Afsluiten, de Verhouding met je salaris, de Terugblik en de Terugblik van je
    salarisverdeling. Een volle maand leest savedNet en spaarStortStand (dezelfde getallen die de Terugblik al toonde: een overboeking tussen
@@ -18830,6 +18851,44 @@ function openGroeien(){
     <div class="small muted" style="margin-top:8px"><span class="chev" style="color:var(--teal);cursor:pointer" onclick="closeSheet();go('vermogen')">Vermogensreis ›</span></div>
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
 }
+/* v524 (onderdeel 5, mockup geldstroom sectie 5): het lagen-logboek. De verschuivingen van deze periode: tussen LAGEN (een
+   spaarrekening-afschrijving die Minder als verschuiving naar je reserveringen herkent, met de keuze of je noodfonds het terug moet
+   krijgen) en tussen DOELEN (de verplaatsingen uit SET.planVerplaatsLog, v502). Een verschuiving laat het totaal van je lagen gelijk;
+   alleen de verdeling wijzigt, en "nog terug" telt hem niet mee (zie savedNetRange). */
+function lagenVerschuivingen(start, eind){
+  const lagen=[]; let sav; try{ sav=new Set(n26SavingsAccounts()); }catch(_){ sav=new Set(); }
+  for(const t of (TX||[])){ if(!t || !(t.amount<0) || !sav.has(t.acc)) continue; const d=String(t.date).slice(0,10);
+    if(d<start || d>eind || !isVerschuiving(t)) continue;
+    const e=(SET.verschuiving||{})[t.id]||{}; lagen.push({id:t.id, date:d, bedrag:Math.round(-t.amount*100)/100, kant:verschuivingVan(t), keuze:e.keuze||null}); }
+  lagen.sort((a,b)=>a.date<b.date?-1:1);
+  const doelen=(SET.planVerplaatsLog||[]).filter(r=>r && !r.ongedaan && String(r.op)>=start && String(r.op)<=eind)
+    .map(r=>({id:r.id, date:r.op, bedrag:r.bedrag, van:r.vanNaam, naar:r.naarNaam})).sort((a,b)=>a.date<b.date?-1:1);
+  return {lagen, doelen};
+}
+function setVerschuivingKeuze(id, keuze){
+  SET.verschuiving=SET.verschuiving||{}; const t=(TX||[]).find(x=>x&&x.id===id); const kant=(t?verschuivingVan(t):null)||'reserveren';
+  SET.verschuiving[id]=Object.assign({}, SET.verschuiving[id], {kant, keuze}); save();
+  try{ if(document.getElementById('lagenLog')) openLagenLog(); }catch(_){}
+}
+function openLagenLog(){
+  const PW=lagenPeriode(), ym=(PW&&PW.ym)||thisYM(), start=PW?PW.start:ym+'-01', eind=PW?PW.eind:ym+'-31';
+  const V=lagenVerschuivingen(start, eind), mnd=MFULL[+String(ym).slice(5,7)-1];
+  const dag=d=>`${+String(d).slice(8,10)} ${MNAMES[+String(d).slice(5,7)-1]}`;
+  const lagenRij=v=>{ const opt=(k,l)=>`<button class="btn sec" data-verschkeuze="${k}" data-aan="${v.keuze===k?1:0}" style="${v.keuze===k?'border-color:var(--teal)':''}" onclick="setVerschuivingKeuze('${esc(v.id)}','${k}')">${l}</button>`;
+    return `<div data-verschlaag="${esc(v.id)}" data-keuze="${esc(v.keuze||'')}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div class="small" style="font-weight:700">${esc(dag(v.date))} · ${euro0(v.bedrag)} verschoven</div>
+      <div class="small muted" style="margin-top:3px;line-height:1.45">Beschermen −${euro0(v.bedrag)} → Reserveren +${euro0(v.bedrag)} · totaal van je lagen gelijk · "nog terug" €0</div>
+      <div class="small" style="margin-top:7px;font-weight:600">Moet het noodfonds deze ${euro0(v.bedrag)} terugkrijgen?</div>
+      <div class="row" style="gap:7px;margin-top:5px;flex-wrap:wrap">${opt('nee','Nee, hoort bij Reserveren')}${opt('3','Ja, over 3 maanden')}${opt('6','Ja, over 6 maanden')}</div></div>`; };
+  const doelRij=v=>`<div class="row small" data-verschdoel="${esc(v.id)}" style="gap:8px;padding:9px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dag(v.date))} · ${esc(v.van)} → ${esc(v.naar)}<span class="small muted" style="display:block">verschuiving tussen doelen · je spaarrekening blijft gelijk</span></span><b style="white-space:nowrap">${euro0(v.bedrag)}</b></div>`;
+  const leeg=!V.lagen.length && !V.doelen.length;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="lagenLog" data-verschn="${V.lagen.length+V.doelen.length}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Verschuivingen · ${esc(mnd)}</div>
+    <div class="small muted" style="margin:3px 0 6px;line-height:1.45">Geld dat tussen je lagen of doelen schoof. Een verschuiving telt niet als opname, dus "nog terug" telt hem niet mee.</div>
+    ${leeg?'<div class="small muted" style="padding:10px 0">Deze periode schoof er niets tussen je lagen of doelen.</div>':''}
+    ${V.lagen.map(lagenRij).join('')}${V.doelen.map(doelRij).join('')}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
+}
 /* v524 (blok 2, gevraagd door de gebruiker): GESTORT NAAST PLAN. Per laag het PLAN uit je verdeling (SET.salVerdeling van de
    periode: opzij gesplitst over terugzetten en de rest, reserveringen, de inleg die in de periode valt) naast GESTORT (de
    stortingen op je spaarrekening(en), je reserveringsrekening en de beleggingsboekingen binnen het opzij-venster).
@@ -18909,6 +18968,7 @@ function planGestortKaart(){
   return `<div class="card" id="planGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
     <div class="row" style="padding:11px 0 1px;align-items:baseline"><span class="small" data-gestortkop style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted" data-gestortdag>${dagT}</span>`:''}</div>${opzijNoot}
     ${G.lagen.map(rij).join('')}${extra}</div>${waarom}
+    ${(function(){ let n=0; try{ const V=lagenVerschuivingen(G.PW.start, G.PW.eind); n=V.lagen.length+V.doelen.length; }catch(_){} return n>0?`<div class="small" data-verschuivingenlink="${n}" style="margin:0 2px 8px"><span class="chev" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openLagenLog()">Verschuivingen deze periode (${n}) ›</span></div>`:''; })()}
     <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
 }
 /* v380: "bijna vol" (keuze C van de gebruiker): de verwachte stand eind deze maand is minstens 95 procent van het doel en
