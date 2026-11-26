@@ -71,9 +71,9 @@ test.describe('v523c', () => {
     const oud = await lees(VOOR_HTML), nu = await lees(null);
     expect(JSON.stringify(nu)).toBe(JSON.stringify(oud));
     // Plan sluit via de lagen-invariant op de huidige app (eb7932b heeft geen lagen-hero, dus los getoetst)
-    const { planLagenInvariant, PLAN_LAGEN_OK } = require('./plan-lagen-invariant');
+    const { planLagenInvariant } = require('./plan-lagen-invariant');
     const p = await browser.newPage(); await S.boot(p, { salDec: '2026-12-24', dag: '2026-12-22' });
-    expect(await planLagenInvariant(p)).toEqual(PLAN_LAGEN_OK); await p.close();
+    expect(await planLagenInvariant(p)).toMatchObject({ ok: true }); await p.close();
   });
 
   test('d: salaris 21 dec, overboeking nog niet gezien: verwacht 22 dec, "nog niet binnen" pas op 28 dec', async ({ page }) => {

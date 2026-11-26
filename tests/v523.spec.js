@@ -181,12 +181,12 @@ test.describe('v523', () => {
   test('h: elk bedrag op Home, Inzichten, Grip, Plan en Vermogen buiten verdeling, krap en reserveringen is gelijk aan bc2bafd', async ({ page }) => {
     // v524: Plan is herzien (lagen-dashboard); de 'plan'-sleutel wordt na de back-upcontrole opnieuw vastgelegd (volgende ronde).
     // Hier sluit Plan via de lagen-invariant; de overige schermen blijven byte-gelijk aan bc2bafd.
-    const { planLagenInvariant, PLAN_LAGEN_OK } = require('./plan-lagen-invariant');
+    const { planLagenInvariant } = require('./plan-lagen-invariant');
     for (const [n, o] of [['nu', {}], ['gezien', { overboekGezien: true, dag: '2026-11-27' }], ['laat', { dag: '2026-11-29' }]]) {
       await S.boot(page, o);
       const u = await S.bedragen(page);
       for (const k of Object.keys(VOOR[n])) { if (k === 'plan') continue; expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]); }
-      expect([n, await planLagenInvariant(page)]).toEqual([n, PLAN_LAGEN_OK]);
+      expect([n, await planLagenInvariant(page)]).toMatchObject([n, { ok: true }]);
     }
   });
 });

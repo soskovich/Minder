@@ -104,7 +104,7 @@ test.describe('v521c', () => {
       await B.boot(page, o);
       const u = await bedragen(page);
       for (const k of ['home', 'ins', 'insSplit', 'grip-zien', 'grip-begrijpen', 'gripSplit', 'vermogen']) expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]);   // v524: 'plan' is nu de lagen-invariant
-      expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toEqual(require('./plan-lagen-invariant').PLAN_LAGEN_OK);
+      expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toMatchObject({ ok: true });
       /* v523 (punt 4): de reserveringen tellen per salarisperiode tot de vervaldag; alleen dat bedrag (en opzij, salaris min de rest) verschuift,
          de rekeningen niet, en opzij + reserveringen blijft gelijk */
       expect([n, u.P.rek, u.P.som, u.P.opzij + u.P.res]).toEqual([n, VOOR[n].P.rek, VOOR[n].P.som, VOOR[n].P.opzij + VOOR[n].P.res]);

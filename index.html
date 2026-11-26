@@ -18639,7 +18639,7 @@ function planStandEind(P){
 function lagenData(){
   let P=[]; try{ P=allocatePlan(); }catch(_){}
   let SE=null; try{ SE=planStandEind(P); }catch(_){}
-  let saldo=0, saldoMiss=false; try{ const S=spaarSaldo(); if(S && !S.missing) saldo=Math.round((S.exact!=null?+S.exact:+S.cur||0)*100)/100; else saldoMiss=true; }catch(_){ saldoMiss=true; }
+  let saldo=0, saldoMiss=false, geenSpaar=false; try{ const S=spaarSaldo(); if(S && !S.missing) saldo=Math.round((S.exact!=null?+S.exact:+S.cur||0)*100)/100; else saldoMiss=true; if(S && S.bron==='geen') geenSpaar=true; }catch(_){ saldoMiss=true; }   // v524 (toevoeging 1): geen herkende spaarrekening EN geen spaargeld-elders
   const extra=Math.round((+SET.extraSavings||0)*100)/100; if(extra>0) saldo=Math.round((saldo+extra)*100)/100;   // spaargeld elders telt in de spaarlaag (v376)
   let res=0, resMiss=false; try{ const ra=resAccId(); if(ra){ const b=accBalance(ra); if(b==null) resMiss=true; else res=Math.round((+b||0)*100)/100; } else resMiss=true; }catch(_){ resMiss=true; }
   let groeien=0; const belItems=[]; try{ for(const a of (SET.assets||[])){ if(!a || !a.grow) continue; const w=Math.max(bezitWaardeNu(a),0); groeien+=w;
@@ -18652,7 +18652,7 @@ function lagenData(){
   beschermen=Math.round(beschermen*100)/100; doelen=Math.round(doelen*100)/100;
   const vrij=saldoMiss?0:Math.round(Math.max(saldo-beschermen-doelen,0)*100)/100;
   const kop=Math.round((saldo+res+groeien)*100)/100;
-  return {saldo, saldoMiss, res, resMiss, groeien, belItems, beschermen, beschermenDoel, beschermenOnbekend,
+  return {saldo, saldoMiss, geenSpaar, res, resMiss, groeien, belItems, beschermen, beschermenDoel, beschermenOnbekend,
     reserveren:res, doelen, doelenDoel, vrij, kop, P, SE};
 }
 /* v524 (blok 1): DE HERO EN DE PER-LAAG-KAART OP PLAN. De vier lagen dragen de kleur-tokens die de app al heeft
@@ -18683,6 +18683,12 @@ function lagenGestortOp(acc, PW){ if(!acc || !PW) return 0; let c=0;
   return c/100; }
 function planLagenHero(L){
   L=L||lagenData();
+  /* v524 (toevoeging 1): zonder herkende spaarrekening (en zonder spaargeld-elders) is er niets te tonen dan €0; geef in
+     plaats daarvan de aanwijzing naar de plek waar je je spaarrekening aanwijst (openSpaarrekening → Instellingen → Bank). */
+  if(L.geenSpaar) return `<div id="planLagenHero" data-geenspaar="1" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px">
+    <div class="small" style="font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Je geld in lagen</div>
+    <div class="small" data-geenspaartekst style="opacity:.85;margin-top:4px;line-height:1.45">Minder kent nog geen spaarrekening, dus je lagen zijn nog niet te tonen.</div>
+    <div class="small" style="margin-top:8px"><span role="button" data-spaaraanwijzen onclick="openSpaarrekening()" style="font-weight:700;cursor:pointer">Wijs je spaarrekening aan ›</span></div></div>`;
   const seg=(v,kleur)=>{ const pct=L.kop>0?Math.max((+v||0)/L.kop*100,0):0; return pct>0?`<i style="display:block;height:100%;width:${pct.toFixed(2)}%;background:${kleur}"></i>`:''; };
   const leg=(k,v)=>`<span data-laaglegenda="${k}" style="display:flex;align-items:center;gap:6px;min-width:0"><i style="width:9px;height:9px;border-radius:2px;flex:none;background:${LAAG_KLEUR[k]}"></i>${LAAG_NAAM[k]}<b style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums">${euro0(v)}</b></span>`;
   const hsub=`${euro0(L.saldo)} op je spaarrekening · ${euro0(L.res)} gereserveerd · ${euro0(L.groeien)} belegd`;
@@ -18751,9 +18757,15 @@ function planLagenKaart(L, TL){
     <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:11px 0 1px">Per laag · stand</div>
     ${rij('beschermen', L.beschermen, L.beschermenDoel||null, lagenBeschermenSub(L, TL), '', 'openNoodfondsPanel()')}
     ${rij('reserveren', L.reserveren, null, lagenReserverenSub(), lagenReserverenFlag(PW), 'openReserveringen()')}
-    ${rij('doelen', L.doelen, L.doelenDoel||null, lagenDoelenSub(L), lagenDoelenVolFlag(L), g0?`openPlanDoel('${g0.id}')`:'')}
+    ${rij('doelen', L.doelen, L.doelenDoel||null, lagenDoelenSub(L), lagenDoelenVolFlag(L), 'planScrollDoelen()')}
     ${rij('groeien', L.groeien, null, lagenGroeienSub(L, PW), '', 'openGroeien()')}
   </div>`;
+}
+/* v524 (toevoeging 2, mockup v10): een tik op de laag Doelen in "Per laag · stand" brengt je naar de doelenlijst. Staat de
+   weergave op Tijdlijn, dan zet hij eerst Lijst aan (de doelenlijst) en scrolt er daarna naartoe. */
+function planScrollDoelen(){
+  if(planWeergave()!=='lijst'){ SET.planWeergave='lijst'; save(); try{ render(); }catch(_){} }
+  const el=document.getElementById('planLijst'); if(el){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ el.scrollIntoView(); }catch(__){} } }
 }
 /* v524 (blok 3, minimale vorm; de volle sheet met voorwaarden komt in stop 2): Groeien. */
 function openGroeien(){
@@ -19253,7 +19265,8 @@ function renderPlan(bare){
   /* v440: "Inleg uit je potjes" (planInlegBlok) is weg van Plan: de Plan-inleg bestaat niet meer. Opzij staat als "Opzij deze
      periode" in planKpi (opzijPeriode); reserveringen en beleggen volgen in v441. */
   const L=lagenData();   // v524 (blok 1): de kop wordt de lagen-hero + per-laag-kaart; "Opzij deze periode" verhuist naar blok 2, "Alles vol" naar de laag Doelen
-  return planWachtRegel()+spaarVrijLine(P)+planLagenHero(L)+planLagenKaart(L,TL)+planGestortKaart()+meld+schakel+inhoud+rest
+  const lagenKaart=L.geenSpaar?'':planLagenKaart(L,TL), blok2=L.geenSpaar?'':planGestortKaart();   // v524 (toevoeging 1): zonder herkende spaarrekening geen per-laag-stand en geen blok 2
+  return planWachtRegel()+spaarVrijLine(P)+planLagenHero(L)+lagenKaart+blok2+meld+schakel+inhoud+rest
     +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 /* v380: de weergave Lijst of Tijdlijn, per gebruiker onthouden; standaard Lijst. */

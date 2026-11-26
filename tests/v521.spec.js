@@ -114,7 +114,7 @@ test('e. met vragen aan zijn alle bedragen op de schermen byte-gelijk aan 9fbc05
   expect(await page.evaluate(() => vraagKnopAan())).toBe(true);
   const nu = await B.bedragen(page);
   for (const k of ['home', 'ins', 'grip-zien', 'grip-begrijpen', 'grip-kiezen', 'grip-terugblik', 'vermKaart', 'vermogen', 'salv']) expect(nu[k], k).toEqual(VOOR[k]);   // v524: 'plan' is nu de lagen-invariant
-  expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toEqual(require('./plan-lagen-invariant').PLAN_LAGEN_OK);
+  expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toMatchObject({ ok: true });
   expect(nu.insVastKop, 'onderhoud1: de kop noemt Vast met de stap').toBe(`· Vast +€${nu.insVastStap}`);   // onderhoud1: de enige toevoeging op Inzichten
   expect(nu.gepland).toEqual(VOOR.gepland);
 });

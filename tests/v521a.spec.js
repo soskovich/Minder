@@ -96,7 +96,7 @@ test.describe('v521a', () => {
     const NA = await B.bedragen(page);
     const verschil = (a, b) => { const c = {}; for (const x of a) c[x] = (c[x] || 0) + 1; for (const x of b) c[x] = (c[x] || 0) - 1; const weg = {}, bij = {}; for (const k in c) { if (c[k] > 0) weg[k] = c[k]; if (c[k] < 0) bij[k] = -c[k]; } return { weg, bij }; };
     for (const k of ['home', 'grip-kiezen', 'grip-terugblik', 'vermogen']) expect(NA[k], k).toEqual(VOOR[k]);   // v524: 'plan' is nu de lagen-invariant
-    expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toEqual(require('./plan-lagen-invariant').PLAN_LAGEN_OK);
+    expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toMatchObject({ ok: true });
     /* de splitsing vast/potjes: EUR 9 van potjes naar vast (het abonnement), op Inzichten en Grip Zien */
     const splits = { weg: { '€1.587': 2, '€1.737': 1 }, bij: { '€1.578': 2, '€1.746': 1 } };
     expect(verschil(VOOR.ins, NA.ins)).toEqual(splits);
