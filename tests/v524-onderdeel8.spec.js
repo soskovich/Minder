@@ -65,8 +65,9 @@ test.describe('v524 onderdeel 8: volle laag + nog over te maken', () => {
       return { bedrag: +sh.dataset.volbedrag, chips, aan };
     });
     expect(r.bedrag).toBe(500);
-    expect(r.chips).toContain('reserveren');
-    expect(r.chips).toContain('groeien');
+    expect(r.chips).toContain('volgende'); // "Volgende laag"
+    expect(r.chips).toContain('iw'); // een niet-vol doel
+    expect(r.chips).toContain('laten'); // "Laten staan"
     expect(r.aan).toBe(0); // niets voorgekozen
   });
 
@@ -86,6 +87,37 @@ test.describe('v524 onderdeel 8: volle laag + nog over te maken', () => {
     expect(r.surplus).toBe(500); // er is wel een surplus, dus de vol-poort is de enige reden
     expect(r.V).toBe(null);
     expect(r.inKies).toBe(false);
+  });
+
+  test('g: elk van de drie antwoorden stuurt de bestemming in blok 2 (volgende / een doel / laten staan)', async ({ page }) => {
+    await volBuffer(page);
+    const r = await page.evaluate(() => {
+      const lees = () => { const div = document.createElement('div'); div.innerHTML = planGestortKaart(); const reg = div.querySelector('[data-extraregel]');
+        return reg ? { naarId: reg.dataset.extranaarid, laten: reg.dataset.extralaten, sub: reg.querySelector('.muted').textContent } : null; };
+      // zonder antwoord: de eerste laag die niet vol is (op deze stand het eerste doel)
+      delete SET.lagenVolKeuze; save(); const geen = lees();
+      // 'volgende': hetzelfde als zonder antwoord
+      setLagenVolKeuze('volgende'); const volgende = lees();
+      // een LATER doel (kk) kiezen, terwijl iw als eerder doel ook niet vol is -> dat doel, niet iw
+      setLagenVolKeuze('kk'); const doel = lees(); const kkNaam = SET.goals.find((g) => g.id === 'kk').naam;
+      // laten staan: geen bestemming
+      setLagenVolKeuze('laten'); const laten = lees();
+      return { geen, volgende, doel, laten, kkNaam, eersteDoel: 'iw' };
+    });
+    // zonder antwoord: het eerste niet-volle doel (iw), generieke tekst
+    expect(r.geen.naarId).toBe('iw');
+    expect(r.geen.laten).toBe('0');
+    expect(r.geen.sub).toContain('eerste laag die niet vol is');
+    // 'volgende' is hetzelfde
+    expect(r.volgende.naarId).toBe('iw');
+    expect(r.volgende.sub).toContain('eerste laag die niet vol is');
+    // een later doel kiezen stuurt naar DAT doel (ook al is iw een eerder niet-vol doel)
+    expect(r.doel.naarId).toBe('kk');
+    expect(r.doel.sub).toContain(r.kkNaam);
+    expect(r.doel.sub).not.toContain('eerste laag die niet vol is');
+    // laten staan: geen bestemming
+    expect(r.laten.laten).toBe('1');
+    expect(r.laten.sub).toContain('geen bestemming');
   });
 
   test('f: een volle buffer zonder surplus geeft geen vraag (de surplus-poort doet er echt toe; additief op surplus-vrije standen)', async ({ page }) => {

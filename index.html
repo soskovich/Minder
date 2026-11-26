@@ -18957,13 +18957,20 @@ function lagenGestort(){
     {k:'doelen', plan:planTerug, gestort:gTerug, sub:planTerug>0?'terugzetten':''},
     {k:'reserveren', plan:planRes, gestort:gRes, sub:''},
     {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:groeiI.nuNamen.join(' · '), later:(gGroei<=0.004 && groeiI.nu>0)}];   // v524: alleen de beleggingen waarvan de inleg in deze periode valt (perVanaf <= periode); het pensioen komt vanaf januari
-  // Extra (surplus) naar de eerste laag die niet vol is
-  const L=lagenData(); let extraNaar='beschermen';
+  // Extra (surplus): standaard naar de eerste laag die niet vol is; jouw keuze (SET.lagenVolKeuze) stuurt het vanaf de volgende
+  // salarisstorting (v524 onderdeel 8, vervolg): 'volgende' = de eerstvolgende niet-volle laag (zoals nu), een doel-id = dat doel
+  // (ook als er een eerder niet-vol doel is), 'laten' = geen bestemming (telt niet als nog over te maken en komt niet bij Kiezen).
+  const L=lagenData();
   const nfVol=L.beschermenDoel>0 && L.beschermen>=L.beschermenDoel-0.5;
-  if(nfVol){ const g0=(L.P||[]).find(p=>p.type==='goal' && !planPaused(p.id) && (((L.SE||{}).per||{})[p.id]||{}).geld < Math.round(+p.doel||0)-0.5); extraNaar=g0?'doelen':'reserveren'; }
+  const eersteNietVol=()=>{ if(!nfVol) return {k:'beschermen'}; const g0=(L.P||[]).find(p=>p.type==='goal' && !planPaused(p.id) && (((L.SE||{}).per||{})[p.id]||{}).geld < Math.round(+p.doel||0)-0.5); return g0?{k:'doelen', id:g0.id, naam:g0.naam}:{k:'reserveren'}; };
+  const volKeuze=(SET.lagenVolKeuze||{}).naar; let extraNaar='beschermen', extraNaarId=null, extraNaarNaam=null, extraLaten=false;
+  if(volKeuze==='laten'){ extraLaten=true; extraNaar='laten'; }
+  else if(volKeuze && volKeuze!=='volgende' && (SET.goals||[]).some(g=>g&&g.id===volKeuze)){ const g=(SET.goals||[]).find(x=>x&&x.id===volKeuze); extraNaar='doelen'; extraNaarId=g.id; extraNaarNaam=g.naam; }
+  else { const d=eersteNietVol(); extraNaar=d.k; extraNaarId=d.id||null; extraNaarNaam=d.naam||null; }   // geen antwoord of 'volgende'
+  const extraGekozen=(volKeuze==='laten' || (volKeuze && volKeuze!=='volgende' && extraNaarId===volKeuze))?volKeuze:null;   // alleen een EXPLICIETE doel/laten-keuze verandert de weergave
   const meer=Math.round((gSav - planOpzij)*100)/100;
   return {PW, SV, stort, surplus, surplusGestort, vast, marge, lagen, meer, gSav, planOpzij, planTerug, gTerug,
-    extra:{bedrag:surplus, verg:stort?Math.round(+stort.verg||0):0, eenmalig:stort?Math.round(+stort.eenmalig||0):0, naar:extraNaar, overTeMaken:Math.max(Math.round((surplus-surplusGestort)*100)/100,0)},
+    extra:{bedrag:surplus, verg:stort?Math.round(+stort.verg||0):0, eenmalig:stort?Math.round(+stort.eenmalig||0):0, naar:extraNaar, naarId:extraNaarId, naarNaam:extraNaarNaam, laten:extraLaten, gekozen:extraGekozen, overTeMaken:extraLaten?0:Math.max(Math.round((surplus-surplusGestort)*100)/100,0)},
     gestortBinnen:!!stort};
 }
 /* de verklaring van het verschil (test c: sluit tot op de euro = meer). Surplus-regel (vergoedingen + eenmalig), per
@@ -18993,7 +19000,8 @@ function planGestortKaart(){
   const rij=l=>{ const d=Math.round((l.gestort-l.plan)*100)/100;
     const rechts=l.later?'<span class="vb" style="font-size:var(--fs-xs);font-weight:600;border:1px dashed var(--mut2);color:var(--mut);border-radius:6px;padding:0 5px">eind nov</span>':vcell(d);
     return `<div class="row" data-gestortlaag="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${LAAG_NAAM[l.k]}</b>${l.sub?`<span class="small muted" style="display:block">${l.sub}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums">${euro0(l.gestort)}</span><span style="white-space:nowrap;min-width:54px;text-align:right">${rechts}</span></div>`; };
-  const extra=G.extra.bedrag>0.5?`<div class="row" data-extraregel data-extra="${G.extra.bedrag}" data-extranaar="${G.extra.naar}" style="gap:8px;align-items:baseline;padding:8px 0 2px;margin-top:4px;border-top:1.5px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">Extra ${euro0(G.extra.bedrag)}</b><span class="small muted" style="display:block">naar ${LAAG_NAAM[G.extra.naar]}, de eerste laag die niet vol is${G.extra.overTeMaken>0?` · nog over te maken ${euro0(G.extra.overTeMaken)}`:''}</span></span></div>`:'';
+  const extraSub=G.extra.laten?'blijft staan · geen bestemming':(G.extra.gekozen?`naar ${esc(G.extra.naarNaam||LAAG_NAAM[G.extra.naar]||'')}`:`naar ${LAAG_NAAM[G.extra.naar]}, de eerste laag die niet vol is`)+(G.extra.overTeMaken>0?` · nog over te maken ${euro0(G.extra.overTeMaken)}`:'');
+  const extra=G.extra.bedrag>0.5?`<div class="row" data-extraregel data-extra="${G.extra.bedrag}" data-extranaar="${G.extra.naar}" data-extranaarid="${esc(G.extra.naarId||'')}" data-extralaten="${G.extra.laten?'1':'0'}" style="gap:8px;align-items:baseline;padding:8px 0 2px;margin-top:4px;border-top:1.5px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">Extra ${euro0(G.extra.bedrag)}</b><span class="small muted" style="display:block">${extraSub}</span></span></div>`:'';
   const W=lagenWaaromRijen(G);
   const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" style="padding:9px 14px 11px;margin-top:9px">
     <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
@@ -19023,10 +19031,10 @@ function lagenVolVraag(){
   return {bedrag:G.extra.bedrag, laag:'beschermen', naam:LAAG_NAAM.beschermen};
 }
 function lagenVolOpties(){
-  let L=null; try{ L=lagenData(); }catch(_){} const out=[];
+  let L=null; try{ L=lagenData(); }catch(_){} const out=[{id:'volgende', naam:'Volgende laag'}];   // de eerstvolgende niet-volle laag, zoals nu
   for(const p of ((L&&L.P)||[])){ if(p.type!=='goal' || planPaused(p.id)) continue; const x=(((L.SE||{}).per||{})[p.id])||{};
-    if((+x.geld||0) >= Math.round(+p.doel||0)-0.5) continue; out.push({id:p.id, naam:p.naam||'Doel'}); }   // alleen doelen die nog niet vol zijn
-  out.push({id:'reserveren', naam:LAAG_NAAM.reserveren}); out.push({id:'groeien', naam:LAAG_NAAM.groeien});
+    if((+x.geld||0) >= Math.round(+p.doel||0)-0.5) continue; out.push({id:p.id, naam:p.naam||'Doel'}); }   // elk doel dat nog niet vol is
+  out.push({id:'laten', naam:'Laten staan'});   // geen bestemming
   return out;
 }
 function openLagenVolKeuze(){
