@@ -12729,6 +12729,10 @@ function gripCyclus(SIG){
       else kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'',  bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} verdelen`, reden:`${S.vast==null?`${S.naam||'inkomen'} van ${dagKort(S.datum)}`:`het deel van je salaris van ${dagKort(S.datum)} boven ${euro0(S.vast)}`}${S.nietGesplitst?' · nog niet gesplitst':''}${EV?` · sinds ${dagKort(EV.van)} ${euro0(EV.naar)} naar opzij, je afspraak ${euro0(EV.afspraak)}`:''}`, act:`openMeevaller(${Math.round(S.eenmalig)},'salaris')`}); } } }catch(_){}
   /* v501 punt 8: de salarisverdeling komt pas in Kiezen na twee salarissen op rij met meer dan SALM2_HERZIEN afwijking per rekening */
   try{ const HZ=salM2Herzien(); if(HZ) kies.push({id:'salm2:herzien', sym:'', bron:'salaris', naam:'Zo verdeel je je salaris', reden:`twee salarissen op rij (${HZ.periodes.map(f3MN).join(', ')}) week ${HZ.rek.map(a=>aanslNaam(a)).join(' en ')} meer dan ${euro0(SALM2_HERZIEN)} af van je afspraak`, act:"openSalVerdeling('salverdeling')"}); }catch(_){}
+  /* v524 (onderdeel 8, rest): een volle laag → waar gaat het vaste bedrag voortaan heen (één keer, niets voorgekozen); en een
+     surplus dat na 3 werkdagen nog niet is overgemaakt → "nog EUR X over te maken". Beide additief (geen bedrag verandert). */
+  try{ const VL=lagenVolVraag(); if(VL) kies.push({id:'lagen:vol', sym:'', bron:'salaris', naam:'Waar gaat je extra voortaan heen?', reden:`je ${VL.naam.toLowerCase()}-laag is vol · je surplus van ${euro0(VL.bedrag)} zoekt een bestemming`, act:'openLagenVolKeuze()'}); }catch(_){}
+  try{ const VO=lagenOverVraag(); if(VO) kies.push({id:'lagen:over', sym:'', bron:'salaris', naam:`Nog ${euro0(VO.bedrag)} over te maken`, reden:`je surplus staat nog niet op je spaarrekening · maak het over naar ${LAAG_NAAM[VO.naar]||'je spaarrekening'}`, act:"go('vooruit')"}); }catch(_){}
   let H=[]; try{ H=gripTeRuimHerzien(); }catch(_){}
   for(const x of H) kies.push({id:'herz:'+x.k, k:x.k, bron:'herzien', naam:`${x.naam} herzien`, reden:`${x.deel==='variabel'?'variabel deel te ruim':'te ruim begroot'} · ${x.nr}e keer · ${euro0(x.bud)}, ${euro0(x.voorstel)} nodig`, bedrag:`${euro0(x.teRuim)} te ruim`, act:'openTeRuim()', x});
   let A=[]; try{ A=overboekActiesOpen(); }catch(_){}
@@ -19005,6 +19009,41 @@ function planGestortKaart(){
     ${G.lagen.map(rij).join('')}${extra}</div>${waarom}
     ${(function(){ let n=0; try{ const V=lagenVerschuivingen(G.PW.start, G.PW.eind); n=V.lagen.length+V.doelen.length; }catch(_){} return n>0?`<div class="small" data-verschuivingenlink="${n}" style="margin:0 2px 8px"><span class="chev" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openLagenLog()">Verschuivingen deze periode (${n}) ›</span></div>`:''; })()}
     <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
+}
+/* v524 (onderdeel 8, rest): bij een VOLLE LAAG vraagt Kiezen ÉÉN KEER waar het vaste bedrag (de opzij uit je verdeling) voortaan
+   heen gaat, en bij een SURPLUS DAT NOG NIET IS OVERGEMAAKT ("nog over te maken EUR X") komt er na OVERBOEK_LAAT_DAGEN werkdagen
+   één keer een herinnering in Kiezen. Beide zijn ADDITIEF: ze lezen alleen, zetten een Kiezen-item, en bewegen geen bedrag.
+   NIETS SCHUIFT VANZELF DOOR: de keuze (SET.lagenVolKeuze) wordt vastgelegd, niet uitgevoerd; de waterval verdeelt zoals altijd. */
+function lagenVolVraag(){
+  if(SET.lagenVolKeuze) return null;                                                                    // al één keer beantwoord
+  let G=null; try{ G=lagenGestort(); }catch(_){} if(!G || !G.extra || !(G.extra.bedrag>0.5)) return null; // alleen met een surplus dat een bestemming zoekt
+  let L=null; try{ L=lagenData(); }catch(_){} if(!L) return null;
+  if(L.beschermenOnbekend) return null;                                                                 // onbekend is geen vol
+  if(!(L.beschermenDoel>0 && L.beschermen>=L.beschermenDoel-0.5)) return null;                           // de buffer (beschermen-laag) is vol
+  return {bedrag:G.extra.bedrag, laag:'beschermen', naam:LAAG_NAAM.beschermen};
+}
+function lagenVolOpties(){
+  let L=null; try{ L=lagenData(); }catch(_){} const out=[];
+  for(const p of ((L&&L.P)||[])){ if(p.type!=='goal' || planPaused(p.id)) continue; const x=(((L.SE||{}).per||{})[p.id])||{};
+    if((+x.geld||0) >= Math.round(+p.doel||0)-0.5) continue; out.push({id:p.id, naam:p.naam||'Doel'}); }   // alleen doelen die nog niet vol zijn
+  out.push({id:'reserveren', naam:LAAG_NAAM.reserveren}); out.push({id:'groeien', naam:LAAG_NAAM.groeien});
+  return out;
+}
+function openLagenVolKeuze(){
+  const VL=lagenVolVraag(); const opts=lagenVolOpties(); const huidig=(SET.lagenVolKeuze&&SET.lagenVolKeuze.naar)||'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="lagenVolKeuze" data-volbedrag="${VL?VL.bedrag:0}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Je buffer is vol</div>
+    <div class="small muted" style="margin:3px 0 11px;line-height:1.45">Je surplus van ${euro0(VL?VL.bedrag:0)} ging naar je ${esc((VL?VL.naam:'buffer').toLowerCase())}. Waar gaat het voortaan heen? Minder schuift niets vanzelf door; je kiest het hier.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">${opts.map(o=>`<button class="btn sec" data-volbron="${esc(o.id)}" data-aan="${o.id===huidig?'1':'0'}" onclick="setLagenVolKeuze('${esc(o.id)}')"${o.id===huidig?' style="border-color:var(--teal);color:var(--teal)"':''}>${esc(o.naam)}</button>`).join('')}</div>
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
+}
+function setLagenVolKeuze(doel){ SET.lagenVolKeuze={naar:doel, op:vandaagYMD()}; save(); closeSheet(); render(); }
+function lagenOverVraag(){
+  let G=null; try{ G=lagenGestort(); }catch(_){} if(!G || !G.extra || !(G.extra.overTeMaken>0.5)) return null;
+  const PW=G.PW; if(!PW || !PW.salDag) return null;
+  const grens=werkdagPlus(String(PW.salDag).slice(0,10), OVERBOEK_LAAT_DAGEN);                            // pas na 3 werkdagen (v523c, dezelfde lat als "nog niet binnen")
+  if(vandaagYMD()<grens) return null;
+  return {bedrag:G.extra.overTeMaken, naar:G.extra.naar};
 }
 /* v380: "bijna vol" (keuze C van de gebruiker): de verwachte stand eind deze maand is minstens 95 procent van het doel en
    nog niet het doel, en er komt na deze maand nog geld terug, dus de vol-datum ligt later. */
