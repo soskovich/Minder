@@ -466,7 +466,9 @@ test.describe('5 - de bron: een grens per vraag, en niet meer een vaste drie', (
        volgende maand over zodra de maand omslaat. Hij staat in de lijst omdat hij een SCHRIJVER is
        en geen lezer die een oordeel velt - dat is de eigenschap die deze test bewaakt - en zijn
        eigen regel staat hieronder apart vast. */
-    const toegestaan = ['function bufferNorm(){', 'function normVastzetten(){',
+    /* v524 (onderdeel 4): de ruwe getter is bufferNormStored(); bufferNorm() is sinds v524 de pad-aware
+       wrapper die bufferNormStored() leest en SET.bufferNorm niet meer rechtstreeks. */
+    const toegestaan = ['function bufferNorm(){', 'function bufferNormStored(){', 'function normVastzetten(){',
       'function normTerugdraaien(){', 'function bufferNormWis(){', 'function diagGrendel(){',
       'function rolloverBudgets(){'];
     const gedekt = toegestaan.map((fn) => sectieVan(s, fn)).join('\n');

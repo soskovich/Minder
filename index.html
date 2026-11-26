@@ -6953,10 +6953,31 @@ const MAAND_DREMPEL = { dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelSt
    hetzelfde getal en noemde de comment daar die gelijkheid. Dat venster is de MEETPERIODE waarover
    de richting van je buffer wordt vastgesteld en niet een grens waaronder iets te weinig is; een
    meetperiode die met een normkeuze meebeweegt maakt de reeks van v226 onvergelijkbaar. */
-function bufferNorm(){
+function bufferNormStored(){
   const v=SET.bufferNorm; const n=(v==null||v==='')?NaN:Math.round(+v);
   return (isFinite(n)&&n>0)?n:null;
 }
+/* v524 (onderdeel 4, mockup geldstroom sectie 4): HET OPBOUWPAD. Je ondergrens groeit stap voor stap van `van` naar `naar` maanden:
+   per kwartaal ½ maand, of elke 2 maanden ¼ maand (of 'zelf': geen pad). Het pad vertrekt op SET.bufferPad.start en de huidige stap
+   volgt uit de verstreken maanden. Zonder pad (of 'zelf') is ondergrensNu() null en is bufferNorm() woordelijk de opgeslagen norm, dus
+   elk bestaand getal blijft gelijk. Met een pad is de ondergrens die het gating-chain leest (bufferMaanden-toets, beleggenDrempel) de
+   gemeten stap van vandaag, die fractioneel kan zijn (1¼). Het DOELBEDRAG (SET.nfMaanden) staat hier los van en verandert niet. */
+function bufferPad(){ const p=SET.bufferPad; if(!p || !p.modus || p.modus==='zelf') return null;
+  const van=Math.max(Math.round((+p.van||1)*4)/4,0), naar=bufferNormStored();   // het pad groeit NAAR je gekozen ondergrens (de twee maandenkiezers blijven apart)
+  if(naar==null || !(naar>van) || !p.start) return null; return {modus:p.modus, van, naar, start:String(p.start).slice(0,7)}; }
+function bufferPadStap(modus){ return modus==='kwartaal'?{elke:3, stap:0.5}:{elke:2, stap:0.25}; }
+function bufferMaandenTussen(a, b){ const pa=/^(\d{4})-(\d{2})/.exec(a), pb=/^(\d{4})-(\d{2})/.exec(b); if(!pa||!pb) return 0; return (+pb[1]-+pa[1])*12+(+pb[2]-+pa[2]); }
+function ondergrensNu(){
+  const p=bufferPad(); if(!p) return null;
+  const S=bufferPadStap(p.modus), verstreken=Math.max(bufferMaandenTussen(p.start, thisYM()),0);
+  const stappen=Math.floor(verstreken/S.elke);
+  return Math.min(Math.round((p.van + stappen*S.stap)*100)/100, p.naar);
+}
+function bufferNorm(){ const o=ondergrensNu(); return o!=null?o:bufferNormStored(); }   // v524 (onderdeel 4): pad-aware; zonder pad de opgeslagen norm
+/* v524 (onderdeel 4): "1¼ maand" voor een fractionele ondergrens; heel getal zonder breuk. */
+function maandLabel(n){ if(n==null) return ''; const heel=Math.floor(n), frac=Math.round((n-heel)*4)/4;
+  const br={0:'',0.25:'¼',0.5:'½',0.75:'¾'}[frac]||''; const g=(frac>=1?heel+1:heel); const t=(frac>0 && frac<1)?`${heel>0?heel:''}${br}`:`${g}`;
+  return `${t} ${(n===1)?'maand':'maanden'}`; }
 /* v315: DE NORM VANAF VOLGENDE MAAND, in dezelfde vorm als `plannedBudgets()`. `bufferNorm()`
    blijft de norm van de LOPENDE maand, en daarom gaat elke bestaande lezer vanzelf mee: de
    bufferregel, `meevallerNodig('buffer')` en `beleggenDrempel()` oordelen over NU en lezen dus
@@ -21958,7 +21979,8 @@ function renderNfSheet(){
       ${nfDoelVastRij(M)}
       <div data-nfgrenskop style="font-weight:700;font-size:var(--fs-sm);margin:16px 0 0;text-align:left">Ondergrens &middot; vanaf wanneer is je buffer genoeg</div>
       <div class="small muted" style="font-size:var(--fs-xs);margin:2px 0 0;text-align:left">Bepaalt alleen het oordeel op Grip; verandert je doelbedrag niet omlaag</div>
-      ${bufferNormRij(M)}</div>
+      ${bufferNormRij(M)}
+      ${bufferPadRij(M)}</div>
     ${nfAllocCard()}
     ${(function(){ try{ const v=planOrdeVeld(PLAN_NF); return v?`<div class="card">${v}</div>`:''; }catch(_){ return ''; } })()}
     ${listCard}
@@ -22214,9 +22236,45 @@ function bufferNormRij(M){
   }
   return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
     <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Ondergrens in maanden</label>${
-      (nu!=null||wacht)?`<span class="small" style="font-weight:700">${wacht?`${nu} → ${vlg}`:nu} mnd</span>`:'<span class="small muted">niet gekozen</span>'}</div>
+      (nu!=null||wacht)?`<span class="small" style="font-weight:700">${wacht?`${nu} → ${vlg}`:maandLabel(nu)}</span>`:'<span class="small muted">niet gekozen</span>'}</div>
     ${kiezer}
     ${onder}</div>`;
+}
+/* v524 (onderdeel 4): "1¼" (alleen het getal met de breuk, voor het pad). */
+function maandBreuk(n){ const heel=Math.floor(n), frac=Math.round((n-heel)*4)/4; const br={0.25:'¼',0.5:'½',0.75:'¾'}[frac]||'';
+  return (frac>0&&frac<1)?`${heel>0?heel:''}${br}`:`${frac>=1?heel+1:heel}`; }
+function bufferPadTraject(p){ if(!p) return []; const S=bufferPadStap(p.modus), out=[]; const tot=Math.ceil((p.naar-p.van)/S.stap);
+  for(let i=0;i<=tot;i++){ const m=Math.min(Math.round((p.van+i*S.stap)*100)/100, p.naar), d=new Date(+p.start.slice(0,4), +p.start.slice(5,7)-1+i*S.elke, 1);
+    out.push({label:MNAMES[d.getMonth()], waarde:m}); if(m>=p.naar) break; }
+  return out; }
+function bufferResTekort(){ try{ const D=dekking(12); const t=Math.max(Math.round((+D.benodigdeStand||0)-(+D.werkelijkeStand||0)),0); return isFinite(t)?t:0; }catch(_){ return 0; } }
+function setBufferPadModus(modus){
+  if(!modus || modus==='zelf'){ delete SET.bufferPad; }
+  else { const b=Object.assign({van:1, start:thisYM()}, SET.bufferPad||{}, {modus}); if(b.van==null) b.van=1; if(!b.start) b.start=thisYM(); SET.bufferPad=b; }
+  save(); renderNfSheet(); try{ renderVooruit(); }catch(_){}
+}
+function setBufferPadVan(v){ const n=Math.max(Math.round((+v||1)*4)/4,0); SET.bufferPad=Object.assign({modus:'2mnd', start:thisYM()}, SET.bufferPad||{}, {van:n}); save(); renderNfSheet(); }
+function toggleBufferResOpslag(){ SET.bufferResOpslag=!SET.bufferResOpslag; save(); renderNfSheet(); try{ renderVooruit(); }catch(_){} }
+/* v524 (onderdeel 4): het opbouwpad ONDER de ondergrens-kiezer (los van de doelbedrag-kiezer, de twee maandenkiezers staan apart).
+   Het pad groeit naar je gekozen ondergrens; drie modi, niets voorgekozen. Het reserveringstekort (opslag) staat in "genoeg vanaf". */
+function bufferPadRij(M){
+  const naar=bufferNormStored(), ess=Math.round((M&&M.essCrisis)||0);
+  if(naar==null) return `<div class="small muted" data-geenpad style="font-size:var(--fs-xs);margin-top:10px;text-align:left">Kies eerst een ondergrens hierboven; dan kun je er stap voor stap naartoe groeien.</div>`;
+  const p=bufferPad(), modus=p?p.modus:((SET.bufferPad&&SET.bufferPad.modus)||null);
+  const van=Math.max(Math.round(((SET.bufferPad&&+SET.bufferPad.van)||1)*4)/4,1);
+  const chip=(k,l)=>`<span class="chip ${modus===k?'on':''}" data-padmodus="${k}" onclick="setBufferPadModus('${k}')">${l}</span>`;
+  const traject=p?bufferPadTraject(p):[];
+  const trajectHTML=traject.length?`<div class="row small" data-padtraject="${traject.length}" style="gap:10px;margin-top:8px;flex-wrap:wrap">${traject.map(s=>`<span style="text-align:center"><b style="display:block">${esc(s.label)}</b><span class="small muted">${maandBreuk(s.waarde)}</span></span>`).join('')}</div>`:'';
+  const opslag=SET.bufferResOpslag?bufferResTekort():0;
+  const ondergrensBedrag=Math.round((ondergrensNu()!=null?ondergrensNu():naar)*ess);
+  const genoeg=ondergrensBedrag+opslag;
+  const genoegHTML=ess>0?`<div class="small" data-padgenoeg="${genoeg}" style="margin-top:9px;line-height:1.5;text-align:left">Ondergrens deze periode ${euro0(ondergrensBedrag)}${opslag>0?` <span data-padopslag="${opslag}">+ reserveringen onder hun doel ${euro0(opslag)}</span>`:''}<span style="display:block;font-weight:700">Je buffer is genoeg vanaf ${euro0(genoeg)}</span></div>`:'';
+  return `<div data-bufferpad="${p?p.modus:''}" style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
+    <div class="small" style="font-weight:700;text-align:left">Opbouwpad &middot; van ${maandBreuk(van)} naar ${maandLabel(naar)}</div>
+    <div class="small muted" style="font-size:var(--fs-xs);margin:2px 0 0;text-align:left">Minder verhoogt je ondergrens stap voor stap. Niets voorgekozen.</div>
+    <div class="chips" style="margin-top:8px;justify-content:flex-start">${chip('kwartaal','Per kwartaal ½ maand')}${chip('2mnd','Elke 2 maanden ¼ maand')}${chip('zelf','Zelf verhogen')}</div>
+    ${trajectHTML}${genoegHTML}
+    <label class="row" data-resopslagrij style="padding:10px 0 0;gap:8px;cursor:pointer;align-items:flex-start"><input type="checkbox" data-resopslag ${SET.bufferResOpslag?'checked':''} onchange="toggleBufferResOpslag()"><span class="small" style="flex:1">Opslag voor lege reserveringen meetellen<span style="display:block;color:var(--mut2)">Is je reserveringspot leeg, dan telt dat tekort mee in je ondergrens.</span></span></label></div>`;
 }
 function nfDoelVastRij(M){
   const v=M.doelVast;
