@@ -9266,6 +9266,17 @@ aan voor zijn eerste `goto`. `ECHTE_KLOK=1` zet de klok uit (alleen als sabotage
 **Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
 `lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
 
+**OMGEVINGSVERSCHIL WINDOWS: VIJF TESTS ZIJN OP WINDOWS ROOD, OP LINUX GROEN** (`v524`, gevraagd door de gebruiker). Op een
+Windows-toestel met `@playwright/test 1.63.0` (Chromium-build 1243) staan deze vijf rood, en ze zijn NIET van v524: `grip-vanaf-norm.spec.js:714`
+p360 en p390 ("de prijs in pixels van het logboek") en `logboek-maandkop.spec.js:347` p360 en p390 ("de hoogte van het logboek") zijn
+CHROMIUM-TEKSTMETRIEK (dezelfde familie als `v478`: een pin op een tekst vlak voor zijn afbreekpunt meet de browser en niet de layout, en
+Windows-Chromium breekt net anders af dan de Linux-build waarop de pins zijn gezet); `v456.spec.js:243` ("CLAUDE.md legt de drie soorten vast")
+is CRLF: de test eist het substring `bekend\n  antwoord` en op Windows staat er `bekend\r\n  antwoord` in CLAUDE.md. BEWIJS dat het de
+omgeving is en niet de code: de drie specs én CLAUDE.md zijn byte-identiek aan de vorige main (`975ad41`, 0 diff), en met `975ad41`'s
+`index.html` uitgecheckt vielen op hetzelfde Windows-toestel EXACT dezelfde vijf (5 van 5 rood). Op de Linux-CI (de build waarop de pins en de
+LF-aanname kloppen) zijn alle vijf groen. Een rode test is dus nooit "omgevingsgebonden" zonder dit soort bewijs (de vorige main ook rood,
+of de Linux-kant groen).
+
 **GEREPAREERD BIJ `v308`: `geen-verbetering-door-uitgeven.spec.js` "de oude som steeg met elke
 uitgegeven euro, en staat nergens meer".** Hij viel op een BOTSING en niet op de eigenschap: de test
 eist dat het bedrag van de vervallen som (`incDue - fixDue - varPlan`) nergens in de tekst staat, en
