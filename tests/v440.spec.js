@@ -100,9 +100,11 @@ test.describe('2 · opzijPeriode is de ene opzij-bron', () => {
     const d = await page.evaluate((acc) => { SET.salVerdeling = { rek: { [acc]: 1 }, opzij: 1200 }; return opzijPeriode().doel; }, MAIN);
     expect(d).toBe(1200);
   });
-  test('Plan toont "Opzij deze periode" en de Doelen-meter leest opzijPeriode', async ({ page }) => {
+  test('de opzij-tegel is weg van Plan; de Doelen-meter leest nog steeds opzijPeriode', async ({ page }) => {
     await open(page);
-    expect(await page.evaluate(() => renderPlan())).toContain('Opzij deze periode');
+    // v524: "Opzij deze periode" (de opzij-tegel) is met de kop vervallen (opzij verhuisde naar blok 2); de bron
+    // (opzijPeriode) blijft, en de Doelen-meter op Grip leest hem ongewijzigd.
+    expect(await page.evaluate(() => renderPlan())).not.toContain('Opzij deze periode');
     const m = await page.evaluate((acc) => { SET.salVerdeling = { rek: { [acc]: 1 }, opzij: 1200 }; const O = opzijPeriode(), D = gripMeterDoelen(); return { doel: D.opzij, meterNetto: D.netto, periodeNetto: O.netto }; }, MAIN);
     expect(m.doel).toBe(1200);               // de meter leest het doel uit opzijPeriode
     expect(m.meterNetto).toBe(m.periodeNetto);

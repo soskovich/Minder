@@ -316,7 +316,9 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
         .map((x) => x.getAttribute('style') || '');
       return { tekst: rij.innerText.replace(/\s+/g, ' '), fills };
     });
-    expect(r.tekst).toMatch(/gepauzeerd/i); expect(r.tekst).toMatch(/krijgt nu niets/i);
+    // v524 (punt 1): "krijgt nu niets" verliet de rij-sub (het increment staat als attribuut); de status "gepauzeerd" op de
+    // rij zegt het, en de detailsheet draagt de zin nog. De grijze vulling en het ontbreken van een tweede segment blijven.
+    expect(r.tekst).toMatch(/gepauzeerd/i);
     expect(r.fills.some((x) => /--mut/.test(x))).toBe(true);
     expect(r.fills.some((x) => /--teal|--accent/.test(x))).toBe(false);
     expect(r.fills.length).toBe(1);            // geen groei-segment
