@@ -2568,7 +2568,7 @@ function resPartijVoor(t){ if(!t || !(t.amount<0) || !t.date) return null;
    EEN geenNorm-CATEGORIE KAN DE VLAG NIET DRAGEN, dus deze functie is daar per constructie gelijk
    aan het volle bedrag (zie uitReserveringBedrag()). Daarmee blijft catSpendMap() karakter voor
    karakter dezelfde som als hiervoor. */
-function uitgaveNorm(t){ return (-t.amount)-uitReserveringBedrag(t); }
+function uitgaveNorm(t){ return (-t.amount)-uitReserveringBedrag(t)-uitDoelBedrag(t); }   // v524 (onderdeel 3): een aankoop uit een spaardoel telt ook niet tegen je potjes
 /* v403: EEN PERSOONLIJKE OVERBOEKING ZONDER POTJE IS GEEN UITGAVE, OP GRIP EN OP INZICHTEN (gevraagd door de gebruiker).
    Dit is de ENE definitie (per categorie): een categorie uit ZONDER_UIT die een uitgave is, geen potje heeft en niet op
    vast staat. Geef je zo'n categorie een potje, of een boeking een andere categorie, dan telt hij gewoon mee. Lezers:
@@ -2597,6 +2597,40 @@ function zetUitReservering(id, bedrag, heropen){
      zou hij zich door de boekingssheet laten vervangen. Eén schrijver, geen tweede opslag. */
   if(heropen!==false){ try{ if(document.getElementById('sheetBg').classList.contains('show')) openSheet(id); }catch(_){} }
 }
+/* v524 (onderdeel 3, mockup geldstroom, sectie 3): SPAARDOEL BESTEDEN. Zet je een doel op "besteden" (g.besteden), dan koppel je
+   een aankoop aan dat doel: hij telt tegen het doel (de stand daalt, zie planMap) en NIET tegen je potjes (uitgaveNorm), en
+   vraagt niet om terugzetten (het geld komt van je betaalrekening, niet van je spaarrekening, dus er is geen spaarOnttrekking).
+   Dit spiegelt "uit een reservering" (v269): SET.uitDoel[txid]={doel, bedrag}, een eigen keuze op de boeking is de enige bron.
+   ADDITIEF: zonder besteden-doel is er geen uitDoel, dus uitDoelBedrag() is overal 0 en elk bestaand getal blijft gelijk.
+   Reservering en doel sluiten elkaar uit (uit een reservering wint), zodat een bedrag nooit twee keer van de norm af gaat. */
+function doelBesteden(id){ const g=(SET.goals||[]).find(x=>x && x.id===id); return !!(g && g.besteden); }
+function bestedenDoelen(){ return (SET.goals||[]).filter(g=>g && g.id && g.besteden); }   // de doelen waarvoor je NU kunt koppelen (de categorie-optie)
+/* De vlag van een gekoppelde aankoop PERSISTEERT los van de besteden-schakelaar: je hebt hem uit het doel betaald, dus hij
+   blijft buiten je potjes ook nadat je het doel afsluit of op "blijft" zet. De besteden-schakelaar stuurt alleen of je NIEUWE
+   aankopen kunt koppelen (bestedenDoelen) en de live aftrek in planMap. Reservering wint (dan geen uitDoel). */
+function uitDoelVan(t){ if(!t) return null; const e=(SET.uitDoel||{})[t.id]; return (e && e.doel)?e.doel:null; }
+function uitDoelBedrag(t){
+  if(!t || !(t.amount<0)) return 0;
+  const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) return 0;
+  if(geenNormTx(t)) return 0;
+  if(uitReserveringBedrag(t)>0) return 0;   // uit een reservering wint: nooit twee keer aftrekken
+  const e=(SET.uitDoel||{})[t.id];
+  if(!e || !e.doel) return 0;
+  const v=+e.bedrag||0; return v>0?Math.min(v, -t.amount):0;
+}
+function uitDoelSom(doelid){ let s=0; for(const t of (TX||[])){ if(uitDoelVan(t)===doelid) s+=uitDoelBedrag(t); } return Math.round(s*100)/100; }
+function zetUitDoel(id, doelid, bedrag){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  SET.uitDoel=SET.uitDoel||{};
+  const v=Math.min(Math.max(Math.round((+bedrag||0)*100)/100,0), Math.max(-t.amount,0));
+  if(!doelid || v<=0) delete SET.uitDoel[id];
+  else SET.uitDoel[id]={doel:doelid, bedrag:v};
+  save(); render();
+  try{ if(document.getElementById('sheetBg').classList.contains('show')) openSheet(id); }catch(_){}
+}
+function toggleUitDoel(id){ const t=TX.find(x=>x.id===id); if(!t) return;
+  if(uitDoelBedrag(t)>0){ zetUitDoel(id, null, 0); return; }
+  const D=bestedenDoelen(); if(D.length) zetUitDoel(id, (uitDoelVan(t)||D[0].id), -t.amount); }
 /* De schakelaar zet het hele bedrag of haalt de vlag weg; het veld eronder verfijnt. Twee ingangen
    naar dezelfde waarde, geen tweede opslag (v61). */
 function toggleUitReservering(id){
@@ -2638,6 +2672,7 @@ function totals(m){ perfHit('totals');
        categorie zodat de regel op Inzichten per constructie optelt tot uitReservering, precies
        zoals geenNormRegels() dat via byCat doet (v258). Geen tweede sommatie. */
     const ur=uitReserveringBedrag(t); if(ur>0){ uitRes+=ur; uitResCat[c]=(uitResCat[c]||0)+ur; }
+    const ud=uitDoelBedrag(t); if(ud>0){ uitRes+=ud; uitResCat[c]=(uitResCat[c]||0)+ud; }   // v524 (onderdeel 3): een aankoop uit een spaardoel, in dezelfde aftrekking
   }
   /* v259: het inkomen komt uit maandInkomen(m), de enige bron. income is de NORM (zonder wat je
      als onregelmatig hebt gemarkeerd), incomeAlles is het GELD. Dat is dezelfde splitsing als
@@ -6705,11 +6740,14 @@ function planMap(){
     try{ return !!spaarSaldo().missing; }catch(_){ return true; } })();
   by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,nfOnbekend,
     gespaard:nfGespaardBij(nfDoel)}, planAllocOf(planAllocCfg(PLAN_NF)));
-  for(const g of (SET.goals||[])) if(g&&g.id)
-    by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
+  for(const g of (SET.goals||[])) if(g&&g.id){
+    /* v524 (onderdeel 3): een doel op "besteden" telt zijn gekoppelde aankopen van zijn stand af (de stand daalt met wat je
+       besteedde). Additief: zonder g.besteden is besteed 0 en is gespaard woordelijk wat het was. */
+    const besteed=g.besteden?uitDoelSom(g.id):0, gesp=g.besteden?Math.max(Math.round(((+g.gespaard||0)-besteed)*100)/100,0):(+g.gespaard||0);
+    by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:gesp,besteden:!!g.besteden,besteed,
              streefdatum:g.streefdatum||'',
              // v248: doorgeven, niet herrekenen. doelStreepje() leest ze hier en nergens anders.
-             startDatum:g.startDatum||'', startStand:+g.startStand||0}, planDoelModus(g));   // v373: na de overgang geen eigen modus meer
+             startDatum:g.startDatum||'', startStand:+g.startStand||0}, planDoelModus(g)); }   // v373: na de overgang geen eigen modus meer
   // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
   for(const key of planOrderList()){
     if(key.slice(0,3)!=='af:') continue;
@@ -19704,6 +19742,40 @@ function planDoelRij(p,i,TL,SE,tints){
    plus de inleg van deze maand, is de stand eind deze maand (planStandEind()). "vol" alleen als die stand het doel haalt;
    anders de rode regel met wat er nog nodig is. Komt er na deze maand nog geld terug (B), dan staat dat eronder, buiten de
    som, met de vol-datum die het laatste deel geeft. */
+/* v524 (onderdeel 3): de besteden-schakelaar in de detailsheet van een doel, met de besteed-stand ("besteed EUR X · nog EUR Y"),
+   de gekoppelde aankopen, en "Klaar met inrichten?" (rest naar het noodfonds / rest blijft in het doel / het doel afsluiten).
+   De besteden-schakelaar en de klaar-knoppen staan alleen bij een gewoon doel, niet bij het noodfonds of een aflos-item. */
+function doelBestedenBlok(p){
+  if(!p || p.type!=='goal') return '';
+  const g=(SET.goals||[]).find(x=>x && x.id===p.id); if(!g) return '';
+  const aan=!!g.besteden; let body='';
+  if(aan){
+    const besteed=uitDoelSom(p.id), gesp0=Math.max(Math.round(+g.gespaard||0),0), rest=Math.max(gesp0-besteed,0);
+    const tx=(TX||[]).filter(t=>uitDoelVan(t)===p.id).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const dag=d=>`${+String(d).slice(8,10)} ${MNAMES[+String(d).slice(5,7)-1]}`;
+    body=`<div class="small" data-besteedstand="${besteed}" data-besteedrest="${rest}" style="margin-top:6px;font-weight:700">besteed ${euro0(besteed)} · nog ${euro0(rest)}</div>
+      ${tx.map(t=>`<div class="row small" data-besteedtx="${esc(t.id)}" style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dag(t.date))} · ${esc(txNaam(t))}</span><b style="white-space:nowrap">${euro0(uitDoelBedrag(t))}</b></div>`).join('')}
+      <div class="small muted" style="margin-top:6px">Koppel een aankoop in het categorie-scherm van de boeking: daar staat "uit ${esc(g.naam)}".</div>
+      <div class="small" style="margin-top:9px;font-weight:700">Klaar met inrichten?</div>
+      <div class="row" style="gap:8px;margin-top:5px;flex-wrap:wrap"><button class="btn sec" data-besteedklaar="noodfonds" onclick="doelBestedenKlaar('${p.id}','noodfonds')">Rest naar Noodfonds</button><button class="btn sec" data-besteedklaar="blijft" onclick="doelBestedenKlaar('${p.id}','blijft')">Rest blijft in ${esc(g.naam)}</button><button class="btn sec" data-besteedklaar="afsluiten" onclick="doelBestedenKlaar('${p.id}','afsluiten')">Doel afsluiten</button></div>`;
+  }
+  return `<label class="row" data-doelbestedenrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:10px">
+      <input type="checkbox" data-doelbesteden ${aan?'checked':''} onchange="toggleDoelBesteden('${p.id}')">
+      <span class="small" style="flex:1">Zet dit doel op <b>besteden</b><span style="display:block;color:var(--mut2)">aankopen tellen tegen dit doel, niet tegen je potjes, en vragen niet om terugzetten</span></span></label>${body}`;
+}
+function toggleDoelBesteden(id){ const g=(SET.goals||[]).find(x=>x && x.id===id); if(!g) return; g.besteden=!g.besteden; save(); try{ renderPlanDoel(); }catch(_){} }
+/* "Klaar met inrichten": de gekoppelde aankopen zijn verwerkt, dus de stand daalt WERKELIJK met wat je besteedde (g.gespaard
+   wordt de rest) en besteden gaat uit. De vlaggen van de aankopen blijven staan (ze bleven uit je potjes, dat verandert niet).
+   noodfonds: de rest verhuist naar je noodfonds-toewijzing; afsluiten: het doel verdwijnt, de rest wordt niet toegewezen (vrij);
+   blijft: het doel blijft open op de reststand. */
+function doelBestedenKlaar(id, keuze){
+  const g=(SET.goals||[]).find(x=>x && x.id===id); if(!g) return;
+  const besteed=uitDoelSom(id), rest=Math.max(Math.round(((Math.max(Math.round(+g.gespaard||0),0))-besteed)*100)/100,0);
+  g.besteden=false; g.gespaard=rest;
+  if(keuze==='noodfonds'){ SET.nfToegewezen=Math.max(Math.round(+SET.nfToegewezen||0),0)+rest; deleteGoal(id); return; }   // deleteGoal haalt het doel uit SET.goals, slaat op en sluit de sheet
+  if(keuze==='afsluiten'){ deleteGoal(id); return; }   // de rest wordt niet toegewezen (vrij)
+  save(); try{ renderPlanDoel(); }catch(_){}
+}
 function openPlanDoel(id){ window._planDoel=id; window._zgKeuze=null; renderPlanDoel(); showSheetBg(); }   // v381: niets voorgekozen
 function planRij(id){ openPlanDoel(id); }
 const PLAN_PLEK=['eerste','tweede','derde','vierde','vijfde','zesde'];
@@ -19744,7 +19816,7 @@ function renderPlanDoel(){
     <div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:800;font-size:var(--fs-lg)">${esc(p.naam)}</span><span class="small" data-planstatus style="font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
     <div class="small muted" style="margin:2px 0 8px">doel ${euro0(doel)} · ${plek} in de volgorde</div>
     <div class="bar-track" style="height:10px;margin:0 0 6px;position:relative"><div class="bar-fill" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}${streep}</div>
-    ${som}${dat}
+    ${som}${dat}${doelBestedenBlok(p)}
     <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${(p.type!=='aflossen'&&planVerplaatsMag(p.id))?act('⇄ verplaats',`openPlanVerplaats('${p.id}')`,'data-doelverplaats'):''}${p.type==='aflossen'?act('Maandbedrag ›',`closeSheet();${planAllocOpen(p)}`,'data-doelmaandbedrag'):''}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
 }
 /* v381: TOEGEWEZEN ZONDER GELD, NOG NIET GEKOZEN. De twee bestaande keuzes uit de sheet achter de melding (spaarOverData()):
@@ -29074,6 +29146,23 @@ function uitReserveringBlok(t){
       <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
              onchange="zetUitReservering('${t.id}', numIn(this.value))"></div>`:''}`;
 }
+/* v524 (onderdeel 3): de keuze "uit een spaardoel" in de boekingssheet, alleen zichtbaar als er een doel op "besteden" staat.
+   Spiegelt uitReserveringBlok; bij meer dan een besteden-doel kies je welk. Reservering wint (dan verschijnt dit blok niet). */
+function uitDoelBlok(t){
+  const c=catOf(t);
+  if(!(t.amount<0 && CATS[c] && CATS[c].type==='expense') || geenNormTx(t)) return '';
+  if(uitReserveringBedrag(t)>0) return '';
+  const D=bestedenDoelen(); if(!D.length) return '';
+  const cur=uitDoelVan(t), b=uitDoelBedrag(t), aan=b>0, heel=aan && Math.abs(b-(-t.amount))<0.01;
+  const kies=cur||D[0].id, opts=D.map(g=>`<option value="${esc(g.id)}"${g.id===kies?' selected':''}>${esc(g.naam)}</option>`).join('');
+  return `<label class="row" data-uitdoelrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)">
+      <input type="checkbox" id="uitdoel" ${aan?'checked':''} onchange="toggleUitDoel('${t.id}')">
+      <span class="small" style="flex:1">Dit kwam <b>uit een spaardoel</b><span style="display:block;color:var(--mut2)">telt tegen dat doel, niet tegen je potjes</span></span></label>
+    ${aan?`<div class="row" style="gap:8px;align-items:center;padding:0 0 10px">
+      ${D.length>1?`<select data-uitdoelsel onchange="zetUitDoel('${t.id}', this.value, ${numUit(b)})" style="flex:1">${opts}</select>`:`<span class="small muted" style="flex:1">Waarvan uit ${esc(D[0].naam)}${heel?'':` \u00b7 van ${euro0(-t.amount)}`}</span>`}
+      <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
+             onchange="zetUitDoel('${t.id}', '${esc(kies)}', numIn(this.value))"></div>`:''}`;
+}
 /* v332: de rij in de boekingssheet. Hij staat alleen bij een afschrijving op Sparen & beleggen
    (bezitKandidaat), zegt waar de koppeling vandaan komt (jouw keuze bij deze boeking, of een regel),
    en een tik opent de keuze. Zonder bezittingen verwijst hij naar Vermogen in plaats van een lege
@@ -29352,7 +29441,7 @@ function openSheet(id){
     ${catVoorstelBlok(t)}
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
     ${CATS[cur].type==='expense'?`<label class="row" data-eenmaligrij style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)"><input type="checkbox" data-eenmaligtoggle ${(SET.eenmaligOk||{})[id]?'checked':''} onchange="eenmaligZet('${id}')"><span class="small"><b>Eenmalig</b> · telt niet in je potje en niet in je patroon</span></label>`:''}
-    ${kennisBlok(t)}${salSplitsing(t)?salSplitBlok(t):onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
+    ${kennisBlok(t)}${salSplitsing(t)?salSplitBlok(t):onregelmatigBlok(t)}${holdingBlok(t)}${uitReserveringBlok(t)}${uitDoelBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}${txNotitieBlok(t)}
     <div id="catKeuzeDeel">${catKeuzeHTML(t,'')}</div>`;
   showSheetBg();
