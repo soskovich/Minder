@@ -18611,6 +18611,16 @@ function planZonderAfKeuze(P){
    gewoon opgehaald. GEMELD op 26-10: saldo EUR 5.350,20, toegewezen EUR 5.350, en Plan zei "nog EUR 1.088 terug". Een transactiefout
    hoort bij de aansluiting per rekening (v465). Alleen een ontbrekend saldo (spaarSaldo().missing) of een saldo dat bij de laatste sync
    mislukte (psd2Falend(), de ene afleiding daarvan) laat het de terugzetkeuze blijven (`saldo:false`, met de reden). */
+/* v524 (onderdeel 2, mockup geldstroom sectie 2): UIT WELK DOEL KWAM HET. Per opname (een afschrijving van je spaarrekening die geen
+   verschuiving is, onderdeel 5) kies je zelf de bron: een doel of je noodfonds. Minder's eigen toewijzing (spaarOverItems-volgorde)
+   is het VOORSTEL, maar niets staat voorgekozen (SET.opnameBron[txid]={bron}). Je keuze laat dat doel het tekort (planTekort) als
+   eerste dragen. Additief: zonder keuze is voorkeur leeg en is de verdeling woordelijk die van spaarOverItems. */
+function opnameLijst(ym){ ym=ym||thisYM(); let sav; try{ sav=new Set(n26SavingsAccounts()); }catch(_){ return []; } if(!sav.size) return [];
+  return (txOfMonth(ym)||[]).filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t)).sort((a,b)=>a.date<b.date?-1:1); }
+function opnameBronVan(t){ const e=(SET.opnameBron||{})[t&&t.id]; return (e&&e.bron)?e.bron:null; }
+function opnameBronNaarDoel(ym){ const o={}; for(const t of opnameLijst(ym)){ const b=opnameBronVan(t); if(b && b!=='noodfonds') o[b]=Math.round(((o[b]||0)+(-t.amount))*100)/100; } return o; }
+function setOpnameBron(id, bron){ SET.opnameBron=SET.opnameBron||{}; if(!bron) delete SET.opnameBron[id]; else SET.opnameBron[id]={bron}; save();
+  try{ if(document.getElementById('opnameBron')) openOpnameBron(); }catch(_){} }
 function planTekort(P, aftrek){
   P=P||allocatePlan();
   const keuze=planTerugKeuze();
@@ -18624,8 +18634,12 @@ function planTekort(P, aftrek){
   const items=P.filter(p=>(p.type==='goal'||p.type==='noodfonds') && !p.nfOnbekend);
   const toeVan={}; let toe=0; for(const p of items){ const t=Math.max(Math.round(+p.gespaard||0),0); toeVan[p.id]=t; toe+=t; }
   const T=r2(Math.max(toe-saldo,0));
-  const nog={}, zg={}, orde=spaarOverItems(P).filter(p=>toeVan[p.id]!=null); let rest=T;
-  for(const p of orde){ if(rest<0.005) break; const k=r2(Math.min(Math.max(keuze[p.id]||0,0), toeVan[p.id], rest)); if(k>0){ nog[p.id]=k; rest=r2(rest-k); } }
+  const voorkeur=(function(){ try{ return opnameBronNaarDoel(thisYM()); }catch(_){ return {}; } })();   // v524 (onderdeel 2): jouw per-opname bron-keuzes dragen het tekort als eerste
+  const auto=spaarOverItems(P).filter(p=>toeVan[p.id]!=null);
+  const voorIds=Object.keys(voorkeur).filter(id=>toeVan[id]!=null && voorkeur[id]>0);
+  const orde=voorIds.length?[...voorIds.map(id=>auto.find(p=>p.id===id)||{id}), ...auto.filter(p=>!voorIds.includes(p.id))]:auto;
+  const nog={}, zg={}; let rest=T;
+  for(const p of orde){ if(rest<0.005) break; const cap=Math.max(keuze[p.id]||0, voorkeur[p.id]||0); const k=r2(Math.min(cap, toeVan[p.id], rest)); if(k>0){ nog[p.id]=k; rest=r2(rest-k); } }
   for(const p of orde){ if(rest<0.005) break; const ruimte=r2(toeVan[p.id]-(nog[p.id]||0)), z=r2(Math.min(ruimte, rest)); if(z>0){ zg[p.id]=z; rest=r2(rest-z); } }
   return {saldo:true, reden:'', nog, zg, keuze, T, saldoBedrag:saldo, toe, rest};
 }
@@ -19942,6 +19956,24 @@ function terugAansluiting(ym){
   return {ym, tot, R, exact:{deze, later, niet, gestort, open, vrij}, uitExact:S.uitExact, laterLab:LM.length?(LM.length>1?`${mk(LM[0])}–${mk(LM[LM.length-1])}`:mk(LM[0])):'', perTx,
     uitDoelen:S.bron.filter(b=>b.soort==='op').reduce((a,b)=>a+b.bedrag,0)};
 }
+/* v524 (onderdeel 2): het voorstel is het doel dat Minder's eigen toewijzing (spaarOverItems-volgorde) als eerste zou verlagen; het
+   staat gemarkeerd maar niet voorgekozen. De sheet "Eruit gehaald in <maand>" laat je per opname zelf de bron kiezen. */
+function opnameVoorstelDoel(P){ try{ const it=spaarOverItems(P||allocatePlan()).find(x=>x.type==='goal' && (+x.gespaard||0)>0); return it?it.id:null; }catch(_){ return null; } }
+function openOpnameBron(){
+  const ym=thisYM(), mn=MFULL[+ym.slice(5,7)-1]; let P=[]; try{ P=allocatePlan(); }catch(_){}
+  const opn=opnameLijst(ym), voorstel=opnameVoorstelDoel(P), doelen=P.filter(p=>p.type==='goal' && (+p.gespaard||0)>0);
+  const dag=d=>`${+String(d).slice(8,10)} ${MNAMES[+String(d).slice(5,7)-1]}`;
+  const rij=t=>{ const cur=opnameBronVan(t);
+    const chip=(k,l,vst)=>`<button class="btn sec" data-opnbron="${esc(k)}" data-aan="${cur===k?1:0}" data-voorstel="${vst?1:0}" style="${cur===k?'border-color:var(--teal);':''}margin:0 5px 5px 0" onclick="setOpnameBron('${esc(t.id)}','${esc(k)}')">${esc(l)}${vst?' · voorstel':''}</button>`;
+    return `<div data-opnamerij="${esc(t.id)}" data-keuze="${esc(cur||'')}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div class="row small" style="gap:8px;font-weight:700"><span style="flex:1;min-width:0">${esc(dag(t.date))} · ${esc(txNaam(t))}</span><b style="white-space:nowrap">${euro0(-t.amount)}</b></div>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap">${chip('noodfonds','Uit Noodfonds', voorstel==='noodfonds')}${doelen.map(d=>chip(d.id,'Uit '+d.naam, voorstel===d.id)).join('')}</div></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="opnameBron" data-opnamen="${opn.length}" data-voorstel="${esc(voorstel||'')}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Eruit gehaald in ${esc(mn)}</div>
+    <div class="small muted" style="margin:3px 0 6px;line-height:1.45">Waar kwam het vandaan? Per opname kies je zelf de bron. Er staat één voorstel, maar niets is aangevinkt — Minder verplaatst niets vanzelf.</div>
+    ${opn.length?opn.map(rij).join(''):'<div class="small muted" style="padding:10px 0">Deze maand haalde je niets uit je spaargeld.</div>'}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
+}
 function openTerugOpbouw(){
   const ym=thisYM(), A=terugzetActief(ym), mn=MFULL[+ym.slice(5,7)-1];
   let P=[]; try{ P=allocatePlan(); }catch(_){}
@@ -19971,7 +20003,7 @@ function openTerugOpbouw(){
     <div style="font-weight:800;font-size:var(--fs-lg)">${euro0(tot)} terug in ${esc(mn)}</div>
     <div class="small muted" style="margin:2px 0 8px">Wat je deze maand terugzet, per keuze.</div>
     ${aansl}${keuzes||'<div class="small muted">Er loopt geen keuze om terug te zetten.</div>'}
-    ${boek?`<div class="small" style="font-weight:700;margin:12px 0 2px">Eruit gehaald in ${esc(mn)}</div>${boek}`:''}
+    ${boek?`<div class="row small" style="margin:12px 0 2px;align-items:baseline"><span style="flex:1;font-weight:700">Eruit gehaald in ${esc(mn)}</span>${opnameLijst(ym).length?`<span class="chev" data-waarvandaan role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openOpnameBron()">Waar kwam het vandaan? ›</span>`:''}</div>${boek}`:''}
     ${heen?`<div class="small" style="font-weight:700;margin:12px 0 2px">Waar het heen gaat</div>${heen}`:''}
     ${TND.onverdeeld>0?`<div class="small muted" style="margin-top:4px">${euro0(TND.onverdeeld)} past nergens en blijft over.</div>`:''}
     <div class="small" style="margin-top:12px"><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openPlanInstel()">keuze wijzigen ›</span></div></div>`;
