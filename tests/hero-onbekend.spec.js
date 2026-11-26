@@ -113,8 +113,9 @@ test.describe('wél een bekend saldo', () => {
 test('hero-hoofdgetal en saldoregel zitten altijd in dezelfde staat', async ({ browser }) => {
   const seen = [];
   for (const bal of [null, 2500]) {
-    // handmatige context: opties uit playwright.config.js gelden hier niet automatisch, dus expliciet meegeven
-    const ctx = await browser.newContext({ baseURL: 'http://localhost:5599', serviceWorkers: 'block' });
+    // handmatige context: opties uit playwright.config.js gelden hier niet automatisch, dus expliciet meegeven.
+    // De poort volgt MINDER_TEST_PORT (standaard 5599), zodat een run op een eigen poort niet op 5599 blijft hangen.
+    const ctx = await browser.newContext({ baseURL: 'http://localhost:' + (process.env.MINDER_TEST_PORT || 5599), serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await open(page, bal);
     const r = await page.evaluate(() => {
