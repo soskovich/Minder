@@ -1,5 +1,11 @@
 const { defineConfig, devices } = require('@playwright/test');
 
+// De poort is instelbaar met MINDER_TEST_PORT (standaard 5599), zodat een tweede worktree/sessie op een eigen
+// poort draait en Playwright niet de serve.js van een andere checkout hergebruikt. tests/serve.js leest dezelfde
+// variable, dus de env propageert naar de webServer-command.
+const PORT = Number(process.env.MINDER_TEST_PORT) || 5599;
+const ORIGIN = 'http://localhost:' + PORT;
+
 module.exports = defineConfig({
   testDir: './tests',
   // tests/wip/ staat buiten de standaardrun: specs voor features die nog niet gebouwd zijn (die lopen
@@ -13,10 +19,10 @@ module.exports = defineConfig({
   // overgenomen en herlaadt de controllerchange-handler midden in een test ("Execution context was destroyed",
   // sheets die nooit verschijnen). page.route('**/sw.js') helpt daar niet tegen: dat onderschept het
   // worker-script niet. De service worker zelf testen we hier niet.
-  use: { baseURL: 'http://localhost:5599', serviceWorkers: 'block' },
+  use: { baseURL: ORIGIN, serviceWorkers: 'block' },
   webServer: {
     command: 'node tests/serve.js',
-    url: 'http://localhost:5599',
+    url: ORIGIN,
     reuseExistingServer: true,
     timeout: 20000,
   },

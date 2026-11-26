@@ -3,6 +3,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
+// De poort is instelbaar met MINDER_TEST_PORT (standaard 5599). Zo kan een tweede worktree/sessie op een
+// eigen poort draaien zonder dat Playwright de server van een andere checkout hergebruikt (reuseExistingServer).
+const PORT = Number(process.env.MINDER_TEST_PORT) || 5599;
 const types = { '.html':'text/html', '.js':'text/javascript', '.json':'application/json',
   '.png':'image/png', '.webmanifest':'application/manifest+json', '.css':'text/css' };
 http.createServer((req, res) => {
@@ -14,4 +17,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': types[path.extname(f)] || 'application/octet-stream' });
     res.end(d);
   });
-}).listen(5599, () => console.log('serve op http://localhost:5599'));
+}).listen(PORT, () => console.log('serve op http://localhost:' + PORT));
