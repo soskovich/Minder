@@ -2819,6 +2819,12 @@ function contantTellen(){
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">Hoeveel contant heb je nu?</div>
     <div class="small muted" style="line-height:1.5;margin-bottom:12px">${uitleg}</div>
     ${V!=null?`<div class="small" style="color:var(--mut2);margin-bottom:10px;line-height:1.5">De app verwacht ${euro0(V)}. Tel je minder, dan is het verschil wat je contant hebt uitgegeven.</div>`:''}
+    ${(()=>{ /* onderhoud2 (punt 3): een opname OP de teldag telt de app als al in de telling. Is er zo'n opname, dan vraagt de app één keer
+       of dat klopt; niets voorgekozen, het antwoord staat bij de telling. "Nee" telt de opname na de telling mee. */
+      const opT=T?contantOpnamesOpTeldag():[]; if(!opT.length) return '';
+      const som=opT.reduce((a,t)=>a-t.amount,0), ant=(SET.contantOpnTel||{})[T.datum], dq=esc(T.datum);
+      const ch=(v,l)=>`<span class="chip${ant===v?' on':''}" data-contopnkeuze="${v}" style="cursor:pointer" onclick="contantOpnTelZet('${dq}','${v}')">${l}</span>`;
+      return `<div class="small" data-contopnvraag style="margin-bottom:10px;line-height:1.5">Zat de opname van ${euro0(som)}${opT.length>1?` (${opT.length} opnames)`:''} van je teldag al in je telling? <span class="chips" style="display:inline-flex;gap:6px;margin-top:4px">${ch('ja','Ja, zat erin')}${ch('nee','Nee, kwam erna')}</span></div>`; })()}
     <label class="fld" style="margin-top:0">In je zak (€)</label>
     <input id="contInput" type="text" inputmode="decimal" value="${V!=null?numUit(Math.max(V,0)):''}" placeholder="bv. 35,50" style="width:100%">
     <div class="row" style="gap:8px;margin-top:14px">
@@ -2980,12 +2986,24 @@ function contantVerwacht(){
      bevestiging zou zichzelf dan tegenspreken. Hetzelfde geldt voor een csv-opname binnen het venster van
      v284: die telde hier ook nog mee. */
   let op=0; for(const t of telbareTx()){ if(t.date>T.datum && isOpnameTx(t)) op+=-t.amount; }
+  /* onderhoud2 (punt 3): een opname OP de teldag (t.date===T.datum) telt de grens t.date>T.datum niet mee: hij wordt verondersteld al in
+     je telling te zitten (v258). Soms klopt dat niet. Heb je bij die telling "nee, de opname zat er nog niet in" geantwoord
+     (SET.contantOpnTel[T.datum]==='nee'), dan telt die opname alsnog na de telling mee. Zonder antwoord, of met "ja", blijft de huidige
+     regel (hij zit al in de telling). */
+  if((SET.contantOpnTel||{})[T.datum]==='nee') for(const t of contantOpnamesOpTeldag()) op+=-t.amount;
   /* v342: een storting van contant geld gaat er af, met dezelfde datumgrens als een opname; een contante
      ontvangst (een lening die contant terugkwam) komt erbij, met de grens van contantInTelt(). */
   for(const t of contantStortingenSinds()) op-=t.amount;
   for(const x of contantInSinds()) op+=x.bedrag;
   return Math.round((T.stand+op)*100)/100;
 }
+/* onderhoud2 (punt 3): de opname(s) op de dag van de huidige telling */
+function contantOpnamesOpTeldag(){ const T=contantTelling(); if(!T || !T.datum) return []; const out=[];
+  for(const t of telbareTx()){ if(!t.pending && String(t.date).slice(0,10)===T.datum && isOpnameTx(t)) out.push(t); } return out; }
+/* niets voorgekozen; dezelfde keuze nog eens tikt hem uit. Het antwoord staat bij de telling (op zijn dag). */
+function contantOpnTelZet(datum, keuze){ SET.contantOpnTel=SET.contantOpnTel||{};
+  if(SET.contantOpnTel[datum]===keuze) delete SET.contantOpnTel[datum]; else SET.contantOpnTel[datum]=keuze;
+  save(); try{ if($('#contInput')) contantTellen(); else render(); }catch(_){} }
 /* v447: DE STANDEN VAN JE PORTEMONNEE, oud naar nieuw (SET.contantHist; een telling van voor v447 staat alleen in SET.contant en
    telt als de eerste). */
 function contantStanden(){ const H=(SET.contantHist||[]).slice(), T=contantTelling();
