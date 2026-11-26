@@ -3832,7 +3832,10 @@ function recurringScheduleKern(metOud){
 /* de toets van het schema op een vaste last (incasso, periodieke overboeking of door jou op vast gezet); een plek, twee lezers:
    recurringScheduleKern() en postReeksen() (onderhoud1). */
 function recurVastBoeking(t, meta){ meta=meta||CATS[catOf(t)]||{};
-  return meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (!_SIM419 && (SET.fixOvrM||{})[recurKey(t)]==='fixed')); }
+  return meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t) || (!_SIM419 && fixOvrMIets() && SET.fixOvrM[recurKey(t)]==='fixed')); }
+/* onderhoud1c: zonder enige keuze per partij in SET.fixOvrM is de sleutel niet nodig (de uitkomst is dan per constructie false). Sinds
+   onderhoud1 loopt postReeksenAlle() over elke afschrijving, en zonder deze toets vroeg hij voor elke losse boeking recurKey() voor niets. */
+function fixOvrMIets(){ const F=SET.fixOvrM; if(!F) return false; for(const _ in F) return true; return false; }
 /* onderhoud1 (punt 2): EEN TEGENPARTIJ KAN MEER REEKSEN DRAGEN. Gemeld: onder Stichting Beheer Derdengelden (Peaks) vallen de inleg van
    EUR 100 eind van de maand, de servicekosten van EUR 2,99 rond de 3e en een gestopte wekelijkse inleg. recurKey() kent alleen de naam,
    dus het schema maakt er EEN post van, en de status ("gestopt?") las dan een reeks die niet bestaat. postReeksen() splitst de vaste
