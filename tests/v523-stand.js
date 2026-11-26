@@ -62,7 +62,7 @@ async function bedragen(page) {
   return page.evaluate(() => {
     const re = /-?€\s?[\d.]+(?:,\d{2})?/g, uit = {};
     const tekst = (el) => { if (!el) return ''; const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let s = '', n; while ((n = w.nextNode())) s += n.nodeValue + ' '; return s; };
-    const leesT = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salmoment1],[data-salvmelding],#salTekort')) x.remove(); return tekst(c).match(re) || []; };
+    const leesT = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salmoment1],[data-salvmelding],[data-salvvolgend],#salTekort')) x.remove(); return tekst(c).match(re) || []; };
     go('dash'); renderDash(); uit.home = leesT('s-dash');
     go('ins'); renderIns(); uit.ins = leesT('s-ins');
     go('maand'); for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { try { gripKiesTab(t); } catch (_) {} uit['grip-' + t] = leesT('s-maand'); }

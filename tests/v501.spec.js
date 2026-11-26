@@ -28,28 +28,33 @@ test.describe('v501', () => {
     const r = await page.evaluate(() => {
       const N = salVoorstelNu(); renderMaand(); gripKiesTab('zien');
       const k = document.getElementById('salVoorstelKaart');
-      const zienTxt = (k.querySelector('[data-salvopzijtekst]') || {}).innerText || '', zienAttr = +k.dataset.salvkaartopzij, verdeling = +k.dataset.salvverdeling;
-      const vs = k.querySelector('[data-salvopzijverschil]'); const vsTxt = vs ? vs.innerText : '', vsAttr = vs ? +vs.dataset.salvopzijverschil : null;
+      /* v525: het grote getal is je overboeking (de afspraak); het voorstel staat eronder als "Volgens Minder kan er €X opzij", zonder correctie */
+      const zienTxt = (k.querySelector('[data-salvminderopzij]') || {}).innerText || '', zienAttr = +k.dataset.salvkaartopzij, verdeling = +k.dataset.salvverdeling;
+      const groot = +String((k.querySelector('[data-salvopzijbedrag]') || {}).innerText || '').replace(/\D/g, ''), vsTxt = k.innerText, vsAttr = +(k.querySelector('[data-salvminderopzij]') || { dataset: {} }).dataset.salvminderopzij;
       gripKiesTab('terugblik');
       const m2 = document.querySelector('[data-m2volgopzij]'); const m2Txt = m2.innerText, m2Attr = +m2.dataset.m2volgopzij;
       const VS = salOpzijVerschil(N);
-      return { N: N.opzij, res: N.P.reserveringen, zienTxt, zienAttr, verdeling, vsTxt, vsAttr, m2Txt, m2Attr, delen: VS.delen, delenSom: VS.totaal };
+      return { N: N.opzij, res: N.P.reserveringen, zienTxt, zienAttr, verdeling, groot, vsTxt, vsAttr, m2Txt, m2Attr, delen: VS.delen, delenSom: VS.totaal };
     });
     expect(r.zienAttr).toBe(r.N); expect(r.m2Attr).toBe(r.N);
-    const zien = num(r.zienTxt.replace(/^.*opzij/, '')), m2 = num(r.m2Txt.replace(/^.*opzij/, ''));
+    const zien = num(r.zienTxt.replace(/^.*kan er/, '')), m2 = num(r.m2Txt.replace(/^.*opzij/, ''));
     expect(zien, 'Zien toont het ene getal').toBe(r.N); expect(m2, 'de Terugblik toont hetzelfde getal').toBe(zien);
     /* het verschil met je verdeling staat eronder, bij naam, OOK als het onder SALV_AFWIJK ligt (de €14 van 26 nov) */
     expect(r.verdeling).toBe(3000); expect(r.N, 'invoer: het voorstel wijkt af van de afspraak').not.toBe(3000);
-    expect(r.vsAttr).toBe(r.N - 3000); expect(r.vsTxt).toMatch(/volgens je verdeling €3\.000 · [+−]€\d/);
+    expect(r.vsAttr).toBe(r.N); expect(r.groot).toBe(3000); expect(r.vsTxt).not.toMatch(/volgens je verdeling/);
     expect(r.delen.length).toBeGreaterThan(0); expect(r.delenSom).toBe(r.N - 3000);   // de delen tellen op tot het verschil
   });
 
   test('a2. de reden van 26 nov: reserveringen die aan de komende periode worden toegerekend staan in het voorstel, niet in de afspraak', async ({ page }) => {
     await S.boot(page, { res: true });
     const r = await page.evaluate(() => { const N = salVoorstelNu(); renderMaand(); gripKiesTab('zien'); const k = document.getElementById('salVoorstelKaart');
-      return { res: N.P.reserveringen, N: N.opzij, afsprRes: Math.round(SET.salVerdeling.reserveringen || 0), vs: (k.querySelector('[data-salvopzijverschil]') || {}).innerText || '', m2: (document.querySelector('[data-m2volgopzij]') || { dataset: {} }).dataset.m2volgopzij }; });
+      const rr = k.querySelector('[data-salvrekrij="__res"]');
+      return { res: N.P.reserveringen, N: N.opzij, afsprRes: Math.round(SET.salVerdeling.reserveringen || 0), vs: (k.querySelector('[data-salvminderopzij]') || {}).innerText || '', resErbij: rr ? +rr.dataset.erbij : null, resVerschil: rr ? +rr.dataset.verschil : null, oordeel: (k.querySelector('[data-salvoordeel]') || {}).innerText || '', m2: (document.querySelector('[data-m2volgopzij]') || { dataset: {} }).dataset.m2volgopzij }; });
     expect(r.res, 'invoer: de komende periode rekent reserveringen toe').toBeGreaterThan(0); expect(r.afsprRes).toBe(0);
-    expect(r.vs).toMatch(new RegExp('reserveringen €' + r.res.toLocaleString('nl-NL').replace('.', '\\.') + ' in deze periode'));
+    /* v525: de reden staat nu als eigen rij: Reserveringen erbij nodig €X tegen je overboeking €0, en in het oordeel */
+    expect(r.resErbij).toBe(Math.round(r.res)); expect(r.resVerschil).toBe(-Math.round(r.res));
+    expect(r.oordeel).toMatch(new RegExp('Reserveringen €' + Math.round(r.res).toLocaleString('nl-NL').replace('.', '\\.')));
+    expect(r.vs).toMatch(new RegExp('als je reserveringen hun €' + Math.round(r.res).toLocaleString('nl-NL').replace('.', '\\.') + ' krijgen'));
     /* en juist hier scheiden salaris − som en het voorstel: de Terugblik toont het voorstel (sabotage a leest salaris − som) */
     const m2 = await page.evaluate(() => { gripKiesTab('terugblik'); const e = document.querySelector('[data-m2volgopzij]'); return { attr: +e.dataset.m2volgopzij, t: e.innerText }; });
     expect(m2.attr).toBe(r.N); expect(num(m2.t.replace(/^.*opzij/, ''))).toBe(r.N);

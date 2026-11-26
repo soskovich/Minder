@@ -1151,3 +1151,19 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
 - **Een latere keuze voor dezelfde regel sluit een acceptatie.** Alleen voor dekking zijn er twee: een stortingsafspraak (ook aangepast of gestopt, "telt als afgerond") en een wijziging van de lijst of de rekening (`SET.resGewijzigd`). Er wordt niets gewist: SET.maandAccept blijft staan.
 - **Een stortingsafspraak meet stortingen, per salarisperiode.** Netto per kalendermaand telde een betaling uit de pot als een gemiste storting. De eenheid komt uit periodeVan() en begint bij de eenheid van de dag van de afspraak.
 - **Een terugcheck die klopt is geen keuze.** Kiezen draagt alleen wat nog iets vraagt; wat hielp staat in de Terugblik als een zin.
+
+## v525 · salarisverdeling: een oordeel, wat er binnenkwam, het salaris van nu eerst
+- **Het oordeel leest alleen je afspraak.** Sinds v523 is de afspraak je N26-regel, dus "dekken mijn overboekingen het" is de afspraak tegen
+  erbij nodig. Een oordeel tegen het voorstel zou per constructie altijd "gedekt" zeggen (het voorstel IS wat er nodig is); test a meet dat het
+  voorstel de Betaalrekening wel dekt terwijl de afspraak dat niet doet.
+- **Het grote opzij-getal is je overboeking, niet het voorstel.** Dat draait de vorm van v501 om ("EEN OPZIJ-GETAL: het voorstel"), op keuze van
+  de mockup: wat er werkelijk naar je spaarrekening gaat is je N26-regel; het voorstel staat eronder als "Volgens Minder kan er X opzij". Het
+  attribuut `data-salvkaartopzij` blijft het voorstel, zodat de bron van v501 (salVoorstelNu) gelijk blijft aan de Terugblik.
+- **In 'dit' staat de voorstelkaart alleen op de stortingsdag.** GEMETEN: `rekVoorstel()` rekent vanaf de dag na de storting de VOLGENDE periode
+  (per0 = SP.volg). Dat omzetten zou elk bedrag in verdeling, krap en vooruitblik verschuiven (verboden in deze ronde), dus de kaart zwijgt in die
+  dagen en "Salaris binnen" gaat over dit salaris. De sheet achter "Nu verdelen" / "Bevestigen" rekent die dagen nog wel het volgende salaris:
+  open punt.
+- **Groeien heeft geen oordeel.** De beleggingsinleg zit al in het bedrag van de rekening waar hij vanaf gaat (`r.belS` in `laten`); hem als eigen
+  rij met een overboeking toetsen zou hem twee keer tellen. De rij zegt in welke rekening hij zit.
+- **Valkuil:** een `//`-commentaar midden in een `const`-reeks slokte de rest van de regel op en gaf in de browser "Unexpected token 'const'";
+  de boot liep vast en elke test timede uit. Na een edit op een lange regel: `node check.js` en een pagina laden, niet alleen de spec.

@@ -184,13 +184,22 @@ test.describe('v436 · 3. Patronen', () => {
 
 test.describe('v436 · 4. tekort-waarschuwingen alleen na Akkoord', () => {
   test('4a. zonder Akkoord geen waarschuwing, ook bij een tekort, en de kaart "Je salarisverdeling" met het voorstel', async ({ page }) => {
+    /* v525 (punt 6): het volgende salaris (ma 26 okt) staat er pas vanaf 5 werkdagen ervoor (ma 19 okt); op 17 okt een rustige regel */
     await boot(page, { set: { manualBal: { [LEEF]: 1, [MAIN]: 1 } } });
     await page.evaluate(() => { go('maand'); renderMaand(); });
+    await expect(page.locator('#salVoorstelKaart')).toHaveCount(0);
+    await expect(page.locator('[data-salvvolgend]')).toContainText('Volgend salaris rond ma 26 okt');
+    await boot(page, { dag: '2026-10-19', set: { manualBal: { [LEEF]: 1, [MAIN]: 1 } } });
+    await page.evaluate(() => { go('maand'); renderMaand(); });
+    await expect(page.locator('[data-salvvolgend]')).toHaveCount(0);
     expect(await page.evaluate(() => salTekortData().length)).toBe(0);
     await expect(page.locator('[data-saltekort]')).toHaveCount(0);
     const k = await page.locator('#salVoorstelKaart').innerText();
-    expect(k).toMatch(/Je salarisverdeling/i); expect(k).toMatch(/Voorstel klaar voor ma 26 okt: Salarisrekening €\d/); expect(k).toMatch(/opzij €/);
-    await page.locator('#salVoorstelKaart').click();
+    /* v525: een oordeel, een rij per rekening (erbij nodig · je overboeking · verschil) en opzij onderaan; geen "Voorstel klaar" als lopende tekst */
+    expect(k).toMatch(/Je salarisverdeling · 26 okt/i); expect(k).not.toMatch(/Voorstel klaar/); expect(k).toMatch(/Opzij naar je spaarrekening/);
+    await expect(page.locator('#salVoorstelKaart [data-salvoordeel]')).toHaveCount(1);
+    expect(await page.locator('#salVoorstelKaart [data-salvrekrij]').count()).toBeGreaterThan(0);
+    await page.locator('#salVoorstelKaart [data-salvhoeopen]').click();
     await expect(page.locator('[data-salvrek]').first()).toBeVisible();
   });
   test('4b. na Akkoord een pop-up (niet op Zien) met alle rekeningen: v481 "tekort EUR X · leeg vanaf <datum>" of "EUR X over", en waar het vandaan kan komen', async ({ page }) => {

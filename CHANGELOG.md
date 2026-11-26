@@ -1877,3 +1877,12 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
     - `plan-balken.spec.js` (1): 548 (e · de optelling als attribuut op de kop).
     - `verdeling-projectie.spec.js` (1): 110 (c · de kop is het eerste blok).
     - `verdeling-aanpassen.spec.js` (1): 79 (c · de regel op de kaart opent de sheet).
+- **v525: salarisverdeling · een oordeel, wat er echt binnenkwam, en het salaris van nu eerst** (`minder-v525`, tak `werk/v525` vanaf d8c90b9,
+  mockup "Salarisverdeling kort"). De kaart "Je salarisverdeling" op Zien (`salVoorstelKaartHtml()`, bron `salKaartData()`) is een oordeel in een
+  zin, een rij per rekening (erbij nodig · je overboeking · verschil), Reserveringen en Groeien als eigen rij, en opzij onderaan met "Volgens
+  Minder kan er X opzij"; de rekensom per rij staat achter een tik. Weg: "Voorstel klaar ...", de correctie "volgens je verdeling ... −EUR X" met
+  de pijlen, de uitlegregels en "Geen tekort-waarschuwingen ...". "Salaris binnen" (`salVerdelingMelding()`) toont wat er per rekening sinds de
+  storting binnenkwam (de telling van v523c), met de afspraak grijs alleen bij een afwijking vanaf EUR 10, en opzij = gestort op je
+  spaarrekening sinds de storting. `salKaartStand()`: na een storting gaat Zien over dat salaris tot de periode bevestigd is en er niets meer
+  verwacht wordt; het volgende salaris pas vanaf 5 werkdagen voor de verwachte storting, daarvoor "Volgend salaris rond <dag>". Geen bedrag
+  verandert (`v525.spec.js` f tegen d8c90b9). Spec `v525.spec.js` (a-f), `tests/wip/v525-export.spec.js`; tien tests in zes specs gemigreerd.

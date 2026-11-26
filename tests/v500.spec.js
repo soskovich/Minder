@@ -23,8 +23,9 @@ test.describe('v500', () => {
     const r = await page.evaluate(() => {
       const N = salVoorstelNu();
       renderMaand(); gripKiesTab('zien');
-      const zien = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrij]')].map(e => [e.dataset.salvrij, +e.dataset.bedrag]));
-      const zienOpzij = +document.getElementById('salVoorstelKaart').dataset.salvkaartopzij;   // v501 (punt 1): het ene opzij-getal van de kaart
+      /* v525: een rij per rekening; het voorstel (nodig tot de dag voor je salaris) staat op de rij en in de rekensom achter de tik */
+      const zien = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrekrij]')].filter(e => e.dataset.salvrekrij !== '__res').map(e => [e.dataset.salvrekrij, +e.dataset.voorstel]));
+      const zienOpzij = +document.getElementById('salVoorstelKaart').dataset.salvkaartopzij;   // v501 (punt 1): het voorstel-opzij van de kaart
       gripKiesTab('terugblik');
       const m2 = Object.fromEntries([...document.querySelectorAll('[data-m2rek]')].map(e => [e.dataset.m2rek, +e.querySelector('[data-m2voorstel]').dataset.m2voorstel]));
       const m2Opzij = +document.querySelector('[data-m2volgopzij]').dataset.m2volgopzij;
@@ -53,13 +54,24 @@ test.describe('v500', () => {
     const r = await page.evaluate(() => {
       renderMaand(); gripKiesTab('zien');
       const lees = e => ({ acc: e.dataset.rekuitleg, nodig: +e.dataset.nodig, saldo: +e.dataset.saldo, erbij: +e.dataset.erbij, afspraak: +e.dataset.afspraak, tekst: e.innerText });
-      const zien = [...document.querySelectorAll('#salVoorstelKaart [data-rekuitleg]')].map(lees);
+      /* v525: de rekensom per rekening staat achter een tik; dicht staat hij er niet, open telt hij op tot de rij */
+      const dicht = document.querySelectorAll('#salVoorstelKaart [data-salvrekensom]').length;
+      window._salk = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrekrij]')].map(e => [e.dataset.salvrekrij, true])); gripKiesTab('zien');
+      const zien = [...document.querySelectorAll('#salVoorstelKaart [data-salvrekrij]')].filter(e => e.dataset.salvrekrij !== '__res').map(e => {
+        const som = document.querySelector(`#salVoorstelKaart [data-salvrekensom="${e.dataset.salvrekrij}"]`), v = k => { const x = som.querySelector(`[data-sd="${k}"]`); return x ? x.innerText : ''; };
+        return { acc: e.dataset.salvrekrij, nodig: +e.dataset.nodig, saldo: +e.dataset.saldo, erbij: +e.dataset.erbijruw, tekst: som.innerText, vast: v('vast'), pot: v('pot'), buffer: v('buffer'), nodigT: v('nodig') }; });
+      window._salk = {};
       gripKiesTab('terugblik');
       const m2 = [...document.querySelectorAll('[data-salmoment2] [data-rekuitleg]')].map(lees);
-      return { zien, m2 };
+      return { zien, m2, dicht };
     });
-    expect(r.zien.length).toBeGreaterThan(0); expect(r.m2.length).toBe(r.zien.length);
-    for (const L of [r.zien, r.m2]) for (const u of L) {
+    expect(r.zien.length).toBeGreaterThan(0); expect(r.m2.length).toBe(r.zien.length); expect(r.dicht).toBe(0);
+    for (const u of r.zien) {
+      expect(u.nodig - u.saldo, u.acc).toBe(u.erbij);
+      expect(u.tekst).toMatch(/Vaste lasten tot \d+ \w+/); expect(u.tekst).toContain('Potjes via deze rekening'); expect(u.tekst).toContain('Buffer'); expect(u.tekst).toContain('Staat er nu'); expect(u.tekst).toContain('Erbij nodig');
+      expect(num(u.nodigT.replace(/^.*€/, ''))).toBe(u.nodig);
+    }
+    for (const u of r.m2) {
       expect(u.nodig - u.saldo, u.acc).toBe(u.erbij);
       expect(u.tekst).toMatch(/nodig tot \d+ \w+ €/);
       expect(u.tekst).toContain('− saldo nu');
@@ -76,7 +88,7 @@ test.describe('v500', () => {
     const lees = () => page.evaluate(() => {
       renderMaand(); gripKiesTab('zien');
       const dek = [...document.querySelectorAll('[data-salvdekking]')].map(e => ({ acc: e.dataset.salvdekking, tot: e.dataset.gedekttot, t: e.innerText }));
-      const zien = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrij]')].map(e => [e.dataset.salvrij, +e.dataset.bedrag]));
+      const zien = Object.fromEntries([...document.querySelectorAll('#salVoorstelKaart [data-salvrekrij], #salVoorstelKaart [data-salvdekking]')].filter(e => e.dataset.salvrekrij !== '__res').map(e => [e.dataset.salvrekrij || e.dataset.salvdekking, +e.dataset.voorstel]));
       const imp = (document.querySelector('[data-salvoorstelimport]') || {}).innerText || null;
       gripKiesTab('terugblik');
       const m2 = [...document.querySelectorAll('[data-m2rek]')].map(e => ({ acc: e.dataset.m2rek, oordeel: e.dataset.m2oordeel, gedekt: e.dataset.m2gedekt, voorstel: +e.querySelector('[data-m2voorstel]').dataset.m2voorstel, bron: e.querySelector('[data-m2voorstel]').dataset.m2bron, t: e.innerText }));

@@ -193,7 +193,12 @@ test.describe('v432 · 4. Kiezen: zo verdeel je je salaris', () => {
     await expect(page.locator('[data-salvmelding]')).toHaveCount(0);
     await add(page, [[MAIN, '2026-10-24', 5216, 'Werkgever', 'SALARIS LOON']]);
     await page.evaluate(() => { window._rekV = null; go('maand'); renderMaand(); });
-    await expect(page.locator('[data-salvmelding]')).toContainText('Salaris binnen: Leefgeld €1.050, Salarisrekening €1.150, opzij €3.016');
+    /* v525 (punt 5): wat er werkelijk binnenkwam (hier nog niets), met de afspraak grijs erachter; niet je verdeling alsof die binnenkwam */
+    await expect(page.locator('[data-salvmelding]')).toContainText('Salaris binnen');
+    await expect(page.locator('[data-salvmelding]')).not.toContainText('Salaris binnen: Leefgeld €1.050');
+    const leef = page.locator(`[data-salvmelding] [data-salvbinnen="${LEEF}"]`);
+    await expect(leef).toHaveAttribute('data-binnen', '0'); await expect(leef).toHaveAttribute('data-afspraak', '1050'); await expect(leef).toContainText('afspraak €1.050');
+    await expect(page.locator('[data-salvmelding] [data-salvbinnen="__opzij"]')).toHaveAttribute('data-afspraak', '3016');
   });
 });
 

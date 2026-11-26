@@ -74,15 +74,20 @@ test.describe('v521a', () => {
     const r = await page.evaluate(() => {
       Object.assign(SET.salVerdeling, { salYM: '2026-10', ym: '2026-10', start: '2026-10-24', eind: '2026-11-23', reserveringen: 32 });
       save(); window._rekV = null; try { runMemoVergeten(); } catch (_) {}
+      /* v525: de lijst staat achter de rij Reserveringen (de rekensom opent na een tik) */
+      window._salk = { __res: true };
       const box = document.createElement('div'); box.innerHTML = salVoorstelKaartHtml(); document.body.appendChild(box);
-      const link = box.querySelector('[data-salvreslink]'); const linkTekst = link ? link.textContent : null;
+      const rij = box.querySelector('[data-salvrekrij="__res"]'), rijErbij = rij ? +rij.dataset.erbij : null, som = box.querySelector('[data-salvrekensom="__res"]'), linkTekst = som ? som.textContent : null;
+      const link = box.querySelector('[data-salvreslink]');
       if (link) link.click();
       const sh = document.getElementById('resPeriode'); const rijen = sh ? [...sh.querySelectorAll('[data-resperioderij]')].map((x) => [x.dataset.resperioderij, +x.dataset.per]) : [];
       const sheetOpen = !!sh, kaartNog = !!document.getElementById('salVerdeling');
       box.remove();
-      return { linkTekst, sheetOpen, kaartNog, rijen, totaal: sh ? +sh.dataset.restotaal : null, P: Math.round(rekVoorstel().reserveringen) };
+      window._salk = {};
+      return { linkTekst, rijErbij, sheetOpen, kaartNog, rijen, totaal: sh ? +sh.dataset.restotaal : null, P: Math.round(rekVoorstel().reserveringen) };
     });
-    expect(r.linkTekst).toContain(`€${r.P} in deze periode`);
+    expect(r.rijErbij).toBe(r.P);
+    expect(r.linkTekst).toContain(`Erbij nodig deze periode€${r.P}`);
     expect(r.sheetOpen).toBe(true);
     expect(r.kaartNog).toBe(false);   // de tik opent de lijst en niet ook de verdeling
     expect(r.rijen.map((x) => x[0])).toEqual(['r521a1', 'r521a2']);
@@ -100,7 +105,10 @@ test.describe('v521a', () => {
     /* de splitsing vast/potjes: EUR 9 van potjes naar vast (het abonnement), op Inzichten en Grip Zien */
     const splits = { weg: { '€1.587': 2, '€1.737': 1 }, bij: { '€1.578': 2, '€1.746': 1 } };
     expect(verschil(VOOR.ins, NA.ins)).toEqual(splits);
-    expect(verschil(VOOR['grip-zien'], NA['grip-zien'])).toEqual(splits);
+    /* v525: de golden van 9fbc05f droeg op Zien de oude kaart "Salaris binnen" met je VERDELING (Salarisrekening 150, Betaalrekening 1.600,
+       Leefgeld 1.700, opzij 1.766); sinds v525 toont die kaart wat er binnenkwam en staat hij buiten deze telling (de vorm, net als #salVoorstelKaart) */
+    const oudeMelding = { '€150': 1, '€1.600': 1, '€1.700': 1, '€1.766': 1 };
+    expect(verschil(VOOR['grip-zien'], NA['grip-zien'])).toEqual({ weg: Object.assign({}, splits.weg, oudeMelding), bij: splits.bij });
     expect([VOOR.insSplit, NA.insSplit]).toEqual([{ vast: '1737', pot: '1587' }, { vast: '1746', pot: '1578' }]);
     /* Begrijpen: dezelfde EUR 9 in de brug (vast-stap 309 → 300, de potjes samen +9: 127 → 128 en -960 → -952) en de indeling */
     expect(verschil(VOOR['grip-begrijpen'], NA['grip-begrijpen'])).toEqual({ weg: { '€1.737': 1, '€1.587': 1, '€309': 1, '€127': 1, '-€960': 1 }, bij: { '€1.746': 1, '€1.578': 1, '€300': 1, '€128': 1, '-€952': 1 } });
