@@ -149,7 +149,8 @@ test.describe('d · de vrij-regel stuurt het handmatige cijfer bij', () => {
     const h = await page.evaluate(() => renderPlan(true));
     expect(h).toContain('spaar-vrij');
     expect(h).toContain('border-left:3px solid var(--teal)');
-    expect(h).not.toMatch(/var\(--amber\)/);          // er is niets mis, alleen iets te doen
+    // v524: de amber-check is vervallen — renderPlan() draagt nu de lagen-hero/kaart met amber als laag-IDENTITEIT
+    // (Reserveren), niet als status ("paletten zijn identiteit, geen status"). De vrij-regel zelf is teal, niet amber.
     expect(await planTekst(page)).toMatch(/aan geen enkel item in je plan is toegewezen/);
   });
 

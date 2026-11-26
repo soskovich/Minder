@@ -102,17 +102,16 @@ test.describe('b - de regel legt het verband, zonder nieuw getal', () => {
     expect(c.al + c.nog).toBe(c.tgt);
   });
 
-  /* v225: de zin stond als losse regel boven de lijst. Hij staat nu achter het uitlegteken in de
-     kop van de kaart, samen met de uitleg over de volgorde. Hij is dus nog steeds op het scherm
-     bereikbaar, maar pas als je erom vraagt - en dat is precies waarom deze test nu de tik doet in
-     plaats van alleen de tekst te lezen. */
-  test('en hij staat op het scherm, achter het uitlegteken', async ({ page }) => {
+  /* v225: de zin stond als losse regel boven de lijst, daarna achter het uitlegteken in de kop.
+     v524: het uitlegteken (noteIcon('planUitleg')) stond in de oude kop #planKpi, die niet meer wordt gerenderd;
+     de lagen-hero draagt "verdeling ⚙". De INHOUD (NOTES.planUitleg, via planMaandTekst) blijft: de zin is niet
+     inline zichtbaar, het teken is weg van Plan, en de uitleg zit nog in NOTES. */
+  test('de zin staat niet inline; het teken is weg van Plan, de inhoud blijft in NOTES', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
     expect(await page.locator('#s-vooruit').innerText()).not.toContain('verdeling per maand');
-    await page.locator('#s-vooruit [onclick*="planUitleg"]').first().click();
-    await page.waitForSelector('#tipPop.show');
-    expect(await page.locator('#tipPop').innerText()).toContain('verdeling per maand');
+    expect(await page.locator('#s-vooruit [onclick*="planUitleg"]').count()).toBe(0);
+    expect(await page.evaluate(() => { renderVooruit(); return (NOTES.planUitleg || '').replace(/<[^>]+>/g, ''); })).toContain('verdeling per maand');
   });
 });
 
