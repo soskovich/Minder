@@ -185,8 +185,9 @@ test('v510 f: per potje een bedrag in de uitklap, en de rijen tellen op tot "Pot
       regelEuro: totSalarisData(LEEF).pot, tekst: rijen.map(e => e.innerText).join(' | ') };
   }, { LEEF });
   expect(r.n).toBeGreaterThan(0);
-  expect(r.perRij.every(n => n === 1)).toBe(true);    // een bedrag per potje
+  expect(r.perRij.every(n => n === 2)).toBe(true);    // onderhoud2 punt 2: per potje de bijdrage + "≈ EUR Y per dag"
   expect(r.tekst).not.toMatch(/typisch/);
+  expect(r.tekst).toMatch(/per dag/);                 // de nieuwe regel draagt het dagbedrag
   expect(Math.abs(r.somCent - r.regelCent)).toBeLessThanOrEqual(r.n);   // centen per rij afgerond
   expect(r.somEuro).toBe(r.regelEuro);
 });

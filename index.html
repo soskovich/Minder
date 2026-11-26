@@ -13608,7 +13608,8 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
   const alPerVul=cs=>{ const vdg=vandaagYMD(); for(const t of TX){ if(t.pending || !set.has(t.acc) || paar.has(t.id) || !piekInScope(t) || eenmaligBevestigd(t)) continue;
       const d=t.date.slice(0,10); if(d<cs || d>vdg) continue; const v=uitgaveNorm(t); if(!(v>0.005)) continue; const c=catOf(t); (alPer[c]=alPer[c]||{})[t.acc]=((alPer[c]||{})[t.acc]||0)+v; } };
   const ritmeVan=(c,acc)=>{ const r=(ritmeD[c]||{})[acc]||{n:0, som:0, maanden:new Set(), dagen:[]}, wm=Math.max(af.length,1), mp=r.maanden.size;
-    return {soort:mp<wm/2?'zelden':(r.n/wm>4?'vaak':'soms'), ud:r.dagen.length?Math.round(mediaan(r.dagen.slice())):null, n:r.n, maandenN:mp, gem:r.n?r.som/r.n:0}; };
+    const dg=r.dagen.slice().sort((a,b)=>a-b), spr=dg.length?dg[dg.length-1]-dg[0]:null;   // onderhoud2 (punt 1): de spreiding van de betaaldagen, voor "elke maand één betaling rond dezelfde dag" (vaste-dag-kandidaat)
+    return {soort:mp<wm/2?'zelden':(r.n/wm>4?'vaak':'soms'), ud:r.dagen.length?Math.round(mediaan(r.dagen.slice())):null, n:r.n, maandenN:mp, gem:r.n?r.som/r.n:0, dagSpreiding:spr}; };
   const terugval=set.has(salAcc)?salAcc:(Object.entries(totRek).sort((a,b)=>b[1]-a[1])[0]||[BR[0]])[0];
   /* (1d) "gaat niet via deze rekening" laat de uitgesloten rekeningen weg en herverdeelt over de andere */
   const aandeel=k=>{ const o=per[k]||{}, geen=rekGeenViaSet(k), pos=Object.entries(o).filter(([a,v])=>v>0.005 && !geen.has(a)), s=pos.reduce((a,[,v])=>a+v,0);
@@ -13773,8 +13774,17 @@ function rekVoorstelRuw(){ const BR=rekBetaal(), set=new Set(BR); if(!BR.length)
     const pd=potExp.map(p=>{ const A=aandeel(p.k), f=A[acc]||0; if(!(f>0)) return null; const R=ritmeVan(p.k, acc);
       const periodExp=p.bedrag*f, alP=((alPer[p.k]||{})[acc])||0, gapExp=eraW?periodExp/Math.max(curDagen,1)*gapDagen:0;   // v506: het niet-gemeten deel telt niet als nog te gaan
       return {k:p.k, naam:p.naam, zonder:p.zonder, maand:p.maand, totaal:p.bedrag, aandeel:f, bedrag:periodExp, rest:p.rest*f,
-        ritme:R.soort, ud:R.ud, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typischVol:(p.typisch||0), typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP-gapExp, 0), gapExp,
+        ritme:R.soort, ud:R.ud, dagSpreiding:R.dagSpreiding, n:R.n, maandenN:R.maandenN, gem:R.gem, maanden:p.maanden||[], typischVol:(p.typisch||0), typisch:(p.typisch||0)*f, alPeriode:Math.round(alP), nogVerwacht:Math.max(periodExp-alP-gapExp, 0), gapExp,
         afMaanden:af.slice(), grossAf:af.map(ym=>Math.round(((((naPer[p.k]||{})[acc]||{})[ym])||0)+((((eenmPer[p.k]||{})[acc]||{})[ym])||0))), eenmAf:af.map(ym=>Math.round((((eenmPer[p.k]||{})[acc]||{})[ym])||0))}; }).filter(Boolean);
+    /* onderhoud2 (punt 1): een keuze per potje (SET.totPotKeuze[k]) raakt ALLEEN de daling "Tot je volgende salaris" — uitDagDelen en de
+       decompositie lezen p.nogVerwacht en het ritme, dus deze mutatie verandert het venster. Het VOORSTEL (verwacht/laten/opzij) leest
+       p.bedrag (periodExp), dat we niet aanraken, dus opzij en de verdeling blijven byte-gelijk. "komt niet meer vóór je salaris" geldt
+       alleen deze periode (kz.periode===SP.cur.start) en zet nogVerwacht op 0 (0 in het venster). "vaste dag" zet voortaan het ritme op
+       soms op de gekozen dag: valt die dag na je salaris (buiten SP.cur.eind), dan is dat 0 in het venster en telt hij in de nieuwe
+       periode. Zonder keuze verandert er niets (tvs c). */
+    for(const p of pd){ const kz=(SET.totPotKeuze||{})[p.k]; if(!kz) continue;
+      if(kz.keuze==='komtniet'){ if(SP.cur && kz.periode===SP.cur.start){ p.nogVerwacht=0; p.typisch=0; } }   // nogVerwacht (cur/era) EN typisch (de maanden na cur, als het venster niet in de era valt) op 0: 0 in het hele venster
+      else if(kz.keuze==='vastedag'){ p.ritme='soms'; p.ud=Math.min(Math.max(+kz.dag||+p.ud||1,1),28); } }
     const pS=pd.reduce((a,x)=>a+x.bedrag,0), kf=kasAandeel[acc]||0, kS=kasP*kf, kM=kas*kf, kp=kasPatroon[acc]||{dag:null};
     const verwacht=vS+pS+kS;
     /* v521a: de lopende beleggingsinleg die van deze rekening afgaat (rekBelegInleg), los van verwacht: hij telt niet in de buffer en
@@ -14420,7 +14430,20 @@ function totSalarisData(acc){ const SP=salPeriode(); if(!SP || SP.stil || SP.laa
      ongevoelig voor wat er na de salarisdag nog beweegt. */
   let naSal=null; try{ const PV=salAfspraakPeriode(); if(PV && PV.werkelijk){ const sb=accBalance(acc); if(sb!=null){ let na=0; for(const t of TX){ if(t.pending || t.acc!==acc) continue; const d=t.date.slice(0,10); if(d>PV.werkelijk && d<=vandaag) na+=t.amount; } naSal=Math.round(sb-na); } } }catch(_){}
   return {acc, naam:r.naam, saldo:Math.round(saldo), saldoExact:saldo, vast:Math.round(T.vast), vastExact:T.vast, vastRij, vastNaSal, pot:Math.round(T.pot), potExact:T.pot, potDelen:r.potDelen||[], potZelden:r.potZelden||[], kas:Math.round(T.kas), kasExact:T.kas, bel:Math.round(T.bel), belExact:T.bel, over:Math.round(T.over), overExact:T.over, overboek:salOverboekVan(acc), eind:Math.round(b), eindExact:b, laagst:Math.round(laagst), laagstDag, nul, eindDag:eind, afspraak, naSal, herkomst:saldoHerkomst(acc), venster:P.venster||null, gat:(()=>{ /* v506: de dagen tussen het saldo van deze rekening en het venster staan niet in het saldo en tellen niet mee */ let sd=null; try{ sd=accBalanceDatum(acc); }catch(_){} if(!sd){ try{ sd=importTotYmd(); }catch(_){} } sd=sd?String(sd).slice(0,10):null; if(!sd || sd>=vandaag) return null; return {van:rekDag(sd,1), tot:vandaag}; })(), sim:(()=>{ const S=voorbeeldSaldoDelen(acc); return {salVerd:S.salVerd, vast:S.vast, ruw:saldo-S.salVerd-S.vast}; })()}; }
-function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salverdeling'); return; } window._totsal=acc; window._totsalPot=false; window._totsalKeuze=''; renderTotSalaris(); showSheetBg(); }
+function openTotSalaris(acc){ if(!totSalarisData(acc)){ openSalVerdeling('salverdeling'); return; } window._totsal=acc; window._totsalPot=false; window._totsalKeuze=''; window._totsalPotD=''; renderTotSalaris(); showSheetBg(); }
+/* onderhoud2 (punt 1): de "vaste dag"-vraag staat ALLEEN bij een potje waar elke maand één betaling rond dezelfde dag valt: een
+   gemeten dag (ud), in minstens TOT_VASTEDAG_MIN_MAANDEN maanden, met de betaaldagen binnen TOT_VASTEDAG_SPREIDING dagen van elkaar
+   (rond dezelfde dag). Een potje met betalingen op wisselende dagen heeft een grote spreiding en krijgt de vraag niet (tvs d). */
+const TOT_VASTEDAG_SPREIDING=7, TOT_VASTEDAG_MIN_MAANDEN=2;
+function potVasteDagKandidaat(p){ return !!(p && p.ud!=null && (p.maandenN||0)>=TOT_VASTEDAG_MIN_MAANDEN && p.dagSpreiding!=null && p.dagSpreiding<=TOT_VASTEDAG_SPREIDING); }
+/* de keuze per potje in "Tot je volgende salaris"; niets voorgekozen, dezelfde keuze nog eens tikt hem uit. "komt niet" is per periode
+   (vervalt vanzelf volgende periode), "vaste dag" draagt de gekozen dag (voortaan). */
+function totPotKeuzeZet(k, keuze, dag){ SET.totPotKeuze=SET.totPotKeuze||{}; const cur=SET.totPotKeuze[k];
+  if(cur && cur.keuze===keuze){ delete SET.totPotKeuze[k]; }
+  else { let P=null; try{ P=salPeriode(); }catch(_){}
+    if(keuze==='komtniet') SET.totPotKeuze[k]={keuze:'komtniet', periode:(P&&P.cur)?P.cur.start:''};
+    else SET.totPotKeuze[k]={keuze:'vastedag', dag:Math.min(Math.max(+dag||1,1),28)}; }
+  save(); try{ renderTotSalaris(); }catch(_){} }
 function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
   if(!D){ $('#sheet').innerHTML=`<div class="grab"></div><div id="totSalaris"><div style="font-weight:800">Tot je salaris</div><div class="small" style="margin-top:6px">Dit is nu niet te rekenen.</div></div>`; return; }
   const e=euro0, rij=(l,v,attr)=>`<div class="row" ${attr||''} style="gap:8px;padding:3px 0"><span class="small" style="flex:1;min-width:0">${l}</span><span class="small" style="white-space:nowrap">${v}</span></div>`;
@@ -14452,7 +14475,25 @@ function renderTotSalaris(){ const acc=window._totsal, D=totSalarisData(acc);
      per potje stonden meerdere getallen door elkaar en "typisch EUR 6" (het gewone bedrag in dezelfde dagen van de maand, een andere vraag)
      naast EUR 380 over 23 dagen. Dat label en de maandreeks zijn weg; het aandeel en het ritme blijven als woorden. */
   const potAfg=(()=>{ try{ return brugAfronden(potDal.map(p=>({k:p.k, v:+p.periode||0})), D.pot); }catch(_){ return {}; } })();
-  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(p=>`<div class="row small" data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" data-totpotbedrag="${potAfg[p.k]!=null?potAfg[p.k]:Math.round(p.periode||0)}" style="gap:8px;padding:3px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> <span style="color:var(--mut2)">· ${Math.round(p.aandeel*100)}% via deze rekening · ${esc(ritLbl[p.ritme]||p.ritme)}</span></span><span style="white-space:nowrap">−${e(potAfg[p.k]!=null?potAfg[p.k]:Math.round(p.periode||0))}</span></div>`).join(''):rij('geen potjes via deze rekening','')}
+  /* onderhoud2 (punt 2): PER POTJE ÉÉN REGEL "<potje> · EUR X tot <dag voor salaris> · ≈ EUR Y per dag" (X = zijn bijdrage in het venster,
+     potAfg[p.k], afgerond zodat de rijen optellen tot "Potjes via deze rekening"; Y = die bijdrage / het aantal dagen van het venster). De
+     REST (aandeel, ritme, maandreeks, al deze periode, nog deze maand, deze periode) staat achter een tik op de regel (window._totsalPotD).
+     "typisch EUR 6 · daarna EUR 6/mnd" is weg: p.typisch is het typische niveau in dezelfde dagen van de maand × aandeel, een forecast-basis
+     voor de maanden NA de periode (vaakPost = typisch/dim), GEEN periodetotaal; naast EUR 380 over 23 dagen las dat als een tweede, veel
+     kleiner getal voor hetzelfde potje (gemeld). "nog deze maand" staat er alleen als de periode tot het eind van de maand loopt (toonNog);
+     stopt de periode eerder dan de maand, dan overschiet een maand-projectie de periode en zegt hij niets. Geen bedrag verandert. */
+  const wdagen=(D.venster&&D.venster.dagen)?D.venster.dagen:(()=>{ let n=0; for(let d=rekDag(vandaagYMD(),1); d<=D.eindDag; d=rekDag(d,1)) n++; return Math.max(n,1); })();
+  const toonNog=(()=>{ try{ return +String(D.eindDag).slice(8,10)>=daysElapsed(D.eindDag).dim; }catch(_){ return false; } })();
+  /* onderhoud2 (punt 1): een vaste-dag-kandidaat (potVasteDagKandidaat) krijgt twee chips onder de regel, niets voorgekozen: "Komt niet
+     meer vóór <salarisdag>" (alleen deze periode) en "Vaste dag: rond de <ud>e" (voortaan). Zodra er een keuze staat, komt het gevolg er
+     als regel bij. Een potje met betalingen op wisselende dagen krijgt geen chips (tvs d). */
+  const salDag=esc(dagKort(rekDag(D.eindDag,1)));
+  const potRij2=p=>{ const bedr=potAfg[p.k]!=null?potAfg[p.k]:Math.round(p.periode||0), perDag=wdagen>0?Math.round((p.periode||0)/wdagen):0, open=window._totsalPotD===p.k, kq=esc(p.k).replace(/'/g,"\\'");
+    const detail=open?`<div class="small" data-totpotdetail="${esc(p.k)}" style="padding:1px 0 5px;color:var(--mut2);line-height:1.5">${Math.round(p.aandeel*100)}% via deze rekening · ${esc(ritLbl[p.ritme]||p.ritme)}${(p.maanden&&p.maanden.length)?`<br>per maand: ${esc(potReeks(p))}`:''}<br>al deze periode ${e(p.alPeriode)} · nog ${e(Math.round(p.nogVerwacht))} · deze periode ${e(bedr)}${toonNog?`<br><span data-totpotnogmaand>nog deze maand ${e(Math.round(p.typisch))}</span>`:''}</div>`:'';
+    const kand=potVasteDagKandidaat(p), kz=(SET.totPotKeuze||{})[p.k], ud=Math.min(Math.max(+p.ud||1,1),28);
+    const chips=kand?`<div class="chips" data-totpotkeuze="${esc(p.k)}" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 4px"><button class="chip${kz&&kz.keuze==='komtniet'?' on':''}" data-totpotkomtniet="${esc(p.k)}" onclick="event.stopPropagation();totPotKeuzeZet('${kq}','komtniet')">Komt niet meer vóór ${salDag}</button><button class="chip${kz&&kz.keuze==='vastedag'?' on':''}" data-totpotvastedag="${esc(p.k)}" onclick="event.stopPropagation();totPotKeuzeZet('${kq}','vastedag',${ud})">Vaste dag: rond de ${ud}e</button></div>${kz?`<div class="small" data-totpotkeuzeres="${esc(p.k)}" style="color:var(--mut2);padding:0 0 4px;line-height:1.45">${kz.keuze==='komtniet'?`Alleen deze periode: dit potje telt niet meer mee tot je salaris. Volgende periode rekent Minder weer zoals gewoon.`:`Voortaan valt dit potje op zijn dag (rond de ${Math.min(Math.max(+kz.dag||1,1),28)}e), niet verdeeld over alle dagen. Valt die dag na je salaris, dan telt het in de nieuwe periode.`}</div>`:''}`:'';
+    return `<div data-totpotrij="${esc(p.k)}" data-ritme="${esc(p.ritme)}" data-totpotperiode="${Math.round((p.periode||0)*100)}" data-totpotbedrag="${bedr}" style="border-top:1px solid var(--line)"><div class="row small" data-totpotregel="${esc(p.k)}" role="button" style="gap:8px;padding:3px 0;cursor:pointer" onclick="window._totsalPotD=window._totsalPotD==='${kq}'?'':'${kq}';renderTotSalaris()"><span style="flex:1;min-width:0"><b>${esc(p.naam)}${p.zonder?' (zonder potje)':''}</b> <span style="color:var(--mut2)">· ${e(bedr)} tot ${esc(dagKort(D.eindDag))} · ≈ ${e(perDag)} per dag</span></span><span style="white-space:nowrap;color:var(--teal)">${open?'‹':'›'}</span></div>${chips}${detail}</div>`; };
+  const potLijst=potOpen?`<div data-totpotlijst style="margin:2px 0 2px 10px">${potDal.length?potDal.map(potRij2).join(''):rij('geen potjes via deze rekening','')}
     ${(D.potZelden||[]).length?`<div class="small" data-totzelden style="padding:4px 0;color:var(--mut2);border-top:1px solid var(--line)">Kan komen, niet meegerekend: ${D.potZelden.map(z=>`${esc(z.naam)} gemiddeld ${e(z.gemiddeld)}`).join(' · ')}${zeldenTekort}</div>`:''}</div>`:'';
   /* v514 (deel 1): de potjesregel en Contant staan onder een eigen kop "Potjes tot je salaris", in de stijl van "Vaste lasten" en
      "Na je salaris": ze gaan over het hele venster tot de dag voor je salaris en niet over wat er na je salaris valt. Alleen opmaak. */
