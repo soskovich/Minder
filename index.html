@@ -18626,6 +18626,212 @@ function planStandEind(P){
   }
   return {per, nogTeGaan:Math.round(nogTeGaan), doelSom, geldSom:Math.round(geldSom*100)/100, TND, TK};
 }
+/* v524 (blok 1, gevraagd door de gebruiker, mockup "Plan lagen v10"): JE GELD IN LAGEN, DE DATALAAG. Een bron voor de kop,
+   de legenda en de "per laag · stand"-kaart op Plan. STAND, GEEN STROOM (de stroom staat in blok 2, lagenGestort()):
+   - kop = spaarrekening(en) + reserveringsrekening + beleggingen met inleg. Bezittingen die niet groeien (Holding) tellen
+     NIET mee; die staan op Vermogen (test a: Holding meetellen -> rood).
+   - Beschermen = het geld van het noodfonds, Doelen = het geld van je spaardoelen (planStandEind(): de toewijzing min wat
+     nog terug moet en min wat zonder geld is toegewezen, zodat de laag toont wat er echt staat, niet het label).
+   - Reserveren = het saldo van je reserveringsrekening (resAccId()), Groeien = de som van je groeiende beleggingen.
+   Op de back-up van 25 nov: Beschermen 4152, Reserveren 0, Doelen 2174, Groeien 4150, kop 6326+0+4150 = 10476.
+   vrij = saldo boven de toewijzingen (niet aan een laag toegewezen); dat telt wel in de kop (het staat op je spaarrekening)
+   maar niet in Beschermen/Doelen. */
+function lagenData(){
+  let P=[]; try{ P=allocatePlan(); }catch(_){}
+  let SE=null; try{ SE=planStandEind(P); }catch(_){}
+  let saldo=0, saldoMiss=false; try{ const S=spaarSaldo(); if(S && !S.missing) saldo=Math.round((S.exact!=null?+S.exact:+S.cur||0)*100)/100; else saldoMiss=true; }catch(_){ saldoMiss=true; }
+  const extra=Math.round((+SET.extraSavings||0)*100)/100; if(extra>0) saldo=Math.round((saldo+extra)*100)/100;   // spaargeld elders telt in de spaarlaag (v376)
+  let res=0, resMiss=false; try{ const ra=resAccId(); if(ra){ const b=accBalance(ra); if(b==null) resMiss=true; else res=Math.round((+b||0)*100)/100; } else resMiss=true; }catch(_){ resMiss=true; }
+  let groeien=0; const belItems=[]; try{ for(const a of (SET.assets||[])){ if(!a || !a.grow) continue; const w=Math.max(bezitWaardeNu(a),0); groeien+=w;
+    belItems.push({id:a.id, naam:a.naam||'Bezitting', waarde:Math.round(w), per:Math.max(Math.round(+a.per||0),0)}); } }catch(_){}
+  groeien=Math.round(groeien*100)/100;
+  let beschermen=0, beschermenDoel=0, doelen=0, doelenDoel=0, beschermenOnbekend=false;
+  for(const p of (P||[])){ const x=(SE&&SE.per[p.id])||{};
+    if(p.type==='noodfonds'){ if(p.nfOnbekend) beschermenOnbekend=true; beschermen=Math.max(+x.geld||0,0); beschermenDoel=Math.max(Math.round(+p.doel||0),0); }
+    else if(p.type==='goal'){ doelen+=Math.max(+x.geld||0,0); doelenDoel+=Math.max(Math.round(+p.doel||0),0); } }
+  beschermen=Math.round(beschermen*100)/100; doelen=Math.round(doelen*100)/100;
+  const vrij=saldoMiss?0:Math.round(Math.max(saldo-beschermen-doelen,0)*100)/100;
+  const kop=Math.round((saldo+res+groeien)*100)/100;
+  return {saldo, saldoMiss, res, resMiss, groeien, belItems, beschermen, beschermenDoel, beschermenOnbekend,
+    reserveren:res, doelen, doelenDoel, vrij, kop, P, SE};
+}
+/* v524 (blok 1): DE HERO EN DE PER-LAAG-KAART OP PLAN. De vier lagen dragen de kleur-tokens die de app al heeft
+   (--teal/--amber/--blue/--violet, in beide thema's), geen hardcoded hex (CLAUDE.md). STAND, geen stroom. */
+const LAAG_KLEUR={beschermen:'var(--teal)', reserveren:'var(--amber)', doelen:'var(--blue)', groeien:'var(--violet)'};
+const LAAG_NAAM={beschermen:'Beschermen', reserveren:'Reserveren', doelen:'Doelen', groeien:'Groeien'};
+/* De salarisperiode waarover blok 1 (gestort op de reserveringsrekening) en blok 2 rekenen: het opzij-venster van de
+   lopende salarisperiode (opzijVenster, v523c: vanaf de dag van een vroeg salaris), met terugval op SET.salVerdeling. */
+function lagenPeriode(){
+  let s=null, e=null, ym=null;
+  try{ const SP=salPeriode(); if(SP && SP.cur){ const OV=opzijVenster({soort:'periode', ym:SP.cur.ym, start:SP.cur.start, eind:SP.cur.eind}); s=OV.start; e=OV.eind; ym=SP.cur.ym; } }catch(_){}
+  const SV=SET.salVerdeling;
+  if(!s && SV && SV.start){ s=String(SV.start); e=String(SV.eind||rekDag(SV.start,29)); ym=s.slice(0,7); }
+  if(!s) return null;
+  let dag=0, dagen=0; try{ dagen=salDagenTussen(s,e)+1; const vd=vandaagYMD(); dag=Math.min(Math.max(salDagenTussen(s,(vd<e?vd:e))+1,1),dagen); }catch(_){}
+  return {start:s, eind:e, ym, label:(function(){ try{ return periodeLabel(s,e); }catch(_){ return ''; } })(), dag, dagen};
+}
+/* wat er in de periode op een rekening is bijgeschreven (bruto, de stortingen); voor "gestort" per laag. */
+function lagenGestortOp(acc, PW){ if(!acc || !PW) return 0; let c=0;
+  for(const t of telbareTx()){ if(t.acc!==acc || !(t.amount>0)) continue; const d=String(t.date).slice(0,10); if(d<PW.start || d>PW.eind) continue; c+=Math.round(t.amount*100); }
+  return c/100; }
+function planLagenHero(L){
+  L=L||lagenData();
+  const seg=(v,kleur)=>{ const pct=L.kop>0?Math.max((+v||0)/L.kop*100,0):0; return pct>0?`<i style="display:block;height:100%;width:${pct.toFixed(2)}%;background:${kleur}"></i>`:''; };
+  const leg=(k,v)=>`<span data-laaglegenda="${k}" style="display:flex;align-items:center;gap:6px;min-width:0"><i style="width:9px;height:9px;border-radius:2px;flex:none;background:${LAAG_KLEUR[k]}"></i>${LAAG_NAAM[k]}<b style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums">${euro0(v)}</b></span>`;
+  const hsub=`${euro0(L.saldo)} op je spaarrekening · ${euro0(L.res)} gereserveerd · ${euro0(L.groeien)} belegd`;
+  return `<div id="planLagenHero" data-lagenkop="${L.kop}" data-laagbeschermen="${L.beschermen}" data-laagreserveren="${L.reserveren}" data-laagdoelen="${L.doelen}" data-laaggroeien="${L.groeien}" data-laagsaldo="${L.saldo}" data-laagres="${L.res}" data-laagvrij="${L.vrij}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px">
+    <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Je geld in lagen · samen</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
+    <div data-lagenkoptekst style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px">${euro0(L.kop)}</div>
+    <div class="small" data-lagenhsub style="opacity:.85;margin-top:2px">${esc(hsub)}</div>
+    <div data-lagenbalk style="display:flex;height:9px;border-radius:5px;margin:9px 0 9px;overflow:hidden;background:color-mix(in srgb,var(--kpi-txt) 18%,transparent)">${seg(L.beschermen,LAAG_KLEUR.beschermen)}${seg(L.reserveren,LAAG_KLEUR.reserveren)}${seg(L.doelen,LAAG_KLEUR.doelen)}${seg(L.groeien,LAAG_KLEUR.groeien)}${L.vrij>0?seg(L.vrij,'color-mix(in srgb,var(--kpi-txt) 35%,transparent)'):''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:var(--fs-xs)">${leg('beschermen',L.beschermen)}${leg('reserveren',L.reserveren)}${leg('doelen',L.doelen)}${leg('groeien',L.groeien)}</div></div>`;
+}
+/* de sub-regel per laag: wat je in één blik over die laag wilt weten. */
+function lagenBeschermenSub(L, TL){
+  if(L.beschermenOnbekend) return 'Noodfonds · stand onbekend';
+  let ess=0; try{ ess=Math.round(noodfondsModel().essCrisis||0); }catch(_){}
+  const norm=bufferNorm();
+  const mnd=ess>0?L.beschermen/ess:null;
+  const mTekst=mnd!=null?`${(Math.round(mnd*10)/10).toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1})} maand`:'';
+  const normTekst=norm!=null?` van je norm van ${norm}`:'';
+  let vol=''; try{ const v=(TL&&TL.per[PLAN_NF]||{}).vol; if(v>0) vol=` · vol ${etaDatum(v)}`; }catch(_){}
+  return `Noodfonds${mTekst?` · ${mTekst}${normTekst}`:''}${vol}`;
+}
+function lagenReserverenPosten(){ let V=[]; try{ V=verplichtingen(14); }catch(_){}
+  const seen=new Set(), uit=[]; for(const x of V){ if(seen.has(x.id)) continue; seen.add(x.id); uit.push(x); if(uit.length>=2) break; } return uit; }
+function lagenReserverenSub(){ const P=lagenReserverenPosten();
+  if(!P.length) return 'Geen komende posten';
+  const d=x=>`${esc(x.naam)} ${euro0(x.bedrag)} (${MNAMES[+x.maand.slice(5,7)-1]}${x.maand.slice(0,4)!==vandaagYMD().slice(0,4)?' '+x.maand.slice(0,4):''})`;
+  return `${P.length} komende post${P.length>1?'en':''}: ${P.map(d).join(' · ')}`; }
+function lagenReserverenFlag(PW){ let nodig=0; try{ nodig=Math.round(resInlegPerMaand().bedrag||0); }catch(_){}
+  if(!(nodig>0)) return ''; let ra=null; try{ ra=resAccId(); }catch(_){}
+  const gestort=ra?Math.round(lagenGestortOp(ra, PW)):0;
+  const tekort=gestort<nodig;
+  return `<div class="small" data-reserverenflag="${nodig}" data-reservergestort="${gestort}" style="margin-top:2px"><span style="font-weight:700;color:${tekort?'var(--amber)':'var(--teal)'};background:color-mix(in srgb,${tekort?'var(--amber)':'var(--teal)'} 14%,transparent);border-radius:8px;padding:1px 7px">deze periode ${euro0(nodig)} nodig · ${euro0(gestort)} gestort</span></div>`; }
+function lagenDoelenSub(L){ const goals=(L.P||[]).filter(p=>p.type==='goal');
+  if(!goals.length) return 'Nog geen doelen';
+  return goals.map(p=>{ const x=(L.SE&&L.SE.per[p.id])||{}, geld=Math.round(+x.geld||0), doel=Math.max(Math.round(+p.doel||0),0);
+    const st=planPaused(p.id)?' gepauzeerd':(p.status==='bereikt'?' vol':'');
+    return `<b style="color:var(--fg,var(--txt))">${esc(p.naam)}</b> ${euro0(geld)} / ${euro0(doel)}${st}`; }).join(' · '); }
+/* v524: ALLES VOL VERHUIST VAN DE KOP NAAR DE LAAG DOELEN (mockup v10, regel 145). Zelfde meting als de oude tegel (planKpiData →
+   allesVol, planSchema → "op schema" in maanden tegen de laatste streefdatum). De attributen data-kpivol/data-kpischema/
+   data-kpischemamnd blijven ongewijzigd, zodat de invarianten (op schema in maanden, amber bij te laat) bewaard blijven; ze staan
+   nu alleen op de Doelen-laag in plaats van op #planKpi. Het doel per periode (monthlySavingTarget) verlaat Plan naar Grip. */
+function lagenDoelenVolFlag(L){
+  let P,TL,K,SCH; try{ P=(L&&L.P)||allocatePlan(); TL=planTijdlijnData(); K=planKpiData(P,null,TL); SCH=planSchema(P,TL,K); }catch(_){ return ''; }
+  if(!K) return '';
+  const vol=K.allesVol!=null?etaDatum(K.allesVol):(K.loopt?'nog niet te zeggen':'alles is vol');
+  const na=!!(SCH && SCH.na>0), klik=!!(SCH && (na || SCH.verschil>0));
+  const schema=SCH?` · <span data-kpischema="${na?'laat':'ok'}" data-kpischemamnd="${SCH.verschil}"${na?' data-kpischemaamber':''}${klik?' role="button" onclick="event.stopPropagation();openPlanTijdlijn()" style="cursor:pointer;text-decoration:underline"':''}>${SCH.tekst}</span>`:'';
+  return `<div class="small" data-doelenvol="${K.allesVol!=null?K.allesVol:''}" style="color:var(--mut);padding-left:18px;margin-top:2px"><span data-kpivol="${K.allesVol!=null?K.allesVol:''}">alles vol ${esc(vol)}</span>${schema}</div>`; }
+/* Groeien: de inleg per periode is de som van wat er NU inlegt (perVanaf null of <= deze periode); wat later start staat apart. */
+function lagenGroeienInleg(PW){ const ym=(PW&&PW.ym)||thisYM(); let nu=0; const later={};
+  for(const a of (SET.assets||[])){ if(!a || !a.grow) continue; const per=Math.max(Math.round(+a.per||0),0); if(!(per>0)) continue;
+    const va=a.perVanaf?String(a.perVanaf).slice(0,7):null;
+    if(!va || va<=ym) nu+=per; else later[va]=(later[va]||0)+per; }
+  return {nu, later}; }
+function lagenGroeienSub(L, PW){ const n=(L.belItems||[]).length, I=lagenGroeienInleg(PW);
+  let s=`${n} belegging${n===1?'':'en'}`; if(I.nu>0) s+=` · inleg ${euro0(I.nu)} per periode`;
+  const lm=Object.keys(I.later).sort()[0]; if(lm){ const tot=I.nu+Object.values(I.later).reduce((a,b)=>a+b,0); s+=`, ${euro0(tot)} vanaf ${MNAMES[+lm.slice(5,7)-1]} ${lm.slice(0,4)}`; }
+  return s; }
+function planLagenKaart(L, TL){
+  L=L||lagenData(); const PW=lagenPeriode();
+  const rij=(k, val, doel, sub, extra, onclick)=>`<div class="laag" data-laag="${k}" ${onclick?`role="button" onclick="${onclick}"`:''} style="padding:9px 0;border-top:1px solid var(--line);cursor:${onclick?'pointer':'default'}">
+      <div class="row" style="gap:8px;align-items:center;font-weight:700"><i style="width:10px;height:10px;border-radius:3px;flex:none;background:${LAAG_KLEUR[k]}"></i><span>${LAAG_NAAM[k]}</span><span style="margin-left:auto;font-variant-numeric:tabular-nums">${euro0(val)}${doel!=null?` <span class="small" style="font-weight:500;color:var(--mut)">/ ${euro0(doel)}</span>`:''}</span></div>
+      <div class="small" data-laagsub style="color:var(--mut);padding-left:18px;margin-top:3px;line-height:1.45">${sub} <span style="color:var(--teal);font-weight:700">›</span></div>${extra||''}</div>`;
+  const g0=(L.P||[]).find(p=>p.type==='goal' && !planPaused(p.id)) || (L.P||[]).find(p=>p.type==='goal');
+  return `<div class="card" id="planLagenKaart" style="padding:2px 14px 8px">
+    <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:11px 0 1px">Per laag · stand</div>
+    ${rij('beschermen', L.beschermen, L.beschermenDoel||null, lagenBeschermenSub(L, TL), '', 'openNoodfondsPanel()')}
+    ${rij('reserveren', L.reserveren, null, lagenReserverenSub(), lagenReserverenFlag(PW), 'openReserveringen()')}
+    ${rij('doelen', L.doelen, L.doelenDoel||null, lagenDoelenSub(L), lagenDoelenVolFlag(L), g0?`openPlanDoel('${g0.id}')`:'')}
+    ${rij('groeien', L.groeien, null, lagenGroeienSub(L, PW), '', 'openGroeien()')}
+  </div>`;
+}
+/* v524 (blok 3, minimale vorm; de volle sheet met voorwaarden komt in stop 2): Groeien. */
+function openGroeien(){
+  const L=lagenData(); const rij=a=>{ const dd=(function(){ const m=/^(\d{4})-(\d{2})/.exec(String(a.waardeOp||'')); return m?`${MNAMES[+m[2]-1]} ${m[1]}`:''; })();
+    const asset=(SET.assets||[]).find(x=>x.id===a.id)||{}, per=Math.max(Math.round(+asset.per||0),0), va=asset.perVanaf?String(asset.perVanaf).slice(0,7):null;
+    const inleg=per>0?(va && va>thisYM()?`inleg ${euro0(per)} vanaf ${MNAMES[+va.slice(5,7)-1]} ${va.slice(0,4)}`:`inleg ${euro0(per)} per maand`):(asset.voorwaarden===false?'voorwaarden voor beleggen gelden':'inleg niet ingesteld');
+    return `<div class="row small" data-groeibelegging="${esc(a.id)}" style="gap:8px;padding:8px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(a.naam)}</b><span class="small muted" style="display:block">${esc(inleg)}${dd?` · waarde van ${dd}`:''}</span></span><b style="white-space:nowrap">${euro0(a.waarde)}</b></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="groeiSheet" data-groeien="${L.groeien}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Groeien · ${euro0(L.groeien)}</div>
+    <div class="small muted" style="margin:3px 0 6px">Je groeiende beleggingen, met de inleg en wanneer die begint. Minder schat geen koers; de waarde is wat je het laatst invoerde.</div>
+    ${(L.belItems||[]).map(rij).join('')}
+    <div class="small muted" style="margin-top:8px"><span class="chev" style="color:var(--teal);cursor:pointer" onclick="closeSheet();go('vermogen')">Vermogensreis ›</span></div>
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
+}
+/* v524 (blok 2, gevraagd door de gebruiker): GESTORT NAAST PLAN. Per laag het PLAN uit je verdeling (SET.salVerdeling van de
+   periode: opzij gesplitst over terugzetten en de rest, reserveringen, de inleg die in de periode valt) naast GESTORT (de
+   stortingen op je spaarrekening(en), je reserveringsrekening en de beleggingsboekingen binnen het opzij-venster).
+   ONDERDEEL 8: het surplus (salaris boven vast = vergoedingen + eenmalig, salSplitsing) telt NIET mee in "gestort naast plan
+   van de vaste bedragen": het staat als eigen regel "Extra EUR X · naar <laag>" en gaat naar de eerste laag die niet vol is.
+   Som per laag van de vaste bedragen = gestort - surplus, tot op de euro (fout b: de per-doel-afronding die EUR 5 te veel gaf). */
+function lagenGestort(){
+  const PW=lagenPeriode(); if(!PW) return null;
+  const SV=SET.salVerdeling||{};
+  let stort=null; try{ const C=salSplitCfg(); if(C){ for(const t of telbareTx()){ if(!salSplitStorting(t,C)) continue; const d=String(t.date).slice(0,10); if(d>=PW.start && d<=PW.eind){ stort=salSplitsing(t); if(stort) break; } } } }catch(_){}
+  const surplusRuw=stort?Math.round(((+stort.verg||0)+(+stort.eenmalig||0))*100)/100:0, vast=Math.round(stort?(+stort.vast||0):(+((SET.salSplit||{}).vast)||0));
+  const marge=(function(){ try{ return salSplitMarge(salSplitCfg()); }catch(_){ return 0; } })();
+  const surplus=(stort && Math.round(((+stort.bedrag||0)-vast)*100)/100 > marge)?surplusRuw:0;   // test o: binnen de marge geen surplus
+  // PLAN uit de verdeling
+  const planOpzij=Math.max(Math.round(+SV.opzij||0),0), planRes=Math.max(Math.round(+SV.reserveringen||0),0);
+  // terugzetten deze maand, gesplitst op bron: naar een DOEL telt in Doelen, naar het noodfonds hoort bij Beschermen (het is opzij dat daarheen gaat)
+  let planTerug=0; try{ for(const T of terugzetActief(PW.ym||thisYM())){ if(T.r.keuze==='niet') continue; const d=Math.round(tzDeelVan(T)), br=T.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=d;
+    br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(d*b.af/tot); rest-=v; if(b.type!=='noodfonds') planTerug+=v; }); } }catch(_){} planTerug=Math.max(planTerug,0);
+  const planBesch=Math.max(planOpzij-planTerug,0); const groeiI=lagenGroeienInleg(PW);
+  // GESTORT per laag (bruto stortingen in het venster)
+  const sav=new Set(n26SavingsAccounts()); let gSav=0; for(const acc of sav) gSav+=lagenGestortOp(acc, PW); gSav=Math.round(gSav*100)/100;
+  let ra=null; try{ ra=resAccId(); }catch(_){} const gRes=ra?Math.round(lagenGestortOp(ra, PW)*100)/100:0;
+  let gGroei=0; try{ for(const t of telbareTx()){ if(!(t.amount<0)) continue; const d=String(t.date).slice(0,10); if(d<PW.start||d>PW.eind) continue; if(bezitVan(t)) gGroei+=-t.amount; } }catch(_){} gGroei=Math.round(gGroei*100)/100;
+  const gTerug=Math.max(Math.min(planTerug, gSav),0), surplusGestort=Math.max(Math.min(surplus, Math.max(gSav-gTerug,0)),0);
+  const gBesch=Math.round(Math.max(gSav-gTerug-surplusGestort,0)*100)/100;
+  const lagen=[{k:'beschermen', plan:planBesch, gestort:gBesch, sub:'noodfonds'},
+    {k:'doelen', plan:planTerug, gestort:gTerug, sub:planTerug>0?'terugzetten':''},
+    {k:'reserveren', plan:planRes, gestort:gRes, sub:''},
+    {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:(L=>L.join(' · '))((lagenData().belItems||[]).filter(b=>b.per>0).map(b=>b.naam)), later:(gGroei<=0.004 && groeiI.nu>0)}];
+  // Extra (surplus) naar de eerste laag die niet vol is
+  const L=lagenData(); let extraNaar='beschermen';
+  const nfVol=L.beschermenDoel>0 && L.beschermen>=L.beschermenDoel-0.5;
+  if(nfVol){ const g0=(L.P||[]).find(p=>p.type==='goal' && !planPaused(p.id) && (((L.SE||{}).per||{})[p.id]||{}).geld < Math.round(+p.doel||0)-0.5); extraNaar=g0?'doelen':'reserveren'; }
+  const meer=Math.round((gSav - planOpzij)*100)/100;
+  return {PW, SV, stort, surplus, surplusGestort, vast, marge, lagen, meer, gSav, planOpzij, planTerug, gTerug,
+    extra:{bedrag:surplus, verg:stort?Math.round(+stort.verg||0):0, eenmalig:stort?Math.round(+stort.eenmalig||0):0, naar:extraNaar, overTeMaken:Math.max(Math.round((surplus-surplusGestort)*100)/100,0)},
+    gestortBinnen:!!stort};
+}
+/* de verklaring van het verschil (test c: sluit tot op de euro = meer). Surplus-regel (vergoedingen + eenmalig), per
+   betaalrekening het verschil tussen verdeling en werkelijke storting (>= EUR 10), en een sluitregel voor de rest. */
+function lagenWaaromRijen(G){
+  const PW=G.PW, SV=G.SV||{}, rek=SV.rek||{}, salAcc=SV.salAcc||'';
+  const rijen=[]; if(G.surplus>0.5) rijen.push({lab:`Salaris boven je vaste ${euro0(G.vast)}`, sub:`vergoedingen ${euro0(G.extra.verg)} · eenmalig ${euro0(G.extra.eenmalig)}`, v:G.surplus, surplus:true});
+  let verklaard=G.surplus;
+  for(const acc of Object.keys(rek)){ if(acc===salAcc) continue; const plan=Math.round(+rek[acc]||0), act=Math.round(lagenGestortOp(acc, PW)), d=plan-act;
+    if(Math.abs(d)>=10){ let nm=acc; try{ nm=accLabel(acc)||acc; }catch(_){} rijen.push({lab:`${esc(nm)} kreeg ${euro0(act)} in plaats van ${euro0(plan)}`, v:d}); verklaard+=d; } }
+  { const plan=Math.round(+SV.reserveringen||0), act=Math.round((function(){ let r=0; try{ const ra=resAccId(); if(ra) r=lagenGestortOp(ra, PW); }catch(_){} return r; })());
+    if(Math.abs(plan-act)>=10){ rijen.push({lab:`Reserveringen kregen ${euro0(act)} in plaats van ${euro0(plan)}`, v:plan-act}); verklaard+=plan-act; } }
+  const rest=Math.round((G.meer-verklaard)*100)/100;
+  if(Math.abs(rest)>=1) rijen.push({lab:'Overige verdeling (salarisrekening en afronding)', v:rest, rest:true});
+  return rijen;
+}
+function planGestortKaart(){
+  let G=null; try{ G=lagenGestort(); }catch(_){} if(!G) return '';
+  const col=d=>d>0.4?'var(--teal)':d<-0.4?'var(--amber)':'var(--mut)';
+  const vcell=d=>d>0.4?`<span class="pos" style="color:var(--teal);font-weight:700">+${euro0(d)}</span>`:d<-0.4?`<span class="neg" style="color:var(--amber);font-weight:700">−${euro0(Math.abs(d))}</span>`:'<span style="color:var(--teal);font-weight:700">✓</span>';
+  const rij=l=>{ const d=Math.round((l.gestort-l.plan)*100)/100;
+    const rechts=l.later?'<span class="vb" style="font-size:var(--fs-xs);font-weight:600;border:1px dashed var(--mut2);color:var(--mut);border-radius:6px;padding:0 5px">eind nov</span>':vcell(d);
+    return `<div class="row" data-gestortlaag="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${LAAG_NAAM[l.k]}</b>${l.sub?`<span class="small muted" style="display:block">${l.sub}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums">${euro0(l.gestort)}</span><span style="white-space:nowrap;min-width:54px;text-align:right">${rechts}</span></div>`; };
+  const extra=G.extra.bedrag>0.5?`<div class="row" data-extraregel data-extra="${G.extra.bedrag}" data-extranaar="${G.extra.naar}" style="gap:8px;align-items:baseline;padding:8px 0 2px;margin-top:4px;border-top:1.5px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">Extra ${euro0(G.extra.bedrag)}</b><span class="small muted" style="display:block">naar ${LAAG_NAAM[G.extra.naar]}, de eerste laag die niet vol is${G.extra.overTeMaken>0?` · nog over te maken ${euro0(G.extra.overTeMaken)}`:''}</span></span></div>`:'';
+  const W=lagenWaaromRijen(G);
+  const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" style="padding:9px 14px 11px;margin-top:9px">
+    <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
+    ${W.map(r=>`<div class="row small" data-waaromrij="${r.surplus?'surplus':r.rest?'rest':'rek'}" data-v="${r.v}" style="gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${r.lab}${r.sub?`<span class="small muted" style="display:block">${r.sub}</span>`:''}</span><span style="white-space:nowrap;font-weight:700;color:${col(r.v)}">${r.v>=0?'+':'−'}${euro0(Math.abs(r.v))}</span></div>`).join('')}
+    <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div>`:'';
+  const dagT=G.PW.dagen>0?`dag ${G.PW.dag} van ${G.PW.dagen}`:'';
+  return `<div class="card" id="planGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
+    <div class="row" style="padding:11px 0 1px;align-items:baseline"><span class="small" style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted">${dagT}</span>`:''}</div>
+    ${G.lagen.map(rij).join('')}${extra}</div>${waarom}
+    <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
+}
 /* v380: "bijna vol" (keuze C van de gebruiker): de verwachte stand eind deze maand is minstens 95 procent van het doel en
    nog niet het doel, en er komt na deze maand nog geld terug, dus de vol-datum ligt later. */
 const PLAN_BIJNA_VOL=0.95;
@@ -19029,7 +19235,8 @@ function renderPlan(bare){
   const rest=vrij>0?`<div id="planVrij" class="small" style="display:flex;justify-content:space-between;gap:12px;color:var(--mut2);margin:-2px 4px 9px"><span>Blijft over${!isMode('rustig')?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:var(--txt)">${euro0(vrij)}</b>/mnd · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></span></div>`:'';
   /* v440: "Inleg uit je potjes" (planInlegBlok) is weg van Plan: de Plan-inleg bestaat niet meer. Opzij staat als "Opzij deze
      periode" in planKpi (opzijPeriode); reserveringen en beleggen volgen in v441. */
-  return planWachtRegel()+spaarVrijLine(P)+planKpi(P,cap,TL,SE)+meld+schakel+inhoud+rest
+  const L=lagenData();   // v524 (blok 1): de kop wordt de lagen-hero + per-laag-kaart; "Opzij deze periode" verhuist naar blok 2, "Alles vol" naar de laag Doelen
+  return planWachtRegel()+spaarVrijLine(P)+planLagenHero(L)+planLagenKaart(L,TL)+planGestortKaart()+meld+schakel+inhoud+rest
     +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 /* v380: de weergave Lijst of Tijdlijn, per gebruiker onthouden; standaard Lijst. */

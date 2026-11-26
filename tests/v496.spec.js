@@ -71,7 +71,7 @@ test('c. zonder keuze: nog niet bevestigd, precies één melding na 3 dagen', as
   expect(r.kopStip).toBe(true);                   // de kop toont "nog niet bevestigd" met een stip
 });
 
-test('d. Plan "doel per periode", Zien "opzij volgens je verdeling"', async ({ page }) => {
+test('d. Plan toont het doel per periode niet meer (dat is Grip), Zien "opzij volgens je verdeling"', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await S.boot(page, { dag: '2026-11-26' });
   const r = await page.evaluate(() => {
@@ -85,10 +85,9 @@ test('d. Plan "doel per periode", Zien "opzij volgens je verdeling"', async ({ p
     return { planDoel, planTxt, planPerPeriode: /per periode/.test(planTxt), planVerdeling: /volgens je verdeling/.test(planTxt),
       zienVerdeling: /volgens je verdeling/.test(zienLabel), zienPerPeriode: /per periode/.test(zienLabel), zienLabel };
   });
-  expect(r.planDoel).toBe('2200');
-  expect(r.planPerPeriode).toBe(true);            // Plan: "doel per periode"
-  expect(r.planVerdeling).toBe(false);            // sabotage (namen omwisselen) → "volgens je verdeling" op het Plan-doel
-  expect(r.zienVerdeling).toBe(true);             // Zien: "opzij volgens je verdeling"
+  expect(r.planDoel).toBe(undefined);             // v524: het doel per periode verliet Plan naar Grip (mockup v10, besloten 31 okt)
+  expect(r.planPerPeriode).toBe(false);
+  expect(r.zienVerdeling).toBe(true);             // Zien: "opzij volgens je verdeling" blijft
   expect(r.zienLabel).toContain('1.766');
   expect(r.zienPerPeriode).toBe(false);
 });

@@ -8,26 +8,31 @@ const tekst = (page, sel) => page.evaluate((s) => { const e = document.querySele
 test.describe('a · de kop', () => {
   test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => go('vooruit')); });
 
-  test('geld, doelen en percentage: EUR 2.850 van EUR 22.000, 13 procent', async ({ page }) => {
-    const k = await page.evaluate(() => { const e = document.getElementById('planKpi'); return { geld: +e.dataset.kpigeld, doel: +e.dataset.kpidoel, pct: +e.dataset.kpipct, w: e.querySelector('[data-kpibalk] i').style.width }; });
-    expect(Math.round(k.geld)).toBe(2850); expect(k.doel).toBe(22000); expect(k.pct).toBe(13); expect(k.w).toBe('13%');
-    const se = await page.evaluate(() => { const S = planStandEind(); return Object.values(S.per).reduce((a, x) => a + x.geld, 0); });
-    expect(Math.round(se)).toBe(Math.round(k.geld));
-    expect(await tekst(page, '#planKpi')).toContain('€2.850 van €22.000');
+  /* v524: de kop is de lagen-hero (het totaal van de vier lagen), niet meer "gespaard van je doelen 13%". Bindt op lagenData(). */
+  test('de kop is de lagen-hero: elk laag-attribuut komt uit lagenData(), de oude geld-kop is weg', async ({ page }) => {
+    const r = await page.evaluate(() => { const e = document.getElementById('planLagenHero'); const L = lagenData();
+      return { attrs: { kop: +e.dataset.lagenkop, b: +e.dataset.laagbeschermen, rs: +e.dataset.laagreserveren, d: +e.dataset.laagdoelen, g: +e.dataset.laaggroeien, vrij: +e.dataset.laagvrij },
+        L: { kop: L.kop, b: L.beschermen, rs: L.reserveren, d: L.doelen, g: L.groeien, vrij: L.vrij }, kpi: !!document.getElementById('planKpi'), hassub: /op je spaarrekening/.test(e.innerText), seg: e.querySelectorAll('[data-lagenbalk] i').length }; });
+    expect(r.kpi).toBe(false);                                   // de oude "gespaard van doelen" kop bestaat niet meer
+    for (const k of ['kop', 'b', 'rs', 'd', 'g', 'vrij']) expect(Math.round(r.attrs[k])).toBe(Math.round(r.L[k]));
+    expect(r.hassub).toBe(true);
+    expect(r.seg).toBeGreaterThanOrEqual(1);
   });
 
   /* v440: de tegel "Deze maand opzij" (inleg + terug) en de terug-chip zijn vervallen; de kop toont nu "Opzij deze periode"
      (opzijPeriode: netto naar je spaarrekening tegen het doel uit Kiezen). Dat getest in v440.spec.js. */
 
-  test('alles vol is de laatste vol-datum van de rijen, uit dezelfde projectie', async ({ page }) => {
-    const r = await page.evaluate(() => { const TL = planTijdlijnData(); const v = Object.values(TL.per).map((x) => x.vol).filter((x) => x != null);
-      return { kpi: +document.querySelector('[data-kpivol]').dataset.kpivol, max: Math.max(...v), lbl: etaDatum(Math.max(...v)) }; });
-    expect(r.kpi).toBe(r.max);
-    expect(await tekst(page, '[data-kpivol]')).toContain(r.lbl);
+  /* v524: "alles vol" verliet de kop naar de laag Doelen (mockup v10, regel 145). Zelfde projectie: planKpiData().allesVol. */
+  test('alles vol staat op de laag Doelen, uit dezelfde projectie (planKpiData)', async ({ page }) => {
+    const r = await page.evaluate(() => { const K = planKpiData(); return { attr: +document.querySelector('[data-laag="doelen"] [data-kpivol]').dataset.kpivol, allesVol: K.allesVol, lbl: K.allesVol != null ? etaDatum(K.allesVol) : null }; });
+    expect(r.attr).toBe(r.allesVol);
+    expect(await tekst(page, '[data-laag="doelen"] [data-kpivol]')).toContain('alles vol');
+    if (r.lbl) expect(await tekst(page, '[data-laag="doelen"] [data-kpivol]')).toContain(r.lbl);
   });
 
-  test('de kop draagt nog te gaan als attribuut, en toont het niet', async ({ page }) => {
-    expect(await page.evaluate(() => +document.getElementById('planKpi').dataset.nogtegaan)).toBe(16262);
+  /* v524: het aggregaat "nog te gaan" verliet de kop met het geld-tegen-doelen; de hero toont alleen het lagen-totaal. */
+  test('de kop toont het lagen-totaal en nergens "te gaan"', async ({ page }) => {
+    expect(await page.evaluate(() => !!document.getElementById('planLagenHero').dataset.lagenkop)).toBe(true);
     expect(await page.evaluate(() => /te gaan/.test(document.getElementById('s-vooruit').innerText))).toBe(false);
   });
 

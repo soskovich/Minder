@@ -102,7 +102,7 @@ test.describe('v502', () => {
 
   test('f: "op schema" in maanden tegen de laatste streefdatum, amber bij te laat, alleen de maand zonder streefdatum', async ({ page }) => {
     await V.boot(page); await naarPlan(page);
-    const c = page.locator('#planKpi [data-kpischema]');
+    const c = page.locator('[data-laag="doelen"] [data-kpischema]');   // v524: "op schema" verhuisde van de kop naar de laag Doelen
     await expect(c).toHaveText('9 maanden voor je streefdatum (jan 2028)');
     await expect(c).toHaveAttribute('data-kpischemamnd', '9');
     await V.boot(page, { kkStreef: '2027-02', iwStreef: '2027-01' }); await naarPlan(page);
@@ -113,7 +113,7 @@ test.describe('v502', () => {
     expect(kleur).toBe(amber);
     await V.boot(page, { set5: { goals: [{ id: 'iw', naam: 'Inrichting woning', doel: 5000, gespaard: 0, streefdatum: '' }, { id: 'kk', naam: 'Kosten Koper', doel: 15000, gespaard: 2000, streefdatum: '' }] } });
     await naarPlan(page);
-    await expect(page.locator('#planKpi [data-kpivol]')).toContainText('apr 2027');
+    await expect(page.locator('[data-laag="doelen"] [data-kpivol]')).toContainText('apr 2027');
     await expect(c).toHaveCount(0);
   });
 
@@ -138,16 +138,17 @@ test.describe('v502', () => {
     expect(na).toMatchObject({ saldo: 6000, nf: 3000, doelen: 3000, stil: 0 });
   });
 
-  test('i: de opzij-tegel toont in de era de periode, zonder "eenmalig ontvangen"', async ({ page }) => {
+  /* v524: de opzij-tegel (met "eenmalig ontvangen" en de era-periode) verliet de kop naar blok 2 (gestort naast plan, mockup v10
+     regel 145). De tegel bestaat niet meer op Plan; de era-periode-meting (opzijEenheid over het salarisperiode-venster) blijft de
+     bron, en blok 2 is het nieuwe huis. Eenmalig geld blijft buiten de spaarrekening-stortingen (het staat op de salarisrekening). */
+  test('i: de opzij-tegel verliet de kop naar blok 2; de era-periode-meting blijft de bron', async ({ page }) => {
     await V.boot(page, { eenmalig: true }); await naarPlan(page);
-    const t = page.locator('#planKpi [data-kpiopzijperiode]');
-    await expect(t).not.toContainText('eenmalig ontvangen');
-    await expect(page.locator('[data-kpieenmalig]')).toHaveCount(0);
+    await expect(page.locator('#planKpi')).toHaveCount(0);
+    await expect(page.locator('[data-kpiopzijperiode], [data-kpiopzijeenheid], [data-kpieenmalig]')).toHaveCount(0);
+    await expect(page.locator('#planGestort')).toHaveCount(1);                 // opzij leeft nu in blok 2 (gestort naast plan)
     expect(await page.evaluate(() => eenmaligPeriode())).toBeGreaterThan(0);   // er IS eenmalig geld in deze periode
-    await expect(page.locator('[data-kpiopzijeenheid]')).toHaveAttribute('data-kpiopzijeenheid', '2026-11-24|2026-12-23');
-    await expect(page.locator('[data-kpiopzijeenheid]')).toContainText('24 nov – 23 dec: gestort');
     const OE = await page.evaluate(() => opzijEenheid({ soort: 'periode', ym: '2026-11', start: '2026-11-24', eind: '2026-12-23' }));
-    await expect(t).toHaveAttribute('data-kpiopzij', String(OE.netto));
-    await expect(t.locator('b')).toHaveText(OE.netto < 0 ? `-€${Math.abs(OE.netto).toLocaleString('nl-NL')}` : `€${OE.netto.toLocaleString('nl-NL')}`);
+    expect(OE && typeof OE.netto).toBe('number');                             // het era-venster is nog de meetbron
+    expect(OE.erin).toBeGreaterThanOrEqual(0);
   });
 });
