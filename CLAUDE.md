@@ -151,7 +151,11 @@ genoemde versietag.)*
   salaris rond <dag>" (`salVolgendRegelHtml()`, `data-salvvolgend`); een salaris dat nog niet binnen is (era, laat) is 'volgend'. In 'dit' staat
   de voorstelkaart er alleen op de stortingsdag (`P.nu`), want `rekVoorstel()` rekent daarna de volgende periode; in 'volgend' houdt een Akkoord
   op de lopende periode (`salTekortActief`) de kaart niet meer tegen. Spec `v525.spec.js` (a-f), op de export `tests/wip/v525-export.spec.js`;
-  `v432` 4e, `v436` 4a, `v499` i, `v500` a/b/c, `v501` a/a2 en `v521a` e/f gemigreerd. Cache `minder-v525`.
+  `v432` 4e, `v436` 4a, `v499` i, `v500` a/b/c, `v501` a/a2 en `v521a` e/f gemigreerd. DE IJKLIJSTEN VAN ZIEN: de bedragen-helpers
+  (`v516-bedragen`, `v518-bedragen`, `v521a-stand`, `v523-stand`) en `v512` f lezen Grip zonder `#salVoorstelKaart`, `[data-salvmelding]` en
+  `[data-salvvolgend]`; in `v512-grip-getallen.json` en `v516/v518/v519/v520/v520b/v521/v521c-voor.json` is ALLEEN `grip-zien` bijgewerkt,
+  GEMETEN op d8c90b9 met dezelfde helpers (een worktree): op alle negen standen is v525 daarbuiten gelijk aan d8c90b9, ook de sheet (`salv`),
+  en wat wegviel zijn alleen de getallen van de oude kaarten (bijv. 1.250 / 750 / 3.216, of 150 / 1.600 / 1.700 / 1.766). Cache `minder-v525`.
 - **v523c: EEN SALARIS DAT VOOR DE VASTE DAG BINNENKOMT, BLIJFT NA DIE DAG HET SALARIS VAN DE NIEUWE PERIODE** (`v523c`, gevraagd door
   de gebruiker, tak `werk/v523c` vanaf eb7932b). GEMETEN (deel 0): `salPeriode()` zocht in de era het salaris van de lopende periode
   (`periodeVan(vandaag)`) alleen tussen start en eind van die periode, dus een storting op ma 21 dec viel op 27 dec weg (periode 24 dec – 24 jan):
