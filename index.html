@@ -15149,7 +15149,7 @@ function verhogingVerdelenZet(){ const N=naJeSalarisData(), S=window._vhv||{}; i
 function eenheidUitBud(k, u){ if(!u) return null; if(u.soort==='maand' && !u.korteMaand){ const r=oorzaakUitBud(k, u.ym, null); return {uit:r.uit, bud:r.bud}; }
   const B=maandPotjes(u.ym).B||{}; let uit=0; for(const t of eenheidTx(u)){ if(catOf(t)!==k || eenmaligLabel(t) || !isUitgave(t, B)) continue; uit+=uitgaveNorm(t); }
   return {uit:Math.max(uit,0), bud:eenheidBudgetPot(u, k)}; }
-function eenheidSpaarUit(u){ if(!u) return null; if(u.soort==='maand' && !u.korteMaand){ try{ return Math.round(spaarStortStand(u.ym).uit||0); }catch(_){ return 0; } }
+function eenheidSpaarUit(u){ if(!u) return null; if(u.soort==='maand' && !u.korteMaand){ try{ return Math.round(gripSpaarOpnames(u.ym).uit||0); }catch(_){ return 0; } }
   try{ return Math.round(-savedTxRange(u.start, u.eind).filter(t=>t.amount<0).reduce((a,t)=>a+t.amount,0)); }catch(_){ return 0; } }
 function oorzaakTerugcheck(){ const m=thisYM(), prev=valtOpYmPlus(m,-1), voorM=valtOpYmPlus(m,-2);
   let A=[]; try{ A=afsprakenLijst().filter(a=>a.soort==='gedrag' && String(a.van)===prev && String(a.key||'').startsWith('oorz:') && a.oorzaak!=='verdelen'); }catch(_){}
@@ -15163,7 +15163,7 @@ function oorzaakTerugcheck(){ const m=thisYM(), prev=valtOpYmPlus(m,-1), voorM=v
       if(k){ const u0=eenheidUitBud(k, U0), u1=eenheidUitBud(k, U1); voor=Math.max(u0.uit-u0.bud,0); nu=Math.max(u1.uit-u1.bud,0); wat=`${(CATS[k]||{}).name||k} boven budget`; }
       else if(a.oorzaak==='opzij'){ voor=eenheidSpaarUit(U0); nu=eenheidSpaarUit(U1); wat='uit je spaargeld'; } }
     else if(k){ const u0=oorzaakUitBud(k, voorM, null), u1=oorzaakUitBud(k, prev, null); voor=Math.max(u0.uit-u0.bud,0); nu=Math.max(u1.uit-u1.bud,0); wat=`${(CATS[k]||{}).name||k} boven budget`; }
-    else if(a.oorzaak==='opzij'){ try{ voor=Math.round(spaarStortStand(voorM).uit||0); nu=Math.round(spaarStortStand(prev).uit||0); }catch(_){} wat='uit je spaargeld'; }
+    else if(a.oorzaak==='opzij'){ try{ voor=Math.round(gripSpaarOpnames(voorM).uit||0); nu=Math.round(gripSpaarOpnames(prev).uit||0); }catch(_){} wat='uit je spaargeld'; }
     if(voor==null || voor<=0) continue;
     const kleiner=(voor-nu)/voor, lijkt=kleiner>=TERUG_KLOPT_DEEL, E=kennisGet('oorzaakcheck|'+a.id);
     uit.push({id:a.id, a, key, k, soort:a.oorzaak, naam:a.titel||a.wat, wat, voorM, prev, voorL, prevL, voor:Math.round(voor), nu:Math.round(nu), kleiner:Math.round(kleiner*100), lijkt, antwoord:E?E.aard:null, vraagKey:'terug|'+a.id}); }
@@ -15601,7 +15601,7 @@ function gripSymMaanden(s, V){ const m=thisYM(), ms=[3,2,1].map(i=>valtOpYmPlus(
       return {ms:P.ms.concat([m]), labels:P.labels.concat([P0?eenheidKort(P0):MNAMES[+m.slice(5,7)-1]]), scheiding:P.eenheden.findIndex(u=>u.soort==='periode')>=0?P.eenheden.findIndex(u=>u.soort==='periode'):P.eenheden.length, v:P.totaal.concat([Math.round(eind)]), budget:bud, lopend:true}; }
     return {ms:P.ms.concat([m]), v:P.totaal.concat([Math.round(eind)]), budget:Math.round(+(SET.budgets||{})[s.k]||0), lopend:true}; }
   const pt=s.p&&s.p.soort;
-  if(pt==='spaargeld'){ const v=ms.concat([m]).map(ym=>{ try{ return Math.round(spaarStortStand(ym).uit||0); }catch(_){ return 0; } }); return {ms:ms.concat([m]), v, budget:0, lopend:false, wat:'uit je spaargeld'}; }
+  if(pt==='spaargeld'){ const v=ms.concat([m]).map(ym=>{ try{ return Math.round(gripSpaarOpnames(ym).uit||0); }catch(_){ return 0; } }); return {ms:ms.concat([m]), v, budget:0, lopend:false, wat:'uit je spaargeld'}; }
   if(pt==='beleggen'){
     /* v501 (punt 7): in de era dezelfde eenheden als elke andere reeks (maanden t/m "nov 1–23", dan de periodes met de scheiding) */
     const P0=eraEenheidNu(); if(P0){ let H=[]; try{ H=periodeHistorie(P0); }catch(_){}
@@ -15870,8 +15870,7 @@ function renderMaand(){
 }
 /* ===== v388: GRIP DEEL 2: BEGRIJPEN, KIEZEN EN TERUGBLIK =====
    Een PATROON is een oorzaak met de signalen die eruit volgen. Er zijn drie bronnen en geen nieuwe meting:
-   (1) ONTTREKKINGEN van je spaarrekening deze maand (spaarStortStand().uitTx, dezelfde afschrijvingen als de
-       Doelen-meter). Die zijn ALTIJD een patroon en staan ALTIJD eerst; de potjes die deze maand boven eindigen
+   (1) ONTTREKKINGEN van je spaarrekening deze maand (gripSpaarOpnames(), sinds onderhoud4b; tot dan spaarStortStand().uitTx). Die zijn ALTIJD een patroon en staan ALTIJD eerst; de potjes die deze maand boven eindigen
        (uitschieters, dezelfde lijst als de bridge op Zien) zijn er de signalen van, want samen maken ze dat je
        betaalrekening op is.
    (2) BELEGGEN VOOR FUNDAMENT: inleg naar een bezitting terwijl de voorwaarden niet gehaald zijn (belegVragen()).
@@ -15894,6 +15893,12 @@ function gripVorigeReden(pid){
 }
 /* De dagen tellen vanaf je salaris en niet vanaf de 1e (v389): de laatste betaling van dezelfde bron als
    salarisBetalingLaatst() (recurKey), op of voor de eerste onttrekking. Zonder zo'n betaling is er geen telling. */
+/* onderhoud4b: de opnames van je spaarrekening in een maand voor het patroon "Betaalrekening op" en zijn uitkomst: de ene
+   definitie (isSpaarOpname) met terug=false, dus geen verschuiving en geen overboeking tussen eigen spaarrekeningen, en een
+   aanvulling telt WEL (dan was je betaalrekening juist op). */
+function gripSpaarOpnames(ym){ const sav=new Set(n26SavingsAccounts()), uitTx=[]; let uit=0;
+  if(sav.size) for(const t of txOfMonth(ym)){ if(!isSpaarOpname(t, sav, false)) continue; uit+=-t.amount; uitTx.push(t); }
+  return {uitTx, uit:Math.round(uit), uitExact:Math.round(uit*100)/100}; }
 function gripSalarisVoor(d){
   const top=salarisBetalingLaatst(valtOpYmPlus(thisYM(),1)); if(!top) return null;
   const k=recurKey(top), dd=String(d).slice(0,10);
@@ -15923,14 +15928,17 @@ function gripPatronenRuw(){
   const boven=(V && !V.onbekend)?uitschieters(V):[];
   const potSig=x=>({soort:'potje', k:x.k, naam:x.naam, bedrag:Math.round(x.overR), bud:x.bud, nr:insMaandenBoven(x.k)});
   const out=[]; const gebruikt=new Set();
-  let S=null; try{ S=spaarStortStand(m); }catch(_){}
+  /* onderhoud4b: het patroon leest gripSpaarOpnames() (isSpaarOpname zonder terug), niet spaarStortStand().uitTx. Die tweede
+     is de terugzet-rekensom: daarin valt een "Aanvulling" weg en telt een verschuiving met terugzetten mee, en voor "je
+     betaalrekening is op" is het precies andersom. Een verschuiving naar je reserveringsrekening telt in geen van beide. */
+  let S=null; try{ S=gripSpaarOpnames(m); }catch(_){}
   if(S && S.uitTx && S.uitTx.length){
     const T=S.uitTx.slice().sort((a,b)=>a.date.localeCompare(b.date)), sal=gripSalarisVoor(T[0].date);
     const dag=sal?Math.round((new Date(T[0].date.slice(0,10)+'T00:00:00')-new Date(sal.date.slice(0,10)+'T00:00:00'))/864e5):null;
     const sig=[{soort:'onttrekking', naam:'Uit spaargeld', bedrag:Math.round(S.uitExact), n:T.length, data:T.map(t=>t.date)}];
     const ont=T.map(t=>({date:String(t.date).slice(0,10), bedrag:Math.round(Math.abs(+t.amount||0)*100)/100}));   // v431: de onttrekkingen per datum, voor het symptoom zelf
     for(const x of boven){ sig.push(potSig(x)); gebruikt.add(x.k); }
-    let vorig=null; try{ vorig=spaarStortStand(prev); }catch(_){}
+    let vorig=null; try{ vorig=gripSpaarOpnames(prev); }catch(_){}
     const twee=!!(vorig && vorig.uit>0) || sig.some(s=>s.soort==='potje' && s.nr>=2);
     out.push({id:'spaargeld', soort:'spaargeld', naam:dag==null?'Betaalrekening op · salarisdatum onbekend':`Betaalrekening op na ~${dag} ${dag===1?'dag':'dagen'} na salaris`, salaris:sal?sal.date.slice(0,10):null, sig, ont, twee,
       bedrag:Math.round(S.uitExact), raakt:'budget en doelen',
@@ -16231,7 +16239,7 @@ function gripRegelUitkomst(r, ym){
     if(sp<=r.max) return {s:'ok', t:`${r.naam} ${euro0(sp)} van ${euro0(r.max)}`};
     if(potEind>r.potje && sp<=potEind) return {s:'geschoven', t:`${r.naam} ${euro0(sp)}: binnen het opgehoogde potje van ${euro0(potEind)}, boven je ${euro0(r.max)}`};
     return {s:'nee', t:`${r.naam} ${euro0(sp)} van ${euro0(r.max)}`}; }
-  if(r.soort==='onttrekking'){ let T=[]; try{ T=(spaarStortStand(ym).uitTx||[]).filter(t=>t.date>r.na); }catch(_){}
+  if(r.soort==='onttrekking'){ let T=[]; try{ T=(gripSpaarOpnames(ym).uitTx||[]).filter(t=>t.date>r.na); }catch(_){}
     return T.length?{s:'nee', t:`${T.length}× uit spaargeld na ${gripKortDatum(r.na)}`}:{s:'ok', t:`niets uit spaargeld na ${gripKortDatum(r.na)}`}; }
   if(r.soort==='inlegstil'){ let T=[]; try{ T=bezitInlegTx(r.id, ym).filter(t=>t.date>r.na); }catch(_){}
     return T.length?{s:'nee', t:`inleg naar ${r.naam} na ${gripKortDatum(r.na)}`}:{s:'ok', t:`geen inleg naar ${r.naam} na ${gripKortDatum(r.na)}`}; }

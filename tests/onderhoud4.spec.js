@@ -206,3 +206,27 @@ test('l: na "Aanvulling, niet terugzetten": nog terug EUR 0, Noodfonds EUR 2.927
   const r3 = await page.evaluate(() => { setOpnameBron(window.__o4.opn, 'noodfonds'); return { nfT: SET.nfToegewezen, terug: planTerug(allocatePlan()).totaal }; });
   expect(r3.nfT).toBe(3326); expect(r3.terug).toBe(398.88);
 });
+
+/* onderhoud4b: "Betaalrekening op na ~N dagen na salaris" (gripPatronenRuw) leest gripSpaarOpnames(): de opnames zonder
+   verschuiving en zonder overboeking tussen eigen spaarrekeningen, en een aanvulling telt WEL. Op 4ce6ffa telde de verschuiving van
+   12 nov mee (~19 dagen na het salaris van 24 okt); sinds onderhoud 4 is de eerste opname die van 27 nov (~3 dagen na 24 nov). */
+test('m: het patroon "Betaalrekening op" telt een verschuiving niet, en een aanvulling of een terugzet-keuze verandert het niet', async ({ page }) => {
+  await S4.boot(page);
+  const lees = () => page.evaluate(() => { const P = gripPatronenRuw().find((p) => p.id === 'spaargeld');
+    return P && { naam: P.naam, sal: P.salaris, bedrag: P.bedrag, ont: P.ont.map((o) => o.date), uitk: gripRegelUitkomst({ soort: 'onttrekking', na: '2026-11-01' }, '2026-11').t }; });
+  const a = await lees();
+  expect(a.naam).toBe('Betaalrekening op na ~3 dagen na salaris');
+  expect(a.sal).toBe('2026-11-24'); expect(a.bedrag).toBe(399); expect(a.ont).toEqual(['2026-11-27']);
+  expect(a.uitk).toBe('1× uit spaargeld na 1 nov');
+  // "Aanvulling, niet terugzetten": de terugzet-rekensom laat de opname weg, het patroon niet (je betaalrekening was op)
+  const b = await page.evaluate(() => { setOpnameBron(window.__o4.opn, OPN_AANVULLING); return spaarStortStand('2026-11').uitExact; });
+  expect(b).toBe(0);
+  expect(await lees()).toEqual(a);
+  // de maandbalken van het symptoom en de terugcheck "klopte de oorzaak?" meten hetzelfde
+  const d = await page.evaluate(() => { const G = gripSymMaanden({ p: { soort: 'spaargeld' } }, null); return { bal: G.v[G.v.length - 1], tc: eenheidSpaarUit({ soort: 'maand', ym: '2026-11' }) }; });
+  expect(d).toEqual({ bal: 399, tc: 399 });
+  // de verschuiving met "terug over 3 maanden" telt in de terugzet-rekensom, niet in het patroon
+  const c = await page.evaluate(() => { setOpnameBron(window.__o4.opn, null); setVerschuivingKeuze(window.__o4.vs, '3'); return spaarStortStand('2026-11').uitExact; });
+  expect(c).toBe(1398.88);
+  expect(await lees()).toEqual(a);
+});
