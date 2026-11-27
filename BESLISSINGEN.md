@@ -1197,3 +1197,16 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   `openPeriodeStart()` leest hem (`lagenResVolgende()`, alleen de periode direct erna) als vooringevuld bedrag voor reserveringen. Bevestigen blijft jouw stap.
 - **Valkuil:** een `//`-commentaar halverwege een regel in `lagenResVolgende()` slokte de rest van de expressie op; node --check gaf
   "Unexpected end of input". Gebruik `/* */` midden in een regel.
+
+### v526b · vervolg na de meting op de back-up
+- **Lagen, alles gehaald:** het groene getal is wat er echt opzij ging, ook het surplus (bij de gebruiker EUR 2.500 tegen EUR 1.989 zonder). Valkuil:
+  `lagenGestort()` telt het surplus niet bij Beschermen (het is geen plan), dus een som over de lagen mist het.
+- **Fundament, reserveringen:** behoefte en afspraak naast elkaar; het oordeel blijft op de behoefte. Valkuil: tegen de afspraak (EUR 36) zou een
+  gestorte afspraak "gedekt" heten terwijl het voorstel EUR 51 vraagt.
+- **Fundament, buffer:** beleggen heeft een eigen lat (besluit 27 sep), dus `SET.beleggenDrempel` gaat voor de norm. `beleggenDrempel()` zelf valt
+  zonder eigen keuze terug op `bufferNorm()`; Fundament leest de eigen keuze rechtstreeks zodat het label kan zeggen welke lat het is.
+- **Kleur:** niet gehaald is geen fout (v314), ook het grote getal niet.
+- **Een post een keer:** `dekking().regels` heeft een regel per voorkomen; de sheet ontdubbelt op de id en noemt het ritme.
+- **Moment 1 weg van Zien:** de kaart zette je saldo naast "het advies", terwijl de afspraak sinds v523 je echte overboeking is en v525 per
+  rekening toont wat er binnenkwam. Twee kaarten over hetzelfde moment in twee eenheden.
+

@@ -1,0 +1,9 @@
+{"specs": ["tests/v526b.spec.js", "tests/v435.spec.js"], "timeout": 300, "sabotages": [
+ {"naam": "j: opzij zonder surplus", "zoek": "+(geteld.some(l=>l.k==='beschermen')?(+G.surplusGestort||0):0)", "vervang": "+0"},
+ {"naam": "k: het oordeel leest de afspraak", "zoek": "const nog=Math.max(Math.round(per-(RP.gestort||0)),0);", "vervang": "const nog=Math.max(Math.round((afspraak!=null?afspraak:per)-(RP.gestort||0)),0);"},
+ {"naam": "k: afspraak niet getoond", "zoek": "${v.afspraak!=null?` · je afspraak ${euro0(v.afspraak)}`:''}", "vervang": ""},
+ {"naam": "l: eigen drempel genegeerd", "zoek": "const norm=eigen!=null?eigen:bufferNorm();", "vervang": "const norm=bufferNorm();"},
+ {"naam": "m: groot getal amber", "zoek": "else l=dial('fundament','Fundament','var(--mut2)','var(--txt)',", "vervang": "else l=dial('fundament','Fundament','var(--mut2)','var(--amber)',"},
+ {"naam": "n: post per voorkomen", "zoek": "if(posten.some(p=>(p.id!=null?p.id:p.naam)===id)) continue; ", "vervang": ""},
+ {"naam": "o: moment 1 weer op Zien", "zoek": "salNietBinnenHtml()+salVoorstelKaartHtml()", "vervang": "salNietBinnenHtml()+salMoment1Html()+salVoorstelKaartHtml()"}
+]}

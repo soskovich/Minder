@@ -1,8 +1,8 @@
 /* v526 OP JOUW EXPORT (de back-up staat niet in de repo, dus dit draait alleen bij jou):
      MINDER_EXPORT=<pad naar je back-up> WIP=1 TZ=Europe/Amsterdam npx playwright test tests/wip/v526-export.spec.js
-   Test a: je stand op 27 nov (REPETITIE_DAG): de tegel Lagen zegt 2/3, groot EUR 36, "Reserveren niet gestort"; Groeien staat op "nog niet".
+   Test a: je stand op 2 dec (REPETITIE_DAG; 27 nov was te vroeg voor de werkdagen-grens van v523b): de tegel Lagen zegt 2/3, groot EUR 36, "Reserveren niet gestort"; Groeien staat op "nog niet".
    Test c: de tegel Fundament: reserveringen niet gedekt (pot EUR 0, je inleg deze periode niet gestort).
-   Test e: na keuze C (dezelfde UI-acties als tests/wip/v524-keuzeC-export.spec.js): het grote getal van Fundament is het buffertekort tegen je norm
+   Test e (blijft op 27 nov tenzij REPETITIE_DAG): na keuze C (dezelfde UI-acties als tests/wip/v524-keuzeC-export.spec.js): het grote getal van Fundament is het buffertekort tegen je norm
    (verwacht EUR 2.470 bij een norm van EUR 5.796), en dat is het grootste niet-gehaalde bedrag.
    Test r (de repetitie): elk bedrag op Home, Inzichten, Plan en Vermogen, het voorstel, lagenGestort, de dekking en safeToSpend zijn op 25, 27 en 30 nov
    gelijk aan de vorige main (4ce6ffa) op dezelfde export. SABOTAGE: CONTANT=0 zet het potje Contant (alleen aan de huidige kant) op 0; dan wordt hij rood. */
@@ -25,7 +25,7 @@ const data = () => { const pad = process.env.MINDER_EXPORT; if (!pad) return nul
 
 test('a: Lagen 2/3, groot EUR 36, "Reserveren niet gestort"', async ({ page }) => {
   const d = data(); if (!d) test.skip();
-  await laad(page, null, d, process.env.REPETITIE_DAG || '2026-11-27');
+  await laad(page, null, d, process.env.REPETITIE_DAG || '2026-12-02');
   const r = await page.evaluate(() => { go('maand'); gripKiesTab('zien'); closeSheet(); const e = document.querySelector('#gripMeters [data-meter="lagen"]');
     const T = lagenTegelData(); return { ring: e.querySelector('.gm-ring').innerText.trim(), v: e.querySelector('.gm-v').innerText.trim(), s: e.querySelector('.gm-s').innerText.trim(), lagen: T.lagen.map((l) => [l.k, l.plan, l.gestort, l.stand]) }; });
   console.log(JSON.stringify(r, null, 1));
@@ -35,7 +35,7 @@ test('a: Lagen 2/3, groot EUR 36, "Reserveren niet gestort"', async ({ page }) =
 
 test('c: Fundament: reserveringen niet gedekt (pot EUR 0, inleg niet gestort)', async ({ page }) => {
   const d = data(); if (!d) test.skip();
-  await laad(page, null, d, process.env.REPETITIE_DAG || '2026-11-27');
+  await laad(page, null, d, process.env.REPETITIE_DAG || '2026-12-02');
   const r = await page.evaluate(() => { const F = fundamentData(), v = F.vw.find((x) => x.key === 'dekking'), RP = resSheetPeriode();
     return { gehaald: v.gehaald, label: v.label, pot: resSaldo(), RP: [RP.per, RP.gestort, RP.komt, RP.telt], oud: beleggenKlaar(maandRegels()).voorwaarden.map((x) => [x.key, x.gehaald]) }; });
   console.log(JSON.stringify(r, null, 1));
@@ -77,10 +77,12 @@ test('r: de repetitie, elk bedrag buiten Grip gelijk aan 4ce6ffa op dezelfde exp
     u.f = { safe: safeToSpend().safe, P: P.ok ? [P.opzij, P.reserveringen] : null, G: G ? G.lagen.map((l) => [l.k, l.plan, l.gestort]) : null, D: [D.gedektTot, D.gat && D.gat.tekort], nw: netWorth() };
     return u; };
   for (const dag of ['2026-11-25', '2026-11-27', '2026-11-30']) {
-    const p1 = await browser.newPage(), p2 = await browser.newPage();
+    /* v526b: elke dag in een eigen, schone context (localStorage en sessionStorage per context), zodat de stand van een andere test of dag niet lekt */
+    const c1 = await browser.newContext({ serviceWorkers: 'block', baseURL: test.info().project.use.baseURL }), c2 = await browser.newContext({ serviceWorkers: 'block', baseURL: test.info().project.use.baseURL });
+    const p1 = await c1.newPage(), p2 = await c2.newPage();
     await laad(p1, MAIN_HTML(), d, dag); await laad(p2, null, d, dag, process.env.CONTANT ? +process.env.CONTANT : null);
     const oud = await p1.evaluate(MEET), nu = await p2.evaluate(MEET);
     for (const k of Object.keys(oud)) expect(JSON.stringify(nu[k]), `${dag} ${k}`).toBe(JSON.stringify(oud[k]));
-    await p1.close(); await p2.close();
+    await c1.close(); await c2.close();
   }
 });

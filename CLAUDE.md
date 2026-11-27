@@ -151,6 +151,18 @@ genoemde versietag.)*
   hem al dragen. GEEN BEDRAG BUITEN GRIP VERANDERT (`v526.spec.js` h tegen 4ce6ffa op drie standen; `tests/wip/v526-export.spec.js` r op je export,
   sabotage CONTANT=0). Spec `v526.spec.js` (a-i), stand `v526-stand.js`, sabotages `tests/wip/v526-sabotage.json`; de ijklijsten van Zien
   (`v512`, `v516`-`v523` voor-json) dragen alleen de getallen van de oude tegels minder, gemeten gelijk op 4ce6ffa met dezelfde helpers.
+  V526B (gevraagd door de gebruiker na een meting op zijn back-up, 1 en 2 dec: tegels kloppen, buiten Grip gelijk aan 4ce6ffa): (1) Lagen alles
+  gehaald: het groene getal is wat er ECHT opzij ging, inclusief het surplus dat op je spaarrekening landde (`lagenTegelData().opzij` = de
+  gestorte lagen plus `lagenGestort().surplusGestort`). (2) Fundament, reserveringen: "nodig EUR 51 per periode · je afspraak EUR 36"
+  (`data-fundamentnodig`, `data-fundamentafspraak`: de behoefte uit het voorstel en `SET.salVerdeling.reserveringen`); het oordeel leest de
+  behoefte. (3) Fundament, buffer: met een eigen drempel voor beleggen (`SET.beleggenDrempel`, besluit 27 sep) geldt die (`drempel:'beleggen'`,
+  "buffer onder je drempel"), anders de norm of het opbouwpad; `bufferNorm()` verandert niet. (4) Het grote getal van Fundament is neutraal
+  (`--txt`) bij niet gehaald (v314). (5) Een terugkerende post staat EEN keer in de sheet ("Laser EUR 159 · elke 6 mnd · eerst apr 2027",
+  `data-fundamentpost`). (6) De kaart "Je salarisverdeling" van moment 1 (`salMoment1Html()`, het woord "advies") staat niet meer op Zien:
+  sinds v523/v525 zegt "Salaris binnen" het tegen je echte afspraak; `salMoment1()` blijft voor de diagnose. (7) De export-repetitie draait
+  elke dag in een eigen context; tests a en c op 2 dec. Spec `v526b.spec.js` (j-n) en `v435` 4/4b (punt 6), sabotages
+  `tests/wip/v526b-sabotage.json`. Cache blijft `minder-v526`. Bij de merge met onderhoud 4: wie als tweede op main komt, krijgt de hoogste
+  cacheversie plus een letter.
 - **ONDERHOUD4: "NAAR JE LAGEN" EN "WAAROM EUR X MEER/MINDER OPZIJ" STAAN OP PLAN STANDAARD DICHT, EN EEN TIK ONTHOUDT DE STAND**
   (`onderhoud4`, gevraagd door de gebruiker, tak `werk/onderhoud4` vanaf 4ce6ffa; cache `minder-v525c`). GEEN BEDRAG VERANDERT (spec e: met beide
   blokken open is elk bedrag op Home, Inzichten, Grip en Plan gelijk aan 4ce6ffa, git show). Dicht is `planGestortKaart()` EEN regel

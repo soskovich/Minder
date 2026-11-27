@@ -154,30 +154,27 @@ test.describe('v435 · 2/3. contant en overboeken', () => {
 
 test.describe('v435 · 4/5/6. de momenten', () => {
   test('4. moment 1: twee dagen na de storting, advies tegen wat er na je salaris stond, ✓ binnen EUR 25, anders het verschil en het gevolg', async ({ page }) => {
+    /* v526b (punt 6): de kaart staat niet meer op Zien (v525 "Salaris binnen" zegt het tegen je afspraak); salMoment1() rekent hetzelfde voor de diagnose */
     for (const [dag, kaart] of [['2026-10-27', false], ['2026-10-28', true], ['2026-10-30', true], ['2026-10-31', false]]) {
       await boot(page, { dag, set: { salVerdeling: SV(), manualBal: { [MAIN]: 1190, [LEEF]: 600 } } });
       await add(page, [sal('2026-10-26')]);
       await page.evaluate(() => { go('maand'); renderMaand(); });
-      await expect(page.locator('[data-salmoment1]')).toHaveCount(kaart ? 1 : 0);
+      await expect(page.locator('[data-salmoment1]')).toHaveCount(0);
+      expect(await page.evaluate(() => !!salMoment1())).toBe(kaart);
+      expect(await page.evaluate(() => /advies/i.test(document.getElementById('gripInhoud').innerText))).toBe(false);   // v526b: het woord "advies" staat niet op Zien
     }
     await boot(page, { dag: '2026-10-28', set: { salVerdeling: SV(), manualBal: { [MAIN]: 1190, [LEEF]: 600 } } });
     await add(page, [sal('2026-10-26')]);
-    await page.evaluate(() => { go('maand'); renderMaand(); });
-    expect(await page.locator(`[data-m1rek="${MAIN}"]`).getAttribute('data-m1ok')).toBe('1');
-    const l = await page.locator(`[data-m1rek="${LEEF}"]`).innerText();
-    expect(l).toContain('advies €850 · na je salaris €600 · €250 minder dan het advies');
-    expect(l).toMatch(/laagste saldo wordt dan -?€[\d.]+ op \d+ (okt|nov)/);
-    /* alles ✓: geen kaart */
-    await page.evaluate(acc => { SET.manualBal[acc] = 840; save(); renderMaand(); }, LEEF);
-    await expect(page.locator('[data-salmoment1]')).toHaveCount(0);
+    const r = await page.evaluate(([m, l]) => { const M = salMoment1(); const a = M.R.find(x => x.acc === m), b = M.R.find(x => x.acc === l); return { aok: a.ok, b: [b.advies, Math.round(b.na), Math.round(b.verschil)], laagst: b.laagst }; }, [MAIN, LEEF]);
+    expect(r.aok).toBe(true); expect(r.b).toEqual([850, 600, -250]); expect(r.laagst).not.toBeNull();
+    await page.evaluate(acc => { SET.manualBal[acc] = 840; save(); }, LEEF);
+    expect(await page.evaluate(() => salMoment1())).toBeNull();
   });
-  test('4b. komt het laagste punt onder nul, dan staat erbij wat je moet overboeken', async ({ page }) => {
-    /* v523: op 28 okt telt de afgesproken overboeking naar Leefgeld (nog niet gezien, verwacht 27 okt) als bijschrijving; op 30 okt is hij
-       OVERBOEK_LAAT_DAGEN te laat, telt niet meer, en dan zakt het laagste punt onder nul (moment 1 loopt t/m dag 4) */
+  test('4b. komt het laagste punt onder nul, dan rekent moment 1 wat je moet overboeken', async ({ page }) => {
     await boot(page, { dag: '2026-10-30', set: { salVerdeling: SV(), manualBal: { [MAIN]: 1190, [LEEF]: 100 } } });
     await add(page, [sal('2026-10-26')]);
-    await page.evaluate(() => { go('maand'); renderMaand(); });
-    expect(await page.locator(`[data-m1rek="${LEEF}"] [data-m1gevolg]`).innerText()).toMatch(/laagste saldo wordt dan -€[\d.]+ op .* · boek €\d+ over/);
+    const r = await page.evaluate(acc => { const b = salMoment1().R.find(x => x.acc === acc); return [b.laagst, b.overboeken]; }, LEEF);
+    expect(r[0]).toBeLessThan(0); expect(r[1]).toBeGreaterThan(0);
   });
   test('5. tussendoor: een rekening die voor de volgende storting op nul komt is een melding + pop-up, niet op Zien; de bewaar-regel (+EUR 100) herschrijft de entry en wist bekeken', async ({ page }) => {
     /* v436: alleen in een periode die begon met een Akkoord (hier de periode van september). v479: de kaart staat niet meer op
