@@ -163,10 +163,12 @@ test.describe('3 · de pill is de versheid', () => {
 test.describe('4 · Zien zegt "volgens je verdeling" bij de meter en de regel eronder', () => {
   test('a. geen "van doel" en geen "van €1.766 opzij"', async ({ page }) => {
     await boot(page, { set: { salVerdeling: { opzij: 1766, rek: {}, salYM: '2026-10' } } });
-    const r = await page.evaluate(() => { const MD = { netto: 2031, opzij: 1766, pct: 115 };
-      const O = { meetbaar: true, netto: 2031, doel: 1766 }; const vor = opzijPeriode; opzijPeriode = () => O;
-      try{ return { regel: gripDoelenNuTekst(MD) }; } finally{ opzijPeriode = vor; } });
-    expect(r.regel).toBe('Doelen: opzij deze periode €2.031 · volgens je verdeling €1.766');
+    /* v526: de regel "Doelen: opzij deze periode ... volgens je verdeling" onder de tegels is vervallen (gripDoelenNuTekst bestaat niet
+       meer); wat blijft is de eis dat Zien geen "van doel" en geen "van €1.766 opzij" zegt. */
+    const r = await page.evaluate(() => { go('maand'); gripKiesTab('zien'); closeSheet();
+      return { fn: typeof window.gripDoelenNuTekst, t: document.getElementById('gripMeters').innerText }; });
+    expect(r.fn).toBe('undefined');
+    expect(r.t).not.toMatch(/van doel|van €1\.766 opzij|Doelen: opzij deze periode/);
     /* de ringtekst op Zien is sinds v465 een gedragstest: tests/v465.spec.js 3a */
   });
 });
