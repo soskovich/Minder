@@ -19141,6 +19141,13 @@ function lagenWaaromRijen(G){
   if(Math.abs(afr)>=10) rijen.push({lab:'Afronding', v:afr, afronding:true});
   return rijen;
 }
+/* onderhoud4: open of dicht per blok op Plan, onthouden op dit toestel (SET.planOpen, gaat niet naar de Worker). Standaard dicht.
+   Een tik zet alleen de weergave om (geen herberekening) en bewaart met een boekhoud-save (voedt geen enkele berekening). */
+function planBlokOpen(k){ return !!((SET.planOpen||{})[k]); }
+function planBlokToggle(k){ SET.planOpen=Object.assign({}, SET.planOpen); SET.planOpen[k]=!SET.planOpen[k]; save(true);
+  const id=k==='waarom'?'planWaarom':'planGestort', el=document.getElementById(id); if(!el) return; const o=SET.planOpen[k];
+  el.dataset.blokopen=o?'1':'0'; const d=el.querySelector(k==='waarom'?'[data-waaromdicht]':'[data-gestortdicht]'), b=el.querySelector(k==='waarom'?'[data-waarombody]':'[data-gestortbody]');
+  if(d) d.style.display=o?'none':''; if(b) b.style.display=o?'':'none'; }
 function planGestortKaart(){
   let G=null; try{ G=lagenGestort(); }catch(_){} if(!G) return '';
   const col=d=>d>0.4?'var(--teal)':d<-0.4?'var(--amber)':'var(--mut)';
@@ -19151,18 +19158,29 @@ function planGestortKaart(){
   const extraSub=G.extra.laten?'blijft staan · geen bestemming':(G.extra.gekozen?`naar ${esc(G.extra.naarNaam||LAAG_NAAM[G.extra.naar]||'')}`:`naar ${LAAG_NAAM[G.extra.naar]}, de eerste laag die niet vol is`)+(G.extra.overTeMaken>0?` · nog over te maken ${euro0(G.extra.overTeMaken)}`:'');
   const extra=G.extra.bedrag>0.5?`<div class="row" data-extraregel data-extra="${G.extra.bedrag}" data-extranaar="${G.extra.naar}" data-extranaarid="${esc(G.extra.naarId||'')}" data-extralaten="${G.extra.laten?'1':'0'}" style="gap:8px;align-items:baseline;padding:8px 0 2px;margin-top:4px;border-top:1.5px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">Extra ${euro0(G.extra.bedrag)}</b><span class="small muted" style="display:block">${extraSub}</span></span></div>`:'';
   const W=lagenWaaromRijen(G);
-  const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" style="padding:9px 14px 11px;margin-top:9px">
-    <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
+  const wOpen=planBlokOpen('waarom'), wKlik=W.some(r=>r.klik);
+  const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" id="planWaarom" data-blokopen="${wOpen?1:0}" style="padding:9px 14px 11px;margin-top:9px">
+    <div class="small" data-waaromdicht role="button" onclick="planBlokToggle('waarom')" style="font-weight:700;cursor:pointer;padding:1px 0;${wOpen?'display:none':''}">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij <span class="chev" style="color:var(--teal)">›</span>${wKlik?'<span class="muted" data-waaromnietgesplitst style="font-weight:600"> · nog niet gesplitst</span>':''}</div>
+    <div data-waarombody style="${wOpen?'':'display:none'}">
+    <div class="small" data-waaromkop role="button" onclick="planBlokToggle('waarom')" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px;cursor:pointer">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
     ${W.map(r=>{ const typ=r.surplus?'surplus':r.salrek?'salrek':r.afronding?'afronding':'rek';
       const sub=r.sub?(r.klik?`<span class="small" data-salsplitlink role="button" onclick="event.stopPropagation();${r.klik}" style="display:block;color:var(--teal);font-weight:700;cursor:pointer">${r.sub} ›</span>`:`<span class="small muted" style="display:block">${r.sub}</span>`):'';
       return `<div class="row small" data-waaromrij="${typ}" data-v="${r.v}" style="gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${r.lab}${sub}</span><span style="white-space:nowrap;font-weight:700;color:${col(r.v)}">${r.v>=0?'+':'−'}${euro0(Math.abs(r.v))}</span></div>`; }).join('')}
-    <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div>`:'';
+    <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div></div>`:'';
   const dagT=G.PW.dagen>0?`dag ${G.PW.dag} van ${G.PW.dagen}`:'';
   const salK=x=>{ try{ return new Date(x+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); }catch(_){ return x; } };
   const opzijNoot=G.PW.salNa?`<div class="small muted" data-gestortopzijnoot style="margin-top:1px">gestort vanaf je salaris op ${salK(G.PW.salDag)}</div>`:'';
-  return `<div class="card" id="planGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
-    <div class="row" style="padding:11px 0 1px;align-items:baseline"><span class="small" data-gestortkop style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted" data-gestortdag>${dagT}</span>`:''}</div>${opzijNoot}
-    ${G.lagen.map(rij).join('')}${extra}</div>${waarom}
+  /* onderhoud4: standaard dicht tot een regel (SET.planOpen.gestort, alleen op dit toestel). De dichte regel telt de lagen op
+     (gestort tegen plan), noemt de lagen die afwijken met hun verschil (Groeien met "nog niet" telt niet) en de extra. Geen nieuw bedrag. */
+  const gOpen=planBlokOpen('gestort'), r2=x=>Math.round(x*100)/100;
+  const somG=r2(G.lagen.reduce((a,l)=>a+(+l.gestort||0),0)), somP=r2(G.lagen.reduce((a,l)=>a+(+l.plan||0),0));
+  const afw=G.lagen.filter(l=>!l.later).map(l=>({k:l.k, d:r2(l.gestort-l.plan)})).filter(x=>Math.abs(x.d)>0.4);
+  const afwTxt=afw.length?afw.map(x=>`<span data-gestortafwijk="${x.k}" data-d="${x.d}">${LAAG_NAAM[x.k]} ${x.d>0?'+':'−'}${euro0(Math.abs(x.d))}</span>`).join(' · '):'<span data-gestortvolgensplan>alles volgens plan</span>';
+  const dicht=`<div data-gestortdicht role="button" onclick="planBlokToggle('gestort')" data-gestort="${somG}" data-plan="${somP}" style="padding:11px 0 1px;cursor:pointer;${gOpen?'display:none':''}"><span class="small" style="font-weight:700">Naar je lagen · ${euro0(somG)} gestort, plan ${euro0(somP)}</span> <span class="small muted">· ${afwTxt}${G.extra.bedrag>0.5?` · <span data-gestortextradicht>+ extra ${euro0(G.extra.bedrag)}</span>`:''}</span> <span class="chev" style="color:var(--teal)">›</span></div>`;
+  return `<div class="card" id="planGestort" data-blokopen="${gOpen?1:0}" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
+    ${dicht}<div data-gestortbody style="${gOpen?'':'display:none'}">
+    <div class="row" role="button" onclick="planBlokToggle('gestort')" style="padding:11px 0 1px;align-items:baseline;cursor:pointer"><span class="small" data-gestortkop style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted" data-gestortdag>${dagT}</span>`:''}</div>${opzijNoot}
+    ${G.lagen.map(rij).join('')}${extra}</div></div>${waarom}
     ${(function(){ let n=0; try{ const V=lagenVerschuivingen(G.PW.start, G.PW.eind); n=V.lagen.length+V.doelen.length; }catch(_){} return n>0?`<div class="small" data-verschuivingenlink="${n}" style="margin:0 2px 8px"><span class="chev" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openLagenLog()">Verschuivingen deze periode (${n}) ›</span></div>`:''; })()}
     <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
 }
