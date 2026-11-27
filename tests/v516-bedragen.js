@@ -3,7 +3,8 @@
 async function bedragen(page) {
   return page.evaluate(() => {
     const re = /-?€\s?[\d.]+(?:,\d{2})?/g, uit = {};
-    const lees = (id) => ((document.getElementById(id) || {}).innerText || '').match(re) || [];
+    /* v525: de kaarten van de salarisverdeling (de vorm die v525 verandert) staan buiten de telling */
+    const lees = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salvmelding],[data-salvvolgend]')) x.remove(); document.body.appendChild(c); const t = c.innerText || ''; c.remove(); return t.match(re) || []; };
     go('ins'); renderIns(); uit.ins = lees('s-ins');
     go('maand'); for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { try { gripKiesTab(t); } catch (_) {} uit['grip-' + t] = lees('s-maand'); }
     go('vooruit'); renderVooruit(); uit.plan = lees('s-vooruit');

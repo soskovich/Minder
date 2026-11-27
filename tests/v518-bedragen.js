@@ -21,7 +21,8 @@ async function boot(page) {
 async function bedragen(page) {
   return page.evaluate(() => {
     const re = /-?€\s?[\d.]+(?:,\d{2})?/g, uit = {};
-    const lees = (id) => ((document.getElementById(id) || {}).innerText || '').match(re) || [];
+    /* v525: de kaarten van de salarisverdeling (de vorm die v525 verandert) staan buiten de telling */
+    const lees = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salvmelding],[data-salvvolgend]')) x.remove(); document.body.appendChild(c); const t = c.innerText || ''; c.remove(); return t.match(re) || []; };
     go('dash'); renderDash(); uit.home = lees('s-dash');
     go('ins'); renderIns();
     /* onderhoud1: de kop van Verschuivingen noemt sinds die ronde ook Vast ("Vast +EUR X", met de oorzaak eronder); op de commits van
