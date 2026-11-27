@@ -20329,8 +20329,8 @@ function terugAansluiting(ym){
   /* onderhoud4 (derde aanvulling): "al teruggestort" kan alleen een storting zijn BUITEN het opzij-venster (vanaf de salarisstorting is
      een storting opzij, gestort naast plan: lagenGestort), en dezelfde euro telt niet ook als terugstorting. Wat zo'n storting niet dekt,
      heeft nog geen keuze. */
-  if(gestort>0.004){ let buiten=0; try{ const PW=lagenPeriode(), sav=new Set(n26SavingsAccounts());
-      for(const t of txOfMonth(ym)){ if(!(t.amount>0) || !sav.has(t.acc) || spaarTussenEigen(t, sav)) continue; const d=String(t.date).slice(0,10); if(PW && d>=PW.start && d<=PW.eind) continue; buiten+=t.amount; } }catch(_){}
+  if(gestort>0.004){ let buiten=0; try{ const PW=lagenPeriode(), sav=new Set(n26SavingsAccounts()), inV=d=>!!PW && d>=PW.start && d<=PW.eind;   // de boekingen van savedTxRange (een bron, v262)
+      buiten=savedTxRange(ym+'-01', ym+'-31').filter(t=>t.amount>0 && !spaarTussenEigen(t, sav) && !inV(String(t.date).slice(0,10))).reduce((a,t)=>a+t.amount,0); }catch(_){}
     const g2=Math.max(Math.min(gestort, buiten),0); open+=gestort-g2; gestort=g2; }
   const tot=Math.round(S.uitExact);
   const R0=brugAfronden([{k:'deze',v:deze},{k:'later',v:later},{k:'niet',v:niet},{k:'gestort',v:gestort},{k:'open',v:open},{k:'vrij',v:vrij}].filter(x=>x.v>0.004), tot);

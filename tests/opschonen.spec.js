@@ -281,7 +281,8 @@ test.describe('e · Plan', () => {
   });
   test('volgende maand: weer het maandbedrag, of het volgende deel bij spreiden', async ({ page }) => {
     const rec = (k) => ({ '2026-10': { bedrag: 231, keuze: k, bron: [{ id: 'noodfonds', type: 'noodfonds', naam: 'Noodfonds', af: 231 }], delen: k === 'drie' ? [77, 77, 77] : [231], op: '2026-10-09' } });
-    await P.boot(page, { dag: '2026-11-09', zonderOpname: true, set: { terugzet: rec('drie') } }); await page.evaluate(() => go('vooruit'));
+    // onderhoud4: de keuze van oktober hoort bij de opname van oktober (een keuze zet niet meer terug dan er die maand werkelijk uit ging)
+    await P.boot(page, { dag: '2026-11-09', set: { terugzet: rec('drie') } }); await page.evaluate(() => go('vooruit'));
     expect((await kop(page)).bedrag).toBe(2277);   // v380: 2.200 + het deel van november, uit planToeMaand() (v440: geen terug-chip)
     await page.evaluate((r) => { SET.terugzet = r; save(); render(); }, rec('alles'));
     expect((await kop(page)).bedrag).toBe(2200); expect((await kop(page)).kpiterug).toBe(null);

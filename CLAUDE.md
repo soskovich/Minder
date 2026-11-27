@@ -163,7 +163,7 @@ genoemde versietag.)*
   `terugzetDelen()`); de keuze zelf blijft bewaard. "Al teruggestort" in de aansluiting is alleen een storting BUITEN het opzij-venster: de
   salarisstorting is opzij (blok 2); wat zij niet dekt heeft nog geen keuze. `spaarStortStand().gestort` (veilig te besteden) is NIET
   aangeraakt. Stand `onderhoud4-stand.js` (27 nov, nagebouwd): na "Aanvulling" nog terug EUR 0, Noodfonds EUR 2.927, Inrichting EUR 3.000,
-  spaarrekening EUR 5.927. Spec `onderhoud4.spec.js` (12 tests, samen 19 van 19 sabotages rood); `v525` f leest Plan zonder de dichte regels.
+  spaarrekening EUR 5.927. Spec `onderhoud4.spec.js` (12 tests, samen 19 van 19 sabotages rood); `v525` f leest Plan zonder de dichte regels, en `opschonen` e draagt de opname van oktober bij de keuze van oktober.
 - **ONDERHOUD3: PLAN NOEMT ELK GETAL EEN KEER, DE OPNAMES EN VERSCHUIVINGEN VAN DE VORIGE PERIODE ZIJN TE BEREIKEN, KIEZEN MEET EERST,
   EN HET RESERVERINGEN-SHEET NOEMT EEN BEDRAG** (`onderhoud3`, gevraagd door de gebruiker, mockup "kleine vragen", tak `werk/onderhoud3` vanaf
   d8c90b9, gerebased op v525b 097bdda; cache `minder-v525b`). (1) De kop van Plan is het totaal met de gestapelde balk; de legenda draagt per laag naam, kleur en aandeel
