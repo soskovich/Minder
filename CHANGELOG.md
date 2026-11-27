@@ -1891,4 +1891,4 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   verwachte storting), vanaf de stortingsdag met het saldo van nu; de rekensom draagt "Gaat er nog af tot <dag>". Voorstel en opzij veranderen niet.
   (2) `tests/wip/v525-export.spec.js` a vergelijkt het oordeel met `salKaartData()` op dezelfde stand; b vergelijkt met 6a01b7f. (3) De sheet "Zo
   verdeel je je salaris" toont in Aanpassen de rij-vorm van de kaart (`salSheetRijenHtml`, `salKaartRijHtml`) in plaats van oud → nieuw. Spec
-  `v525b.spec.js` (g, g2, g3, h; 5 van 5 sabotages rood); `v500` b, `v523` a en `v525` f gemigreerd.
+  `v525b.spec.js` (g, g2, g3, h; 5 van 5 sabotages rood); `v500` b, `v523` a, `v523c` c en `v525` f gemigreerd.

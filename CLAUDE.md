@@ -141,7 +141,7 @@ genoemde versietag.)*
   rekening de rij van de kaart (`salKaartRijHtml`, `salKaartData(P, eigen)` met de bedragen van de sheet, `data-salvsheetrij`, tik
   `salSheetTik`), geen pijlen oud → nieuw (`salOudNieuwHtml` is weg; `salOudNieuw` blijft voor de melding, zonder pijlen). (3)
   `tests/wip/v525-export.spec.js` a toetst tegen `salKaartData()`, b tegen 6a01b7f, beide zonder `[data-rekuitleg]` in de bedragen
-  (`S.bedragen(page, weg)`). Spec `v525b.spec.js` (g, g2, g3, h); `v500` b, `v523` a en `v525` f (nu tegen 6a01b7f) gemigreerd. Cache `minder-v525a`.
+  (`S.bedragen(page, weg)`). Spec `v525b.spec.js` (g, g2, g3, h); `v500` b, `v523` a, `v523c` c en `v525` f (nu tegen 6a01b7f) gemigreerd (de laatste twee zonder `[data-rekuitleg]`). Cache `minder-v525a`.
 - **v525: DE SALARISVERDELING IS EEN OORDEEL EN EEN RIJ PER REKENING, "SALARIS BINNEN" TOONT WAT ER BINNENKWAM, EN HET SALARIS VAN NU GAAT
   VOOR** (`v525`, gevraagd door de gebruiker, mockup "Salarisverdeling kort", tak `werk/v525` vanaf d8c90b9). GEEN BEDRAG VERANDERT: alleen de vorm
   en welk salaris de kaart toont (`v525.spec.js` f legt de bedragen buiten de vorm, het voorstel, opzij, de verwachte overboekingen en krap naast

@@ -63,7 +63,7 @@ test.describe('v523c', () => {
         await spaarDec(page, [['2026-12-22', 400], ['2026-12-24', 2500]]);
         out[dag] = await page.evaluate(() => { const SP = salPeriode(), nov = periodeVan('2026-12-01'), dec = periodeVan('2026-12-24');
           return { cur: SP.cur, volg: SP.volg, opzij: opzijPeriode().netto, plan: opzijPlanO().netto, nov: opzijEenheid(nov), dec: opzijEenheid(dec), moment: periodeMoment(), ov: overboekVerwacht().map((o) => [o.naar, o.dag, o.laat]) }; });
-        out[dag].bedragen = await S.bedragen(page);
+        out[dag].bedragen = await S.bedragen(page, '[data-rekuitleg]');   // v525b: de rekensom in de Terugblik rekent voor de storting met het verwachte saldo (v525b.spec g)
         delete out[dag].bedragen.plan;   // v524: Plan is herzien (lagen-dashboard); de 'plan'-sleutel wordt na de back-upcontrole opnieuw vastgelegd (volgende ronde)
       }
       await page.close(); return out;
