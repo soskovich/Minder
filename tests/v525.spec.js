@@ -150,7 +150,7 @@ test.describe('v525', () => {
             krap: salTekortData().map((x) => JSON.stringify(x).replace(/"[a-z]*[Hh]tml?":"[^"]*"/g, '')), opzij: opzijPeriode().netto, cur: [SP.cur.start, SP.cur.eind, SP.cur.werkelijk] }; });
         /* v525b: de rekensom in de Terugblik (data-rekuitleg) rekent voor de storting met het verwachte saldo; die bedragen staan in v525b.spec
            g, hier tellen ze niet mee. Wel: nodig, saldo nu en je afspraak per rekening zijn gelijk. */
-        out[dag].bedragen = await S.bedragen(page, '[data-rekuitleg]');
+        out[dag].bedragen = await S.bedragen(page, '[data-rekuitleg],[data-gestortdicht],[data-waaromdicht]');   // onderhoud4: de dichte regels op Plan (een samenvatting van het blok eronder) tellen niet mee
         out[dag].uitleg = await page.evaluate(() => { go('maand'); gripKiesTab('terugblik'); return [...document.querySelectorAll('[data-rekuitleg]')].map((e) => [e.dataset.rekuitleg, e.dataset.nodig, e.dataset.saldo, e.dataset.afspraak]); });
       }
       await page.close(); return out;

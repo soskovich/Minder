@@ -15,7 +15,8 @@ const MAIN_HTML = (() => { try { return execSync('git show 4ce6ffa:index.html', 
 async function zetG(page, o) {
   await page.evaluate((o) => {
     const echt = window.__echtG || (window.__echtG = lagenGestort);
-    window.lagenGestort = () => { const G = echt() || {}; return Object.assign({}, G, { lagen: o.lagen, meer: o.meer, gestortBinnen: true, surplus: o.surplus || 0,
+    window.lagenGestort = () => { const G = echt() || {}; return Object.assign({}, G, { lagen: o.lagen, meer: o.meer, gestortBinnen: true, surplus: o.surplus || 0, eruit: 0, opnames: [],
+      gSav: o.gSav != null ? o.gSav : G.gSav, netto: o.gSav != null ? o.gSav : G.netto, planOpzij: o.plan != null ? o.plan : G.planOpzij,
       stort: o.surplus ? { id: 'o4stort', beantwoord: !!o.beantwoord } : null,
       extra: Object.assign({}, G.extra, { bedrag: o.surplus || 0, verg: 0, eenmalig: o.surplus || 0, overTeMaken: 0, laten: false, gekozen: null, naar: 'beschermen' }) }); };
     go('vooruit'); renderVooruit();
@@ -44,11 +45,11 @@ test('a: beide blokken staan standaard dicht, met de dichte regel zichtbaar en d
 
 test('b: dicht noemt de afwijkende laag met zijn verschil, Groeien met "nog niet" telt niet, en de extra', async ({ page }) => {
   await P.boot(page, '2026-11-26');
-  await zetG(page, { meer: -36, surplus: 250, beantwoord: true, lagen: [{ k: 'beschermen', plan: 1000, gestort: 1000 }, { k: 'reserveren', plan: 236, gestort: 200 },
+  await zetG(page, { meer: -36, surplus: 250, beantwoord: true, gSav: 1200, plan: 1236, lagen: [{ k: 'beschermen', plan: 1000, gestort: 1000 }, { k: 'reserveren', plan: 236, gestort: 200 },
     { k: 'groeien', plan: 300, gestort: 0, later: true }] });
   const r = await lees(page);
   expect(r.afw).toEqual([['reserveren', -36]]);
-  expect(r.gDicht).toContain('Naar je lagen · €1.200 gestort, plan €1.536');
+  expect(r.gDicht).toContain('Naar je lagen · €1.200 gestort, plan €1.236');   // tweede aanvulling: de spaarrekening tegen opzij uit je verdeling
   expect(r.gDicht).toContain('Reserveren −€36');
   expect(r.gDicht).not.toContain('Groeien');
   expect(r.gDicht).toContain('+ extra €250');
@@ -101,4 +102,107 @@ test('e: met beide blokken open is elk bedrag gelijk aan de vorige main (4ce6ffa
   expect(Object.keys(nu['2026-11-26']).length).toBeGreaterThan(3);
   expect(nu['2026-11-26'].plan.length).toBeGreaterThan(0);
   expect(nu).toEqual(oud);
+});
+
+/* ---------- tweede aanvulling: een opname in hetzelfde opzij-venster gaat van gestort af ---------- */
+const S4 = require('./onderhoud4-stand');
+const waarom = (page) => page.evaluate(() => { go('vooruit'); renderVooruit(); const G = lagenGestort();
+  const rijen = [...document.querySelectorAll('#planWaarom [data-waaromrij]')].map((e) => ({ typ: e.dataset.waaromrij, v: +e.dataset.v, vx: +e.dataset.vexact, t: e.innerText }));
+  return { netto: G.netto, gSav: G.gSav, eruit: G.eruit, meer: G.meer, totaal: +document.querySelector('#planWaarom [data-waaromtotaal]').dataset.waaromtotaal, rijen,
+    dicht: document.querySelector('#planGestort [data-gestortdicht]').innerText, wdicht: document.querySelector('#planWaarom [data-waaromdicht]').innerText,
+    besch: G.lagen.find((l) => l.k === 'beschermen').gestort }; });
+
+test('f: de stand van 27 nov: netto EUR 2.101, verschil +EUR 471, geen "Salarisrekening hield EUR 399 minder over"', async ({ page }) => {
+  await S4.boot(page);
+  const r = await waarom(page);
+  expect(r.gSav).toBe(2500); expect(r.eruit).toBe(398.88); expect(r.netto).toBe(2101.12);
+  expect(r.meer).toBe(471.12); expect(r.totaal).toBe(471.12);
+  expect(r.dicht).toContain('Naar je lagen · €2.101 netto gestort (€2.500 erin, €399 eruit), plan €1.630');
+  expect(r.wdicht).toContain('Waarom €471 meer opzij');
+  const t = r.rijen.map((x) => x.t).join(' | ');
+  expect(t).not.toContain('€399 minder over');
+  expect(t).toContain('€511 boven je vaste salaris');
+  expect(t).toContain('Betaalrekening kreeg €1.500 uit je salaris in plaats van €1.750');
+  expect(t).toContain('Reserveringen kregen €0 uit je salaris in plaats van €36');
+  expect(t).toContain('Leefgeld kreeg €1.720 uit je salaris in plaats van €1.700');
+  expect(t).toContain('Salarisrekening hield €93 minder over');                  // zelf: EUR 7 van EUR 100, zonder de EUR 92,88 die van de opname bleef
+  const terug = r.rijen.find((x) => x.typ === 'terug');
+  expect(terug.vx).toBe(-398.88);
+  expect(terug.t).toContain('€399 terug van je spaarrekening naar je rekeningen');
+  expect(terug.t).toContain('Betaalrekening €250 · Reserveringen €36 · Leefgeld €20 · salarisrekening €93');
+  expect(r.besch).toBe(1590.12);                                                   // de opname gaat (zonder bronkeuze) van Beschermen af: 2.500 - 511 extra - 398,88
+});
+
+test('g: de som van Waarom sluit tot op de euro (exact en getoond), zonder regel "niet te verklaren"', async ({ page }) => {
+  await S4.boot(page);
+  const r = await waarom(page);
+  expect(r.rijen.some((x) => x.typ === 'gat')).toBe(false);
+  expect(Math.round(r.rijen.reduce((a, x) => a + x.vx, 0) * 100) / 100).toBe(r.meer);   // exact in centen
+  expect(r.rijen.reduce((a, x) => a + x.v, 0)).toBe(Math.round(r.meer));                  // de getoonde (afgeronde) regels tellen op tot het getoonde totaal
+  // en zonder de huur-correctie van de fixture (een uitgave van EUR 300 van de salarisrekening) zegt hij wat er ontbreekt in plaats van te sluiten met een verzonnen regel
+  const r2 = await page.evaluate((M) => { const t = { id: 'o4huur', date: '2026-11-25', amount: -300, acc: M, name: 'Huur', desc: 'Huur', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); save();
+    const G = lagenGestort(), W = lagenWaaromRijen(G); return { gat: W.filter((x) => x.gat).map((x) => x.vExact), som: Math.round(W.reduce((a, x) => a + x.vExact, 0) * 100) / 100, meer: G.meer }; }, S4.MAIN);
+  expect(r2.gat).toEqual([-300]); expect(r2.som).toBe(r2.meer);
+});
+
+test('h: een verschuiving naar de reserveringsrekening in hetzelfde venster telt niet als opname', async ({ page }) => {
+  await S4.boot(page);
+  const r = await page.evaluate(([SPAAR, RESV]) => {
+    const add = (acc, a, id) => { const t = { id, date: '2026-11-26', amount: a, acc, name: 'Verschuiving', desc: 'Overboeking', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); return t; };
+    const v = add(SPAAR, -200, 'o4vs26'); add(RESV, 200, 'o4vs26i'); save();
+    const G = lagenGestort(); return { isV: isVerschuiving(v), eruit: G.eruit, netto: G.netto, uit: spaarStortStand('2026-11').uitExact }; }, [S4.SPAAR, S4.RESV]);
+  expect(r.isV).toBe(true);
+  expect(r.eruit).toBe(398.88); expect(r.netto).toBe(2101.12);                    // de 200 gaat er niet af
+  expect(r.uit).toBe(398.88);                                                       // en staat niet in de terugzet-rekensom
+});
+
+test('i: een opname voor de salarisstorting telt niet in het opzij-venster', async ({ page }) => {
+  await S4.boot(page);
+  const r = await page.evaluate(([SPAAR, MAIN]) => {
+    // het salaris komt een dag later (25 nov): het venster begint op de salarisdag, de periode op de 24e; een opname op de 24e valt erbuiten
+    for (const t of TX) if (t.id === window.__o4.sal) t.date = '2026-11-25';
+    const t = { id: 'o4voor', date: '2026-11-24', amount: -150, acc: SPAAR, name: 'Opname', desc: 'Overboeking naar Salarisrekening', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t);
+    save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {}
+    const PW = lagenPeriode(), G = lagenGestort(); return { start: PW.start, perStart: PW.perStart, eruit: G.eruit, opn: G.opnames.map((x) => x.id) }; }, [S4.SPAAR, S4.MAIN]);
+  expect(r.perStart).toBe('2026-11-24'); expect(r.start).toBe('2026-11-25');
+  expect(r.opn).not.toContain('o4voor');
+  expect(r.eruit).toBe(398.88);
+});
+
+/* ---------- derde aanvulling: het terugzet-sheet volgt de v524-keuzes ---------- */
+test('j: een verschuiving zonder terug-keuze staat niet in de terugzet-rekensom (ook niet via een oude keuze)', async ({ page }) => {
+  await S4.boot(page, { terugzet: true });
+  const r = await page.evaluate(() => { const S = spaarStortStand('2026-11'), A = terugzetActief('2026-11'), AS = terugAansluiting('2026-11');
+    return { uitTx: S.uitTx.map((t) => t.id), uit: S.uitExact, A: A.map((T) => [T.r.bedrag, (T.r.delen || []).reduce((a, x) => a + x, 0)]), AS: AS && AS.R, tot: AS && AS.tot }; });
+  expect(r.uitTx).not.toContain(await page.evaluate(() => window.__o4.vs));
+  expect(r.uit).toBe(398.88);
+  expect(r.A).toEqual([[399, 399]]);                // de oude keuze van EUR 1.000 is begrensd op de echte opname
+  expect(r.tot).toBe(399); expect(r.AS.deze + r.AS.later).toBe(399);
+  // kies je voor de verschuiving "Ja, over 3 maanden", dan telt hij wel mee
+  const r2 = await page.evaluate(() => { setVerschuivingKeuze(window.__o4.vs, '3'); return spaarStortStand('2026-11').uitExact; });
+  expect(r2).toBe(1398.88);
+});
+
+test('k: de salarisstorting telt niet als terugstorting', async ({ page }) => {
+  await S4.boot(page);
+  const r = await page.evaluate(() => { const AS = terugAansluiting('2026-11'); return AS && AS.R; });
+  expect(r.gestort).toBe(0);                         // de EUR 2.500 van 24 nov is opzij (gestort naast plan), geen terugstorting
+  expect(r.open).toBe(399);                          // de opname heeft dus nog geen keuze
+});
+
+test('l: na "Aanvulling, niet terugzetten": nog terug EUR 0, Noodfonds EUR 2.927, Inrichting EUR 3.000, spaarrekening EUR 5.927', async ({ page }) => {
+  await S4.boot(page, { terugzet: true });
+  const voor = await page.evaluate(() => planTerug(allocatePlan()).totaal);
+  expect(voor).toBe(398.88);
+  const r = await page.evaluate(() => { openOpnameBron(); document.querySelector(`[data-opnamerij="${window.__o4.opn}"] [data-opnbron="aanvulling"]`).click();
+    const P = allocatePlan(), M = planMap(), G = lagenGestort();
+    return { terug: planTerug(P).totaal, nf: M[PLAN_NF].gespaard, iw: M.iw.gespaard, sp: spaarSaldo().exact, nfT: SET.nfToegewezen, AS: terugAansluiting('2026-11'), A: terugzetActief('2026-11').map((T) => T.r.bedrag),
+      besch: G.lagen.find((l) => l.k === 'beschermen').gestort, doelen: G.lagen.find((l) => l.k === 'doelen').gestort, meer: G.meer }; });
+  expect(r.terug).toBe(0); expect(r.nf).toBe(2927); expect(r.nfT).toBe(2927.12); expect(r.iw).toBe(3000); expect(r.sp).toBe(5927.12);
+  expect(r.AS).toBe(null);                           // er is niets meer uit dat terug moet
+  expect(r.A).toEqual([0]);
+  expect(r.besch).toBe(1590.12); expect(r.doelen).toBe(0); expect(r.meer).toBe(471.12);   // blok 2 en Waarom sluiten erop aan
+  // een andere keuze zet de toewijzing precies terug
+  const r3 = await page.evaluate(() => { setOpnameBron(window.__o4.opn, 'noodfonds'); return { nfT: SET.nfToegewezen, terug: planTerug(allocatePlan()).totaal }; });
+  expect(r3.nfT).toBe(3326); expect(r3.terug).toBe(398.88);
 });

@@ -142,6 +142,28 @@ genoemde versietag.)*
   (`save(true)`, voedt geen berekening) en alleen de weergave omzetten, geen herberekening; de open kop (`data-gestortkop`, `data-waaromkop`) klapt
   weer dicht. Niet in `vraagBody()`. Verschuivingen deze periode en Bijsturen op Grip staan buiten de blokken en blijven zichtbaar. Spec
   `onderhoud4.spec.js` (5 tests, 8 van 8 sabotages rood).
+  TWEEDE AANVULLING (gemeten op het toestel 27 nov: EUR 398,88 van de spaarrekening via de salarisrekening naar Betaalrekening +250,
+  Reserveringen +36, Leefgeld +20, en blok 2 telde nog EUR 2.500 gestort met "Salarisrekening hield EUR 399 minder over"): `lagenGestort()`
+  trekt de opnames binnen hetzelfde opzij-venster (vanaf de salarisstorting, `PW.start`, niet de start van de periode) af: `eruit`, per laag
+  volgens `opnameBronVan()` (zonder keuze, en bij "Aanvulling", van Beschermen), `netto = gSav - eruit`, `meer = netto - planOpzij`. Een
+  overboeking tussen twee eigen spaarrekeningen telt aan geen van beide kanten. De dichte regel en blok 2 (`data-gestortnetto`) zeggen
+  "EUR 2.101 netto gestort (EUR 2.500 erin, EUR 399 eruit), plan EUR 1.630". WAAROM MET EEN OPNAME (`lagenWaaromRijenOpname()`, keuze van de
+  gebruiker, optie 2): het surplus, per rekening wat hij UIT JE SALARIS kreeg (bijschrijvingen min wat de opname aanvulde, `lagenOpnameNaar()`:
+  een bijschrijving tussen de opnamedag en + `VERSCHUIF_DAGEN` met een even grote afschrijving op de salarisrekening), de salarisrekening alleen
+  als zij zelf (netto sinds de storting min wat van de opname er bleef) minder overhield dan de afspraak, en "EUR X terug van je spaarrekening
+  naar je rekeningen" (`data-waaromrij="terug"`, negatief) met waar het heen ging. Sluit de som niet tot op de euro, dan staat het verschil als
+  "Niet te verklaren uit je boekingen" (`gat`) en niet in een andere regel; getoond via `brugAfronden()`, exact in `data-vexact`. Zonder opname
+  is Waarom ongewijzigd (de oude rekensom met de salarisrekening als rest). Grip-tegel Lagen (v526) leest `lagenGestort()` en krijgt dit mee.
+  DERDE AANVULLING: `isSpaarOpname(t, sav, terug)` is de ENE definitie van een opname (lagenGestort, `spaarStortStand()` en dus
+  `terugAansluiting()`, en `terugzetActief()` via `terugzetEffectief()`): geen overboeking tussen eigen spaarrekeningen
+  (`spaarTussenEigen()`), geen verschuiving naar de reserveringsrekening tenzij het noodfonds hem terugkrijgt (keuze 3 of 6,
+  `verschuivingTerugKeuze()`), en voor de terugzet-rekensom geen opname met bron "Aanvulling, niet terugzetten" (`OPN_AANVULLING`, een vierde
+  chip in `openOpnameBron()`; de keuze verlaagt `SET.nfToegewezen` met het bedrag en bewaart dat als `af`, een andere keuze zet het precies
+  terug). Een oude terugzetkeuze wordt begrensd op de echte opnames van haar maand (`opnameTerugBedrag()`, de delen opnieuw via
+  `terugzetDelen()`); de keuze zelf blijft bewaard. "Al teruggestort" in de aansluiting is alleen een storting BUITEN het opzij-venster: de
+  salarisstorting is opzij (blok 2); wat zij niet dekt heeft nog geen keuze. `spaarStortStand().gestort` (veilig te besteden) is NIET
+  aangeraakt. Stand `onderhoud4-stand.js` (27 nov, nagebouwd): na "Aanvulling" nog terug EUR 0, Noodfonds EUR 2.927, Inrichting EUR 3.000,
+  spaarrekening EUR 5.927. Spec `onderhoud4.spec.js` (12 tests, samen 19 van 19 sabotages rood); `v525` f leest Plan zonder de dichte regels.
 - **ONDERHOUD3: PLAN NOEMT ELK GETAL EEN KEER, DE OPNAMES EN VERSCHUIVINGEN VAN DE VORIGE PERIODE ZIJN TE BEREIKEN, KIEZEN MEET EERST,
   EN HET RESERVERINGEN-SHEET NOEMT EEN BEDRAG** (`onderhoud3`, gevraagd door de gebruiker, mockup "kleine vragen", tak `werk/onderhoud3` vanaf
   d8c90b9, gerebased op v525b 097bdda; cache `minder-v525b`). (1) De kop van Plan is het totaal met de gestapelde balk; de legenda draagt per laag naam, kleur en aandeel
