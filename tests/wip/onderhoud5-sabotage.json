@@ -135,11 +135,6 @@
 "vervang": ":(!OM.komt);"
 },
 {
-"naam": "9b: tekortkleur bij aanvulling",
-"zoek": "<span data-naaanvulling=\"${l.gestort}\" style=\"color:var(--mut);",
-"vervang": "<span data-naaanvulling=\"${l.gestort}\" style=\"color:var(--amber);"
-},
-{
 "naam": "9c: geen directe bijschrijving",
 "zoek": "    if(dx){ direct.add(dx);",
 "vervang": "    if(false){ direct.add(dx);"
@@ -158,6 +153,16 @@
 "naam": "9c: geen gat-regel",
 "zoek": "  if(Math.abs(gat)>=1) rijen.push({lab:'Niet te verklaren uit je boekingen', v:gat, gat:true});\n  /* de getoonde bedragen tellen op tot het getoonde totaal (brugAfronden, v271) */\n  const R=brugAfronden(rijen.map((r,i)=>({k:'r'+i, v:r.v})), Math.round(G.meer));\n  rijen.forEach((r,i)=>{ r.vExact=r.v; r.v=R['r'+i]; });\n  return rijen;\n}\n/* onderhoud5 (punt 8)",
 "vervang": "  /* de getoonde bedragen tellen op tot het getoonde totaal (brugAfronden, v271) */\n  const R=brugAfronden(rijen.map((r,i)=>({k:'r'+i, v:r.v})), Math.round(G.meer));\n  rijen.forEach((r,i)=>{ r.vExact=r.v; r.v=R['r'+i]; });\n  return rijen;\n}\n/* onderhoud5 (punt 8)"
+},
+{
+"naam": "9b: nog niet ondanks storting",
+"zoek": ":(erin>0.5 || !OM.komt);",
+"vervang": ":(!OM.komt);"
+},
+{
+"naam": "9b: na aanvulling terug in de kolom",
+"zoek": "    if(l.naAanv) return '<span style=\"color:var(--mut2)\">–</span>';",
+"vervang": "    if(l.naAanv) return `<span style=\"color:var(--mut);font-weight:700;white-space:nowrap\">· na aanvulling ${euro0(l.gestort)}</span>`;"
 }
 ]
 }

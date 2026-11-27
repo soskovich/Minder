@@ -196,6 +196,7 @@ test('i2 (punt 7): niets gestort terwijl het moment nog komt is geen afwijking',
    EUR 20 naar Leefgeld en EUR 93 naar Salarisrekening (alle drie "Aanvulling, niet terugzetten"), en EUR 36 als verschuiving naar
    Reserveringen (keuze nee). GECONSTRUEERD naar de getallen van de melding. */
 async function stand9(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
   await S4.boot(page);
   await page.evaluate(({ BET, LEEF, MAIN, SPAAR, RESV }) => {
     TX = TX.filter((t) => String(t.date).slice(0, 10) !== '2026-11-27' && !(t.acc === SPAAR && Math.round(t.amount) === -1000) && !(t.acc === RESV && Math.round(t.amount) === 1000));
@@ -214,7 +215,12 @@ const lagenSheet = (page) => page.evaluate(() => { go('maand'); openGripLagen();
   return { tekst: sh.innerText, netto: sh.querySelector('[data-gestortnetto]') && +sh.querySelector('[data-gestortnetto]').dataset.gestortnetto,
     rijen: [...sh.querySelectorAll('[data-waaromrij]')].map((e) => ({ typ: e.dataset.waaromrij, v: +e.dataset.v, vx: +e.dataset.vexact, t: e.innerText.replace(/\s+/g, ' ') })),
     totaal: sh.querySelector('[data-waaromtotaal]') && +sh.querySelector('[data-waaromtotaal]').dataset.waaromtotaal,
-    besch: (() => { const r = sh.querySelector('[data-lagenrij="beschermen"]'); return r ? { stand: r.dataset.stand, t: r.innerText.replace(/\s+/g, ' '), na: !!r.querySelector('[data-naaanvulling]'), amber: [...r.querySelectorAll('span')].some((s) => /amber/.test(s.getAttribute('style') || '')) } : null; })(),
+    besch: (() => { const r = sh.querySelector('[data-lagenrij="beschermen"]'); if (!r) return null; const sp = [...r.children]; const box = sp.map((e) => e.getBoundingClientRect());
+      const naam = r.querySelector('b').getBoundingClientRect();
+      const overlap = r.scrollWidth > r.clientWidth + 0.5 || sp.some((e) => e.scrollWidth > e.clientWidth + 0.5) || box.slice(1).some((y) => naam.right > y.left + 0.5 && naam.bottom > y.top + 0.5 && y.bottom > naam.top + 0.5)
+        || box.some((x, i) => box.some((y, j) => j > i && x.right > y.left + 0.5 && y.right > x.left + 0.5 && x.bottom > y.top + 0.5 && y.bottom > x.top + 0.5));
+      const na = r.querySelector('[data-naaanvulling]');
+      return { stand: r.dataset.stand, t: r.innerText.replace(/\s+/g, ' '), na: na && na.innerText, overlap, amber: [...r.querySelectorAll('span')].some((s) => /amber/.test(s.getAttribute('style') || '')) }; })(),
     opzij: T.opzij, gnetto: G.netto, meer: G.meer, lagen: T.lagen.map((l) => [l.k, l.stand]) }; });
 
 test('j (punt 8): Naar je lagen en Waarom staan in het Lagen-sheet op Grip en niet op Plan; Plan houdt de stand', async ({ page }) => {
@@ -245,7 +251,9 @@ test('l (punt 9b): Beschermen na de aanvulling: geen "nog niet", geen tekortkleu
   const sh = await lagenSheet(page);
   expect(sh.besch.stand).toBe('gehaald');   // het oordeel kijkt naar de storting (EUR 1.989 tegen plan EUR 1.630)
   expect(sh.besch.t).not.toContain('nog niet');
-  expect(sh.besch.t).toContain('plan €1.630 €1.989 · na aanvulling €1.626');
+  expect(sh.besch.na).toBe('€1.989 gestort · na aanvulling €1.626');
+  expect(sh.besch.t).toContain('plan €1.630 €1.989');
+  expect(sh.besch.overlap).toBe(false);   // gemeten op de schermafdruk: in de rechterkolom liep de tekst op 390px over het plan heen
   expect(sh.besch.amber).toBe(false);
   /* de werkdagen-grens komt nog (zoals op het toestel: salaris 25 nov), maar de storting is binnen: ook dan geen "nog niet" */
   const vroeg = await page.evaluate(() => { const echt = lagenOverboekMoment; window.lagenOverboekMoment = () => Object.assign({}, echt(), { komt: true });
