@@ -16,11 +16,12 @@ test.describe('v526b', () => {
       SET.salSplit = { vast: 4900, key: recurKey(sal), naam: 'Werkgever', marge: 50 }; save(); try { runMemoVergeten(); } catch (_) {}
       const G = lagenGestort(), T = lagenTegelData(); go('maand'); gripKiesTab('zien');
       const e = document.querySelector('#gripMeters [data-meter="lagen"] [data-lagenopzij]');
-      return { sg: G.surplusGestort, gSav: G.gSav, gRes: lagenGestortOp(resAccId(), G.PW), som: Math.round(T.lagen.filter((l) => l.stand === 'gehaald').reduce((a, l) => a + l.gestort, 0)), mist: T.mist.length, opzij: T.opzij, tegel: e ? +e.dataset.lagenopzij : null, tekst: e ? e.innerText : '' }; });
+      return { netto: G.netto, sg: G.surplusGestort, gSav: G.gSav, gRes: lagenGestortOp(resAccId(), G.PW), som: Math.round(T.lagen.filter((l) => l.stand === 'gehaald').reduce((a, l) => a + l.gestort, 0)), mist: T.mist.length, opzij: T.opzij, tegel: e ? +e.dataset.lagenopzij : null, tekst: e ? e.innerText : '' }; });
     expect(r.mist).toBe(0);
     expect(r.sg).toBeGreaterThan(0);   // invoer: er is een surplus dat op je spaarrekening landde
-    expect(r.opzij).toBe(Math.round(r.gSav + r.gRes));   // wat er echt naar je spaarrekening en je reserveringsrekening ging
-    expect(r.opzij).toBe(r.som + Math.round(r.sg));
+    /* onderhoud5 (punt 9a): het groene getal is netto opzij (erin min eruit op je spaarrekening, lagenGestort().netto); tot hier
+       spaarrekening plus reserveringsrekening */
+    expect(r.opzij).toBe(Math.round(r.netto));
     expect(r.tegel).toBe(r.opzij); expect(r.tekst).toBe(`€${r.opzij.toLocaleString('nl-NL')} opzij`);
   });
 

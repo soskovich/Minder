@@ -190,3 +190,93 @@ test('i2 (punt 7): niets gestort terwijl het moment nog komt is geen afwijking',
     go('vooruit'); renderVooruit(); const e = document.querySelector('#s-vooruit [data-reserverenflag]'); window.lagenOverboekMoment = echt; return !!e; }, { RESV: S4.RESV });
   expect(r).toBe(false);
 });
+
+/* punt 8 en 9: de stand van de melding (v526, 27 nov, na de aanvullingen) op onderhoud4-stand: verdeling 100/1.750/1.700/36/1.630,
+   uit het salaris Betaalrekening 1.500, Leefgeld 1.720, spaarrekening 2.500; daarna van de spaarrekening EUR 250 naar Betaalrekening,
+   EUR 20 naar Leefgeld en EUR 93 naar Salarisrekening (alle drie "Aanvulling, niet terugzetten"), en EUR 36 als verschuiving naar
+   Reserveringen (keuze nee). GECONSTRUEERD naar de getallen van de melding. */
+async function stand9(page) {
+  await S4.boot(page);
+  await page.evaluate(({ BET, LEEF, MAIN, SPAAR, RESV }) => {
+    TX = TX.filter((t) => String(t.date).slice(0, 10) !== '2026-11-27' && !(t.acc === SPAAR && Math.round(t.amount) === -1000) && !(t.acc === RESV && Math.round(t.amount) === 1000));
+    const add = (acc, d, a, n) => { const t = { id: 'o5w' + acc.slice(-4) + d + Math.round(Math.abs(a) * 100) + (a < 0 ? 'u' : 'i'), date: d, amount: a, acc, name: n, desc: n, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); return t; };
+    const over = (van, naar, d, b, n1, n2) => [add(van, d, -b, 'From ' + n1 + ' to ' + n2), add(naar, d, b, 'From ' + n1 + ' to ' + n2)];
+    const a3 = over(SPAAR, BET, '2026-11-26', 250, 'Buffer Rust', 'Betaalrekening')[0], a2 = over(SPAAR, LEEF, '2026-11-26', 20, 'Buffer Rust', 'Leefgeld')[0], a1 = over(SPAAR, MAIN, '2026-11-26', 93, 'Buffer Rust', 'Salarisrekening')[0];
+    const vs = over(SPAAR, RESV, '2026-11-26', 36, 'Buffer Rust', 'Reserveringen')[0];
+    window.__o9 = { a1: a1.id, a2: a2.id, a3: a3.id, vs: vs.id };
+    SET.verschuiving = { [vs.id]: { kant: 'reserveren', keuze: 'nee' } }; delete SET.nfAfgetrokken;
+    SET.opnameBron = { [a1.id]: { bron: 'aanvulling', af: 0 }, [a2.id]: { bron: 'aanvulling', af: 0 }, [a3.id]: { bron: 'aanvulling', af: 0 } };
+    save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {}
+  }, { BET: S4.BET, LEEF: S4.LEEF, MAIN: S4.MAIN, SPAAR: S4.SPAAR, RESV: S4.RESV });
+}
+const lagenSheet = (page) => page.evaluate(() => { go('maand'); openGripLagen(); const sh = document.getElementById('gripLagenSheet');
+  const T = lagenTegelData(), G = lagenGestort();
+  return { tekst: sh.innerText, netto: sh.querySelector('[data-gestortnetto]') && +sh.querySelector('[data-gestortnetto]').dataset.gestortnetto,
+    rijen: [...sh.querySelectorAll('[data-waaromrij]')].map((e) => ({ typ: e.dataset.waaromrij, v: +e.dataset.v, vx: +e.dataset.vexact, t: e.innerText.replace(/\s+/g, ' ') })),
+    totaal: sh.querySelector('[data-waaromtotaal]') && +sh.querySelector('[data-waaromtotaal]').dataset.waaromtotaal,
+    besch: (() => { const r = sh.querySelector('[data-lagenrij="beschermen"]'); return r ? { stand: r.dataset.stand, t: r.innerText.replace(/\s+/g, ' '), na: !!r.querySelector('[data-naaanvulling]'), amber: [...r.querySelectorAll('span')].some((s) => /amber/.test(s.getAttribute('style') || '')) } : null; })(),
+    opzij: T.opzij, gnetto: G.netto, meer: G.meer, lagen: T.lagen.map((l) => [l.k, l.stand]) }; });
+
+test('j (punt 8): Naar je lagen en Waarom staan in het Lagen-sheet op Grip en niet op Plan; Plan houdt de stand', async ({ page }) => {
+  await stand9(page);
+  const plan = await page.evaluate(() => { go('vooruit'); renderVooruit(); const e = document.getElementById('s-vooruit');
+    return { t: e.innerText, gestort: !!e.querySelector('#planGestort,#lagenGestort,[data-gestortnetto],[data-waaromrij],[data-gestortbijsturen]'), lagen: !!e.querySelector('#planLagen,[data-laag]') }; });
+  expect(plan.t).not.toContain('Naar je lagen');
+  expect(plan.t).not.toMatch(/Waarom €[\d.]+ (meer|minder) opzij/);
+  expect(plan.t).not.toContain('Bijsturen op Grip');
+  expect(plan.gestort).toBe(false);
+  expect(plan.t).toContain('PER LAAG · STAND');   // de stand blijft op Plan
+  const sh = await lagenSheet(page);
+  expect(sh.tekst).toContain('Naar je lagen · €2.137 netto gestort (€2.500 erin, €363 eruit), plan €1.630');
+  expect(sh.tekst).toMatch(/WAAROM €507 MEER OPZIJ/i);
+  expect((sh.tekst.match(/plan €1\.630/g) || []).length).toBe(2);   // de tabel per laag een keer (Beschermen) en de netto-regel; geen tweede tabel
+  expect(await page.evaluate(() => typeof planBlokToggle === 'undefined' && typeof planGestortKaart === 'undefined')).toBe(true);   // de dichtklap-regels zijn weg
+});
+
+test('k (punt 9a): het groene getal van de tegel Lagen is netto opzij, EUR 2.137', async ({ page }) => {
+  await stand9(page);
+  const r = await page.evaluate(() => { go('maand'); gripKiesTab('zien'); closeSheet(); const e = document.querySelector('#gripMeters [data-meter="lagen"] [data-lagenopzij]'); return { v: e && +e.dataset.lagenopzij, t: e && e.innerText, n: lagenGestort().netto }; });
+  expect(r.n).toBe(2137);
+  expect(r).toMatchObject({ v: 2137, t: '€2.137 opzij' });
+});
+
+test('l (punt 9b): Beschermen na de aanvulling: geen "nog niet", geen tekortkleur, "EUR 1.989 · na aanvulling EUR 1.626"', async ({ page }) => {
+  await stand9(page);
+  const sh = await lagenSheet(page);
+  expect(sh.besch.stand).toBe('gehaald');   // het oordeel kijkt naar de storting (EUR 1.989 tegen plan EUR 1.630)
+  expect(sh.besch.t).not.toContain('nog niet');
+  expect(sh.besch.t).toContain('plan €1.630 €1.989 · na aanvulling €1.626');
+  expect(sh.besch.amber).toBe(false);
+  /* de werkdagen-grens komt nog (zoals op het toestel: salaris 25 nov), maar de storting is binnen: ook dan geen "nog niet" */
+  const vroeg = await page.evaluate(() => { const echt = lagenOverboekMoment; window.lagenOverboekMoment = () => Object.assign({}, echt(), { komt: true });
+    for (const k of ['a1', 'a2', 'a3']) SET.opnameBron[window.__o9[k]] = { bron: 'noodfonds' }; save(); try { runMemoVergeten(); } catch (_) {}
+    const T = lagenTegelData(); window.lagenOverboekMoment = echt; for (const k of ['a1', 'a2', 'a3']) SET.opnameBron[window.__o9[k]] = { bron: 'aanvulling', af: 0 }; save();
+    return T.lagen.find((l) => l.k === 'beschermen').stand; });
+  expect(vroeg).toBe('tekort');   // EUR 1.626 tegen EUR 1.630 met de opnames uit je noodfonds: een tekort, geen "nog niet"
+  /* zonder aanvulling (de opname uit het noodfonds) blijft het een tekort, en het moment is voorbij omdat de storting binnenkwam */
+  await page.evaluate(() => { for (const k of ['a1', 'a2', 'a3']) SET.opnameBron[window.__o9[k]] = { bron: 'noodfonds' }; save(); try { runMemoVergeten(); } catch (_) {} });
+  const sh2 = await lagenSheet(page);
+  expect(sh2.besch.stand).toBe('tekort');
+  expect(sh2.besch.amber).toBe(true);
+  expect(sh2.besch.t).not.toContain('nog niet');
+});
+
+test('m (punt 9c): Waarom noemt per overboeking de ontvangende rekening, de salarisrekening alleen haar eigen minder, en sluit op EUR 507', async ({ page }) => {
+  await stand9(page);
+  const sh = await lagenSheet(page);
+  expect(sh.meer).toBe(507); expect(sh.totaal).toBe(507);
+  const t = (typ) => sh.rijen.filter((r) => r.typ === typ);
+  expect(t('terug')[0].t).toContain('Betaalrekening €250 · Leefgeld €20 · Salarisrekening €93');
+  expect(t('terug')[0].v).toBe(-363);
+  expect(t('salrek').map((r) => r.v)).toEqual([93]);   // EUR 7 van de afgesproken EUR 100 bleef uit je salaris; de EUR 93 van de opname telt niet als "hield over"
+  expect(sh.rijen.find((r) => /Reserveringen kregen €0 uit je salaris/.test(r.t)).v).toBe(36);   // de verschuiving van EUR 36 is geen geld uit je salaris
+  expect(sh.rijen.reduce((a, r) => a + r.v, 0)).toBe(507);
+  expect(Math.round(sh.rijen.reduce((a, r) => a + r.vx, 0) * 100) / 100).toBe(507);
+  expect(t('gat')).toEqual([]);
+  /* sluit hij niet, dan een regel "niet te verklaren uit je boekingen" met het verschil */
+  await page.evaluate(({ BET }) => { const t = { id: 'o5x', date: '2026-11-26', amount: -40, acc: BET, name: 'Iets', desc: 'Iets', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); SET.salVerdeling.opzij = 1600; save(); try { runMemoVergeten(); } catch (_) {} }, { BET: S4.BET });
+  const sh2 = await lagenSheet(page);
+  const g = sh2.rijen.filter((r) => r.typ === 'gat');
+  expect(g.length).toBe(1);
+  expect(sh2.rijen.reduce((a, r) => a + r.v, 0)).toBe(sh2.meer);
+});

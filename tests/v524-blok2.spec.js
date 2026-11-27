@@ -43,7 +43,7 @@ test('punt 1: geen "deze maand" op Plan, en de som van de doelen = wat de laag D
    salarisdag na de start van de periode, dan verschijnt de noot "gestort vanaf je salaris op <dag>". */
 test('punt 2: de kop is de salarisperiode, gestort het opzij-venster, met de noot als het salaris later kwam', async ({ page }) => {
   await P.boot(page, '2026-11-26');
-  const a = await page.evaluate(() => { const PW = lagenPeriode(); return { perStart: PW.perStart, start: PW.start, salNa: PW.salNa, label: PW.label, pv: periodeVan(vandaagYMD()).start, kop: (document.querySelector('[data-gestortkop]') || {}).textContent || '' }; });
+  const a = await page.evaluate(() => { go('maand'); openGripLagen(); const PW = lagenPeriode(); return { perStart: PW.perStart, start: PW.start, salNa: PW.salNa, label: PW.label, pv: periodeVan(vandaagYMD()).start, kop: (document.querySelector('[data-gestortkop]') || {}).textContent || '' }; });
   expect(a.perStart).toBe(a.pv);             // de kop-periode komt van periodeVan (de regel), niet van het opzij-venster
   expect(a.label).toBe('24 nov – 23 dec');
   expect(a.kop).toContain('24 nov – 23 dec');
@@ -52,7 +52,7 @@ test('punt 2: de kop is de salarisperiode, gestort het opzij-venster, met de noo
   // salaris een dag later (25): het venster begint op de salarisdag, de kop blijft de periode, de noot verschijnt
   const b = await page.evaluate(() => {
     for (const t of TX) { if (Math.round(t.amount) === 5216 && String(t.date).slice(0, 10) === '2026-11-24') t.date = '2026-11-25'; }
-    _dataGen++; try { buildAccMeta(); } catch (_) {} render();
+    _dataGen++; try { buildAccMeta(); } catch (_) {} render(); go('maand'); openGripLagen();   // onderhoud5 (punt 8): blok 2 staat in het Lagen-sheet
     const PW = lagenPeriode(); return { perStart: PW.perStart, start: PW.start, salNa: PW.salNa, noot: (document.querySelector('[data-gestortopzijnoot]') || {}).textContent || '' };
   });
   expect(b.perStart).toBe('2026-11-24');     // de kop blijft de periode

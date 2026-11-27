@@ -108,6 +108,56 @@
 "naam": "7: moment genegeerd",
 "zoek": "if(komt) return ''; }",
 "vervang": "}"
+},
+{
+"naam": "8: terug op Plan",
+"zoek": "blok2='';   // onderhoud5 (punt 8)",
+"vervang": "blok2=lagenStroomHtml();   // onderhoud5 (punt 8)"
+},
+{
+"naam": "8: niet in het Lagen-sheet",
+"zoek": "    ${lagenStroomHtml(T.G)}\n",
+"vervang": "\n"
+},
+{
+"naam": "9a: groen getal is de som van de lagen",
+"zoek": "const opzij=Math.round(G.netto!=null?+G.netto:",
+"vervang": "const opzij=Math.round(false?+G.netto:"
+},
+{
+"naam": "9b: oordeel op na de aanvulling",
+"zoek": "voorStort=Math.round((gestort+aanv)*100)/100,",
+"vervang": "voorStort=gestort,"
+},
+{
+"naam": "9b: nog niet ondanks storting",
+"zoek": ":(erin>0.5 || !OM.komt);",
+"vervang": ":(!OM.komt);"
+},
+{
+"naam": "9b: tekortkleur bij aanvulling",
+"zoek": "<span data-naaanvulling=\"${l.gestort}\" style=\"color:var(--mut);",
+"vervang": "<span data-naaanvulling=\"${l.gestort}\" style=\"color:var(--amber);"
+},
+{
+"naam": "9c: geen directe bijschrijving",
+"zoek": "    if(dx){ direct.add(dx);",
+"vervang": "    if(false){ direct.add(dx);"
+},
+{
+"naam": "9c: verschuiving telt als uit je salaris",
+"zoek": "-(N.ra?(N.naar[N.ra]||0):0)-verschIn)*100)/100",
+"vervang": "-(N.ra?(N.naar[N.ra]||0):0))*100)/100"
+},
+{
+"naam": "9c: terug-regel zonder rekening per overboeking",
+"zoek": "  { const delen=(N.per||[]).filter(x=>x.bedrag>0.004).map(x=>`<span data-terugnaar=\"${esc(x.acc||'')}\">${x.acc===N.ra?'Reserveringen':x.acc?esc(nm(x.acc)):'je salarisrekening'} ${euro0(x.bedrag)}</span>`);",
+"vervang": "  { const delen=[`salarisrekening ${euro0(G.eruit)}`];"
+},
+{
+"naam": "9c: geen gat-regel",
+"zoek": "  if(Math.abs(gat)>=1) rijen.push({lab:'Niet te verklaren uit je boekingen', v:gat, gat:true});\n  /* de getoonde bedragen tellen op tot het getoonde totaal (brugAfronden, v271) */\n  const R=brugAfronden(rijen.map((r,i)=>({k:'r'+i, v:r.v})), Math.round(G.meer));\n  rijen.forEach((r,i)=>{ r.vExact=r.v; r.v=R['r'+i]; });\n  return rijen;\n}\n/* onderhoud5 (punt 8)",
+"vervang": "  /* de getoonde bedragen tellen op tot het getoonde totaal (brugAfronden, v271) */\n  const R=brugAfronden(rijen.map((r,i)=>({k:'r'+i, v:r.v})), Math.round(G.meer));\n  rijen.forEach((r,i)=>{ r.vExact=r.v; r.v=R['r'+i]; });\n  return rijen;\n}\n/* onderhoud5 (punt 8)"
 }
 ]
 }

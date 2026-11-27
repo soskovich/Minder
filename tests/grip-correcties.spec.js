@@ -122,7 +122,7 @@ test.describe('7 · de patroonkaart als boom', () => {
        getoetst, buiten het scherm. */
     await page.evaluate(() => gripNaarSymptoom('pat:spaargeld'));
     expect(await page.locator('#gripSymptoom [data-patboom]').count()).toBe(0);
-    expect(await page.evaluate(() => [...document.querySelectorAll('#gripSymptoom [data-onttrekking]')].map(e => e.innerText.replace(/\s+/g, ' ')))).toEqual(['6 okt €300,00', '9 okt €400,00']);
+    expect(await page.evaluate(() => [...document.querySelectorAll('#gripSymptoom [data-onttrekking]')].map(e => e.innerText.replace(/\s+/g, ' ').replace(/ · naar [^€]*/, ' ')))).toEqual(['6 okt €300,00', '9 okt €400,00']);   // onderhoud5 (punt 6): de regel noemt sindsdien ook waar het heen ging
     await page.evaluate(() => { const d = document.createElement('div'); d.id = 'boomTest'; d.style.width = '358px'; d.innerHTML = gripPatroonBoom(gripPatronen()[0]); document.querySelector('#gripSymptoom').appendChild(d); });
     expect(await tekst(page, '[data-patoorzaak]')).toMatch(/Betaalrekening op na ~12 dagen na salaris[\s\S]*€700[\s\S]*uit spaargeld/);
     /* v428: de takken in de drill dragen geen tik en geen pijl meer (Begrijpen verandert niets), dus het bedrag is de laatste span */

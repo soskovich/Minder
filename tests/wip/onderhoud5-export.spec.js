@@ -3,9 +3,13 @@
    Test a: na laden (de migratie van onderhoud5 draait bij het opstarten): Beschermen EUR 2.927, Inrichting EUR 3.000, nog terug EUR 0,
      spaarrekening EUR 5.927,12, kop EUR 10.113; de overboeking van 16 nov tussen Instant Savings en Buffer Rust staat niet in het
      bron-sheet; de drie aanvullingen dragen hun hele bedrag als af.
+   Test b (punt 8 en 9, 27 nov): Plan draagt geen "Naar je lagen" en geen "Waarom"; het Lagen-sheet wel. De tegel Lagen zegt "EUR 2.137
+     opzij" (EUR 2.500 erin min EUR 363 eruit), Beschermen staat niet op "nog niet" en draagt geen tekortkleur ("EUR X · na aanvulling EUR Y"),
+     en Waarom noemt per overboeking de ontvangende rekening (Betaalrekening EUR 250, Leefgeld EUR 20, Salarisrekening EUR 93) en sluit op
+     netto min verdeling (EUR 2.137 - EUR 1.630 = EUR 507), zonder regel "niet te verklaren".
    Test r (de repetitie): elk bedrag op Home, Inzichten en Vermogen, het voorstel, lagenGestort, de dekking en safeToSpend zijn op 25, 27
-     en 30 nov gelijk aan de vorige main (57e831e) op dezelfde export. Plan, Grip (Fundament en Lagen lezen dezelfde standen) en het
-     bron-sheet mogen veranderen; de bedragen van Grip zonder de tegels worden afgedrukt (oud en nieuw) zodat elk verschil te melden is.
+     en 30 nov gelijk aan de vorige main (57e831e) op dezelfde export. Plan, Grip (Fundament en Lagen lezen dezelfde standen, Naar je lagen en Waarom staan sinds punt 8 in het
+     Lagen-sheet) en het bron-sheet mogen veranderen; de bedragen van Grip zonder de tegels worden afgedrukt (oud en nieuw) zodat elk verschil te melden is.
      SABOTAGE: CONTANT=0 zet het potje Contant (alleen aan de huidige kant) op 0; dan wordt hij rood. */
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -40,6 +44,30 @@ test('a: na laden Beschermen EUR 2.927, Inrichting EUR 3.000, nog terug EUR 0, s
   expect(r.kop).toBe(10113);
   expect(r.tussen).toBe(false);
   expect(r.af.map((x) => x[1]).sort((a, b) => a - b)).toEqual([20, 93, 250]);
+});
+
+test('b (punt 8 en 9): Lagen-sheet met Naar je lagen en Waarom; EUR 2.137 opzij; Waarom sluit op EUR 507', async ({ page }) => {
+  const d = data(); if (!d) test.skip();
+  await laad(page, null, d, process.env.REPETITIE_DAG || '2026-11-27');
+  const r = await page.evaluate(() => { go('vooruit'); renderVooruit(); const plan = document.getElementById('s-vooruit').innerText;
+    go('maand'); gripKiesTab('zien'); closeSheet(); const tegel = document.querySelector('#gripMeters [data-meter="lagen"]').innerText;
+    openGripLagen(); const sh = document.getElementById('gripLagenSheet'); const G = lagenGestort(), T = lagenTegelData();
+    const b = sh.querySelector('[data-lagenrij="beschermen"]');
+    return { plan, tegel, opzij: T.opzij, netto: G.netto, gSav: G.gSav, eruit: G.eruit, meer: G.meer, planOpzij: G.planOpzij,
+      besch: { stand: b.dataset.stand, t: b.innerText.replace(/\s+/g, ' '), amber: [...b.querySelectorAll('span')].some((x) => /amber/.test(x.getAttribute('style') || '')) },
+      rijen: [...sh.querySelectorAll('[data-waaromrij]')].map((e) => ({ typ: e.dataset.waaromrij, v: +e.dataset.v, vx: +e.dataset.vexact, t: e.innerText.replace(/\s+/g, ' ') })),
+      totaal: sh.querySelector('[data-waaromtotaal]') ? +sh.querySelector('[data-waaromtotaal]').dataset.waaromtotaal : null, sheet: sh.innerText }; });
+  console.log(JSON.stringify(r, null, 1));
+  expect(r.plan).not.toContain('Naar je lagen'); expect(r.plan).not.toMatch(/Waarom €[\d.]+ (meer|minder) opzij/); expect(r.plan).not.toContain('Bijsturen op Grip');
+  expect(r.sheet).toContain('Naar je lagen');
+  expect([r.gSav, r.eruit, Math.round(r.netto)]).toEqual([2500, 363, 2137]);
+  expect(r.opzij).toBe(2137); expect(r.tegel).toContain('€2.137 opzij');
+  expect(r.besch.t).not.toContain('nog niet'); expect(r.besch.amber).toBe(false);
+  expect(Math.round(r.meer)).toBe(Math.round(r.netto - r.planOpzij)); expect(Math.round(r.meer)).toBe(507);
+  const terug = r.rijen.find((x) => x.typ === 'terug');
+  expect(terug.t).toContain('Betaalrekening €250'); expect(terug.t).toContain('Leefgeld €20'); expect(terug.t).toContain('Salarisrekening €93');
+  expect(r.rijen.filter((x) => x.typ === 'gat')).toEqual([]);
+  expect(r.rijen.reduce((a, x) => a + x.v, 0)).toBe(Math.round(r.meer));
 });
 
 test('r: de repetitie: buiten Plan, Grip en het bron-sheet is elk bedrag gelijk aan 57e831e (25, 27 en 30 nov)', async ({ browser }) => {

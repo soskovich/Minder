@@ -34,19 +34,21 @@ test.describe('v526', () => {
     expect(na.vd >= na.moment).toBe(true); expect(na.st).toBe('tekort');
   });
 
-  test('b: de sheet Lagen en Plan blok 2 tonen per laag dezelfde plan en gestort', async ({ page }) => {
+  test('b: de sheet Lagen toont per laag plan en gestort uit lagenGestort(), een keer (onderhoud5: blok 2 staat niet meer op Plan)', async ({ page }) => {
     await S.boot(page, '2026-11-27');
     const r = await page.evaluate(() => {
-      go('vooruit'); renderVooruit();
-      const plan = [...document.querySelectorAll('#planGestort [data-gestortlaag]')].map((e) => [e.dataset.gestortlaag, Math.round(+e.dataset.plan), Math.round(+e.dataset.gestort)]);
+      go('vooruit'); renderVooruit(); const opPlan = !!document.querySelector('#s-vooruit [data-gestortlaag], #s-vooruit #planGestort');
+      const plan = lagenGestort().lagen.map((l) => [l.k, Math.round(+l.plan), Math.round(+l.gestort)]);
       go('maand'); openGripLagen();
       const grip = [...document.querySelectorAll('#gripLagenSheet [data-lagenrij]')].map((e) => [e.dataset.lagenrij, Math.round(+e.dataset.plan), Math.round(+e.dataset.gestort)]);
       const link = !!document.querySelector('#gripLagenSheet [data-lagennaarplan]'), waarom = document.querySelectorAll('#gripLagenSheet [data-waaromrij]').length;
-      closeSheet(); return { plan, grip, link, waarom };
+      const tabellen = document.querySelectorAll('#gripLagenSheet [data-gestortlaag]').length;
+      closeSheet(); return { plan, grip, link, waarom, opPlan, tabellen };
     });
     expect(r.plan.length).toBe(4);
     expect(r.grip).toEqual(r.plan);
-    expect(r.link).toBe(true); expect(r.waarom).toBe(0);   // zonder de waarom-uitleg, met de link naar Plan
+    expect(r.opPlan).toBe(false); expect(r.tabellen).toBe(0);   // een tabel per laag, niet ook die van blok 2
+    expect(r.link).toBe(true);   // de link naar de stand op Plan blijft; de waarom-uitleg staat sinds onderhoud5 in dit sheet (alleen met een salarissplitsing)
   });
 
   test('c: Fundament op de stand: reserveringen niet gedekt (pot EUR 0, inleg niet gestort); gestort of het moment komt nog: gedekt', async ({ page }) => {
@@ -176,7 +178,9 @@ test.describe('v526', () => {
           const re = /-?€\s?[\d.]+(?:,\d{2})?/g;
           const lees = (id) => (document.getElementById(id).innerText.match(re) || []);
           const u = {}; go('dash'); renderDash(); u.home = lees('s-dash'); go('ins'); renderIns(); u.ins = lees('s-ins');
-          go('vooruit'); renderVooruit(); u.doelTerug = [...document.querySelectorAll('#s-vooruit [data-doelterug]')].map((e) => e.innerText); for (const e of document.querySelectorAll('#s-vooruit [data-doelterug]')) e.remove(); u.plan = lees('s-vooruit');   /* onderhoud5 (punt 4): een doel dat niet vol is zegt sindsdien wat er staat en wat nog terug moet in plaats van "vol"; die tekst gaat buiten de vergelijking en komt apart terug (u.doelTerug) */ go('vermogen'); renderVermogen(); u.verm = lees('s-vermogen');
+          go('vooruit'); renderVooruit(); u.doelTerug = [...document.querySelectorAll('#s-vooruit [data-doelterug]')].map((e) => e.innerText); u.resFlag = [...document.querySelectorAll('#s-vooruit [data-reserverenflag]')].map((e) => e.innerText);
+          /* onderhoud5: blok 2 (Naar je lagen, Waarom, Verschuivingen, Bijsturen) staat niet meer op Plan (punt 8), het label bij Reserveren alleen bij een afwijking (punt 7) en "vol" alleen als het geld het doel haalt (punt 4); die gaan buiten de vergelijking van de stand en komen apart terug */
+          for (const e of document.querySelectorAll('#s-vooruit [data-doelterug], #s-vooruit [data-reserverenflag], #s-vooruit #planGestort, #s-vooruit #planWaarom, #s-vooruit [data-verschuivingenlink], #s-vooruit [data-gestortbijsturen]')) e.remove(); u.plan = lees('s-vooruit');   /* onderhoud5 (punt 4): een doel dat niet vol is zegt sindsdien wat er staat en wat nog terug moet in plaats van "vol"; die tekst gaat buiten de vergelijking en komt apart terug (u.doelTerug) */ go('vermogen'); renderVermogen(); u.verm = lees('s-vermogen');
           const P = rekVoorstel(), G = lagenGestort(), D = dekking(12);
           u.f = { safe: safeToSpend().safe, P: P.ok ? [P.opzij, P.reserveringen, P.rek.map((r) => [r.acc, Math.round(r.laten)])] : null, G: G ? G.lagen.map((l) => [l.k, l.plan, l.gestort]) : null,
             D: [D.gedektTot, D.gat && D.gat.tekort, D.nodigPerMaand], RP: (() => { const R = resSheetPeriode(); return [R.per, R.gestort, R.komt, R.telt]; })(), nw: netWorth() };
@@ -185,9 +189,9 @@ test.describe('v526', () => {
       await page.close(); return out;
     };
     const oud = await lees(MAIN_HTML), nu = await lees(null);
-    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) if (k !== 'doelTerug') expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
+    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) if (k !== 'doelTerug' && k !== 'resFlag') expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
     for (const dag of Object.keys(oud)) expect(oud[dag].doelTerug, dag).toEqual([]);   // op 278655e bestaat de regel niet
-    console.log('onderhoud5 doelTerug', JSON.stringify(Object.fromEntries(Object.keys(nu).map((d) => [d, nu[d].doelTerug]))));
+    console.log('onderhoud5 doelTerug/resFlag', JSON.stringify(Object.fromEntries(Object.keys(nu).map((d) => [d, { nu: [nu[d].doelTerug, nu[d].resFlag], oud: oud[d].resFlag }]))));
   });
 
   test('i: "vanaf de volgende periode" zet het bedrag in de verdeling van de volgende periode (openPeriodeStart)', async ({ page }) => {

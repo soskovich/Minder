@@ -146,7 +146,10 @@ test.describe('v502', () => {
     await V.boot(page, { eenmalig: true }); await naarPlan(page);
     await expect(page.locator('#planKpi')).toHaveCount(0);
     await expect(page.locator('[data-kpiopzijperiode], [data-kpiopzijeenheid], [data-kpieenmalig]')).toHaveCount(0);
-    await expect(page.locator('#planGestort')).toHaveCount(1);                 // opzij leeft nu in blok 2 (gestort naast plan)
+    await expect(page.locator('#planGestort, #lagenGestort')).toHaveCount(0);  // onderhoud5 (punt 8): blok 2 staat niet meer op Plan
+    await page.evaluate(() => { go('maand'); openGripLagen(); });
+    await expect(page.locator('#gripLagenSheet #lagenGestort')).toHaveCount(1);  // maar in het Lagen-sheet op Grip (gestort naast plan)
+    await page.evaluate(() => closeSheet());
     expect(await page.evaluate(() => eenmaligPeriode())).toBeGreaterThan(0);   // er IS eenmalig geld in deze periode
     const OE = await page.evaluate(() => opzijEenheid({ soort: 'periode', ym: '2026-11', start: '2026-11-24', eind: '2026-12-23' }));
     expect(OE && typeof OE.netto).toBe('number');                             // het era-venster is nog de meetbron

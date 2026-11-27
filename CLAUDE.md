@@ -149,7 +149,20 @@ genoemde versietag.)*
   (`opnameNaarRek()`: de eigen bijschrijving binnen `VERSCHUIF_DAGEN`, door de salarisrekening heen gevolgd), in Signalen
   (`data-signaalnaar`) en per onttrekking; de naam zelf blijft, want oordeel en reden lezen hem. (7) Het label bij Reserveren op Plan
   (`lagenReserverenFlag()`) staat er alleen bij een afwijking: deels gestort, of niets gestort en het moment (`lagenOverboekMoment()`) voorbij;
-  gehaald of "nog niet" geen label, en het is altijd amber. Spec `onderhoud5.spec.js` (10 tests),
+  gehaald of "nog niet" geen label, en het is altijd amber. (8) "Naar je lagen" en "Waarom EUR X meer/minder opzij" staan in het sheet van de
+  tegel Lagen op Grip, onder de tabel per laag (`lagenStroomHtml()`, `#lagenGestort`, `#lagenWaarom`, altijd open); de tabel staat er een keer,
+  Plan houdt alleen de stand (kop, Per laag · stand, de sheets per laag), "Bijsturen op Grip" en "Verschuivingen deze periode" zijn van Plan
+  af (de laatste staat in de sheets van Beschermen en Reserveren), en `planGestortKaart()`, `planBlokOpen`/`planBlokToggle` en `SET.planOpen`
+  zijn vervallen. DAT DRAAIT DE DICHTKLAP VAN ONDERHOUD4 TERUG. (9a) Het groene getal van de tegel Lagen is `lagenGestort().netto` (erin min
+  eruit op je spaarrekening, EUR 2.137 op de melding); tot hier de som van de lagen die meetelden (EUR 761), en v526b telde reserveren mee.
+  (9b) Het oordeel van een laag kijkt naar de storting (`voorStort` = gestort plus wat er daarna als aanvulling uit ging); "nog niet" alleen
+  zolang er niets binnenkwam (`erin`) en het moment nog komt. Haalt de storting het plan en komt het tekort alleen door de aanvulling, dan
+  staat er "EUR X · na aanvulling EUR Y" zonder tekortkleur (`data-naaanvulling`). (9c) `lagenOpnameNaar()` zoekt eerst de directe
+  bijschrijving van dezelfde opname op een eigen rekening die geen spaarrekening is; alleen wat op de salarisrekening landt wordt gevolgd zoals
+  in onderhoud4. De terug-regel noemt per overboeking de ontvangende rekening (`N.per`, `data-terugnaar`), de salarisregel alleen wat de
+  salarisrekening zelf minder overhield, en de reserveringsregel telt een verschuiving van je spaarrekening niet als geld uit je salaris.
+  GEMETEN op de nagebouwde melding: de som sluit op EUR 507 zonder gat-regel (zonder de verschuiving-aftrek EUR 471 met een gat van 36).
+  Spec `onderhoud5.spec.js` (14 tests),
   sabotages `tests/wip/onderhoud5-sabotage.json`, export `tests/wip/onderhoud5-export.spec.js`; `onderhoud4-stand` (nfAfgetrokken 1000),
   `v524-keuzeC` (de stand voor de keuze) en `v526` h (de regel `data-doelterug` apart) gemigreerd.
 - **v526: DE TEGELS OP GRIP ZIJN BUDGET, LAGEN EN FUNDAMENT; ELKE TEGEL TOONT RING, OORDEEL EN HET GROOTSTE BEDRAG DAT NIET GEHAALD IS**

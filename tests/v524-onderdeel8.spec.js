@@ -92,7 +92,7 @@ test.describe('v524 onderdeel 8: volle laag + nog over te maken', () => {
   test('g: elk van de drie antwoorden stuurt de bestemming in blok 2 (volgende / een doel / laten staan)', async ({ page }) => {
     await volBuffer(page);
     const r = await page.evaluate(() => {
-      const lees = () => { const div = document.createElement('div'); div.innerHTML = planGestortKaart(); const reg = div.querySelector('[data-extraregel]');
+      const lees = () => { const div = document.createElement('div'); div.innerHTML = lagenStroomHtml(); const reg = div.querySelector('[data-extraregel]');
         return reg ? { naarId: reg.dataset.extranaarid, laten: reg.dataset.extralaten, sub: reg.querySelector('.muted').textContent } : null; };
       // zonder antwoord: de eerste laag die niet vol is (op deze stand het eerste doel)
       delete SET.lagenVolKeuze; save(); const geen = lees();

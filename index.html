@@ -11920,16 +11920,22 @@ function lagenTegelData(){
   let G=null; try{ G=lagenGestort(); }catch(_){} if(!G) return null;
   const OM=lagenOverboekMoment(), GM=lagenGroeienMoment(G.PW), vd=vandaagYMD();
   const lagen=G.lagen.map(l=>{ const plan=Math.round(+l.plan||0), gestort=Math.round((+l.gestort||0)*100)/100, verschil=Math.round((gestort-plan)*100)/100;
+    /* onderhoud5 (punt 9b): het oordeel kijkt naar de storting, niet naar een aanvulling erna (voorStort = gestort plus die aanvulling).
+       "Nog niet" alleen zolang er niets binnenkwam en het moment nog komt: kwam de storting binnen, dan is het moment voorbij. */
+    const aanv=Math.round((+l.aanvulling||0)*100)/100, voorStort=Math.round((gestort+aanv)*100)/100, erin=+l.erin||0;
     let stand;
-    if(!(plan>0.5) && !(gestort>0.5)) stand='geen';
-    else if(gestort>=plan-0.5) stand='gehaald';
-    else { const voorbij=l.k==='groeien'?!!(GM && vd>=GM.moment):!OM.komt; stand=voorbij?'tekort':'nognie'; }
-    return {k:l.k, naam:LAAG_NAAM[l.k], sub:l.sub||'', plan, gestort, verschil, stand, tekort:stand==='tekort'?Math.round((plan-gestort)*100)/100:0}; });
+    if(!(plan>0.5) && !(voorStort>0.5)) stand='geen';
+    else if(voorStort>=plan-0.5) stand='gehaald';
+    else { const voorbij=l.k==='groeien'?!!(GM && vd>=GM.moment):(erin>0.5 || !OM.komt); stand=voorbij?'tekort':'nognie'; }
+    const naAanv=stand==='gehaald' && aanv>0.004 && gestort<plan-0.5;
+    return {k:l.k, naam:LAAG_NAAM[l.k], sub:l.sub||'', plan, gestort, verschil, stand, aanvulling:aanv, voorStort, naAanv, tekort:stand==='tekort'?Math.round((plan-voorStort)*100)/100:0}; });
   const geteld=lagen.filter(l=>l.stand==='gehaald' || l.stand==='tekort'), gehaald=geteld.filter(l=>l.stand==='gehaald'), mist=geteld.filter(l=>l.stand==='tekort');
   const ontbreekt=Math.round(mist.reduce((a,l)=>a+l.tekort,0));
   /* v526b (punt 1): wat er deze periode echt opzij ging, INCLUSIEF het surplus dat op je spaarrekening landde (lagenGestort() telt
      dat surplus niet bij Beschermen, want het is geen plan); alleen van de lagen die meetellen. */
-  const opzij=Math.round(geteld.reduce((a,l)=>a+l.gestort,0)+(geteld.some(l=>l.k==='beschermen')?(+G.surplusGestort||0):0));
+  /* onderhoud5 (punt 9a): het groene getal is wat er NETTO opzij ging, erin min eruit (lagenGestort().netto, dezelfde bron als de regel
+     "netto gestort" in het sheet); tot hier de som van de lagen die meetelden, en een laag op "nog niet" viel daar dan uit (EUR 761). */
+  const opzij=Math.round(G.netto!=null?+G.netto:geteld.reduce((a,l)=>a+l.gestort,0)+(geteld.some(l=>l.k==='beschermen')?(+G.surplusGestort||0):0));
   return {G, PW:G.PW, OM, GM, lagen, n:geteld.length, gehaald:gehaald.length, mist, ontbreekt, opzij}; }
 function lagenTegelSub(T){ if(!T.mist.length) return '';
   if(T.mist.length===1){ const l=T.mist[0]; return `${l.naam} ${l.gestort>0.5?'deels gestort':'niet gestort'}`; }
@@ -12023,9 +12029,10 @@ function renderGripLagen(){
     if(l.stand==='nognie') return `<span data-nognie style="color:var(--mut);font-weight:700">−${euro0(l.plan-l.gestort)} · nog niet</span>`;
     if(l.stand==='tekort') return `<span style="color:var(--amber);font-weight:700">−${euro0(l.tekort)}</span>`;
     if(l.stand==='geen') return '<span style="color:var(--mut2)">–</span>';
+    if(l.naAanv) return `<span data-naaanvulling="${l.gestort}" style="color:var(--mut);font-weight:700">· na aanvulling ${euro0(l.gestort)}</span>`;   // onderhoud5 (punt 9b): geen tekortkleur, het tekort komt alleen door de aanvulling
     return `<span style="color:var(--teal);font-weight:700">✓${l.verschil>0.5?` +${euro0(l.verschil)}`:''}</span>`; };
   const sub=l=>l.k==='groeien'&&l.stand==='nognie'&&T.GM&&T.GM.laatste?`afschrijving ${dagKort(T.GM.laatste)}${l.sub?' · '+l.sub:''}`:l.sub;
-  const rij=l=>`<div class="row" data-lagenrij="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" data-stand="${l.stand}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${l.naam}</b>${sub(l)?`<span class="small muted" style="display:block">${esc(sub(l))}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;min-width:52px;text-align:right">${(l.stand==='nognie'&&!(l.gestort>0.5))?'–':euro0(l.gestort)}</span><span style="white-space:nowrap;min-width:60px;text-align:right">${cel(l)}</span></div>`;
+  const rij=l=>`<div class="row" data-lagenrij="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" data-stand="${l.stand}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${l.naam}</b>${sub(l)?`<span class="small muted" style="display:block">${esc(sub(l))}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;min-width:52px;text-align:right">${(l.stand==='nognie'&&!(l.gestort>0.5))?'–':euro0(l.naAanv?l.voorStort:l.gestort)}</span><span style="white-space:nowrap;min-width:60px;text-align:right">${cel(l)}</span></div>`;
   const RK=lagenResKeuzeOpen(T), R=T.lagen.find(l=>l.k==='reserveren'), Kz=lagenKeuzeRes(PW);
   let keuze='';
   if(R && R.stand==='tekort'){
@@ -12042,10 +12049,11 @@ function renderGripLagen(){
         +knop('overslaan', 'Bewust overslaan', 'de vraag komt terug als een post niet meer gedekt is')
       :'<div class="small muted" style="margin-top:6px">Je surplus gaat al naar Reserveren; de keuze daarover staat bij Kiezen.</div>'}</div>`; }
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLagenSheet" data-lagengehaald="${T.gehaald}" data-lagenn="${T.n}" data-lagenontbreekt="${T.ontbreekt}">
-    <div class="row" style="align-items:baseline;margin-bottom:4px"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">Lagen · ${esc(PW.label||'deze periode')}</span>${dagT?`<span class="small muted">${dagT}</span>`:''}</div>
+    <div class="row" style="align-items:baseline;margin-bottom:4px"><span data-gestortkop style="flex:1;font-weight:800;font-size:var(--fs-lg)">Lagen · ${esc(PW.label||'deze periode')}</span>${dagT?`<span class="small muted">${dagT}</span>`:''}</div>
     <div class="row small" style="gap:8px;color:var(--mut2);font-size:var(--fs-xs);padding:2px 0"><span style="flex:1">Laag</span><span>Plan</span><span style="min-width:52px;text-align:right">Gestort</span><span style="min-width:60px"></span></div>
     ${T.lagen.map(rij).join('')}
-    <div class="small" data-lagennaarplan role="button" onclick="closeSheet();go('vooruit')" style="padding:9px 0 0;border-top:1px solid var(--line);color:var(--mut);cursor:pointer">Waar het verschil vandaan komt staat op Plan <span style="color:var(--teal);font-weight:700">›</span></div>
+    ${lagenStroomHtml(T.G)}
+    <div class="small" data-lagennaarplan role="button" onclick="closeSheet();go('vooruit')" style="padding:9px 0 0;margin-top:8px;border-top:1px solid var(--line);color:var(--mut);cursor:pointer">De stand per laag staat op Plan <span style="color:var(--teal);font-weight:700">›</span></div>
     ${keuze}</div>`; }
 function openGripLagen(){ renderGripLagen(); showSheetBg(); }
 function renderGripFundament(){
@@ -19402,17 +19410,19 @@ function lagenGestort(){
   for(const t of telbareTx()) if(t.amount>0 && sav.has(t.acc) && inV(t) && spaarTussenEigen(t, sav)) gSav-=t.amount;
   gSav=Math.round(gSav*100)/100;
   const opnames=telbareTx().filter(t=>inV(t) && isSpaarOpname(t, sav, false)).sort((a,b)=>a.date<b.date?-1:1);
-  let eruit=0, eruitBesch=0, eruitDoelen=0; const eruitPer={};
-  for(const t of opnames){ const v=-t.amount, b=opnameBronVan(t); eruit+=v; if(b && b!=='noodfonds' && b!==OPN_AANVULLING){ eruitDoelen+=v; eruitPer[b]=(eruitPer[b]||0)+v; } else eruitBesch+=v; }
-  eruit=Math.round(eruit*100)/100; eruitBesch=Math.round(eruitBesch*100)/100; eruitDoelen=Math.round(eruitDoelen*100)/100;
+  let eruit=0, eruitBesch=0, eruitDoelen=0, eruitAanv=0; const eruitPer={};
+  for(const t of opnames){ const v=-t.amount, b=opnameBronVan(t); eruit+=v; if(b && b!=='noodfonds' && b!==OPN_AANVULLING){ eruitDoelen+=v; eruitPer[b]=(eruitPer[b]||0)+v; } else { eruitBesch+=v; if(b===OPN_AANVULLING) eruitAanv+=v; } }
+  eruit=Math.round(eruit*100)/100; eruitBesch=Math.round(eruitBesch*100)/100; eruitDoelen=Math.round(eruitDoelen*100)/100; eruitAanv=Math.round(eruitAanv*100)/100;
   let ra=null; try{ ra=resAccId(); }catch(_){} const gRes=ra?Math.round(lagenGestortOp(ra, PW)*100)/100:0;
   let gGroei=0; try{ for(const t of telbareTx()){ if(!(t.amount<0)) continue; const d=String(t.date).slice(0,10); if(d<PW.start||d>PW.eind) continue; if(bezitVan(t)) gGroei+=-t.amount; } }catch(_){} gGroei=Math.round(gGroei*100)/100;
   const gTerug=Math.max(Math.min(planTerug, gSav),0), surplusGestort=Math.max(Math.min(surplus, Math.max(gSav-gTerug,0)),0);
   const gBesch=Math.round((Math.max(gSav-gTerug-surplusGestort,0)-eruitBesch)*100)/100;
-  const lagen=[{k:'beschermen', plan:planBesch, gestort:gBesch, sub:'noodfonds'},
-    {k:'doelen', plan:planTerug, gestort:Math.round((gTerug-eruitDoelen)*100)/100, sub:planTerug>0?'terugzetten':''},
-    {k:'reserveren', plan:planRes, gestort:gRes, sub:''},
-    {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:groeiI.nuNamen.join(' · '), later:(gGroei<=0.004 && groeiI.nu>0)}];   // v524: alleen de beleggingen waarvan de inleg in deze periode valt (perVanaf <= periode); het pensioen komt vanaf januari
+  /* onderhoud5 (punt 9b): erin is wat er bruto binnenkwam (de storting zelf; kwam er iets, dan is het moment voorbij), en bij Beschermen
+     aanvulling: wat er na de storting als "Aanvulling, niet terugzetten" weer uit ging. Het oordeel van de laag kijkt naar de storting. */
+  const lagen=[{k:'beschermen', plan:planBesch, gestort:gBesch, sub:'noodfonds', erin:Math.round((gSav-gTerug)*100)/100, aanvulling:eruitAanv},
+    {k:'doelen', plan:planTerug, gestort:Math.round((gTerug-eruitDoelen)*100)/100, sub:planTerug>0?'terugzetten':'', erin:gTerug},
+    {k:'reserveren', plan:planRes, gestort:gRes, sub:'', erin:gRes},
+    {k:'groeien', plan:groeiI.nu, gestort:gGroei, sub:groeiI.nuNamen.join(' · '), later:(gGroei<=0.004 && groeiI.nu>0), erin:gGroei}];   // v524: alleen de beleggingen waarvan de inleg in deze periode valt (perVanaf <= periode); het pensioen komt vanaf januari
   // Extra (surplus): standaard naar de eerste laag die niet vol is; jouw keuze (SET.lagenVolKeuze) stuurt het vanaf de volgende
   // salarisstorting (v524 onderdeel 8, vervolg): 'volgende' = de eerstvolgende niet-volle laag (zoals nu), een doel-id = dat doel
   // (ook als er een eerder niet-vol doel is), 'laten' = geen bestemming (telt niet als nog over te maken en komt niet bij Kiezen).
@@ -19425,7 +19435,7 @@ function lagenGestort(){
   else { const d=eersteNietVol(); extraNaar=d.k; extraNaarId=d.id||null; extraNaarNaam=d.naam||null; }   // geen antwoord of 'volgende'
   const extraGekozen=(volKeuze==='laten' || (volKeuze && volKeuze!=='volgende' && extraNaarId===volKeuze))?volKeuze:null;   // alleen een EXPLICIETE doel/laten-keuze verandert de weergave
   const netto=Math.round((gSav-eruit)*100)/100, meer=Math.round((netto - planOpzij)*100)/100;
-  return {PW, SV, stort, surplus, surplusGestort, vast, marge, lagen, meer, gSav, eruit, eruitBesch, eruitDoelen, opnames, netto, planOpzij, planTerug, gTerug,
+  return {PW, SV, stort, surplus, surplusGestort, vast, marge, lagen, meer, gSav, eruit, eruitBesch, eruitDoelen, eruitAanv, opnames, netto, planOpzij, planTerug, gTerug,
     extra:{bedrag:surplus, verg:stort?Math.round(+stort.verg||0):0, eenmalig:stort?Math.round(+stort.eenmalig||0):0, naar:extraNaar, naarId:extraNaarId, naarNaam:extraNaarNaam, laten:extraLaten, gekozen:extraGekozen, overTeMaken:extraLaten?0:Math.max(Math.round((surplus-surplusGestort)*100)/100,0)},
     gestortBinnen:!!stort};
 }
@@ -19438,16 +19448,23 @@ function lagenGestort(){
 function lagenOpnameNaar(G){
   const SV=G.SV||{}, rek=SV.rek||{}, salAcc=SV.salAcc||''; let ra=''; try{ ra=resAccId(); }catch(_){}
   const doel=new Set(Object.keys(rek).filter(a=>a!==salAcc)); if(ra) doel.add(ra);
-  const naar={}, gebruikt=new Set(), salGebruikt=new Set(); let blijft=0;
+  const naar={}, gebruikt=new Set(), salGebruikt=new Set(), per=[]; let blijft=0;
   const T=telbareTx(), dt=x=>String(x.date).slice(0,10);
+  /* onderhoud5 (punt 9c): eerst de directe bijschrijving van dezelfde opname op een eigen rekening (geen spaarrekening): Buffer Rust naar
+     Betaalrekening EUR 250 telt bij de Betaalrekening, ook zonder de omweg via je salarisrekening. Alleen wat op je salarisrekening
+     landt, wordt gevolgd zoals hieronder (wat daar binnen de dagen met hetzelfde bedrag naar een rekening uit je verdeling ging). */
+  let sav=new Set(); try{ sav=new Set(n26SavingsAccounts()); }catch(_){} const eig=new Set(OWN||[]), direct=new Set();
   for(const o of (G.opnames||[])){ let rest=Math.round(-o.amount*100)/100; const d=dt(o), tot=rekDag(d, VERSCHUIF_DAGEN);
+    const dx=T.find(x=>x.amount>0 && x.acc!==o.acc && !sav.has(x.acc) && eig.has(x.acc) && x.acc!==salAcc && !gebruikt.has(x) && !direct.has(x) && Math.round(x.amount*100)===Math.round(-o.amount*100) && dt(x)>=d && dt(x)<=tot);
+    if(dx){ direct.add(dx); gebruikt.add(dx); naar[dx.acc]=Math.round(((naar[dx.acc]||0)+rest)*100)/100; per.push({acc:dx.acc, bedrag:rest}); continue; }
     const kand=T.filter(x=>x.amount>0 && doel.has(x.acc) && !gebruikt.has(x) && dt(x)>=d && dt(x)<=tot).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:0);
     for(const x of kand){ if(rest<=0.004) break;
       const m=salAcc?T.find(y=>y.acc===salAcc && !salGebruikt.has(y) && Math.round(y.amount*100)===-Math.round(x.amount*100) && dt(y)>=d && dt(y)<=tot):null;
       if(!m) continue; gebruikt.add(x); salGebruikt.add(m);
-      const n=Math.min(rest, x.amount); naar[x.acc]=Math.round(((naar[x.acc]||0)+n)*100)/100; rest=Math.round((rest-n)*100)/100; }
+      const n=Math.min(rest, x.amount); naar[x.acc]=Math.round(((naar[x.acc]||0)+n)*100)/100; per.push({acc:x.acc, bedrag:n}); rest=Math.round((rest-n)*100)/100; }
+    if(rest>0.004) per.push({acc:salAcc||null, bedrag:rest, blijft:true});
     blijft=Math.round((blijft+rest)*100)/100; }
-  return {naar, blijft, ra};
+  return {naar, blijft, ra, per};
 }
 function lagenWaaromRijen(G){
   const PW=G.PW, SV=G.SV||{}, rek=SV.rek||{}, salAcc=SV.salAcc||'';
@@ -19468,13 +19485,6 @@ function lagenWaaromRijen(G){
   if(Math.abs(afr)>=10) rijen.push({lab:'Afronding', v:afr, afronding:true});
   return rijen;
 }
-/* onderhoud4: open of dicht per blok op Plan, onthouden op dit toestel (SET.planOpen, gaat niet naar de Worker). Standaard dicht.
-   Een tik zet alleen de weergave om (geen herberekening) en bewaart met een boekhoud-save (voedt geen enkele berekening). */
-function planBlokOpen(k){ return !!((SET.planOpen||{})[k]); }
-function planBlokToggle(k){ SET.planOpen=Object.assign({}, SET.planOpen); SET.planOpen[k]=!SET.planOpen[k]; save(true);
-  const id=k==='waarom'?'planWaarom':'planGestort', el=document.getElementById(id); if(!el) return; const o=SET.planOpen[k];
-  el.dataset.blokopen=o?'1':'0'; const d=el.querySelector(k==='waarom'?'[data-waaromdicht]':'[data-gestortdicht]'), b=el.querySelector(k==='waarom'?'[data-waarombody]':'[data-gestortbody]');
-  if(d) d.style.display=o?'none':''; if(b) b.style.display=o?'':'none'; }
 /* onderhoud4 (tweede aanvulling): Waarom met een opname in het venster. Elke regel komt uit de boekingen: het surplus, per rekening wat
    hij UIT JE SALARIS kreeg (de bijschrijvingen min wat de opname aanvulde), de salarisrekening alleen als zij zelf (wat er sinds de storting
    netto bleef, min wat van de opname er nog staat) minder overhield dan je afspraak, en de opname als eigen regel met waar hij heen ging.
@@ -19487,13 +19497,16 @@ function lagenWaaromRijenOpname(G){
       klik:(niet&&idq)?`salSplitVraagSheet('${idq}')`:'', v:G.surplus, surplus:true}); }
   for(const acc of Object.keys(rek)){ if(acc===salAcc) continue; const plan=+rek[acc]||0, act=Math.round((lagenGestortOp(acc, PW)-(N.naar[acc]||0))*100)/100, d=Math.round((plan-act)*100)/100;
     if(Math.abs(d)>=10) rijen.push({lab:`${esc(nm(acc))} kreeg ${euro0(act)} uit je salaris in plaats van ${euro0(plan)}`, v:d}); }
-  { const plan=+SV.reserveringen||0, act=Math.round(((N.ra?lagenGestortOp(N.ra, PW):0)-(N.ra?(N.naar[N.ra]||0):0))*100)/100, d=Math.round((plan-act)*100)/100;
+  /* onderhoud5 (punt 9c): een verschuiving van je spaarrekening naar je reserveringsrekening in het venster kwam niet uit je salaris */
+  let verschIn=0; try{ for(const v of lagenVerschuivingen(PW.start, PW.eind).lagen) verschIn+=v.bedrag; }catch(_){} verschIn=Math.round(verschIn*100)/100;
+  { const plan=+SV.reserveringen||0, act=Math.round(((N.ra?lagenGestortOp(N.ra, PW):0)-(N.ra?(N.naar[N.ra]||0):0)-verschIn)*100)/100, d=Math.round((plan-act)*100)/100;
     if(Math.abs(d)>=10) rijen.push({lab:`Reserveringen kregen ${euro0(act)} uit je salaris in plaats van ${euro0(plan)}`, v:d}); }
   if(salAcc && rek[salAcc]!=null){ let flow=0; for(const t of telbareTx()){ if(t.acc!==salAcc) continue; const d=String(t.date).slice(0,10); if(d>=PW.start && d<=PW.eind) flow+=t.amount; }
     const eigen=Math.round((flow-N.blijft)*100)/100, afspr=+rek[salAcc]||0, d=Math.round((afspr-eigen)*100)/100;
     if(d>=1) rijen.push({lab:`Salarisrekening hield ${euro0(d)} minder over`, sub:`${euro0(eigen)} van je afgesproken ${euro0(afspr)}, zonder wat er doorheen ging`, v:d, salrek:true}); }
-  { const delen=Object.keys(N.naar).filter(a=>N.naar[a]>0.004).map(a=>`${a===N.ra?'Reserveringen':esc(nm(a))} ${euro0(N.naar[a])}`);
-    if(N.blijft>0.004) delen.push(`salarisrekening ${euro0(N.blijft)}`);
+  /* onderhoud5 (punt 9c): per overboeking de rekening die hem ontving (Buffer Rust naar Betaalrekening EUR 250, naar Leefgeld EUR 20,
+     naar Salarisrekening EUR 93), in de volgorde van de opnames */
+  { const delen=(N.per||[]).filter(x=>x.bedrag>0.004).map(x=>`<span data-terugnaar="${esc(x.acc||'')}">${x.acc===N.ra?'Reserveringen':x.acc?esc(nm(x.acc)):'je salarisrekening'} ${euro0(x.bedrag)}</span>`);
     rijen.push({lab:`${euro0(G.eruit)} terug van je spaarrekening naar je rekeningen`, sub:delen.join(' · '), v:-G.eruit, terug:true}); }
   const gat=Math.round((G.meer-rijen.reduce((a,r)=>a+r.v,0))*100)/100;
   if(Math.abs(gat)>=1) rijen.push({lab:'Niet te verklaren uit je boekingen', v:gat, gat:true});
@@ -19502,45 +19515,28 @@ function lagenWaaromRijenOpname(G){
   rijen.forEach((r,i)=>{ r.vExact=r.v; r.v=R['r'+i]; });
   return rijen;
 }
-function planGestortKaart(){
-  let G=null; try{ G=lagenGestort(); }catch(_){} if(!G) return '';
+/* onderhoud5 (punt 8): "NAAR JE LAGEN" EN "WAAROM" STAAN IN HET SHEET VAN DE TEGEL LAGEN OP GRIP, onder de tabel per laag (die tabel en
+   de per-laag-rijen van "Naar je lagen" waren hetzelfde, dus hij staat er een keer). Plan houdt alleen de stand. Altijd open: de
+   dichtklap-regels van onderhoud 4 (SET.planOpen, planBlokOpen/planBlokToggle) zijn vervallen. Verschuivingen staan in de sheets van
+   Beschermen en Reserveren (verschuivingIngang). Geen bedrag verandert: dezelfde lagenGestort() en lagenWaaromRijen(). */
+function lagenStroomHtml(G){
+  if(!G){ try{ G=lagenGestort(); }catch(_){ G=null; } } if(!G) return '';
   const col=d=>d>0.4?'var(--teal)':d<-0.4?'var(--amber)':'var(--mut)';
-  const vcell=d=>d>0.4?`<span class="pos" style="color:var(--teal);font-weight:700">+${euro0(d)}</span>`:d<-0.4?`<span class="neg" style="color:var(--amber);font-weight:700">−${euro0(Math.abs(d))}</span>`:'<span style="color:var(--teal);font-weight:700">✓</span>';
-  const rij=l=>{ const d=Math.round((l.gestort-l.plan)*100)/100;
-    const rechts=l.later?'<span class="vb" style="font-size:var(--fs-xs);font-weight:600;border:1px dashed var(--mut2);color:var(--mut);border-radius:6px;padding:0 5px">eind nov</span>':vcell(d);
-    return `<div class="row" data-gestortlaag="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${LAAG_NAAM[l.k]}</b>${l.sub?`<span class="small muted" style="display:block">${l.sub}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums">${euro0(l.gestort)}</span><span style="white-space:nowrap;min-width:54px;text-align:right">${rechts}</span></div>`; };
   const extraSub=G.extra.laten?'blijft staan · geen bestemming':(G.extra.gekozen?`naar ${esc(G.extra.naarNaam||LAAG_NAAM[G.extra.naar]||'')}`:`naar ${LAAG_NAAM[G.extra.naar]}, de eerste laag die niet vol is`)+(G.extra.overTeMaken>0?` · nog over te maken ${euro0(G.extra.overTeMaken)}`:'');
   const extra=G.extra.bedrag>0.5?`<div class="row" data-extraregel data-extra="${G.extra.bedrag}" data-extranaar="${G.extra.naar}" data-extranaarid="${esc(G.extra.naarId||'')}" data-extralaten="${G.extra.laten?'1':'0'}" style="gap:8px;align-items:baseline;padding:8px 0 2px;margin-top:4px;border-top:1.5px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">Extra ${euro0(G.extra.bedrag)}</b><span class="small muted" style="display:block">${extraSub}</span></span></div>`:'';
-  const W=lagenWaaromRijen(G);
-  const wOpen=planBlokOpen('waarom'), wKlik=W.some(r=>r.klik);
-  const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div class="card" id="planWaarom" data-blokopen="${wOpen?1:0}" style="padding:9px 14px 11px;margin-top:9px">
-    <div class="small" data-waaromdicht role="button" onclick="planBlokToggle('waarom')" style="font-weight:700;cursor:pointer;padding:1px 0;${wOpen?'display:none':''}">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij <span class="chev" style="color:var(--teal)">›</span>${wKlik?'<span class="muted" data-waaromnietgesplitst style="font-weight:600"> · nog niet gesplitst</span>':''}</div>
-    <div data-waarombody style="${wOpen?'':'display:none'}">
-    <div class="small" data-waaromkop role="button" onclick="planBlokToggle('waarom')" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px;cursor:pointer">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
+  const W=lagenWaaromRijen(G), r2=x=>Math.round(x*100)/100;
+  const somG=r2(G.netto!=null?G.netto:G.gSav), somP=r2(G.planOpzij||0), uitG=(+G.eruit||0)>0.004;
+  const nettoTxt=uitG?`${euro0(somG)} netto gestort (${euro0(G.gSav)} erin, ${euro0(G.eruit)} eruit)`:`${euro0(somG)} gestort`;
+  const waarom=G.gestortBinnen&&Math.abs(G.meer)>=1?`<div id="lagenWaarom" style="margin-top:12px">
+    <div class="small" data-waaromkop style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:1px 0 2px">Waarom ${euro0(Math.abs(G.meer))} ${G.meer>=0?'meer':'minder'} opzij</div>
     ${W.map(r=>{ const typ=r.surplus?'surplus':r.salrek?'salrek':r.afronding?'afronding':r.terug?'terug':r.gat?'gat':'rek';
       const sub=r.sub?(r.klik?`<span class="small" data-salsplitlink role="button" onclick="event.stopPropagation();${r.klik}" style="display:block;color:var(--teal);font-weight:700;cursor:pointer">${r.sub} ›</span>`:`<span class="small muted" style="display:block">${r.sub}</span>`):'';
       return `<div class="row small" data-waaromrij="${typ}" data-v="${r.v}" data-vexact="${r.vExact!=null?r.vExact:r.v}" style="gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${r.lab}${sub}</span><span style="white-space:nowrap;font-weight:700;color:${col(r.v)}">${r.v>=0?'+':'−'}${euro0(Math.abs(r.v))}</span></div>`; }).join('')}
-    <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div></div>`:'';
-  const dagT=G.PW.dagen>0?`dag ${G.PW.dag} van ${G.PW.dagen}`:'';
-  const salK=x=>{ try{ return new Date(x+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); }catch(_){ return x; } };
-  const opzijNoot=G.PW.salNa?`<div class="small muted" data-gestortopzijnoot style="margin-top:1px">gestort vanaf je salaris op ${salK(G.PW.salDag)}</div>`:'';
-  /* onderhoud4: standaard dicht tot een regel (SET.planOpen.gestort, alleen op dit toestel). De dichte regel telt de lagen op
-     (gestort tegen plan), noemt de lagen die afwijken met hun verschil (Groeien met "nog niet" telt niet) en de extra. Geen nieuw bedrag. */
-  const gOpen=planBlokOpen('gestort'), r2=x=>Math.round(x*100)/100;
-  /* tweede aanvulling: de dichte regel en blok 2 tonen NETTO wat er op je spaarrekening kwam (erin min eruit) tegen opzij uit je verdeling,
-     dezelfde getallen als het totaal van Waarom (G.meer = netto - plan) */
-  const somG=r2(G.netto!=null?G.netto:G.gSav), somP=r2(G.planOpzij||0), uitG=(+G.eruit||0)>0.004;
-  const nettoTxt=uitG?`${euro0(somG)} netto gestort (${euro0(G.gSav)} erin, ${euro0(G.eruit)} eruit)`:`${euro0(somG)} gestort`;
-  const afw=G.lagen.filter(l=>!l.later).map(l=>({k:l.k, d:r2(l.gestort-l.plan)})).filter(x=>Math.abs(x.d)>0.4);
-  const afwTxt=afw.length?afw.map(x=>`<span data-gestortafwijk="${x.k}" data-d="${x.d}">${LAAG_NAAM[x.k]} ${x.d>0?'+':'−'}${euro0(Math.abs(x.d))}</span>`).join(' · '):'<span data-gestortvolgensplan>alles volgens plan</span>';
-  const dicht=`<div data-gestortdicht role="button" onclick="planBlokToggle('gestort')" data-gestort="${somG}" data-plan="${somP}" style="padding:11px 0 1px;cursor:pointer;${gOpen?'display:none':''}"><span class="small" style="font-weight:700">Naar je lagen · ${nettoTxt}, plan ${euro0(somP)}</span> <span class="small muted">· ${afwTxt}${G.extra.bedrag>0.5?` · <span data-gestortextradicht>+ extra ${euro0(G.extra.bedrag)}</span>`:''}</span> <span class="chev" style="color:var(--teal)">›</span></div>`;
-  return `<div class="card" id="planGestort" data-blokopen="${gOpen?1:0}" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="padding:2px 14px 10px;margin-bottom:9px">
-    ${dicht}<div data-gestortbody style="${gOpen?'':'display:none'}">
-    <div class="row" role="button" onclick="planBlokToggle('gestort')" style="padding:11px 0 1px;align-items:baseline;cursor:pointer"><span class="small" data-gestortkop style="flex:1;font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">Naar je lagen · ${esc(G.PW.label||'deze periode')}</span>${dagT?`<span class="small muted" data-gestortdag>${dagT}</span>`:''}</div>${opzijNoot}
-    ${uitG?`<div class="small" data-gestortnetto="${somG}" data-erin="${G.gSav}" data-eruit="${G.eruit}" style="margin-top:3px">${nettoTxt}, plan ${euro0(somP)}</div>`:''}
-    ${G.lagen.map(rij).join('')}${extra}</div></div>${waarom}
-    ${(function(){ let n=0; try{ const V=lagenVerschuivingen(G.PW.start, G.PW.eind); n=V.lagen.length+V.doelen.length; }catch(_){} return n>0?`<div class="small" data-verschuivingenlink="${n}" style="margin:0 2px 8px"><span class="chev" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openLagenLog()">Verschuivingen deze periode (${n}) ›</span></div>`:''; })()}
-    <div class="row small" data-gestortbijsturen role="button" onclick="go('maand')" style="gap:8px;margin:0 2px 9px;padding:9px 11px;border-radius:10px;border:1.4px solid var(--teal);color:var(--teal);font-weight:700;cursor:pointer;justify-content:center">Bijsturen op Grip ›</div>`;
+    <div class="row small" data-waaromtotaal="${G.meer}" style="gap:10px;padding:6px 0 0;border-top:1.5px solid var(--txt);font-weight:800"><span style="flex:1">${G.meer>=0?'Meer':'Minder'} opzij dan je verdeling</span><span style="white-space:nowrap">${G.meer>=0?'+':'−'}${euro0(Math.abs(G.meer))}</span></div></div>`:'';
+  return `<div id="lagenGestort" data-gestortmeer="${G.meer}" data-gestortperiode="${esc(G.PW.perStart)}|${esc(G.PW.perEind)}" data-gestortvenster="${esc(G.PW.start)}|${esc(G.PW.eind)}" style="margin-top:8px;padding-top:8px;border-top:1.5px solid var(--line)">
+    <div class="small" data-gestortnetto="${somG}" data-erin="${G.gSav}" data-eruit="${G.eruit}" data-plan="${somP}" style="font-weight:700">Naar je lagen · ${nettoTxt}, plan ${euro0(somP)}</div>
+    ${G.PW.salNa?`<div class="small muted" data-gestortopzijnoot style="margin-top:1px">gestort vanaf je salaris op ${(()=>{ try{ return new Date(G.PW.salDag+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}).replace('.',''); }catch(_){ return G.PW.salDag; } })()}</div>`:''}
+    ${extra}${waarom}</div>`;
 }
 /* v524 (onderdeel 8, rest): bij een VOLLE LAAG vraagt Kiezen ÉÉN KEER waar het vaste bedrag (de opzij uit je verdeling) voortaan
    heen gaat, en bij een SURPLUS DAT NOG NIET IS OVERGEMAAKT ("nog over te maken EUR X") komt er na OVERBOEK_LAAT_DAGEN werkdagen
@@ -19978,7 +19974,7 @@ function renderPlan(bare){
   /* v440: "Inleg uit je potjes" (planInlegBlok) is weg van Plan: de Plan-inleg bestaat niet meer. Opzij staat als "Opzij deze
      periode" in planKpi (opzijPeriode); reserveringen en beleggen volgen in v441. */
   const L=lagenData();   // v524 (blok 1): de kop wordt de lagen-hero + per-laag-kaart; "Opzij deze periode" verhuist naar blok 2, "Alles vol" naar de laag Doelen
-  const lagenKaart=L.geenSpaar?'':planLagenKaart(L,TL), blok2=L.geenSpaar?'':planGestortKaart();   // v524 (toevoeging 1): zonder herkende spaarrekening geen per-laag-stand en geen blok 2
+  const lagenKaart=L.geenSpaar?'':planLagenKaart(L,TL), blok2='';   // onderhoud5 (punt 8): Naar je lagen en Waarom staan in het Lagen-sheet op Grip   // v524 (toevoeging 1): zonder herkende spaarrekening geen per-laag-stand en geen blok 2
   /* onderhoud3 (punt 1): de doelenlijst (Lijst/Tijdlijn, de doelrijen, "Blijft over" en "+ Doel toevoegen") staat niet meer op
      Plan: het bedrag per doel en per laag stond daar een tweede en derde keer. Hij staat in de sheet van de laag Doelen
      (planDoelenLijstHTML, openLaagDoelen) en het noodfonds in die van Beschermen. Zonder herkende spaarrekening (geen per-laag-
