@@ -127,7 +127,7 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       nf: SET.nfToegewezen, vrij: spaarVrij().vrij,
       eta: allocatePlan().filter((p) => p.type === 'goal').map((p) => p.eta),
       /* v380: de rij draagt de vol-datum in [data-rijvol] ("vol feb 2027 ›"); [data-planrechts] is vervallen */
-      vol: [...document.querySelectorAll('#s-vooruit [data-rijvol]')]
+      vol: (openLaagDoelen(), [...document.querySelectorAll('#laagDoelen [data-rijvol]')])   // onderhoud3: de rijen staan in de sheet van de laag Doelen
         .map((e) => (e.innerText.match(/vol \w+ \d{4}/) || [''])[0]).filter(Boolean),
     }));
     expect(na.goals).toEqual([['Kosten Koper', 8780], ['Inrichting woning', 220]]);   // v373: zie hierboven

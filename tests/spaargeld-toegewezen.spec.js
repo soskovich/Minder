@@ -69,7 +69,7 @@ test.describe('a · één betekenis in de kolom', () => {
     await boot(page, seed({ nfToegewezen: 900 }));
     /* v380: het woord "toegewezen" staat niet meer in de rij; [data-rijgeld] toont "€X / €Y" uit planStandEind(). De
        eigenschap blijft: de rij toont de toewijzing (900) en niet het saldo (2.000, geklemd 1.500). */
-    const r = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+    const r = await page.evaluate(() => { openLaagDoelen(); const d = document.querySelector('#sheetBg.show #laagDoelen');   // onderhoud3: de rijen staan in de sheet van Doelen
       const nf = d.querySelector('.plan-item[data-id="noodfonds"]');
       return { geld: nf.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' '), rij: nf.innerText };
     });

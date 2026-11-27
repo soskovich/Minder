@@ -49,7 +49,7 @@ test.describe('a · de stand van het toestel na de drie keuzes', () => {
 
   test('de rij zegt bijna vol; het increment staat als attribuut en niet meer in de sub (v385 → v524 punt 1)', async ({ page }) => {
     await page.evaluate(() => go('vooruit'));
-    const r = await page.evaluate(() => { const e = document.querySelector('.plan-item[data-id="noodfonds"]'); const b = e && e.querySelector('[data-rijsub]');
+    const r = await page.evaluate(() => { const e = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]'); const b = e && e.querySelector('[data-rijsub]');
       return { st: e && e.dataset.status, sub: b ? b.innerText.replace(/\s+/g, ' ').trim() : '', dezeMaand: b ? +b.dataset.rijdezemaand : null,
         later: planStandEind(allocatePlan()).per.noodfonds.nogLater }; });
     expect(r.st).toBe('bijnavol');

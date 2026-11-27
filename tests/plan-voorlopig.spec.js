@@ -9,7 +9,8 @@ const O = require('./opschonen-stand');
 const tekst = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); return e ? e.innerText.replace(/\s+/g, ' ').trim() : null; }, sel);
 
 test.describe('a · het Noodfonds met EUR 149,80 zonder geld', () => {
-  test.beforeEach(async ({ page }) => { await T.boot(page, 'na150'); await page.evaluate(() => go('vooruit')); });
+  /* onderhoud3 (punt 1): de doelrijen staan in de sheet van de laag Doelen */
+  test.beforeEach(async ({ page }) => { await T.boot(page, 'na150'); await page.evaluate(() => { go('vooruit'); openLaagDoelen(); }); });
 
   test('de invoer: er is geld zonder keuze, en de vol-datum is november', async ({ page }) => {
     const r = await page.evaluate(() => ({ z: spaarOver().zonder, zg: planStandEind().per.noodfonds.zg, vol: planVooruit().noodfonds }));
@@ -41,7 +42,7 @@ test.describe('a · het Noodfonds met EUR 149,80 zonder geld', () => {
     expect(await page.evaluate(() => document.querySelector('[data-pdzgkeuze="alles"]').dataset.gekozen)).toBe('1');
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
     await page.locator('[data-pdzgbevestig]').click();
-    await page.evaluate(() => go('vooruit'));
+    await page.evaluate(() => { go('vooruit'); openLaagDoelen(); });
     expect(await page.evaluate(() => spaarOver().zonder)).toBe(0);
     expect(await page.locator('[data-voorlopig]').count()).toBe(0);
     expect(await tekst(page, '[data-id="noodfonds"] [data-rijvol]')).not.toContain('voorlopig');
@@ -51,7 +52,7 @@ test.describe('a · het Noodfonds met EUR 149,80 zonder geld', () => {
     await page.evaluate(() => openPlanDoel('noodfonds'));
     await page.locator('[data-pdzgkeuze="v:noodfonds"]').click();
     await page.locator('[data-pdzgbevestig]').click();
-    await page.evaluate(() => go('vooruit'));
+    await page.evaluate(() => { go('vooruit'); openLaagDoelen(); });
     expect(await page.locator('[data-voorlopig]').count()).toBe(0);
   });
 });
@@ -61,7 +62,7 @@ test.describe('b · een doel met een toewijzing boven het saldo', () => {
     await O.boot(page, { set: { planOrder: ['noodfonds', 'iw', 'kk'], goals: [
       { id: 'kk', naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'auto' },
       { id: 'iw', naam: 'Inrichting', doel: 3000, gespaard: 2000, streefdatum: '2026-10', allocMode: 'auto' }] } });
-    await page.evaluate(() => go('vooruit'));
+    await page.evaluate(() => { go('vooruit'); openLaagDoelen(); });
     const r = await page.evaluate(() => ({ zg: planStandEind().per.iw.zg, laat: document.querySelector('[data-id="iw"]').dataset.laat,
       w: !!document.querySelector('[data-id="iw"][data-planwaarschuwing]'), sub: document.querySelector('[data-id="iw"] [data-rijsub]').innerText, kop: document.querySelector('[data-kpischema]').innerText,
       v: !!document.querySelector('[data-id="iw"] [data-voorlopig]') }));

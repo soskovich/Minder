@@ -65,7 +65,7 @@ test.describe('c - geen zichtbare tekst noemt het scherm nog Maand', () => {
     expect(t).not.toMatch(/\b(op|vanaf) Maand\b/);
   });
 
-  test('op de reserveringenkaart en in het spaarquote-detail', async ({ page }) => {
+  test('op de reserveringen-sheet', async ({ page }) => {
     const p = seed({ maanden: 8 }); const set = JSON.parse(p.minder_set);
     set.reserveringen = [{ id: 'r1', naam: 'Waterschap', bedrag: 900, intervalM: 12, vervalmaand: M1.slice(0, 4) + '-12' }];
     set.resAcc = 'NL01SAVE0000004323'; p.minder_set = JSON.stringify(set);
@@ -77,9 +77,7 @@ test.describe('c - geen zichtbare tekst noemt het scherm nog Maand', () => {
     // v344: de kaart op Plan is weg; de lijst staat in de sheet op Grip
     const kaart = await page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
     expect(kaart).not.toContain('Maand');
-    const detail = await page.evaluate((m) => { openKpiDetail('inleg', m); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); }, M1);
-    expect(detail).toContain('lees je op Grip');
-    expect(detail).not.toContain('maandscherm');
+    // onderhoud3 (punt 7): het spaarquote-detail (openKpiDetail) is opgeruimd; alleen de reserveringen-sheet blijft hier
   });
 
   test('de tijdseenheid blijft: een maandinvoer heet Maand', async ({ page }) => {

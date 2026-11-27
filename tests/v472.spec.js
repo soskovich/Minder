@@ -21,7 +21,7 @@ async function stand(page, o) {
       : { balGeland: true, balFout: '', txFout: o.txFout ? 'ASPSP_RATE_LIMIT_EXCEEDED' : '', _op: nu, _veldOp: { balGeland: nu, txFout: nu } };
     save(); renderVooruit(); }, [F.SAV, o]);
 }
-const lees = (page) => page.evaluate(() => { const TK = planTekort(), R = planTerug(), A = spaarPlanAansl(), r = document.querySelector('.plan-item[data-id="noodfonds"]');
+const lees = (page) => page.evaluate(() => { const TK = planTekort(), R = planTerug(), A = spaarPlanAansl(), r = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]');
   const g = document.querySelector('#spaarPlanRegel');
   return { saldo: TK.saldo, reden: TK.reden, keuze: TK.keuze.noodfonds || 0, nog: TK.nog.noodfonds || 0, terug: R.totaal, vrij: A.vrij, bron: A.bron,
     nf: A.doelen.find((d) => d.id === 'noodfonds'), st: r.dataset.status, geldTxt: r.querySelector('[data-rijgeld]').innerText,

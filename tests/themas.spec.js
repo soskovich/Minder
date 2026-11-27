@@ -62,7 +62,6 @@ test.describe('b · de hele app volgt', () => {
     const uit = await page.evaluate(() => ({
       chart: (document.querySelector('#s-ins #insMaand') || {}).outerHTML || '',
       brug: brugBlok(months().filter((m) => m < thisYM()).slice(-1)[0]),
-      kpi: maandKpiBlok(curMonth || months()[months().length - 1]),   // v208: de tegels staan alleen nog op Maand
       avatar: coachAvatar(),
     }));
     for (const [naam, html] of Object.entries(uit)) {

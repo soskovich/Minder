@@ -12712,7 +12712,8 @@ function gripCyclus(SIG){
   /* keuzes: te ruim herzien, de actieregel bij je bank, een reservering voor wat terugkomt, de patronen zonder keuze, en de
      handelingen uit Let op met hun signaal als reden */
   const kies=[];
-  for(const x of G3open){ const kq=esc(x.key).replace(/'/g,"\\'"); kies.push({id:'vastpost:'+x.key, sym:'vast:gestegen', bron:'vast', naam:x.status==='vervangt'?`${x.naam} · verschil ${x.verschil>=0?'+':'−'}${euro0(Math.abs(x.verschil))}/mnd · ${x.verschil>0?'accepteren':'vastleggen'} of nakijken`:x.onbekend?`${x.naam}: nieuw · bedrag nog onbekend · nakijken`:`${x.naam}: ${x.status==='nieuw'?'nieuw':'gestegen'} +${euro0(x.verschil)} · accepteren of nakijken`, reden:`oorzaak zeker uit je boekingen · ${x.status==='nieuw'?`nieuwe vaste last${x.sinds?' sinds '+dagKort(x.sinds):''}`:x.status==='vervangt'?'vervangt een gestopte post · alleen het verschil telt':`${euro0(x.mV)} → ${euro0(x.mN)} per maand`}`, act:`openVastPostKeuze('${kq}')`, x}); }
+  for(const x of G3open){ const kq=esc(x.key).replace(/'/g,"\\'"); const VSk=(function(){ try{ return vastVervangVoorstel(x); }catch(_){ return null; } })();
+    kies.push({id:'vastpost:'+x.key, sym:'vast:gestegen', bron:'vast', vervangVoorstel:VSk?VSk.key:null, naam:(VSk && x.status==='nieuw')?`${x.naam}: nieuw +${euro0(x.verschil)}/mnd · vervangt dit ${VSk.naam}?`:x.status==='vervangt'?`${x.naam} · verschil ${x.verschil>=0?'+':'−'}${euro0(Math.abs(x.verschil))}/mnd · ${x.verschil>0?'accepteren':'vastleggen'} of nakijken`:x.onbekend?`${x.naam}: nieuw · bedrag nog onbekend · nakijken`:`${x.naam}: ${x.status==='nieuw'?'nieuw':'gestegen'} +${euro0(x.verschil)} · accepteren of nakijken`, reden:`oorzaak zeker uit je boekingen · ${x.status==='nieuw'?`nieuwe vaste last${x.sinds?' sinds '+dagKort(x.sinds):''}`:x.status==='vervangt'?'vervangt een gestopte post · alleen het verschil telt':`${euro0(x.mV)} → ${euro0(x.mN)} per maand`}`, act:`openVastPostKeuze('${kq}')`, x}); }
   const inkGekozen=N3 && (SET.inkomenVerdeeld||{})[N3.ym];
   if(N3 && !inkGekozen) kies.push({id:'inkomen:verdeel', sym:'inkomen:na', bron:'inkomen', naam:'Verhoging verdelen', reden:`vast inkomen +${euro0(N3.d)} (+${N3.pct}%) vanaf ${f3MN(N3.ym)}${N3.geenNa?'':' · '+naJeSalarisTekst(N3)}`, act:'openVerhogingVerdelen()'});
   /* v473: eenmalig geld uit je salaris is een eigen keuze, los van de verhoging en zonder voorkeuze */
@@ -12726,7 +12727,7 @@ function gripCyclus(SIG){
     for(const S of L){ const A=(SET.eenmaligVerdeeld||{})[S.id]; if(A && A.klopt) continue; let EV=null; try{ EV=A?null:eenmaligAlVerdeeld(S); }catch(_){}
       const sq=esc(String(S.id)).replace(/'/g,"\\'");
       if(EV && EV.dekt) kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'', bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} lijkt ${EV.dekt==='heel'?'al verdeeld':`voor ${euro0(EV.boven)} al verdeeld`}`, reden:`${eenmaligVerdeeldTekst(EV)} · klopt / niet`, act:`openEenmaligVerdeeld('${sq}')`, EV, S});
-      else kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'',  bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} verdelen`, reden:`${S.vast==null?`${S.naam||'inkomen'} van ${dagKort(S.datum)}`:`het deel van je salaris van ${dagKort(S.datum)} boven ${euro0(S.vast)}`}${S.nietGesplitst?' · nog niet gesplitst':''}${EV?` · sinds ${dagKort(EV.van)} ${euro0(EV.naar)} naar opzij, je afspraak ${euro0(EV.afspraak)}`:''}`, act:`openMeevaller(${Math.round(S.eenmalig)},'salaris')`}); } } }catch(_){}
+      else kies.push({id:'inkomen:eenmalig:'+S.id, sym:N3?'inkomen:na':'',  bron:'inkomen', naam:`Eenmalig ${euro0(S.eenmalig)} verdelen`, reden:`${(A && A.deel)?`de rest · ${euro0(A.gespaard||0)} al gespaard · `:''}${S.vast==null?`${S.naam||'inkomen'} van ${dagKort(S.datum)}`:`het deel van je salaris van ${dagKort(S.datum)} boven ${euro0(S.vast)}`}${S.nietGesplitst?' · nog niet gesplitst':''}${EV?` · sinds ${dagKort(EV.van)} ${euro0(EV.naar)} naar opzij, je afspraak ${euro0(EV.afspraak)}`:''}`, act:`openMeevaller(${Math.round(S.eenmalig)},'salaris')`}); } } }catch(_){}
   /* v501 punt 8: de salarisverdeling komt pas in Kiezen na twee salarissen op rij met meer dan SALM2_HERZIEN afwijking per rekening */
   try{ const HZ=salM2Herzien(); if(HZ) kies.push({id:'salm2:herzien', sym:'', bron:'salaris', naam:'Zo verdeel je je salaris', reden:`twee salarissen op rij (${HZ.periodes.map(f3MN).join(', ')}) week ${HZ.rek.map(a=>aanslNaam(a)).join(' en ')} meer dan ${euro0(SALM2_HERZIEN)} af van je afspraak`, act:"openSalVerdeling('salverdeling')"}); }catch(_){}
   /* v524 (onderdeel 8, rest): een volle laag → waar gaat het vaste bedrag voortaan heen (één keer, niets voorgekozen); en een
@@ -14909,7 +14910,8 @@ function onregBinnen(){ let start=thisYM()+'-01'; try{ const P=salPeriode(); if(
   for(const t of TX){ if(t.pending || !(t.amount>0)) continue; const d=t.date.slice(0,10); if(d<start || d>vandaag) continue;
     let e=0; try{ e=inkomenEenmalig(t); }catch(_){} if(!(e>0.5)) continue;
     if(SET.onregBestemming && SET.onregBestemming[t.id]) continue;
-    { const A=(SET.eenmaligVerdeeld||{})[t.id]; if(A && A.klopt) continue; }   // v511 (punt 3): "klopt, al verdeeld"
+    { const A=(SET.eenmaligVerdeeld||{})[t.id]; if(A && A.klopt) continue;   // v511 (punt 3): "klopt, al verdeeld"
+      if(A && A.deel){ if(A.rest>0.5) uit.push({id:t.id, naam:titleCase(cleanMerch(t.name)||t.name||'Inkomen'), bedrag:Math.round(A.rest), datum:d, deel:true, gespaard:Math.round(A.gespaard||0)}); continue; } }   // onderhoud3 (punt 4): "Deels": alleen de rest blijft te verdelen
     uit.push({id:t.id, naam:titleCase(cleanMerch(t.name)||t.name||'Inkomen'), bedrag:Math.round(e), datum:d}); }
   return uit.sort((a,b)=>b.bedrag-a.bedrag); }
 function onregState(id){ const w=window._onreg=window._onreg||{}; return (w[id]=w[id]||{delen:{}, resWelke:'', anderLabel:''}); }
@@ -14930,9 +14932,9 @@ function onregKaart(){ const B=onregBinnen(); if(!B.length) return ''; const e=e
     /* v511 (punt 3): EERST METEN (eenmaligAlVerdeeld, zoals v501 in Kiezen). Ging er sinds de binnenkomst meer naar opzij dan je afspraken
        over die periodes, en dekt dat het hele bedrag, dan "lijkt al verdeeld · klopt / niet" en geen invulvelden; niets voorgekozen. */
     const A=(SET.eenmaligVerdeeld||{})[bon.id]; let EV=null; if(!A){ try{ EV=eenmaligAlVerdeeld({datum:bon.datum, eenmalig:bon.bedrag}); }catch(_){} }
-    if(EV && EV.dekt==='heel'){ const sq=esc(String(bon.id)).replace(/'/g,"\\'");
-      return `<div class="card" data-onreg="${esc(bon.id)}" data-onregverdeeld="${EV.boven}"><div class="hlabel" style="margin:0">${esc(bon.naam)} · eenmalig ${e(bon.bedrag)} lijkt al verdeeld</div>${gripSub(`binnen op ${dagKort(bon.datum)} · ${eenmaligVerdeeldTekst(EV)} · klopt / niet`)}
-      <div class="row" style="gap:8px;margin-top:8px"><button class="btn sec" data-onregklopt style="flex:1" onclick="eenmaligVerdeeldZet('${sq}', true)">Klopt, al verdeeld</button><button class="btn sec" data-onregniet style="flex:1" onclick="eenmaligVerdeeldZet('${sq}', false)">Nee, nog verdelen</button></div></div>`; }
+    if(EV && EV.dekt){ const sq=esc(String(bon.id)).replace(/'/g,"\\'"), rest=Math.max(EV.een-EV.boven,0);
+      return `<div class="card" data-onreg="${esc(bon.id)}" data-onregverdeeld="${EV.boven}"><div class="hlabel" style="margin:0">${esc(bon.naam)} · eenmalig ${e(bon.bedrag)} ${EV.dekt==='heel'?'lijkt al verdeeld':`lijkt voor ${e(EV.boven)} al verdeeld`}</div>${gripSub(`binnen op ${dagKort(bon.datum)} · ${eenmaligVerdeeldTekst(EV)} · is het eenmalige geld daarmee al verdeeld?`)}
+      <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sec" data-onregklopt style="flex:1" onclick="eenmaligVerdeeldZet('${sq}', true)">Ja, al gespaard</button>${rest>0.5?`<button class="btn sec" data-onregdeel style="flex:1" onclick="eenmaligVerdeeldZet('${sq}', 'deel')">Deels, verdeel de rest ${e(rest)}</button>`:''}<button class="btn sec" data-onregniet style="flex:1" onclick="eenmaligVerdeeldZet('${sq}', false)">Nee, nog verdelen</button></div></div>`; }
     const s=onregState(bon.id), delen=s.delen||{}, som=ONREG_SOORTEN.reduce((a,x)=>a+(+delen[x.k]||0),0), rest=bon.bedrag-som, klaar=Math.abs(rest)<0.5;
     const rij=x=>{ const sel=x.k==='reservering'&&resL.length?`<select data-onregreswelke onchange="onregResWelke('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px"><option value="">welke reservering?</option>${resL.map(v=>`<option value="${esc(v.id)}" ${s.resWelke===v.id?'selected':''}>${esc(v.naam||'Reservering')}</option>`).join('')}</select>`:'';
       const ander=x.k==='anders'?`<input type="text" data-onregander placeholder="waarvoor?" value="${esc(s.anderLabel||'')}" oninput="onregAnder('${esc(bon.id)}',this.value)" style="margin-top:3px;max-width:160px">`:'';
@@ -15028,7 +15030,11 @@ function vastGestegenTitel(G){ return 'Vaste lasten '+((G && G.stijging<0)?'geda
    schema, zoals de rijen van vastGestegenData). */
 function vastOudePost(van, SCH){ if(!van) return null; let t=null; for(const x of telbareTx()) if(x.amount<0 && recurKey(x)===van && (!t || x.date>t.date)) t=x; if(!t) return null;
   let sch=null; try{ sch=(SCH||recurringSchedule(true).filter(x=>x.type==='fixed')).find(x=>x.key===van)||null; }catch(_){}
-  return {key:van, naam:titleCase(cleanMerch(t.name)||t.name||van), maand:Math.round(postMaandBedrag(sch, Math.abs(t.amount))), laatste:String(t.date).slice(0,10)}; }
+  return {key:van, naam:titleCase(cleanMerch(t.name)||t.name||van), maand:Math.round(postMaandBedrag(sch, Math.abs(t.amount))), laatste:String(t.date).slice(0,10), cat:catOf(t)}; }
+/* onderhoud3 (punt 4, mockup "kleine vragen" 3): HET VOORSTEL BIJ "VERVANGT DIT EEN GESTOPTE POST?": de gestopte post in DEZELFDE
+   categorie als de nieuwe (de nieuwste eerst, vastGestoptePosten sorteert al op laatste betaling). Alleen een voorstel: hij staat
+   gemarkeerd, niet aangevinkt (window._vpk.van blijft leeg tot jij tikt). Geen post in dezelfde categorie: geen voorstel. */
+function vastVervangVoorstel(p){ if(!p || !(p.status==='nieuw') || p.onbekend) return null; try{ return vastGestoptePosten(p.key).find(x=>x.cat && x.cat===p.cat)||null; }catch(_){ return null; } }
 /* v501 punt 4: de gestopte vaste lasten die een nieuwe post kan vervangen: gestopt, verlopen of opgezegd (postStatusMap en
    SET.postStatus), met naam en laatste maandbedrag; de nieuwe post zelf niet. */
 function vastGestoptePosten(behalve){ const M=postStatusMap(), uit=[], gezien=new Set();
@@ -15047,8 +15053,8 @@ function renderVastPostKeuze(){ const S=window._vpk||{}, G=vastGestegenData(), p
   const bron=S.optie==='accepteren'?`<div data-vpkbron style="margin:6px 0 0 24px"><div class="small" style="font-weight:700">Waar komt ${euro0(p.verschil)} per maand vandaan?</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${BR.map(x=>`<span class="chip${S.bron===x.id?' on':''}" data-vpkbronkeuze="${esc(x.id)}" style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="window._vpk.bron='${esc(x.id)}';renderVastPostKeuze()">uit ${esc(x.naam)}</span>`).join('')}</div></div>`:'';
   /* v501 punt 4: een nieuwe post kan een gestopte vervangen; de gestopte vaste lasten staan als chips, niets voorgekozen */
   const magVervang=(p.status==='nieuw'||p.status==='vervangt') && !p.onbekend;   // v503: zonder bekend bedrag is er geen verschil, dus geen "vervangt"
-  const GP=magVervang?vastGestoptePosten(p.key):[], gv=GP.find(x=>x.key===S.van), nwNaam=p.naam.split(' → ').pop();
-  const vervang=S.optie==='vervangt'?`<div data-vpkvan style="margin:6px 0 0 24px"><div class="small" style="font-weight:700">Welke gestopte post vervangt ${esc(nwNaam)}?</div>${GP.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${GP.map(x=>`<span class="chip${S.van===x.key?' on':''}" data-vpkvankeuze="${esc(x.key)}" style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="window._vpk.van='${esc(x.key).replace(/'/g,"\\'")}';renderVastPostKeuze()">${esc(x.naam)} · ${euro0(x.maand)}/mnd</span>`).join('')}</div>`:gripSub('geen gestopte vaste last gevonden')}</div>`:'';
+  const GP=magVervang?vastGestoptePosten(p.key):[], gv=GP.find(x=>x.key===S.van), nwNaam=p.naam.split(' → ').pop(), VS=magVervang?vastVervangVoorstel(p):null;
+  const vervang=S.optie==='vervangt'?`<div data-vpkvan style="margin:6px 0 0 24px"><div class="small" style="font-weight:700">Welke gestopte post vervangt ${esc(nwNaam)}?</div>${GP.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${GP.map(x=>`<span class="chip${S.van===x.key?' on':''}" data-vpkvankeuze="${esc(x.key)}"${VS&&VS.key===x.key?' data-vpkvoorstel':''} style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="window._vpk.van='${esc(x.key).replace(/'/g,"\\'")}';renderVastPostKeuze()">${esc(x.naam)} · ${euro0(x.maand)}/mnd${VS&&VS.key===x.key?' · voorstel':''}</span>`).join('')}</div>`:gripSub('geen gestopte vaste last gevonden')}</div>`:'';
   const gev=S.optie==='nakijken'?`De post ${esc(p.naam)} gaat open (status, laatste betaling). Er verandert niets aan je budget.`
     :S.optie==='vervangt'?(gv?`<span data-vpkverschil="${p.mN-gv.maand}">${esc(gv.naam)} → ${esc(nwNaam)} · verschil ${p.mN-gv.maand>=0?'+':'−'}${euro0(Math.abs(p.mN-gv.maand))}/mnd</span> · alleen het verschil telt in je vaste lasten`:'')
     :S.optie==='accepteren'&&b?`${esc(cn)} ${euro0(A)} → ${euro0(A+p.verschil)} per maand${b.k?`<br>${esc(b.naam)} ${euro0(b.bud)} → ${euro0(b.bud-p.verschil)}`:''}<br><span data-budgetgevolg>${esc(budgetWijzGevolgTekst(budgetWijzGevolg(()=>{ const m=thisYM(); potPlanZet(p.cat, m, A+p.verschil); if(b.k) potPlanZet(b.k, m, b.bud-p.verschil); })))}</span>`:'';
@@ -15058,9 +15064,10 @@ function renderVastPostKeuze(){ const S=window._vpk||{}, G=vastGestegenData(), p
   $('#sheet').innerHTML=`<div class="grab"></div><div id="vastPostKeuze" data-vastpost="${esc(p.key)}" data-vastpoststatus="${esc(p.status)}"><div class="small muted">${esc(vastGestegenTitel(G))} · zeker uit je boekingen</div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-top:2px">${esc(p.naam)} ${p.status==='nieuw'?'is nieuw':p.status==='vervangt'?'':'is gestegen'}</div>
     <div class="small" data-vpkfeit style="margin-top:6px;line-height:1.45">${p.status==='nieuw'?`${p.sinds?`nieuw sinds ${esc(dagKort(p.sinds))}`:'nieuw'}, ${p.onbekend?'<span data-vpkonbekend>bedrag nog onbekend</span>':`${euro0(p.verschil)} per maand`}`:p.status==='vervangt'?`vervangt een gestopte post van ${euro0(p.mV)} · nu ${euro0(p.mN)} · verschil ${p.verschil>=0?'+':'−'}${euro0(Math.abs(p.verschil))} per maand`:`${G.voor.map(f3MN).join(' · ')}: ${p.voor.map(euro0).join(' · ')} → ${G.na.map(f3MN).join(' · ')}: ${p.na.map(euro0).join(' · ')} · +${euro0(p.verschil)} per maand`} · in ${esc(cn)}</div>
-    ${p.verschil>0?opt('accepteren', `Accepteren: ${esc(cn)} ${euro0(p.verschil)} omhoog`, 'het vaste budget omhoog, jij kiest uit welk potje')+bron:''}
+    ${VS?`<div class="small" data-vpkvraag="${esc(VS.key)}" style="margin-top:8px;font-weight:700">Vervangt dit een gestopte post? <span class="muted" style="font-weight:400">Voorstel: ${esc(VS.naam)} (gestopt, ook ${esc((CATS[p.cat]||{}).name||p.cat)}) · niet aangevinkt</span></div>`:''}
+    ${p.verschil>0?opt('accepteren', VS?`Nee, echt nieuw: ${esc(cn)} ${euro0(p.verschil)} omhoog`:`Accepteren: ${esc(cn)} ${euro0(p.verschil)} omhoog`, 'het vaste budget omhoog, jij kiest uit welk potje')+bron:''}
     ${opt('nakijken', 'Nakijken', 'de post openen: klopt hij, loopt hij nog')}
-    ${magVervang?opt('vervangt', p.status==='vervangt'?`Vervangt ${esc(p.naam.split(' → ')[0])}`:'Vervangt een gestopte post', p.status==='vervangt'?'alleen het verschil telt · of kies een andere gestopte post':'alleen het verschil met die post telt')+vervang:''}
+    ${magVervang?opt('vervangt', p.status==='vervangt'?`Vervangt ${esc(p.naam.split(' → ')[0])}`:VS?`Ja, vervangt een gestopte post (voorstel ${esc(VS.naam)})`:'Vervangt een gestopte post', p.status==='vervangt'?'alleen het verschil telt · of kies een andere gestopte post':'alleen het verschil met die post telt')+vervang:''}
     ${gev?`<div class="small" data-vpkgevolg style="margin-top:8px;padding:7px 10px;border-radius:10px;background:var(--card2);line-height:1.45"><b>Gevolg</b><br>${gev}</div>`:''}
     ${sheetVoet(`<button class="btn" data-vpkbevestig ${reden?'disabled':''} onclick="vastPostKeuzeZet('${kq}')">${S.optie==='nakijken'?'Post openen':S.optie==='vervangt'?'Vastleggen':'Bevestigen'}</button><button class="btn sec" onclick="closeSheet()">Terug</button>`, reden)}</div>`; }
 function vastPostKeuzeZet(key){ const S=window._vpk||{}, G=vastGestegenData(), p=G&&G.posten.find(x=>x.key===key); if(!p || !S.optie) return;   /* leest opnieuw (v319) */
@@ -16632,7 +16639,7 @@ function verplichtingen(maanden){
 function resOpTermijn(r){ if(!r || !r.vanaf || !r.vervalmaand) return null; const iv=Math.max(+r.intervalM||0,0); if(!iv) return null;
   const pm=(+r.bedrag||0)/iv; let n=0, y=String(r.vanaf); for(let i=0;i<240 && y<=r.vervalmaand;i++){ n++; y=nextYM(y); }
   return {ym:r.vervalmaand, n, pm, op:Math.min(n*pm, +r.bedrag||0)}; }
-function dekking(maanden){
+function dekking(maanden, opts){
   const H=Math.max(Math.round(+maanden||12),1);
   const lijst=resLijst();
   const V=verplichtingen(H);
@@ -16700,7 +16707,7 @@ function dekking(maanden){
     /* v510 punt 2: DE LAAGSTE POTSTAND OVER DE HORIZON, INLEG MEEGEREKEND. Per maand (offset 0..H-1) de stand min elke post tot en
        met die maand plus de inleg vanaf volgende maand (resInlegPerMaand(), je afspraak). De reeks staat op D zodat elke lezer dezelfde
        laagste stand leest (v104); gedektTot en gat blijven op de pot alleen, zoals sinds v131. */
-    { const inl=resInlegPerMaand(); let min=null;
+    { const inl=(opts && opts.inleg!=null)?{bedrag:Math.max(+opts.inleg||0,0), bron:opts.bron||'periode'}:resInlegPerMaand(); let min=null;   // onderhoud3 (punt 6): alleen het reserveringen-sheet geeft een eigen inleg mee
       for(let m=0;m<H;m++){ const uit=V.filter(x=>x.offset<=m).reduce((a,x)=>a+x.bedrag,0), st=Math.round((stand+inl.bedrag*m-uit)*100)/100;
         reeks.push({maand:resYmPlus(m), offset:m, stand:st}); if(min==null || st<min.stand) min={maand:resYmPlus(m), offset:m, stand:st}; }
       laagste=min?Object.assign({inleg:inl.bedrag, inlegBron:inl.bron}, min):null;
@@ -16848,8 +16855,43 @@ function resCheckLine(){
 }
 /* ---- beheer ---- */
 function openReserveringen(){ renderResSheet(); showSheetBg(); }
+/* onderhoud3 (punt 6): EEN BEDRAG IN HET RESERVERINGEN-SHEET. GEMETEN op de stand van de gebruiker noemde het sheet drie bedragen voor
+   hetzelfde: "inleg EUR 36 per periode, niets extra nodig" (resInlegPerMaand, de oude afspraak), "EUR 27 per maand, tekort EUR 27"
+   (de opbouw per maand) en EUR 42 in de verdeling. Het sheet rekent nu per SALARISPERIODE met het bedrag van de verdeling
+   (rekVoorstel().reserveringen, rekReserveringen; terugval rekReserveringen vanaf de start van de lopende periode), en telt die inleg
+   pas als dekking als hij deze periode GESTORT is of zijn moment nog moet komen (het salaris nog niet binnen, of binnen
+   OVERBOEK_LAAT_DAGEN werkdagen na de storting): zoals Groeien in v524 een inleg die niet gestort is niet als gedaan telt. Alleen
+   dit sheet leest dat bedrag; dekking() zonder opts (Grip, de tegel, maandRegels) is ongewijzigd. */
+function resSheetPeriode(){
+  let PW=null; try{ PW=lagenPeriode(); }catch(_){}
+  let per=null, rijen=[], bron='verdeling';
+  try{ const P=rekVoorstel(); if(P && P.ok && P.resOk){ per=Math.round(+P.reserveringen||0); rijen=resPeriodeRijen(P); } }catch(_){}
+  if(per==null){ try{ const RR=rekReserveringen(PW?PW.perStart:thisYM()+'-01'); if(RR.ok){ per=RR.totaal; rijen=RR.rijen.map(x=>Object.assign({}, x, {perR:Math.round(x.per)})); bron='reserveringen'; } }catch(_){} }
+  let ra=null; try{ ra=resAccId(); }catch(_){}
+  const gestort=(ra && PW)?Math.round(lagenGestortOp(ra, PW)):0;
+  let komt=false, moment=null; try{ const SP=salPeriode(); const w=SP&&SP.cur&&SP.cur.werkelijk; if(!w) komt=true; else { moment=werkdagPlus(String(w).slice(0,10), OVERBOEK_LAAT_DAGEN); komt=vandaagYMD()<moment; } }catch(_){ komt=false; }
+  const gedekt=per!=null && per>0 && (gestort>=per-0.5 || komt);
+  return {PW, per, rijen, bron, gestort, komt, moment, gedekt, telt:per!=null&&per>0?(gedekt?per:0):0}; }
+/* onderhoud3 (punt 6): DE ZIN VAN HET SHEET, PER SALARISPERIODE. dekkingTekst() noemt bij een gat het bedrag PER MAAND om het te
+   dichten (dekkingDichtenZin) en bij een inleg die nog niet telt "zonder inleg (je verdeling noemt geen bedrag)"; naast de kop
+   "EUR X per salarisperiode" zijn dat een tweede bedrag en een onware bijzin. GEMETEN: EUR 37 in de pot, een boete van EUR 299, de
+   verdeling EUR 262 per periode en EUR 20 gestort gaf "EUR 262 per salarisperiode" EN "EUR 131 per maand" EN "zonder inleg". De zin noemt
+   het bedrag van de inleg niet nog eens (dat staat in de kop) en geen bedrag per maand: telt de inleg (gestort of nog te komen), dan
+   wat er met die inleg staat bij de post die het knelt; telt hij nog niet, dan dat, en wat je pot ZONDER die inleg dekt. Zonder bedrag van de verdeling de gewone dekkingTekst(). */
+function resSheetZin(D, RP){
+  if(!RP || RP.per==null || !D || !D.volledig || !D.regels.some(r=>r.soort==='post')) return dekkingTekst(D);
+  if(RP.per<=0) return D.gat?`Je verdeling zet deze periode niets opzij voor je reserveringen. In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort.`:dekkingTekst(D);
+  if(RP.telt>0){ const IL=D.inlegDekt; if(!IL) return dekkingTekst(D);
+    if(IL.ok){ const e=D.gat; if(!e) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. Er is niets meer nodig tot de volgende post.`;
+      const r=(IL.eerste && IL.eerste.maand===e.maand)?IL.eerste:null; const stand=r?r.stand:(D.werkelijkeStand||0)+IL.inleg*(doelMaandenTot(e.maand)||0);
+      return `Met die inleg staat er in ${resMaandLabel(e.maand)} ${euro0(stand)}; ${e.naam} van ${euro0(e.bedrag)} is gedekt. Er is niets extra nodig.`; }
+    const g=IL.gat; return `Met die inleg staat er in ${resMaandLabel(g.maand)} ${euro0(g.stand)}; daar komt ${g.naam} van ${euro0(g.bedrag)} en dan kom je ${euro0(g.tekort)} tekort.`; }
+  const pot=D.gat?`Zonder die inleg dekt je pot ${D.gedektTot?`tot en met ${resMaandLabel(D.gedektTot)}; in ${resMaandLabel(D.gat.maand)}`:`de eerstvolgende post niet: in ${resMaandLabel(D.gat.maand)}`} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort.`
+    :`Je pot dekt ook zonder die inleg tot en met ${resMaandLabel(D.gedektTot)}.`;
+  return `Die inleg is deze periode nog niet gestort, dus hij telt nog niet. ${pot}`; }   // wat wel gestort is staat in de kop
 function renderResSheet(){
-  const D=dekking(12); const acc=resAccId(); const stand=resSaldo();
+  const RP=resSheetPeriode();
+  const D=dekking(12, RP.per!=null?{inleg:RP.telt, bron:'periode'}:null); const acc=resAccId(); const stand=resSaldo();
   const lijst=resLijst().slice().sort((a,b)=>{ const oa=resVolgende(a), ob=resVolgende(b);
     return (oa==null?999:oa)-(ob==null?999:ob) || String(a.naam||'').localeCompare(String(b.naam||'')); });
   const spaarBotst = acc && (typeof isSavingsAcc==='function') && isSavingsAcc(acc);
@@ -16882,17 +16924,20 @@ function renderResSheet(){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="resHead">Reserveringen</div>
     <div class="small muted" style="margin-bottom:12px">Kosten die de komende twaalf maanden aankomen maar niet elke maand vallen. Je voert ze zelf in.</div>
-    <div class="small" style="color:var(--mut2);line-height:1.55;margin-bottom:10px">${esc(dekkingTekst(D))}</div>
+    ${RP.per!=null?`<div class="row" data-resperiodekop="${RP.per}" data-resgestort="${RP.gestort}" data-resgedekt="${RP.gedekt?1:0}" style="padding:7px 10px;border-radius:10px;background:var(--card2);margin-bottom:8px;gap:8px;align-items:baseline"><span class="small" style="flex:1;min-width:0"><b>${euro0(RP.per)} per salarisperiode</b><span style="display:block;color:var(--mut2)">volgens je verdeling · ${RP.gestort>=RP.per-0.5?`${euro0(RP.gestort)} gestort deze periode`:RP.komt?`deze periode nog te storten${RP.moment?` (uiterlijk ${esc(dagKort(RP.moment))})`:''}`:`${euro0(RP.gestort)} gestort · telt nog niet als dekking`}</span></span>${RP.rijen.length?`<span role="button" class="small" style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="openResPeriode()">per post ›</span>`:''}</div>`:''}
+    <div class="small" data-resdekzin style="color:var(--mut2);line-height:1.55;margin-bottom:10px">${esc(resSheetZin(D, RP))}</div>
     <div class="hlabel" style="margin:14px 2px 4px">Reserveringsrekening</div>
     ${accRij}${botsing}
     <div class="hlabel" style="margin:16px 2px 4px">Verplichtingen</div>
     ${resCheckLine()}${lijst.length?lijst.map(rij).join(''):'<div class="small muted" style="padding:8px 0">Nog niets ingevoerd.</div>'}
     <button class="cp-add" style="margin-top:10px" onclick="openReservering()">+ Verplichting toevoegen</button>
     ${D.aantal?`<div class="hlabel" style="margin:18px 2px 4px">De opbouw</div>
-      <div class="row" data-resnodig style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Nog nodig per maand</span><span class="small" style="font-weight:700">${D.nodigPerMaand==null?'onbekend':D.nodigPerMaand>0?euro0(D.nodigPerMaand):D.gat?`${euro0(D.gat.tekort)} deze maand`:'niets tot de volgende post'}</span></div>
+      ${RP.per!=null?''   /* onderhoud3 (punt 6): de inleg per periode staat een keer, in de kop van het sheet */
+        :`<div class="row" data-resnodig style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Nog nodig per maand</span><span class="small" style="font-weight:700">${D.nodigPerMaand==null?'onbekend':D.nodigPerMaand>0?euro0(D.nodigPerMaand):D.gat?`${euro0(D.gat.tekort)} deze maand`:'niets tot de volgende post'}</span></div>`}
       <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Hoort nu in de pot te staan</span><span class="small" style="font-weight:700">${euro0(D.benodigdeStand)}</span></div>
       <div class="row" style="padding:7px 0"><span class="small" style="flex:1">Staat er nu</span><span class="small" style="font-weight:700">${D.werkelijkeStand==null?'onbekend':euro0(D.werkelijkeStand)}</span></div>
-      ${D.volledig&&D.tekort>0?`<div class="row" style="padding:9px 0 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;font-weight:700">Tekort</span><span class="small" style="font-weight:800">${euro0(D.tekort)}</span></div>`:''}`:''}
+      ${D.volledig&&D.tekort>0&&!(RP.per!=null&&D.inlegDekt&&D.inlegDekt.ok)?`<div class="row" style="padding:9px 0 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;font-weight:700">Tekort</span><span class="small" style="font-weight:800">${euro0(D.tekort)}</span></div>`:''}`:''}
+    ${verschuivingIngang()}
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Deze lijst voed je zelf; Minder leest hem niet uit je transacties. De reserveringsinleg staat los van je spaardoelen en verdeelt je spaarinleg niet mee.</div>`;
 }
 function openResAccPick(){
@@ -16950,12 +16995,13 @@ function resBetaaldRegel(v){
   if(resVolgende(v)==null) return '';
   return `<div class="small" style="margin-top:14px;text-align:center"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="resBetaaldZet('${id}')">Deze post is betaald \u203a</span></div>`;
 }
+/* de ENE schrijver van de vlag (v268); onderhoud3 (punt 5) geeft er de boeking bij mee als jij hem aanwees */
+function resBetaaldVlag(id, o, tx){ SET.resBetaald=SET.resBetaald||{}; const f={op:vandaagYMD(), maand:resYmPlus(o)}; if(tx) f.tx=tx; SET.resBetaald[id]=f; }
 function resBetaaldZet(id){
   const v=resLijst().find(x=>x.id===id); if(!v) return;
   const o=resVolgende(v);
   if(o==null){ toast('Er staat geen termijn open'); return; }
-  SET.resBetaald=SET.resBetaald||{};
-  SET.resBetaald[id]={op:vandaagYMD(), maand:resYmPlus(o)};
+  resBetaaldVlag(id, o);
   save(); render();
   toast(`${ICON('check')} Betaald \u00b7 onthouden`);
   /* v269: de twee vlaggen raken elkaar op precies dit moment en nergens anders. Deze post staat nu
@@ -18722,7 +18768,7 @@ function planZonderAfKeuze(P){
 function opnameLijst(ym){ ym=ym||thisYM(); let sav; try{ sav=new Set(n26SavingsAccounts()); }catch(_){ return []; } if(!sav.size) return [];
   return (txOfMonth(ym)||[]).filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t)).sort((a,b)=>a.date<b.date?-1:1); }
 function opnameBronVan(t){ const e=(SET.opnameBron||{})[t&&t.id]; return (e&&e.bron)?e.bron:null; }
-function opnameBronNaarDoel(ym){ const o={}; for(const t of opnameLijst(ym)){ const b=opnameBronVan(t); if(b && b!=='noodfonds') o[b]=Math.round(((o[b]||0)+(-t.amount))*100)/100; } return o; }
+function opnameBronNaarDoel(ym){ const o={}; let L=[]; try{ L=opnameLijstPerioden(); }catch(_){ L=opnameLijst(ym); } for(const t of L){   /* onderhoud3 (punt 2): dezelfde opnames als de sheet (lopende + vorige salarisperiode), anders telt een keuze van 12 nov op 2 dec niet meer */ const b=opnameBronVan(t); if(b && b!=='noodfonds') o[b]=Math.round(((o[b]||0)+(-t.amount))*100)/100; } return o; }
 function setOpnameBron(id, bron){ SET.opnameBron=SET.opnameBron||{}; if(!bron) delete SET.opnameBron[id]; else SET.opnameBron[id]={bron}; save();
   try{ if(document.getElementById('opnameBron')) openOpnameBron(); }catch(_){} }
 function planTekort(P, aftrek){
@@ -18867,15 +18913,31 @@ function planLagenHero(L){
     <div class="small" data-geenspaartekst style="opacity:.85;margin-top:4px;line-height:1.45">Minder kent nog geen spaarrekening, dus je lagen zijn nog niet te tonen.</div>
     <div class="small" style="margin-top:8px"><span role="button" data-spaaraanwijzen onclick="openSpaarrekening()" style="font-weight:700;cursor:pointer">Wijs je spaarrekening aan ›</span></div></div>`;
   const seg=(v,kleur)=>{ const pct=L.kop>0?Math.max((+v||0)/L.kop*100,0):0; return pct>0?`<i style="display:block;height:100%;width:${pct.toFixed(2)}%;background:${kleur}"></i>`:''; };
-  const leg=(k,v)=>`<span data-laaglegenda="${k}" style="display:flex;align-items:center;gap:6px;min-width:0"><i style="width:9px;height:9px;border-radius:2px;flex:none;background:${LAAG_KLEUR[k]}"></i>${LAAG_NAAM[k]}<b style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums">${euro0(v)}</b></span>`;
-  const hsub=`${euro0(L.saldo)} op je spaarrekening · ${euro0(L.res)} gereserveerd · ${euro0(L.groeien)} belegd`;
+  /* onderhoud3 (punt 1): DE LEGENDA DRAAGT GEEN BEDRAG, alleen naam, kleur en het aandeel (lagenPct(), grootste rest, samen
+     precies 100). Het bedrag per laag staat op EEN plek: "Per laag · stand". De sub noemt de bronnen zonder bedrag, want
+     "EUR X gereserveerd" en "EUR Y belegd" waren de bedragen van Reserveren en Groeien een tweede keer. */
+  const PCT=lagenPct(L);
+  const leg=k=>`<span data-laaglegenda="${k}" data-laagpct="${PCT[k]}" style="display:flex;align-items:center;gap:6px;min-width:0"><i style="width:9px;height:9px;border-radius:2px;flex:none;background:${LAAG_KLEUR[k]}"></i>${LAAG_NAAM[k]}<b style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums">${PCT[k]}%</b></span>`;
+  const hsub='spaarrekening, reserveringsrekening en beleggingen samen';
   return `<div id="planLagenHero" data-lagenkop="${L.kop}" data-laagbeschermen="${L.beschermen}" data-laagreserveren="${L.reserveren}" data-laagdoelen="${L.doelen}" data-laaggroeien="${L.groeien}" data-laagsaldo="${L.saldo}" data-laagres="${L.res}" data-laagvrij="${L.vrij}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px">
     <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Je geld in lagen · samen</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
     <div data-lagenkoptekst style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px">${euro0(L.kop)}</div>
     <div class="small" data-lagenhsub style="opacity:.85;margin-top:2px">${esc(hsub)}</div>
     <div data-lagenbalk style="display:flex;height:9px;border-radius:5px;margin:9px 0 9px;overflow:hidden;background:color-mix(in srgb,var(--kpi-txt) 18%,transparent)">${seg(L.beschermen,LAAG_KLEUR.beschermen)}${seg(L.reserveren,LAAG_KLEUR.reserveren)}${seg(L.doelen,LAAG_KLEUR.doelen)}${seg(L.groeien,LAAG_KLEUR.groeien)}${L.vrij>0?seg(L.vrij,'color-mix(in srgb,var(--kpi-txt) 35%,transparent)'):''}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:var(--fs-xs)">${leg('beschermen',L.beschermen)}${leg('reserveren',L.reserveren)}${leg('doelen',L.doelen)}${leg('groeien',L.groeien)}</div></div>`;
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:var(--fs-xs)">${leg('beschermen')}${leg('reserveren')}${leg('doelen')}${leg('groeien')}</div></div>`;
 }
+/* onderhoud3 (punt 1): HET AANDEEL PER LAAG, met de methode van de grootste rest: elke laag krijgt het afgeronde-naar-beneden
+   percentage, en de punten die dan nog ontbreken tot 100 gaan naar de lagen met de grootste rest (bij gelijke rest de volgorde
+   beschermen, reserveren, doelen, groeien). De noemer is de som van de vier lagen, zodat ze samen precies 100 zijn; een laag van
+   EUR 0 is 0%. Zonder geld in een laag geen deling: alle vier 0. */
+const LAAG_VOLG=['beschermen','reserveren','doelen','groeien'];
+function lagenPct(L){ const v={beschermen:+L.beschermen||0, reserveren:+L.reserveren||0, doelen:+L.doelen||0, groeien:+L.groeien||0};
+  const tot=LAAG_VOLG.reduce((a,k)=>a+Math.max(v[k],0),0), uit={}; if(!(tot>0)){ LAAG_VOLG.forEach(k=>uit[k]=0); return uit; }
+  const ruw=LAAG_VOLG.map((k,i)=>({k, i, r:Math.max(v[k],0)/tot*100})); let som=0;
+  for(const x of ruw){ uit[x.k]=Math.floor(x.r); som+=uit[x.k]; }
+  const rest=ruw.filter(x=>x.r>0).sort((a,b)=>(b.r-Math.floor(b.r))-(a.r-Math.floor(a.r)) || a.i-b.i);
+  for(let n=0;n<100-som && n<rest.length;n++) uit[rest[n].k]++;
+  return uit; }
 /* de sub-regel per laag: wat je in één blik over die laag wilt weten. */
 function lagenBeschermenSub(L, TL){
   if(L.beschermenOnbekend) return 'Noodfonds · stand onbekend';
@@ -18902,7 +18964,7 @@ function lagenDoelenSub(L){ const goals=(L.P||[]).filter(p=>p.type==='goal');
   if(!goals.length) return 'Nog geen doelen';
   return goals.map(p=>{ const x=(L.SE&&L.SE.per[p.id])||{}, geld=Math.round(+x.geld||0), doel=Math.max(Math.round(+p.doel||0),0);
     const st=planPaused(p.id)?' gepauzeerd':(p.status==='bereikt'?' vol':'');
-    return `<b style="color:var(--fg,var(--txt))">${esc(p.naam)}</b> ${euro0(geld)} / ${euro0(doel)}${st}`; }).join(' · '); }
+    return `<b style="color:var(--fg,var(--txt))">${esc(p.naam)}</b>${st}`; }).join(' · '); }   // onderhoud3 (punt 1): geen bedrag per doel hier; bij een doel is dat het bedrag van de laag een tweede keer
 /* v524: ALLES VOL VERHUIST VAN DE KOP NAAR DE LAAG DOELEN (mockup v10, regel 145). Zelfde meting als de oude tegel (planKpiData →
    allesVol, planSchema → "op schema" in maanden tegen de laatste streefdatum). De attributen data-kpivol/data-kpischema/
    data-kpischemamnd blijven ongewijzigd, zodat de invarianten (op schema in maanden, amber bij te laat) bewaard blijven; ze staan
@@ -18932,18 +18994,14 @@ function planLagenKaart(L, TL){
   const g0=(L.P||[]).find(p=>p.type==='goal' && !planPaused(p.id)) || (L.P||[]).find(p=>p.type==='goal');
   return `<div class="card" id="planLagenKaart" style="padding:2px 14px 8px">
     <div class="small" style="font-size:var(--fs-xs);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:11px 0 1px">Per laag · stand</div>
-    ${rij('beschermen', L.beschermen, L.beschermenDoel||null, lagenBeschermenSub(L, TL), '', 'openNoodfondsPanel()')}
+    ${rij('beschermen', L.beschermen, L.beschermenDoel||null, lagenBeschermenSub(L, TL), '', 'openLaagBeschermen()')}
     ${rij('reserveren', L.reserveren, null, lagenReserverenSub(), lagenReserverenFlag(PW), 'openReserveringen()')}
-    ${rij('doelen', L.doelen, L.doelenDoel||null, lagenDoelenSub(L), lagenDoelenVolFlag(L), 'planScrollDoelen()')}
+    ${rij('doelen', L.doelen, L.doelenDoel||null, lagenDoelenSub(L), lagenDoelenVolFlag(L), 'openLaagDoelen()')}
     ${rij('groeien', L.groeien, null, lagenGroeienSub(L, PW), '', 'openGroeien()')}
   </div>`;
 }
 /* v524 (toevoeging 2, mockup v10): een tik op de laag Doelen in "Per laag · stand" brengt je naar de doelenlijst. Staat de
    weergave op Tijdlijn, dan zet hij eerst Lijst aan (de doelenlijst) en scrolt er daarna naartoe. */
-function planScrollDoelen(){
-  if(planWeergave()!=='lijst'){ SET.planWeergave='lijst'; save(); try{ render(); }catch(_){} }
-  const el=document.getElementById('planLijst'); if(el){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(_){ try{ el.scrollIntoView(); }catch(__){} } }
-}
 /* v524 (blok 3, volle vorm, mockup v10): Groeien. Per belegging de waarde (koers van je laatste invoer, met de datum) en de
    inleg met startmaand; eronder de inleg per periode (nu, en wat er later bijkomt), en de voorwaarden voor beleggen. Die
    gelden PER BELEGGING (jouw keuze, v332), dus de regel noemt de beleggingen waarvoor ze nog gelden en opent de volle
@@ -18988,9 +19046,19 @@ function setVerschuivingKeuze(id, keuze){
   SET.verschuiving[id]=Object.assign({}, SET.verschuiving[id], {kant, keuze}); save();
   try{ if(document.getElementById('lagenLog')) openLagenLog(); }catch(_){}
 }
+/* onderhoud3 (punt 3): de verschuivingen van de lopende EN de vorige salarisperiode (een verschuiving van voor je salaris, zoals
+   de EUR 1.000 van 12 nov, viel tot hier buiten het venster en was dus niet in te stellen). Dezelfde keuze per verschuiving. */
+function lagenLogVensters(){ const PW=lagenPeriode(), vd=vandaagYMD(); let ym=(PW&&PW.ym)||thisYM(), start=PW?PW.start:ym+'-01', eind=PW?PW.eind:ym+'-31';
+  /* ligt het venster van lagenPeriode() (de terugval op een oude verdeling) al voor vandaag, dan is de lopende periode die van vandaag */
+  if(String(eind)<vd){ try{ const P=periodeVan(vd); if(P && P.start){ start=String(P.start); eind=String(P.eind); ym=P.ym||vd.slice(0,7); } }catch(_){} if(String(eind)<vd){ ym=vd.slice(0,7); start=ym+'-01'; eind=ym+'-31'; } }
+  let vs=null; try{ const P0=periodeVan(rekDag(start,-1)); if(P0 && P0.start) vs=String(P0.start); }catch(_){}
+  if(!vs) vs=prevYM(start.slice(0,7))+'-01';
+  return {cur:{start, eind, ym}, vor:{start:vs, eind:rekDag(start,-1)}}; }
+function verschuivingIngang(){ let n=0; try{ const W=lagenLogVensters(); const a=lagenVerschuivingen(W.cur.start, W.cur.eind), b=lagenVerschuivingen(W.vor.start, W.vor.eind); n=a.lagen.length+a.doelen.length+b.lagen.length+b.doelen.length; }catch(_){}
+  if(!n) return ''; return `<div class="small" data-verschuivingingang="${n}" style="margin-top:8px"><span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openLagenLog()">Verschuivingen (${n}) ›</span> <span class="muted">deze en vorige periode</span></div>`; }
 function openLagenLog(){
-  const PW=lagenPeriode(), ym=(PW&&PW.ym)||thisYM(), start=PW?PW.start:ym+'-01', eind=PW?PW.eind:ym+'-31';
-  const V=lagenVerschuivingen(start, eind), mnd=MFULL[+String(ym).slice(5,7)-1];
+  const W=lagenLogVensters(), ym=W.cur.ym, start=W.cur.start, eind=W.cur.eind;
+  const V=lagenVerschuivingen(start, eind), VV=lagenVerschuivingen(W.vor.start, W.vor.eind), mnd=MFULL[+String(ym).slice(5,7)-1];
   const dag=d=>`${+String(d).slice(8,10)} ${MNAMES[+String(d).slice(5,7)-1]}`;
   const lagenRij=v=>{ const opt=(k,l)=>`<button class="btn sec" data-verschkeuze="${k}" data-aan="${v.keuze===k?1:0}" style="${v.keuze===k?'border-color:var(--teal)':''}" onclick="setVerschuivingKeuze('${esc(v.id)}','${k}')">${l}</button>`;
     return `<div data-verschlaag="${esc(v.id)}" data-keuze="${esc(v.keuze||'')}" style="padding:10px 0;border-top:1px solid var(--line)">
@@ -18999,12 +19067,13 @@ function openLagenLog(){
       <div class="small" style="margin-top:7px;font-weight:600">Moet het noodfonds deze ${euro0(v.bedrag)} terugkrijgen?</div>
       <div class="row" style="gap:7px;margin-top:5px;flex-wrap:wrap">${opt('nee','Nee, hoort bij Reserveren')}${opt('3','Ja, over 3 maanden')}${opt('6','Ja, over 6 maanden')}</div></div>`; };
   const doelRij=v=>`<div class="row small" data-verschdoel="${esc(v.id)}" style="gap:8px;padding:9px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0">${esc(dag(v.date))} · ${esc(v.van)} → ${esc(v.naar)}<span class="small muted" style="display:block">verschuiving tussen doelen · je spaarrekening blijft gelijk</span></span><b style="white-space:nowrap">${euro0(v.bedrag)}</b></div>`;
-  const leeg=!V.lagen.length && !V.doelen.length;
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="lagenLog" data-verschn="${V.lagen.length+V.doelen.length}">
+  const leeg=!V.lagen.length && !V.doelen.length, vorN=VV.lagen.length+VV.doelen.length;
+  const vorBlok=vorN?`<div class="small" data-verschvorige="${vorN}" style="font-weight:800;margin:14px 0 2px">Vorige periode · ${esc(dag(W.vor.start))} t/m ${esc(dag(W.vor.eind))}</div>${VV.lagen.map(lagenRij).join('')}${VV.doelen.map(doelRij).join('')}`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="lagenLog" data-verschn="${V.lagen.length+V.doelen.length}" data-verschnvorige="${vorN}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Verschuivingen · ${esc(mnd)}</div>
     <div class="small muted" style="margin:3px 0 6px;line-height:1.45">Geld dat tussen je lagen of doelen schoof. Een verschuiving telt niet als opname, dus "nog terug" telt hem niet mee.</div>
     ${leeg?'<div class="small muted" style="padding:10px 0">Deze periode schoof er niets tussen je lagen of doelen.</div>':''}
-    ${V.lagen.map(lagenRij).join('')}${V.doelen.map(doelRij).join('')}
+    ${V.lagen.map(lagenRij).join('')}${V.doelen.map(doelRij).join('')}${vorBlok}
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
 }
 /* v524 (blok 2, gevraagd door de gebruiker): GESTORT NAAST PLAN. Per laag het PLAN uit je verdeling (SET.salVerdeling van de
@@ -19101,9 +19170,16 @@ function planGestortKaart(){
    heen gaat, en bij een SURPLUS DAT NOG NIET IS OVERGEMAAKT ("nog over te maken EUR X") komt er na OVERBOEK_LAAT_DAGEN werkdagen
    één keer een herinnering in Kiezen. Beide zijn ADDITIEF: ze lezen alleen, zetten een Kiezen-item, en bewegen geen bedrag.
    NIETS SCHUIFT VANZELF DOOR: de keuze (SET.lagenVolKeuze) wordt vastgelegd, niet uitgevoerd; de waterval verdeelt zoals altijd. */
+/* onderhoud3 (punt 4): EEN STORTING, EEN VRAAG. Draagt de salarisstorting van deze periode een eenmalig deel waarover Kiezen nog
+   vraagt of het al verdeeld is (onregBinnen, de bron van "Eenmalig EUR X ..."), dan gaat die vraag voor en vragen de twee vragen
+   van onderdeel 8 (volle laag, nog over te maken) niets over dezelfde storting. Zei je "Ja, al gespaard", dan is er ook niets meer
+   over te maken. */
+function lagenStortVraagOpen(G){ const id=G && G.stort && G.stort.id; if(!id) return false; try{ return onregBinnen().some(b=>String(b.id)===String(id)); }catch(_){ return false; } }
+function lagenStortGespaard(G){ const id=G && G.stort && G.stort.id; const A=id?(SET.eenmaligVerdeeld||{})[id]:null; return !!(A && A.klopt); }
 function lagenVolVraag(){
   if(SET.lagenVolKeuze) return null;                                                                    // al één keer beantwoord
   let G=null; try{ G=lagenGestort(); }catch(_){} if(!G || !G.extra || !(G.extra.bedrag>0.5)) return null; // alleen met een surplus dat een bestemming zoekt
+  if(lagenStortVraagOpen(G)) return null;                                                               // onderhoud3: eerst de eenmalig-vraag over dezelfde storting
   let L=null; try{ L=lagenData(); }catch(_){} if(!L) return null;
   if(L.beschermenOnbekend) return null;                                                                 // onbekend is geen vol
   if(!(L.beschermenDoel>0 && L.beschermen>=L.beschermenDoel-0.5)) return null;                           // de buffer (beschermen-laag) is vol
@@ -19127,6 +19203,7 @@ function openLagenVolKeuze(){
 function setLagenVolKeuze(doel){ SET.lagenVolKeuze={naar:doel, op:vandaagYMD()}; save(); closeSheet(); render(); }
 function lagenOverVraag(){
   let G=null; try{ G=lagenGestort(); }catch(_){} if(!G || !G.extra || !(G.extra.overTeMaken>0.5)) return null;
+  if(lagenStortVraagOpen(G) || lagenStortGespaard(G)) return null;                                      // onderhoud3: een vraag per storting
   const PW=G.PW; if(!PW || !PW.salDag) return null;
   const grens=werkdagPlus(String(PW.salDag).slice(0,10), OVERBOEK_LAAT_DAGEN);                            // pas na 3 werkdagen (v523c, dezelfde lat als "nog niet binnen")
   if(vandaagYMD()<grens) return null;
@@ -19522,27 +19599,72 @@ function renderPlan(bare){
      deze periode" in planKpi (opzijPeriode, per salarisperiode), de enige opzij-bron op Plan. */
   let spRegel=''; try{ spRegel=spaarPlanRegel(P, SE); }catch(_){}   // v469 punt 1
   const meld=(tzKaart||vdMeld||spRegel)?`<div data-planmeldingen style="margin:0 2px 8px">${spRegel}${tzKaart}${vdMeld}</div>`:'';
-  const weergave=planWeergave();
-  const knop=(k,t)=>`<span role="button" data-planweergave="${k}" data-aan="${weergave===k?1:0}" onclick="planWeergaveZet('${k}')" style="flex:1;text-align:center;padding:6px 4px;border-radius:9px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;${weergave===k?'background:var(--card);color:var(--txt);box-shadow:var(--shadow)':'color:var(--mut)'}">${t}</span>`;
-  const schakel=P.length?`<div class="row" data-planschakel style="gap:0;padding:3px;border-radius:12px;background:var(--card2);margin:0 0 9px">${knop('lijst','Lijst')}${knop('tijdlijn','Tijdlijn')}</div>`:'';
-  const leeg=`<div class="small muted" style="padding:11px 0 3px">Nog geen bestemmingen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
-  const inhoud=!P.length?`<div class="card" style="padding:4px 13px">${leeg}</div>`
-    :(weergave==='tijdlijn'
-      ? `<div class="card" id="planTijdlijnInline" style="padding:12px 13px">${planTijdlijnHTML(P,cap,TL,tints)}</div>`
-      : `<div class="card" id="planLijst" style="padding:2px 13px">${P.map((p,i)=>planDoelRij(p,i,TL,SE,tints)).join('')}</div>`);
-  /* "Blijft over" staat er alleen nog als er iets overblijft, als regel onder de lijst */
-  let TND=SE.TND; const vrij=planVrij(P)+Math.max(Math.round((TND&&TND.onverdeeld)||0),0);
-  const rest=vrij>0?`<div id="planVrij" class="small" style="display:flex;justify-content:space-between;gap:12px;color:var(--mut2);margin:-2px 4px 9px"><span>Blijft over${!isMode('rustig')?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:var(--txt)">${euro0(vrij)}</b>/mnd · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></span></div>`:'';
   /* v440: "Inleg uit je potjes" (planInlegBlok) is weg van Plan: de Plan-inleg bestaat niet meer. Opzij staat als "Opzij deze
      periode" in planKpi (opzijPeriode); reserveringen en beleggen volgen in v441. */
   const L=lagenData();   // v524 (blok 1): de kop wordt de lagen-hero + per-laag-kaart; "Opzij deze periode" verhuist naar blok 2, "Alles vol" naar de laag Doelen
   const lagenKaart=L.geenSpaar?'':planLagenKaart(L,TL), blok2=L.geenSpaar?'':planGestortKaart();   // v524 (toevoeging 1): zonder herkende spaarrekening geen per-laag-stand en geen blok 2
-  return planWachtRegel()+spaarVrijLine(P)+planLagenHero(L)+lagenKaart+blok2+meld+schakel+inhoud+rest
-    +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  /* onderhoud3 (punt 1): de doelenlijst (Lijst/Tijdlijn, de doelrijen, "Blijft over" en "+ Doel toevoegen") staat niet meer op
+     Plan: het bedrag per doel en per laag stond daar een tweede en derde keer. Hij staat in de sheet van de laag Doelen
+     (planDoelenLijstHTML, openLaagDoelen) en het noodfonds in die van Beschermen. Zonder herkende spaarrekening (geen per-laag-
+     kaart, dus geen ingang) blijft hij hier staan. */
+  const lijstHier=L.geenSpaar?planDoelenLijstHTML(P,cap,TL,SE,tints,false):'';
+  return planWachtRegel()+spaarVrijLine(P)+planLagenHero(L)+lagenKaart+blok2+meld+lijstHier;
 }
 /* v380: de weergave Lijst of Tijdlijn, per gebruiker onthouden; standaard Lijst. */
 function planWeergave(){ return SET.planWeergave==='tijdlijn'?'tijdlijn':'lijst'; }
-function planWeergaveZet(k){ SET.planWeergave=(k==='tijdlijn')?'tijdlijn':'lijst'; save(); render(); }
+function planWeergaveZet(k){ SET.planWeergave=(k==='tijdlijn')?'tijdlijn':'lijst'; save(); render(); try{ if(document.querySelector('#sheetBg.show #laagDoelen')) renderLaagDoelen(); }catch(_){} }
+/* onderhoud3 (punt 1): DE DOELENLIJST, NU IN DE SHEET VAN DE LAAG DOELEN. Dezelfde rijen als tot v524 op Plan (planDoelRij, de
+   schakelaar Lijst/Tijdlijn, "Blijft over" en "+ Doel toevoegen"), met per doel de knoppen die tot nu alleen in het doel-sheet
+   stonden (Doel aanpassen, Pauzeren, besteden; verplaatsen staat al op de rij zelf). Het noodfonds staat als eerste in de VOLGORDE in de lijst (dezelfde
+   bestemmingen als de tijdlijn ernaast), en met zijn eigen ingangen in de sheet van Beschermen; zonderNf laat hem weg. De ids
+   (#planLijst, #planTijdlijnInline, #planVrij) blijven, zodat elke lezer dezelfde lijst vindt. */
+function planDoelenLijstHTML(P,cap,TL,SE,tints,zonderNf){
+  const lijst=P.map((p,i)=>({p,i})).filter(x=>!(zonderNf && x.p.type==='noodfonds'));
+  const weergave=planWeergave();
+  const knop=(k,t)=>`<span role="button" data-planweergave="${k}" data-aan="${weergave===k?1:0}" onclick="planWeergaveZet('${k}')" style="flex:1;text-align:center;padding:6px 4px;border-radius:9px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;${weergave===k?'background:var(--card);color:var(--txt);box-shadow:var(--shadow)':'color:var(--mut)'}">${t}</span>`;
+  const schakel=lijst.length?`<div class="row" data-planschakel style="gap:0;padding:3px;border-radius:12px;background:var(--card2);margin:0 0 9px">${knop('lijst','Lijst')}${knop('tijdlijn','Tijdlijn')}</div>`:'';
+  const act=(t2,fn,attr)=>`<span role="button" ${attr} style="color:var(--teal);font-weight:700;cursor:pointer" onclick="event.stopPropagation();${fn}">${t2}</span>`;
+  const acties=p=>(p.type==='noodfonds')?'':`<div class="small" data-doelacties="${p.id}" style="display:flex;gap:12px;flex-wrap:wrap;padding:0 0 9px">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', planOpen(p),'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderLaagDoelen()`,'data-doelpauze')}${p.type==='goal'?act('besteden ›',`openPlanDoel('${p.id}')`,'data-doelbestedenlink'):''}</div>`;
+  const leeg=`<div class="small muted" style="padding:11px 0 3px">Nog geen doelen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
+  const inhoud=!lijst.length?`<div class="card" style="padding:4px 13px">${leeg}</div>`
+    :(weergave==='tijdlijn'
+      ? `<div class="card" id="planTijdlijnInline" style="padding:12px 13px">${planTijdlijnHTML(P,cap,TL,tints)}</div>`
+      : `<div class="card" id="planLijst" style="padding:2px 13px">${lijst.map(({p,i})=>planDoelRij(p,i,TL,SE,tints)+acties(p)).join('')}</div>`);
+  let TND=SE.TND; const vrij=planVrij(P)+Math.max(Math.round((TND&&TND.onverdeeld)||0),0);
+  const rest=vrij>0?`<div id="planVrij" class="small" style="display:flex;justify-content:space-between;gap:12px;color:var(--mut2);margin:-2px 4px 9px"><span>Blijft over${!isMode('rustig')?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:var(--txt)">${euro0(vrij)}</b>/mnd · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></span></div>`:'';
+  return schakel+inhoud+rest+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+}
+function openLaagDoelen(){ renderLaagDoelen(); showSheetBg(); }
+function renderLaagDoelen(){
+  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
+  const TL=planTijdlijnData(P,cap), SE=planStandEind(P), tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
+  const L=lagenData();
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="laagDoelen" data-laagsheet="doelen">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Doelen</div>
+    <div class="small muted" style="margin:3px 0 4px;line-height:1.45">Per doel de stand tegen het doel, de status en wanneer het vol is. Tik op een doel voor de rekensom.</div>
+    ${lagenDoelenVolFlag(L)}
+    <div style="margin-top:9px">${planDoelenLijstHTML(P,cap,TL,SE,tints,false)}</div>
+    ${opnameIngang()}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`;
+}
+/* onderhoud3 (punt 1): DE SHEET VAN BESCHERMEN. Het noodfonds (stand tegen het doel, maanden van je norm, vol-datum), de ingang
+   naar de noodfonds-sheet (norm en opbouwpad), verplaatsen, en de twee vaste ingangen van punt 2 en 3: de opnames van deze en de
+   vorige salarisperiode, en de verschuivingen tussen je lagen. */
+function openLaagBeschermen(){ renderLaagBeschermen(); showSheetBg(); }
+function renderLaagBeschermen(){
+  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
+  const TL=planTijdlijnData(P,cap), SE=planStandEind(P), L=lagenData();
+  const nf=P.find(p=>p.type==='noodfonds'), i=nf?P.indexOf(nf):0;
+  const rij=nf?planDoelRij(nf,i,TL,SE,{[nf.id]:planTint(nf,i)}):'<div class="small muted" style="padding:9px 0">Nog geen noodfonds.</div>';
+  const act=(t2,fn,attr)=>`<span role="button" ${attr} style="color:var(--teal);font-weight:700;cursor:pointer" onclick="${fn}">${t2}</span>`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="laagBeschermen" data-laagsheet="beschermen">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Beschermen</div>
+    <div class="small muted" data-beschermensub style="margin:3px 0 4px;line-height:1.45">${esc(lagenBeschermenSub(L, TL))}</div>
+    <div class="card" style="padding:2px 13px;margin-top:8px">${rij}</div>
+    <div class="small" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">${act('Norm en opbouwpad ›','openNoodfondsPanel()','data-beschermennorm')}</div>
+    ${opnameIngang()}${verschuivingIngang()}
+    ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`;
+}
 /* v440: OPZIJ DEZE PERIODE. De ENE bron voor opzij op Plan, de Doelen-meter en Zien. METING: wat er netto naar je
    spaarrekening ging (inleg − onttrekkingen) van de salarisstorting tot de dag vóór de volgende storting (salPeriode().cur).
    Geen spaarrekening herkend → netto null (onbekend blijft onbekend, v59/v73/v173). DOEL = de opzij uit de verdeling die je in
@@ -19602,10 +19724,18 @@ function openEenmaligVerdeeld(id){ const S=salSplitStortingen(45).find(x=>String
   $('#sheet').innerHTML=`<div class="grab"></div><div id="eenmaligVerdeeld" data-eenmaligverdeeld="${esc(String(id))}" data-dekt="${EV.dekt||''}" data-boven="${EV.boven}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Eenmalig ${euro0(EV.een)} ${EV.dekt==='heel'?'lijkt al verdeeld':EV.dekt==='deel'?`lijkt voor ${euro0(EV.boven)} al verdeeld`:'nog niet verdeeld'}</div>
     <div class="small" style="margin:6px 0 10px;line-height:1.45">${esc(eenmaligVerdeeldTekst(EV))}.${EV.dekt==='deel'?` Dat is ${euro0(EV.boven)} van de ${euro0(EV.een)}; de rest (${euro0(EV.een-EV.boven)}) is nog niet verdeeld.`:''} Minder kiest niets: zeg jij of dit klopt.</div>
-    <button class="btn sec" data-eenmaligklopt style="width:100%;text-align:left;min-height:44px" onclick="eenmaligVerdeeldZet('${sq}', true)"><b>Klopt, al verdeeld</b><span class="small muted" style="display:block;font-weight:400">de keuze verdwijnt uit Kiezen</span></button>
+    <div class="small" data-eenmaligvraag style="font-weight:700;margin:0 0 6px">Is het eenmalige geld daarmee al verdeeld?</div>
+    <button class="btn sec" data-eenmaligklopt style="width:100%;text-align:left;min-height:44px" onclick="eenmaligVerdeeldZet('${sq}', true)"><b>Ja, al gespaard</b><span class="small muted" style="display:block;font-weight:400">de keuze verdwijnt uit Kiezen</span></button>
+    ${(EV.boven>0.5 && EV.een-EV.boven>0.5)?`<button class="btn sec" data-eenmaligdeel="${Math.round(EV.een-EV.boven)}" style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="eenmaligVerdeeldZet('${sq}', 'deel')"><b>Deels, verdeel de rest ${euro0(EV.een-EV.boven)}</b><span class="small muted" style="display:block;font-weight:400">${euro0(EV.boven)} telt als gespaard · de rest krijgt een bestemming</span></button>`:''}
     <button class="btn sec" data-eenmaligniet style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="eenmaligVerdeeldZet('${sq}', false)"><b>Nee, nog verdelen</b><span class="small muted" style="display:block;font-weight:400">opent de verdeling van ${euro0(EV.een)}</span></button>
     <button class="btn sec" style="margin-top:10px" onclick="closeSheet()">Terug</button></div>`; showSheetBg(); }
-function eenmaligVerdeeldZet(id, klopt){ SET.eenmaligVerdeeld=SET.eenmaligVerdeeld||{}; SET.eenmaligVerdeeld[id]={klopt:!!klopt, op:vandaagYMD()}; save();
+function eenmaligVerdeeldZet(id, klopt){ SET.eenmaligVerdeeld=SET.eenmaligVerdeeld||{};
+  /* onderhoud3 (punt 4): "Deels" legt vast wat er al gespaard is (EV.boven) en laat alleen de rest te verdelen (onregBinnen leest hem) */
+  if(klopt==='deel'){ const S=salSplitStortingen(45).find(x=>String(x.id)===String(id)) || (function(){ const b=onregBinnen().find(x=>String(x.id)===String(id)); return b?{id:b.id, datum:b.datum, eenmalig:b.bedrag}:null; })();
+    const EV=S?eenmaligAlVerdeeld(S):null; if(!EV) return; const rest=Math.max(Math.round(EV.een-EV.boven),0);
+    SET.eenmaligVerdeeld[id]={klopt:false, deel:true, gespaard:Math.round(EV.boven), rest, op:vandaagYMD()}; save(); closeSheet(); render();
+    if(rest>0) openMeevaller(rest, 'salaris'); return; }
+  SET.eenmaligVerdeeld[id]={klopt:!!klopt, op:vandaagYMD()}; save();
   if(klopt){ closeSheet(); render(); toast('Eenmalig bedrag: al verdeeld'); return; }
   const S=salSplitStortingen(45).find(x=>String(x.id)===String(id)); closeSheet(); render(); if(S) openMeevaller(Math.round(S.eenmalig), 'salaris'); }
 function opzijHerleiding(O){
@@ -20026,6 +20156,7 @@ function renderPlanDoel(){
     if(!vol && doel>0) som+=`<div class="row small" data-nognodig="${Math.round((doel-S)*100)/100}" role="button" onclick="closeSheet();planWeergaveZet('tijdlijn')" style="gap:8px;padding:7px 0;color:var(--red);font-weight:700;cursor:pointer"><span style="flex:1;min-width:0">Nog nodig tot ${euro0(doel)}</span><span style="white-space:nowrap">${euro0(doel-S)} ›</span></div>`;
     if(x.zg>0) som+=planZgKeuzeBlok(p,x);
     if(x.tb>0||x.nogLater>0) som+=`<div class="small muted" style="margin-top:6px">Waar komt "terug" vandaan? <span role="button" data-terugherkomst style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openTerugOpbouw()">opnames in ${esc(mn)} ›</span></div>`;
+    som+=opnameIngang();   // onderhoud3 (punt 2): de vaste ingang, ook zonder terugzetten
   } else som=`<div class="small" style="padding:7px 0">${p.nfOnbekend?'Wat er al staat is niet bekend.':`${euro0(geld)} afgelost van ${euro0(doel)}, ${euro0(x.inleg)} extra deze maand.`}</div>`;
   /* het datumpaar (vatRegels(): streefdatum, speling of achterstand, waarop hij wacht, bij een schuld beide datums) en de
      ingang "datum zetten" bij een doel zonder streefdatum stonden in de open rij (v367) en staan nu hier */
@@ -20106,9 +20237,33 @@ function terugAansluiting(ym){
 /* v524 (onderdeel 2): het voorstel is het doel dat Minder's eigen toewijzing (spaarOverItems-volgorde) als eerste zou verlagen; het
    staat gemarkeerd maar niet voorgekozen. De sheet "Eruit gehaald in <maand>" laat je per opname zelf de bron kiezen. */
 function opnameVoorstelDoel(P){ try{ const it=spaarOverItems(P||allocatePlan()).find(x=>x.type==='goal' && (+x.gespaard||0)>0); return it?it.id:null; }catch(_){ return null; } }
+/* onderhoud3 (punt 2): DE OPNAMES VAN DE LOPENDE EN DE VORIGE SALARISPERIODE. Tot hier las openOpnameBron() alleen thisYM(), dus de
+   opnames van november waren vanaf 1 december weg, en de enige ingang hing aan terugzetten (x.tb of x.nogLater). Het venster is van
+   de start van de vorige salarisperiode (periodeVan van de dag voor de lopende) tot vandaag; zonder salarisperiode de lopende en de
+   vorige kalendermaand. Zelfde toets per boeking als opnameLijst() (spaarrekening, afschrijving, geen verschuiving). */
+function opnamePerioden(){ const vd=vandaagYMD(); let cur=null, vor=null;
+  try{ const PW=lagenPeriode(); if(PW && PW.perStart) cur={start:PW.perStart<PW.start?PW.perStart:PW.start, eind:vd}; }catch(_){}
+  if(!cur){ cur={start:thisYM()+'-01', eind:vd}; }
+  try{ const P0=periodeVan(rekDag(cur.start,-1)); if(P0 && P0.start) vor={start:String(P0.start), eind:rekDag(cur.start,-1)}; }catch(_){}
+  if(!vor){ const pm=prevYM(cur.start.slice(0,7)); vor={start:pm+'-01', eind:rekDag(cur.start,-1)}; }
+  return {cur, vor, start:vor.start, eind:vd}; }
+/* een memo op de stand van de gegevens en de dag: planTekort() leest hem via opnameBronNaarDoel() per doel, en zonder memo deed
+   een render van Grip zo 41 passes over TX (GEMETEN op toestel-omvang, telbare-cache.spec.js d). De aanroeper krijgt een kopie. */
+let _opnPerMemo=null;
+function opnameLijstPerioden(){ let vk=''; try{ vk=voorbeeldSleutel(); }catch(_){}
+  const k=_dataGen+'|'+vandaagYMD()+'|'+vk+'|'+TX.length;
+  if(_opnPerMemo && _opnPerMemo.k===k) return _opnPerMemo.v.slice();
+  let sav; try{ sav=new Set(n26SavingsAccounts()); }catch(_){ return []; } if(!sav.size){ _opnPerMemo={k, v:[]}; return []; }
+  const R=opnamePerioden();
+  const v=telbareTx().filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t) && String(t.date).slice(0,10)>=R.start && String(t.date).slice(0,10)<=R.eind).sort((a,b)=>a.date<b.date?-1:1);
+  _opnPerMemo={k, v}; return v.slice(); }
+function opnameMaandenTekst(L){ const ms=[...new Set(L.map(t=>String(t.date).slice(0,7)))].sort(); return ms.map(m=>MFULL[+m.slice(5,7)-1]).join(' en '); }
+/* de vaste ingang (Beschermen- en Doelen-sheet en het doel-sheet): staat er zodra er een opname was, los van terugzetten */
+function opnameIngang(){ let L=[]; try{ L=opnameLijstPerioden(); }catch(_){} if(!L.length) return '';
+  return `<div class="small" data-opnameingang="${L.length}" style="margin-top:10px"><span role="button" data-waarvandaan style="color:var(--teal);font-weight:700;cursor:pointer" onclick="openOpnameBron()">Opnames in ${esc(opnameMaandenTekst(L))} › </span><span class="muted">waar kwam het vandaan?</span></div>`; }
 function openOpnameBron(){
-  const ym=thisYM(), mn=MFULL[+ym.slice(5,7)-1]; let P=[]; try{ P=allocatePlan(); }catch(_){}
-  const opn=opnameLijst(ym), voorstel=opnameVoorstelDoel(P), doelen=P.filter(p=>p.type==='goal' && (+p.gespaard||0)>0);
+  const ym=thisYM(); let P=[]; try{ P=allocatePlan(); }catch(_){}
+  const opn=opnameLijstPerioden(), mn=opn.length?opnameMaandenTekst(opn):MFULL[+ym.slice(5,7)-1], voorstel=opnameVoorstelDoel(P), doelen=P.filter(p=>p.type==='goal' && (+p.gespaard||0)>0);
   const dag=d=>`${+String(d).slice(8,10)} ${MNAMES[+String(d).slice(5,7)-1]}`;
   const rij=t=>{ const cur=opnameBronVan(t);
     const chip=(k,l,vst)=>`<button class="btn sec" data-opnbron="${esc(k)}" data-aan="${cur===k?1:0}" data-voorstel="${vst?1:0}" style="${cur===k?'border-color:var(--teal);':''}margin:0 5px 5px 0" onclick="setOpnameBron('${esc(t.id)}','${esc(k)}')">${esc(l)}${vst?' · voorstel':''}</button>`;
@@ -20118,7 +20273,7 @@ function openOpnameBron(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="opnameBron" data-opnamen="${opn.length}" data-voorstel="${esc(voorstel||'')}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Eruit gehaald in ${esc(mn)}</div>
     <div class="small muted" style="margin:3px 0 6px;line-height:1.45">Waar kwam het vandaan? Per opname kies je zelf de bron. Er staat één voorstel, maar niets is aangevinkt — Minder verplaatst niets vanzelf.</div>
-    ${opn.length?opn.map(rij).join(''):'<div class="small muted" style="padding:10px 0">Deze maand haalde je niets uit je spaargeld.</div>'}
+    ${opn.length?opn.map(rij).join(''):'<div class="small muted" style="padding:10px 0">Deze en de vorige salarisperiode haalde je niets uit je spaargeld.</div>'}
     ${sheetVoet('<button class="btn sec" onclick="closeSheet()">Sluiten</button>','')}</div>`; showSheetBg();
 }
 function openTerugOpbouw(){
@@ -25924,33 +26079,16 @@ function catSparkline(k){
    geen rekenlogica elders geraakt. Vier afgeleide cijfers + een verloopgrafiek.
    ============================================================ */
 
+/* onderhoud3 (punt 7): DE KERNCIJFERS EN DE SPAARQUOTE-KAART ZIJN OPGERUIMD. De kaart stond sinds v359/v382 niet meer op Inzichten
+   en sinds v518 niet meer op Vermogen; wat hier aan functies en constanten stond (insKpis, maandKpiBlok, openKpiDetail, kpiTegels,
+   aflossingRegel/aflossingMaand/openAflossing, vermogenSpaarquoteMaand, de grafiek- en delta-helpers, KPI_META, KPI_WOORD,
+   KPI_INCBRON) had geen lezer meer in de app, alleen nog in tests. GEMETEN met bereikbaarheid (de aanroepgraaf vanaf de HTML en de
+   boot-code, zonder commentaar). vermogensInleg() en opzijGemiddeld() blijven: de Vermogensreis leest ze. De losse uitleg hieronder
+   hoort bij de functies die bleven (bezittingen, schulden, de maandbrug). */
 // Kleur is een spiegel, geen rapportcijfer: in Rustig geen alarmrood en een gedempt midden.
-function kpiCol(state){
-  const r=isMode('rustig');
-  if(state==='good') return 'var(--teal)';
-  if(state==='bad')  return r?'var(--amber)':'var(--red)';
-  if(state==='mid')  return r?'var(--mut)':'var(--amber)';
-  return 'var(--txt)';
-}
-const _pct0=n=>Math.round(n)+'%';
-const _sign=n=>(n<0?'−':'+')+euro0(Math.abs(n));   // echte min-tekens, zoals elders in de app
 
 // Wat elke KPI betekent en waartegen hij zich meet. Een kaal getal zonder band zegt niets,
 // dus band + oordeel + uitleg horen bij de definitie, niet bij de opmaak.
-const KPI_META={
-  // v108: heette "Bespaarquote", maar meet je restsaldo — wat je overhoudt, niet wat je opzij
-  // zette. Geld dat op je betaalrekening blijft staan telt hier volledig mee. De naam suggereerde
-  // het tegendeel en botste met de referentie-verdeling, die "sparen" wél als instroom op je
-  // spaarrekening leest (healthSplitOver). Eén term per begrip (v91): dit is het restsaldo.
-  inleg: {label:'Spaarquote',         bandTxt:'doel 20% of meer', band:20,  dir:'up',   sign:1,  base:0,
-    uitleg:'Welk deel van je inkomen er écht opzij ging: wat er naar je spaarrekening en je reserveringen stroomde plus je beleggingsinleg, gedeeld door je inkomen. Geld dat op je betaalrekening blijft staan telt hier niet mee. Een overboeking tussen je eigen potten telt één keer. Wat er niet in zit: een aflossing op een schuld en een inleg in een doel dat je zelf bijhoudt. Een aflossing zit er niet in, maar staat eronder: koppel je een betaling aan een schuld, dan staat het aflossingsdeel (zonder de rente) als eigen regel onder het percentage. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
-  budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down', sign:1, base:0,
-    uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
-  vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down', sign:1, base:0,
-    uitleg:'Welk deel van je inkomen naar variabele (niet-vaste) uitgaven gaat: variabele uitgaven ÷ inkomen. Er hoort geen doel bij: dit cijfer laat je verloop zien, niet of je een norm haalt.'},
-  vast:  {label:'Vaste-lasten-druk',  bandTxt:'doel onder 50%', band:50, dir:'down', sign:1, base:0,
-    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Er hoort geen doel bij: dit cijfer laat je verloop zien, niet of je een norm haalt.'}
-};
 // Drie van de vier banden volgen je gekozen referentie-verdeling (default 50/30/20 → precies de
 // oude 20%, 30% en 50%), zodat vast/variabel/sparen samen het hele ijkpunt spiegelen.
 // Alleen budgetnaleving meet tegen je eigen potjes.
@@ -25961,18 +26099,6 @@ const KPI_META={
    Budgetnaleving houdt zijn band van 100%: die meet tegen je eigen potjes, niet tegen een extern
    ijkpunt. De rest heeft geen eigen voorwaarde en krijgt dus geen doel, want een cijfer zonder norm
    is bruikbaar en een cijfer met de verkeerde norm is misleidend. */
-function kpiBand(key){
-  if(key==='budget') return KPI_META.budget.band;
-  return null;
-}
-function kpiBandTxt(key){
-  if(key==='budget') return KPI_META.budget.bandTxt;
-  if(key==='inleg')  return 'wat je opzij zette en belegde';
-  if(key==='vast')   return 'geen doel, alleen je verloop';
-  if(key==='vari')   return 'geen doel, alleen je verloop';
-  return KPI_META[key].bandTxt;
-}
-const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
 /* Hoe ver sta je van je doel? (v103) De tegel toonde het cijfer en de band als losse teksten,
    dus de vergelijking moest je zelf maken. Dit zet ze in verhouding: het verschil in procent-
    punten én vertaald naar euro's, want daar denk je in. Bewust GEEN eigen sommen: `t` en `sf`
@@ -25981,50 +26107,9 @@ const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
 /* v161: de noemer van een cijfer staat los van zijn band. Sinds de norm 50/30/20 de kerncijfers
    niet meer stuurt heeft alleen budgetnaleving nog een doel, maar de noemer bestaat voor alle vier
    - kpiBijdrage() leunt erop en zou anders met drie cijfers niets meer kunnen. Eén bron. */
-function kpiBasis(key,t){ return (key==='budget')?(+t.budget||0):(+t.income||0); }
-function kpiAfstand(key,v,t,sf){
-  if(v==null) return null;
-  const B=kpiBand(key); if(!(B>0)) return null;
-  const dir=(KPI_META[key]||{}).dir||'down';
-  const pt=(dir==='up')?(v-B):(B-v);                      // >0 = aan de goede kant van je doel
-  const basis=kpiBasis(key,t);
-  const bedrag=basis>0?Math.round(Math.abs(pt)/100*basis):null;
-  return {pt:Math.round(pt*10)/10, bedrag, basis, goed:pt>=0};
-}
 // Eén formulering per kerncijfer; "meer" is bij sparen goed en bij een druk-metriek juist niet,
 // dus de woorden volgen de betekenis, niet het teken.
-function kpiAfstandTxt(key,A,kort){
-  if(!A||A.bedrag==null) return '';
-  const e=euro0(A.bedrag);
-  if(Math.abs(A.pt)<0.05) return kort?'op je doel':'precies op je doel';
-  if(key==='inleg')  return A.goed?`${e} meer opzij dan je doel`:`${e} minder opzij dan je doel`;
-  if(key==='budget') return A.goed?`${e} onder je budget`:`${e} over je budget`;
-  return A.goed?`${e} onder je doel`:`${e} boven je doel`;
-}
-function kpiState(key,v,ref){
-  if(v==null) return 'n';
-  /* v161: zonder band is er geen oordeel. Zonder deze guard rekende elke tak door met null:
-     `v<null` is `v<0`, dus elk vast- en variabel-cijfer kwam stilzwijgend op 'bad' uit. */
-  if(kpiBand(key)==null) return 'n';
-  if(key==='budget') return v<=100?'good':(v<=110?'mid':'bad');
-  if(key==='vast'){  const B=kpiBand('vast');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }
-  if(key==='vari'){  const B=kpiBand('vari');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }   // drukmetriek: lager is gezonder
-  return 'n';
-}
 // reeksen per maand, in één pass over months(); n=0 -> volledige historie
-function insKpiSeries(n){
-  const all=months(); const ms=(n===0)?all:all.slice(-(n||12));
-  const S={ms,inleg:[],budget:[],vari:[],vast:[]};
-  for(const mm of ms){
-    const t=totals(mm), sf=splitFixedVar(mm);
-    const _vi=vermogensInleg(mm).totaal;   // dezelfde teller als de tegel, anders liegt de lijn
-    S.inleg.push((t.income>0&&_vi!=null)?_vi/t.income*100:null);
-    S.budget.push(t.budget>0?t.spendNorm/t.budget*100:null);   // v234
-    S.vari.push(t.income>0?sf.vari/t.income*100:null);
-    S.vast.push(t.income>0?sf.fixed/t.income*100:null);
-  }
-  return S;
-}
 // Vier KPI's voor maand m, elk met waarde, band, oordeel én historische reeks.
 // Onbekend = '—' i.p.v. een verzonnen getal; een lopende maand krijgt geen oordeel:
 // een halve maand is per definitie "zuinig" en dat is geen verdienste.
@@ -26511,50 +26596,6 @@ function schuldGemetenPerMaand(id){
    zeggen. Is dat bij elke schuld zo, dan staat er geen regel; bij een deel zegt de regel "deels onbekend"
    en telt alleen wat bekend is. Zonder gekoppelde betaling in die maand staat er geen regel. */
 function schuldMetAuto(d){ return !!(d && d.type==='financiallease' && d.autoBezit && (+d.dagwaarde||0)>0); }
-function aflossingMaand(ym){
-  const regels=[];
-  for(const d of (SET.debts||[])){
-    const tx=schuldGekoppeld(d.id).filter(t=>String(t.date).slice(0,7)===ym);
-    if(!tx.length) continue;
-    const S=schuldStand(d);
-    const bet=S.betalingen.filter(b=>String(b.datum).slice(0,7)===ym);
-    const betaald=Math.round(tx.reduce((s,t)=>s-t.amount,0));
-    if(bet.length<tx.length){ regels.push({id:d.id, naam:d.naam||'Schuld', onbekend:true, betaald, auto:schuldMetAuto(d)}); continue; }
-    regels.push({id:d.id, naam:d.naam||'Schuld', onbekend:false, betaald,
-      aflossing:Math.round(bet.reduce((s,b)=>s+b.aflossing,0)), rente:Math.round(bet.reduce((s,b)=>s+b.rente,0)),
-      zonderRente:S.zonderRente, auto:schuldMetAuto(d)});
-  }
-  if(!regels.length) return null;
-  const bekend=regels.filter(r=>!r.onbekend);
-  if(!bekend.length) return {regels, bedrag:null, deels:false};
-  return {regels, bedrag:bekend.reduce((s,r)=>s+r.aflossing,0), deels:bekend.length<regels.length};
-}
-function aflossingRegel(ym){
-  let A=null; try{ A=aflossingMaand(ym); }catch(_){ return ''; }
-  if(!A || A.bedrag==null) return '';
-  return `<div class="wvo-ts" data-aflossing="${A.bedrag}" style="color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();openAflossing('${esc(ym)}')">Daarnaast ${euro0(A.bedrag)} afgelost op je schulden${A.deels?' · deels onbekend':''} ›</div>`;
-}
-function openAflossing(ym){
-  let A=null; try{ A=aflossingMaand(ym); }catch(_){ return; }
-  if(!A) return;
-  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
-  const rij=r=>{
-    const sub=r.onbekend
-      ? `niet te zeggen: er staat geen restschuld van voor deze betaling · ${euro0(r.betaald)} betaald`
-      : `van ${euro0(r.betaald)} betaald${r.zonderRente?' · zonder rente gerekend':` · ${euro0(r.rente)} rente`} · bij benadering`;
-    return `<div class="row" data-aflosrij="${esc(String(r.id))}" style="gap:9px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start">
-      <div style="flex:1;min-width:0"><div class="small" style="font-weight:600;overflow-wrap:anywhere">${esc(r.naam)}</div>
-        <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45">${sub}${r.auto?' · <span data-aflosauto>de auto verliest ook waarde</span>':''}</div></div>
-      <div class="small" style="font-weight:700;white-space:nowrap">${r.onbekend?'onbekend':euro0(r.aflossing)}</div></div>`;
-  };
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:6px"><div style="font-weight:800;font-size:var(--fs-lg)">Afgelost in ${esc(MFULL[+ym.slice(5,7)-1])}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="line-height:1.5">Het aflossingsdeel van de betalingen die je aan een schuld koppelde: eerst gaat de rente eraf, de rest maakt je schuld kleiner. Dit staat naast je spaarquote en telt er niet in mee.</div>
-    <div data-aflossheet style="margin-top:8px">${A.regels.map(rij).join('')}</div>
-    ${A.bedrag!=null?`<div class="row" style="gap:9px;padding:9px 0"><span class="small" style="flex:1;font-weight:600">Samen${A.deels?', van wat bekend is':''}</span><span class="small" style="font-weight:700">${euro0(A.bedrag)}</span></div>`:''}
-    <div style="height:8px"></div>`;
-  showSheetBg();
-}
 /* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
    totaal is null zodra geen enkele stroom bekend is. */
 function vermogensInleg(ym){
@@ -26589,118 +26630,17 @@ function opzijGemiddeld(){
    tegel 'te klein voor een percentage' zei, dus dezelfde maand las op twee plekken anders. Nul is
    voortaan een uitkomst en geen ondergrens; onbekend blijft een andere zaak en wordt eerder
    afgevangen (v==null, v163). */
-function pctZinvol(grondtal){
-  if(grondtal==null) return false;
-  const g=Math.abs(Math.round(grondtal));
-  return g===0 || g>=MAAND_DREMPEL.kpiMinBedrag;
-}
 /* En de andere helft van diezelfde regel: nul is alleen een meting als er ook iets te meten viel.
    Ligt je laatste boeking vóór de maand waarover het cijfer gaat, dan is er niets binnengekomen en
    zegt de hero 'onbekend' (v173). Dan mag de tegel geen 0% tonen, want dan spreken ze elkaar tegen
    in de andere richting. Dezelfde bron als de hero - laatsteImport() - zodat er geen tweede
    detectie ontstaat. */
-function maandGemeten(m){
-  // zonder een geldige maand valt er niets te toetsen; dan niets onderdrukken. Een losse
-  // stringvergelijking op 'null-01' zou juist alles op onbekend zetten.
-  if(!/^\d{4}-\d{2}$/.test(String(m||''))) return true;
-  try{ const L=laatsteImport(); return !(L && L.datum < m+'-01'); }catch(_){ return true; }
-}
-function insKpis(m,n){
-  const t=totals(m), S=insKpiSeries(n);
-  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const partial=(m===nowYM);
-  const i=S.ms.indexOf(m); const upto=a=>i>=0?a.slice(0,i+1):a.slice();
-  const labels=upto(S.ms).map(x=>MNAMES[+x.slice(5,7)-1]);
-  const maanden=upto(S.ms);
-  const sf=splitFixedVar(m);
-  /* v161: de restsaldo-quote is vervallen. Die mat wat er op je betaalrekening bleef staan, en dat
-     is bij een automatische verdeling per definitie hoog: een artefact van je eigen structuur.
-     De spaarquote telt nu de hele vermogensopbouw, niet alleen de spaarrekening. */
-  const V=vermogensInleg(m);
-  const waarde={
-    inleg:  (t.income>0&&V.totaal!=null)?V.totaal/t.income*100:null,
-    budget: t.budget>0?t.spendNorm/t.budget*100:null,   // v234
-    vari:   t.income>0?sf.vari/t.income*100:null,
-    vast:   t.income>0?sf.fixed/t.income*100:null
-  };
-  /* Het grondtal per cijfer: de teller waar het percentage uit komt. Is die te klein, dan zegt het
-     percentage niets - een terugstorting in een categorie met nauwelijks kosten gaf zo een vaste-
-     lastendruk van -1%. Dan tonen we het bedrag zelf. Drempel in MAAND_DREMPEL, niet inline. */
-  const grondtal={inleg:V.totaal, budget:Math.round(t.spendNorm), vari:Math.round(sf.vari), vast:Math.round(sf.fixed)};
-  const gemeten=maandGemeten(m);
-  const mk=key=>{
-    const M=KPI_META[key], v=gemeten?waarde[key]:null, ref=null;
-    const fmt=_pct0;
-    let st=kpiState(key,v,ref);
-    /* v161 trekt de bijstelling uit v117 in. De spaarquote meet hoeveel er opzij ging; of dat uit
-       lopend inkomen kwam of uit een pot is een andere vraag, en die beantwoordt het maandscherm
-       met de drie voorwaarden. Twee vragen in één getal maakt het onleesbaar. Een herkomsttoets zou
-       bovendien blind zijn voor rekeningen zonder eigen IBAN (v128), dus juist voor het geval
-       waarvoor hij zou bestaan. spaarDekking() blijft bestaan waar het wél iets zegt. */
-    let band=kpiBandTxt(key);
-    if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
-    if(v==null) band=(key==='budget')?'nog geen budget':(key==='inleg'&&t.income>0)?'geen spaarrekening bekend':'inkomen onbekend';
-    if(!gemeten) band='geen boekingen in deze maand';
-    const afst=kpiAfstand(key,v,t,sf);
-    const g=grondtal[key];
-    const klein=(v!=null && !pctZinvol(g));
-    if(klein) band=`grondtal ${euro0(g)} · te klein voor een percentage`;
-    return {key, m, label:M.label, raw:v, ref, val:klein?euro0(g):(v==null?'—':fmt(v)), band, uitleg:M.uitleg, fmt, partial, afst,   // v232: m mee, zodat de tik het detail op dezelfde maand opent
-            grondtal:g, klein,
-            oordeel: (v==null||klein)?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
-            state: (v==null||partial||klein)?'n':st,      // kleur van het cijfer
-            trendState: st,                         // oordeel los van de lopende maand
-            src: key==='budget'?(t.potTotal>0?'potjes':'limiet'):undefined,
-            budgetBedrag: key==='budget'?Math.round(t.budget):undefined,
-            series: upto(S[key]), labels, maanden};
-  };
-  // v161: vier cijfers, verdeeld over twee schermen. Structureel (spaarquote, vaste-lastendruk)
-  // hoort bij de maand; operationeel (budgetnaleving, variabele-lastendruk) bij Inzichten.
-  const items=['inleg','budget','vari','vast'].map(mk);
-  const by={}; for(const k of items) by[k.key]=k;
-  return Object.assign({m,partial,items},by);
-}
 
 // staafkleur per maand = binnen of buiten je band; zo draagt de trend zelf het oordeel
-function kpiBarColor(k){ return (v,idx)=>{
-  if(k.partial&&idx===k.series.length-1) return 'var(--teal)';        // de lopende maand is de highlight
-  const st=kpiState(k.key,v,k.ref);
-  return st==='bad'?kpiCol('bad'):'var(--bar)';                       // alleen écht buiten de band kleurt; amber blijft spaarzaam
-}; }
 
 /* Richting A: één rustige datataal in de Kerncijfer-tegels. Eén lijn in de neutrale datakleur,
    de lopende maand als open teal punt, en waar er een doel is een hele zachte gestreepte lijn.
    De status staat in het label ernaast, nooit in de kleur van de lijn. */
-function miniSparkLine(values, opts){
-  opts=opts||{};
-  const vals=(values||[]).map(v=>(v==null||isNaN(v))?null:+v);
-  const pts=vals.map((v,i)=>({v,i})).filter(p=>p.v!=null);
-  if(pts.length<2) return '';
-  // breedte ~ de echte tegelbreedte op mobiel, zodat het eindpunt rond blijft i.p.v. uitgerekt
-  const W=150, H=26, P=3;
-  let doel=(opts.target!=null && isFinite(opts.target))?+opts.target:null;
-  // Een doel ver buiten je eigen bereik drukt de lijn plat. Eerder lieten we de referentie dan
-  // weg, maar juist wie ver van zijn doel staat verloor 'm zo uit beeld (v103). Nu blijft de
-  // schaal van je eigen cijfers en tekenen we de doellijn op de rand: de trend blijft leesbaar
-  // en je ziet aan welke kant je doel ligt.
-  let doelBuiten=false;
-  if(doel!=null){
-    const dl=Math.min(...pts.map(p=>p.v)), dh=Math.max(...pts.map(p=>p.v)), dr=(dh-dl)||Math.abs(dh)||1;
-    if(doel<dl-1.2*dr || doel>dh+1.2*dr) doelBuiten=true;
-  }
-  const alles=pts.map(p=>p.v).concat((doel!=null&&!doelBuiten)?[doel]:[]);
-  const lo=Math.min(...alles), hi=Math.max(...alles), span=(hi-lo)||1;
-  const x=i=>P+(W-2*P)*(vals.length<2?0:i/(vals.length-1));
-  const y=v=>H-P-((v-lo)/span)*(H-2*P);
-  const pad=pts.map((p,k)=>`${k?'L':'M'}${x(p.i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
-  const laatste=pts[pts.length-1];
-  const dy=doel!=null?Math.min(Math.max(y(doel),P),H-P):null;   // buiten bereik -> op de rand
-  const lijn=doel!=null?`<line x1="${P}" x2="${W-P}" y1="${dy.toFixed(1)}" y2="${dy.toFixed(1)}" stroke="var(--mut2)" stroke-width="1" stroke-dasharray="${doelBuiten?'2 4':'3 3'}" opacity="${doelBuiten?'.32':'.45'}" vector-effect="non-scaling-stroke"/>`:'';
-  const px=(x(laatste.i)/W*100).toFixed(2), py=(y(laatste.v)/H*100).toFixed(2);
-  const punt=`<i class="${opts.running?'spk-nu':'spk-eind'}" style="left:${px}%;top:${py}%"></i>`;
-  return `<div class="spk-in"><svg class="spk" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
-    ${lijn}<path d="${pad}" fill="none" stroke="var(--bar)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>${punt}</div>`;
-}
 /* v161: de tegels zijn gedeeld, want de kerncijfers staan nu op twee schermen. Eén renderer, zodat
    Inzichten en het maandscherm niet uiteen kunnen lopen in opmaak of oordeel. */
 /* v194: een sparkline bij drie punten is twee segmenten - je leest een richting en verder niets -
@@ -26712,37 +26652,6 @@ function miniSparkLine(values, opts){
    (v161/v193) terwijl de reeks procenten plot. Getal en lijn in twee eenheden onder elkaar, zonder
    dat iets dat zegt. Dan geen lijn en ook geen delta-zin, want die zou procenten noemen onder een
    bedrag; de band zegt al dat het grondtal te klein is. */
-function kpiVolleMaanden(k){
-  const v=(k&&k.series)||[];
-  const n=v.filter(x=>x!=null).length;
-  return k&&k.partial&&v.length&&v[v.length-1]!=null?n-1:n;
-}
-function kpiDeltaZin(k){
-  const v=((k&&k.series)||[]).filter(x=>x!=null);
-  if(v.length<2) return `<div class="wvo-ts" style="color:var(--mut2)">Een verloop zie je vanaf ${GRAFIEK_MIN} afgeronde maanden.</div>`;
-  const vorige=v[v.length-2];
-  return `<div class="wvo-ts" style="color:var(--mut2)">vorige maand ${_pct0(vorige)} \u00b7 verloop vanaf ${GRAFIEK_MIN} mnd</div>`;
-}
-function kpiTegels(items){
-  return items.map(k=>{
-    const col=kpiCol(k.state);
-    const doel=kpiBand(k.key)!=null?kpiBand(k.key):null;
-    const genoeg=kpiVolleMaanden(k)>=GRAFIEK_MIN;
-    const sl=(genoeg&&!k.klein)?miniSparkLine(k.series,{target:doel, running:k.partial}):'';
-    const spark=sl?`<div class="spk-wrap">${sl}</div>`
-      :((!genoeg&&!k.klein&&k.raw!=null)?kpiDeltaZin(k):'');
-    return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}','${esc(k.m||'')}')" data-kpi="${k.key}">
-      <div class="wvo-tl">${k.label}</div>
-      <div class="wvo-tv" style="color:${col}">${k.val}</div>
-      <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
-      ${(()=>{ const e=(!k.partial?kpiAfstandTxt(k.key,k.afst,true):'');
-        return e?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${e}</div>`:''; })()}
-      ${k.key==='inleg'&&k.m?aflossingRegel(k.m):''}
-      ${spark||''}${''/* v173: de mededeling dat je nog moet wachten stond per tegel en nog eens
-        onder de maandgrafiek: drie keer hetzelfde op één scherm. De grafiek zegt het nu als enige. */}
-    </div>`;
-  }).join('');
-}
 /* v208: hier stond insKpiStrip(), het Kerncijfers-blok van Inzichten met budgetnaleving en de
    variabele-lastendruk. Budgetnaleving stond al in de hero, in dezelfde eenheid en uit dezelfde
    bron (totals()), met de balk en de dagteller erbij. En de variabele-lastendruk stuurde niets: je
@@ -26791,92 +26700,15 @@ function kpiTegels(items){
    tests onderuit; de schil weghalen was de opdracht, de structuur eronder niet.
    Het id staat op een wrapper en niet op .wvo-tiles zelf, want selectors als
    '#maandKpiBlok .wvo-tiles' verwachten die nesting. */
-/* v232: de tegel staat op Vermogen en toont daar de laatste AFGERONDE maand. Een halve maand is
-   geen tempo (v230), en op een scherm dat over dertig jaar gaat is die halve maand ruis. Op een
-   afgeronde maand draagt de tegel een oordeel, een kleur, een afstand en een gesloten eindpunt in
-   de sparkline; 'loopt nog' komt daar dus niet voor. Het label noemt de maand, anders lees je een
-   percentage zonder te weten waarover het gaat. De naam maandKpiBlok en het id blijven: daar
-   hangen de specs aan die de tegel bewaken, en de tegel zelf is niet veranderd. */
-function vermogenSpaarquoteMaand(){ const ms=months().filter(x=>x<thisYM()); return ms.length?ms[ms.length-1]:null; }
-function maandKpiBlok(m, opts){
-  opts=opts||{};
-  let K=null; try{ K=insKpis(m); }catch(_){ return ''; }
-  if(!K) return '';
-  const items=K.items.filter(k=>k.key==='inleg');
-  if(!items.length) return '';
-  if(opts.maandInLabel) items.forEach(k=>{ k.label=`${k.label} · ${MFULL[+m.slice(5,7)-1]}`; });
-  return `<div id="maandKpiBlok">
-    <div class="wvo-tiles" style="grid-template-columns:1fr">${kpiTegels(items)}</div>
-  </div>`;
-}
 
 /* ---- Gedeelde bouwstenen voor de staafgrafieken: as met waarden, labels boven de staven
        en een tik-uitlezing. Puur weergave; de reeksen zelf blijven zoals ze zijn. ---- */
-const CHART_GEO={W:320,H:172,L:34,R:6,TOP:16,BASE:126,XLAB:142};   // L = gutter voor de y-labels
-const chartK=v=>euroK(v);   // één compacte notatie in de hele app (euroK)
 // welke staven een vast label krijgen: bij weinig maanden alle, anders eerste/laatste/hoogste/laagste
-function chartLabelIdx(vals){
-  const idx=vals.map((v,i)=>v==null?-1:i).filter(i=>i>=0);
-  if(!idx.length) return new Set();
-  if(idx.length<=6) return new Set(idx);
-  let hi=idx[0], lo=idx[0];
-  for(const i of idx){ if(vals[i]>vals[hi]) hi=i; if(vals[i]<vals[lo]) lo=i; }
-  return new Set([idx[0], idx[idx.length-1], hi, lo]);
-}
-function chartYAxis(niceTop, fmt){
-  const G=CHART_GEO; const out=[];
-  for(const f of [1,0.5]){
-    const v=niceTop*f, yy=G.BASE-f*(G.BASE-G.TOP);
-    out.push(`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="var(--lab)" text-anchor="end">${fmt(v)}</text>`);
-  }
-  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="var(--lab)" text-anchor="end">0</text>`);
-  return out.join('');
-}
 // tik-uitlezing: vult een regel onder de grafiek, zonder re-render
-function chartRead(id,txt){ const el=document.getElementById(id); if(el) el.innerHTML=txt; }
 // label voor een referentielijn, rechts uitgelijnd, met een dekkend plaatje eronder zodat het
 // leesbaar blijft als er staven achter langs lopen
-function chartTagRight(xr,yy,txt,col){
-  const w=txt.length*4.7+8;
-  return `<rect x="${(xr-w).toFixed(1)}" y="${(yy-8.5).toFixed(1)}" width="${w.toFixed(1)}" height="11.5" rx="3" fill="var(--card2)" fill-opacity=".95"/>`
-    +`<text x="${(xr-4).toFixed(1)}" y="${yy.toFixed(1)}" font-size="8.5" font-weight="700" fill="${col}" text-anchor="end">${txt}</text>`;
-}
 
 // volledige historie van één KPI: staven met waarde, maandlabels, y-as en je band als gelabelde lijn
-function kpiHistChart(k){
-  const vals=k.series, labs=k.labels, ms=k.maanden;
-  if(vals.filter(v=>v!=null).length<2) return `<div class="small muted" style="margin:14px 0 4px">Na twee maanden zie je hier je verloop.</div>`;
-  const band=kpiBand(k.key)!=null?kpiBand(k.key):(k.ref||0);
-  const G=CHART_GEO, {W,R,L,TOP,BASE,XLAB,H}=G;
-  const ruw=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1);
-  const niceTop=Math.max(Math.ceil(ruw*1.08/10)*10,10);
-  const slot=(W-L-R)/vals.length, bw=Math.min(slot*0.62,34);
-  const y=v=>BASE-Math.max(v,0)/niceTop*(BASE-TOP);
-  const col=kpiBarColor(k);
-  const every=Math.ceil(vals.length/12);
-  const toon=chartLabelIdx(vals);
-  const kort=v=>k.fmt(v);
-  const bars=vals.map((v,i)=>{
-    const cx=L+slot*i+slot/2, x=cx-bw/2, nu=(k.partial&&i===vals.length-1);
-    if(v==null) return `<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${labs[i]}</text>`;
-    const yy=y(v);
-    const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-yy,1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${nu?' fill-opacity=".45" stroke="'+col(v,i)+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
-    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="var(--txt)" text-anchor="middle">${kort(v)}</text>`:'';
-    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${labs[i]}${nu?'*':''}</text>`:'';
-    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('kpiRead','&lt;b&gt;${esc(monthLabel(ms[i]))}&lt;/b&gt; · ${k.fmt(v)}${nu?' · tot nu toe':''}')"><title>${labs[i]} · ${k.fmt(v)}</title></rect>`;
-    return bar+val+lab+hit;
-  }).join('');
-  const bandTxt=kpiBandTxt(k.key);
-  const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`
-    +chartTagRight(W-R, y(band)-4, bandTxt, 'var(--ref)'):'';
-  return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
-      ${chartYAxis(niceTop, kort)}
-      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
-      ${bars}${bandLine}
-    </svg>
-    <div id="kpiRead" class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
-    <div class="gc-leg"><span><i class="d"></i>${kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
-}
 /* Welke transacties maken dit kerncijfer? (v104) Elk cijfer heeft een scherp afgebakende
    verzameling, en die gebruiken we hier letterlijk: dezelfde predicaten als totals() en
    splitFixedVar(). Zo telt de lijst per definitie op tot het getal erboven. Een lijst die iets
@@ -26885,90 +26717,19 @@ function kpiHistChart(k){
    moet ze alle drie tonen: alleen savedTx() laten zien zou het getal erboven tegenspreken (v104).
    Eén verzameling, ontdubbeld op id, want een boeking op je reserveringspot kan ook als
    spaarrekening gemarkeerd staan. */
-function inlegTx(ym){
-  const uit=new Map();
-  try{ for(const t of savedTx(ym)) uit.set(t.id,t); }catch(_){}
-  let ra=null; try{ ra=resAccId(); }catch(_){}
-  if(ra) for(const t of txOfMonth(ym)){ if(t.acc===ra) uit.set(t.id,t); }
-  for(const t of beleggingsTx(ym)) uit.set(t.id,t);
-  return [...uit.values()];
-}
-function kpiTx(key,m){
-  const list=txOfMonth(m);
-  if(key==='vast')   return list.filter(x=>isExpenseTx(x)&&isFixed(x));
-  if(key==='vari')   return list.filter(x=>isExpenseTx(x)&&!isFixed(x));
-  if(key==='budget') return list.filter(isExpenseTx);
-  if(key==='inleg')  return inlegTx(m);                    // alle drie de stromen van vermogensInleg()
-  return [];
-}
 /* Het inkomen in de restsaldo-quote komt uit totals() en dat is lang niet altijd de som van je
    inkomsten-transacties: met autoIncome uit is het je eigen instelling (index.html:1441).
    Doen alsof de transacties dat getal maken zou onwaar zijn, dus we noemen de bron. */
-const KPI_INCBRON={handmatig:'zelf ingesteld', gedetecteerd:'herkend uit je transacties', basisnorm:'je basisnorm uit eerdere maanden', halvemaand:'je basisnorm, deze maand is nog niet af', onbekend:'onbekend'};
 /* Wat heeft één transactie aan dit cijfer gedaan? (v105) Dezelfde noemer als het cijfer zelf
    (kpiAfstand().basis: je potjes bij budgetnaleving, anders je inkomen), zodat de bijdragen
    optellen tot het getal erboven. Het teken volgt de betekenis: bij sparen dúwt een uitgave het
    cijfer omlaag, bij een drukmetriek juist omhoog. Een terugstorting draait dat vanzelf om. */
-function kpiBijdrage(key,t,basis){
-  if(!(basis>0)) return null;
-  const sign=(KPI_META[key]||{}).sign||1;
-  return sign*kpiTxWaarde(key,t)/basis*100;
-}
-const kpiPt=v=>{ const a=Math.abs(v); if(a<0.05) return '0 pt';
-  return (v<0?'−':'+')+String(Math.round(a*10)/10).replace('.',',')+' pt'; };
 /* De teller van een kerncijfer. Uitgaven tellen netto als -amount (netSpend); de spaarquote
    telt de instroom op je spaarrekening, dus juist +amount. Eén plek, zodat de lijst, de delta en
    de bijdrage per transactie dezelfde som gebruiken. */
-function kpiTxWaarde(key,t){
-  if(key==='inleg') return inlegWaarde(t);
-  return -t.amount;                                                          // uitgave: netto, terugstorting verlaagt
-}
 /* Op een eigen vermogenspot is de bijschrijving de inleg; een beleggingsinleg verlaat je rekeningen
    juist, dus daar telt de afschrijving. Eén regel per boeking, zodat de lijst optelt tot het cijfer
    ongeacht welke stromen bekend zijn. */
-function inlegWaarde(t){
-  let sav=new Set(); try{ sav=new Set(n26SavingsAccounts()); }catch(_){}
-  let ra=null; try{ ra=resAccId(); }catch(_){}
-  if(sav.has(t.acc)||(ra&&t.acc===ra)) return t.amount;
-  return -t.amount;
-}
-function kpiSom(key,items){ return items.reduce((s,t)=>s+kpiTxWaarde(key,t),0); }
-function kpiTxLijst(key,m){
-  const t=totals(m);
-  const basis=kpiBasis(key,t);   // v161: los van de band, want die is er nog maar voor budgetnaleving
-  // v105: op gewicht, niet op datum. De vraag is welke transactie dit cijfer maakt, en dan is
-  // "de zwaarste eerst" het antwoord; de datum staat er per regel toch bij.
-  const items=kpiTx(key,m).slice().map(x=>({t:x,pt:kpiBijdrage(key,x,basis)}))
-    .sort((a,b)=>(Math.abs(b.pt||0)-Math.abs(a.pt||0))||b.t.date.localeCompare(a.t.date));
-  const uit=kpiSom(key,items.map(x=>x.t));
-  const kop=(key==='inleg')
-    ? `${euro0(uit)} naar je spaarrekening, van ${euro0(t.income)} inkomen`
-    : (key==='budget')
-    ? `${euro0(uit)} uitgegeven van ${euro0(t.budget)} budget`
-    : `${euro0(uit)} aan ${key==='vast'?'vaste lasten':'variabele uitgaven'}`;
-  /* v161: deze regel hing aan de restsaldo-quote. De redenering van v104 geldt voor elk cijfer met
-     je inkomen als noemer: dat inkomen komt uit je instelling, niet uit de som van je
-     inkomsten-transacties, dus het hoort als aparte regel met zijn bron en niet in de lijst. */
-  const incRegel=(kpiBasis(key,t)===(+t.income||0) && t.income>0)
-    ? `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-         <span class="small">Inkomen · <span style="color:var(--mut2)">${KPI_INCBRON[t.incomeBasis]||t.incomeBasis}</span></span>
-         <span class="small" style="font-weight:700">${euro0(t.income)}</span></div>`
-    : '';
-  const rijen=items.length?items.map(({t:t2,pt})=>{const c=CATS[catOf(t2)];
-    return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t2.name)}</div><div class="cat">${new Date(t2.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}</div></div>
-      <div style="text-align:right"><div class="amt ${t2.amount>0?'pos':'neg'}">${t2.amount>0?'+':''}${euro(t2.amount)}</div>
-        ${pt!=null?`<div class="kpi-pt small" style="color:var(--mut2);font-size:var(--fs-xs)">${kpiPt(pt)}</div>`:''}</div></div>`;}).join('')
-    : `<div class="small muted" style="padding:12px 0">Geen transacties in deze maand.</div>`;
-  // de uitleg hoort bij de eenheid, niet bij elke regel: één zin boven de lijst
-  const ptUitleg=(basis>0&&items.length)
-    ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:2px 0 6px">Achter elk bedrag staat wat die transactie aan dit cijfer deed, in ${jrg('procentpunt','procentpunten')}. ${key==='inleg'?'Elke storting duwt dit cijfer omhoog.':'Een uitgave duwt dit cijfer omhoog.'}</div>`
-    : '';
-  return `<details class="kpi-tx" style="margin-top:14px">
-    <summary class="small" style="color:var(--teal);cursor:pointer">Welke transacties zitten hierin? · ${items.length}</summary>
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:8px 0 2px">${kop}</div>
-    ${ptUitleg}${incRegel}${rijen}</details>`;
-}
 /* Wat veranderde er sinds vorige maand, en wat verklaart dat? (v106)
    Elk kerncijfer is teken × X/B: X is wat je uitgaf, B je inkomen (of je potjes bij
    budgetnaleving). De verschuiving splitst dan exact in twee delen:
@@ -26976,59 +26737,7 @@ function kpiTxLijst(key,m){
      noemer-effect  X0·(1/B1 − 1/B0)    — wat je inkomen of budget deed
    Samen zijn ze de hele verandering, en alleen het teller-effect splitst per categorie. Zonder
    die tweedeling zou een gedaald inkomen als "je gaf meer uit" lezen, en dat is niet waar. */
-function kpiXB(key,m){
-  const t=totals(m);
-  return {X:kpiSom(key,kpiTx(key,m)), B:(key==='budget')?(+t.budget||0):(+t.income||0)};
-}
-function kpiCatSom(key,m){                     // niet clampen: een netto-negatieve categorie telt gewoon mee
-  const by={};
-  if(key==='inleg'){ const sav=new Set(n26SavingsAccounts());
-    // alle spaarboekingen dragen dezelfde categorie, dus groeperen we op rekening
-    for(const t of kpiTx(key,m)){ const k='acc:'+t.acc; by[k]=(by[k]||0)+(sav.size?t.amount:-t.amount); }
-    return by; }
-  for(const t of kpiTx(key,m)){ const c=catOf(t); by[c]=(by[c]||0)+(-t.amount); } return by;
-}
 // label van een driver: een categorie, of bij de spaarquote een rekening
-function kpiDriverNaam(k){
-  if(String(k).slice(0,4)==='acc:'){ const a=String(k).slice(4); return 'Naar '+(accShort(a)||'je spaarrekening'); }
-  return CATS[k]?CATS[k].name:k;
-}
-function kpiDelta(key,m){
-  const ms=months(), i=ms.indexOf(m); if(i<1) return null;
-  const vorige=ms[i-1];
-  const a=kpiXB(key,m), b=kpiXB(key,vorige);
-  if(!(a.B>0)||!(b.B>0)) return null;                     // zonder basis geen vergelijking (v59/v73)
-  const teken=(KPI_META[key]||{}).sign||1;
-  const nu=teken*a.X/a.B*100, was=teken*b.X/b.B*100;
-  const tel=teken*(a.X-b.X)/a.B*100;
-  const noem=teken*b.X*(1/a.B-1/b.B)*100;
-  const c1=kpiCatSom(key,m), c0=kpiCatSom(key,vorige);
-  const cats=[...new Set([...Object.keys(c1),...Object.keys(c0)])]
-    .map(c=>({cat:c, euro:(c1[c]||0)-(c0[c]||0), pt:teken*((c1[c]||0)-(c0[c]||0))/a.B*100}))
-    .filter(x=>Math.abs(x.pt)>=0.05).sort((x,y)=>Math.abs(y.pt)-Math.abs(x.pt));
-  return {vorige, was, nu, dpt:nu-was, tel, noem, cats, basisVan:b.B, basisNaar:a.B};
-}
-function kpiDeltaBlok(key,m,partial){
-  // Een halve maand tegen een hele leggen zegt niets; dat wachten we af (zie ook de tegel in v103).
-  if(partial) return `<div class="kpi-delta small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:13px">De vergelijking met vorige maand volgt zodra deze maand rond is.</div>`;
-  const D=kpiDelta(key,m); if(!D) return '';
-  if(Math.abs(D.dpt)<0.05) return `<div class="kpi-delta small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:13px">Vrijwel gelijk aan ${esc(monthLabel(D.vorige))}.</div>`;
-  const TOP=4, top=D.cats.slice(0,TOP), rest=D.cats.slice(TOP);
-  const restPt=rest.reduce((s,x)=>s+x.pt,0);
-  const rij=(nm,pt,eu)=>`<div class="row" style="justify-content:space-between;gap:10px;padding:4px 0">
-    <span class="small">${nm}</span><span class="small" style="color:var(--mut2);white-space:nowrap">${eu!=null?`${euro0(Math.abs(eu))} ${eu>0?'meer':'minder'} · `:''}${kpiPt(pt)}</span></div>`;
-  const noemRij=Math.abs(D.noem)>=0.05
-    ? rij(`Je ${key==='budget'?'budget':'inkomen'} ging van ${euro0(D.basisVan)} naar ${euro0(D.basisNaar)}`, D.noem, null)
-    : '';
-  return `<div class="kpi-delta" style="margin-top:14px;border-top:1px solid var(--line);padding-top:11px">
-    <div class="row" style="justify-content:space-between;gap:10px">
-      <span class="small" style="font-weight:600">Ten opzichte van ${esc(monthLabel(D.vorige))}</span>
-      <span class="small" style="font-weight:700">${_pct0(D.was)} → ${_pct0(D.nu)} · ${kpiPt(D.dpt)}</span></div>
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:6px 0 2px">Wat die verschuiving verklaart:</div>
-    ${top.map(x=>rij(kpiDriverNaam(x.cat), x.pt, x.euro)).join('')}
-    ${rest.length?rij(`Overige ${rest.length}`,restPt,null):''}
-    ${noemRij}</div>`;
-}
 /* De stand tegen het doel in één beeld (v103). Neutrale datakleur; amber alleen als je er echt
    buiten valt (v93), en niet in een lopende maand — een halve maand is geen eindoordeel.
    De markering staat in een wrapper omdat .bar-track overflow:hidden heeft. */
@@ -27041,79 +26750,11 @@ function kpiDeltaBlok(key,m,partial){
    kwam het verschil uit een pot en groeide je vermogen er niet mee. Het cijfer wordt daar niet op
    bijgesteld - de spaarquote meet wat er opzij ging, niet waar het vandaan kwam - de sheet zegt
    het er alleen bij. spaarDekking() is en blijft de enige bron voor dat verschil (v117). */
-function kpiSpaarBrug(key,m){
-  if(key!=='inleg') return '';
-  const D=spaarDekking(m); if(!D) return '';
-  const staart=(D.uitBuffer>0)
-    ? ` Dat is ${euro0(D.uitBuffer)} meer dan je overhield: dat deel kwam uit je buffer, dus je vermogen groeide er niet mee.`
-    : (D.gestort<0 ? ` Je nam deze maand netto op.` : ` Het verschil bleef op je betaalrekening staan.`);
-  return `<div class="kpi-brug small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:11px;line-height:1.5">
-    Je hield ${euro0(D.over)} over en zette ${euro0(D.gestort)} opzij.${staart}</div>`;
-}
-function kpiDoelBalk(k){
-  const A=k.afst; if(!A) return '';
-  const B=kpiBand(k.key), v=k.raw; if(!(B>0)||v==null) return '';
-  const top=Math.max(v,B)*1.25||1;
-  const pv=Math.max(Math.min(v/top*100,100),0), pd=Math.max(Math.min(B/top*100,100),0);
-  const col=(k.state==='bad')?'var(--amber)':'var(--bar)';
-  const pt=Math.abs(A.pt), ptTxt=pt>=0.05?`${String(pt).replace('.',',')} pt · `:'';
-  return `<div class="kpi-doel" style="margin-top:13px">
-    <div style="position:relative">
-      <div class="bar-track"><div class="bar-fill" style="width:${pv.toFixed(1)}%;background:${col}"></div></div>
-      <i title="je doel" style="position:absolute;top:5px;height:15px;left:${pd.toFixed(1)}%;width:2px;background:var(--mut2);border-radius:1px"></i>
-    </div>
-    <div class="row" style="justify-content:space-between;gap:10px;align-items:flex-start">
-      <span class="small" style="color:var(--mut2);font-size:var(--fs-xs)">nu ${k.val} · doel ${_pct0(B)}</span>
-      <span class="small" style="color:var(--mut2);font-size:var(--fs-xs);text-align:right">${ptTxt}${kpiAfstandTxt(k.key,A,false)}</span>
-    </div>
-    ${k.partial?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:5px">Tussenstand: de maand loopt nog, dus dit is nog geen eindoordeel.</div>`:''}</div>`;
-}
 /* De opbouw van de spaarquote (v161). Toont per stroom wat er meetelt, en noemt uitdrukkelijk wat
    er buiten valt en waarom - anders lijkt een ontbrekende stroom een fout in plaats van een keuze. */
-function kpiInlegOpbouw(m){
-  let V=null; try{ V=vermogensInleg(m); }catch(_){ return ''; }
-  if(!V) return '';
-  const rij=(naam,bedrag,noot)=>`<div class="row" style="gap:9px;padding:6px 0;border-bottom:1px solid var(--line)">
-    <span class="small" style="flex:1;min-width:0">${esc(naam)}${noot?` <span style="color:var(--mut2)">· ${esc(noot)}</span>`:''}</span>
-    <span class="small" style="font-weight:700;white-space:nowrap">${bedrag==null?'niet bekend':euro0(bedrag)}</span></div>`;
-  return `<div class="small muted" style="margin:14px 0 4px;font-weight:600">Waaruit dit cijfer is opgebouwd</div>
-    ${V.delen.map(d=>rij(d.naam,d.bedrag,d.key==='spaar'&&d.bedrag==null?'geen spaarrekening gemarkeerd':(d.key==='res'&&d.bedrag==null?'geen reserveringsrekening ingesteld':''))).join('')}
-    ${V.totaal!=null?`<div class="row" style="gap:9px;padding:8px 0"><span class="small" style="flex:1;font-weight:600">Samen</span>
-      <span class="small" style="font-weight:700">${euro0(V.totaal)}</span></div>`:''}
-    <div class="small muted" style="margin-top:8px;line-height:1.5">Dit cijfer zegt <b>hoeveel</b> er opzij ging, niet waar het vandaan kwam. Zette je iets opzij uit een pot in plaats van uit het inkomen van deze maand, dan telt dat hier gewoon mee; of je opbouw gedekt was door je overschot lees je op Grip bij je drie voorwaarden.</div>
-    <div class="small muted" style="margin-top:8px;line-height:1.5">Hier buiten vallen twee stromen, bewust en niet bij vergissing.
-      <b>Je aankoopdoel</b> heeft geen eigen rekening; de voortgang is een bedrag dat je zelf invult, en wordt het doel vanuit je
-      spaarrekening gevoed dan telt dat geld hierboven al mee. <b>Aflossing op een lening</b> valt er ook buiten: een schuld die
-      kleiner wordt is geen geld dat ergens staat. Koppel je de betaling aan een schuld, dan rekent de app bij benadering uit
-      welk deel aflossing is en welk deel rente, en dat staat onder het percentage. Zonder koppeling weet de app niet welk deel
-      wat is, en dan staat er niets.</div>`;
-}
 /* v232: het tweede argument is de maand van de tegel die je aantikte. Zonder dat opende het detail
    curMonth, de maand van de kiezer op Inzichten en Maand, en op Vermogen toont de tegel een andere
    maand dan die kiezer. Zonder argument gedraagt hij zich als voorheen. */
-function openKpiDetail(key, mm){
-  const m=(mm&&months().includes(mm))?mm:(curMonth||months()[months().length-1]);
-  const K=insKpis(m,0); const k=K[key]; if(!k) return;                    // n=0: volledige historie
-  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" id="kpiDetailHead" style="margin-bottom:6px"><div style="font-weight:800;font-size:var(--fs-lg)">${k.label}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="line-height:1.5">${k.uitleg}</div>
-    <div style="display:flex;align-items:baseline;gap:9px;margin-top:13px;flex-wrap:wrap">
-      <div style="font-size:28px;font-weight:800;letter-spacing:-.5px;color:${kpiCol(k.state)}">${k.val}</div>
-      <div class="small muted">${esc(monthLabel(m))}${k.partial?' · tot nu toe':''}</div>
-    </div>
-    <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
-    ${key==='inleg'?aflossingRegel(m):''}
-    ${kpiDoelBalk(k)}
-    ${key==='inleg'?kpiInlegOpbouw(m):''}
-    ${kpiSpaarBrug(key,m)}
-    ${kpiDeltaBlok(key,m,k.partial)}
-    ${kpiTxLijst(key,m)}
-    ${kpiHistChart(k)}
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:8px">Je volledige historie van deze metriek.</div>
-    <div style="height:8px"></div>`;
-  showSheetBg();
-}
 
 // Kolomgrafiek uitgaven per maand met je maandbudget als gestreepte referentie.
 // viewBox + width:100% => schaalt mee, kapt nooit af op smalle schermen.
@@ -29420,8 +29061,36 @@ function uitReserveringBlok(t){
     ${aan?`<div class="row" style="gap:8px;align-items:center;padding:0 0 10px">
       <span class="small muted" style="flex:1">Waarvan uit een reservering${heel?'':` \u00b7 van ${euro0(-t.amount)}`}</span>
       <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
-             onchange="zetUitReservering('${t.id}', numIn(this.value))"></div>`:''}`;
+             onchange="zetUitReservering('${t.id}', numIn(this.value))"></div>`:''}${aan?resPostVraagBlok(t):''}`;
 }
+/* onderhoud3 (punt 5, mockup "kleine vragen" 2): IS DIT DE POST ...? Het vinkje "uit een reservering" zette de post zelf niet op
+   betaald, dus de dekking bleef rekenen alsof hij nog kwam. Past het bedrag binnen EUR 1 op een open post (resVolgende) in dezelfde
+   maand of eerder, dan vraagt Minder het meteen bij het vinkje. Ja zet DIE post op betaald (SET.resBetaald, dezelfde vlag als
+   "Deze post is betaald", met de boeking erbij); Andere post toont de open posten; Geen post onthoudt dat. Niets voorgekozen. */
+function resPostOpen(){ return resLijst().filter(v=>v && v.id && Math.round(+v.bedrag||0)>0 && resVolgende(v)!=null); }
+function resPostKandidaat(t){ if(!t || !(t.amount<0)) return null; const ym=String(t.date).slice(0,7), b=-t.amount;
+  return resPostOpen().filter(v=>Math.abs(Math.round(+v.bedrag||0)-b)<=1 && resYmPlus(resVolgende(v))<=ym)
+    .sort((a,c)=>Math.abs((+a.bedrag||0)-b)-Math.abs((+c.bedrag||0)-b))[0]||null; }
+function resPostGekoppeld(t){ const B=SET.resBetaald||{}; for(const id in B){ if(B[id] && B[id].tx===t.id){ const v=resLijst().find(x=>x.id===id); return v||{id, naam:'een post'}; } } return null; }
+function resPostVraagBlok(t){
+  const tq=esc(String(t.id).replace(/'/g,"\\'")), G=resPostGekoppeld(t);
+  if(G) return `<div class="small" data-respostgekoppeld="${esc(G.id)}" style="padding:0 0 10px;color:var(--mut2)">Gekoppeld aan de post ${esc(G.naam||'')} · staat op betaald</div>`;
+  const A=(SET.resPostVraag||{})[t.id]; if(A && A.keuze==='geen') return '';
+  const anderOpen=window._resPostAnder===t.id;
+  const kies=v=>`<span class="chip" data-respostkies="${esc(v.id)}" style="padding:4px 9px;font-size:var(--fs-xs);cursor:pointer" onclick="resPostJa('${tq}','${esc(String(v.id).replace(/'/g,"\\'"))}')">${esc(v.naam||'Post')} · ${euro0(+v.bedrag||0)} · ${esc(resMaandLabel(resYmPlus(resVolgende(v))))}</span>`;
+  const K=resPostKandidaat(t);
+  if(!K && !anderOpen) return '';
+  const lijst=anderOpen?`<div data-respostander style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${resPostOpen().map(kies).join('')||'<span class="small muted">Geen open posten.</span>'}</div>`:'';
+  const mnd=K?MFULL[+resYmPlus(resVolgende(K)).slice(5,7)-1]:'';
+  return `<div data-respostvraag="${K?esc(K.id):''}" style="padding:0 0 10px">
+    ${K?`<div class="small" style="font-weight:700">Is dit de post ${esc(K.naam||'')} (${euro0(+K.bedrag||0)}, ${esc(mnd)})?</div>`:'<div class="small" style="font-weight:700">Welke post was dit?</div>'}
+    <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">${K?`<button class="btn sec" data-respostja onclick="resPostJa('${tq}','${esc(String(K.id).replace(/'/g,"\\'"))}')">Ja, zet de post op betaald</button>`:''}<button class="btn sec" data-respostanderknop onclick="window._resPostAnder='${tq}';openSheet('${tq}')">Andere post</button><button class="btn sec" data-respostgeen onclick="resPostGeen('${tq}')">Geen post</button></div>${lijst}</div>`;
+}
+function resPostJa(txId, resId){ const v=resLijst().find(x=>x.id===resId), t=TX.find(x=>x.id===txId); if(!v || !t) return; const o=resVolgende(v); if(o==null) return;
+  resBetaaldVlag(resId, o, txId);
+  SET.resPostVraag=SET.resPostVraag||{}; SET.resPostVraag[txId]={keuze:'ja', res:resId, op:vandaagYMD()}; window._resPostAnder=null;
+  save(); render(); try{ openSheet(txId); }catch(_){} toast(`${ICON('check')} ${esc(v.naam||'Post')} op betaald`); }
+function resPostGeen(txId){ SET.resPostVraag=SET.resPostVraag||{}; SET.resPostVraag[txId]={keuze:'geen', op:vandaagYMD()}; window._resPostAnder=null; save(); try{ openSheet(txId); }catch(_){} }
 /* v524 (onderdeel 3): de keuze "uit een spaardoel" in de boekingssheet, alleen zichtbaar als er een doel op "besteden" staat.
    Spiegelt uitReserveringBlok; bij meer dan een besteden-doel kies je welk. Reservering wint (dan verschijnt dit blok niet). */
 function uitDoelBlok(t){
@@ -32379,7 +32048,7 @@ function rekSamenvoegPlan(van, naar){
    SET. Een vijfde soort erbij is een regel erbij, en dan valt de spec die deze lijst leest. */
 /* v332: de koppeling van een boeking aan een bezitting hangt ook aan t.id, dus hij verhuist mee bij een
    samenvoeging; anders is hij na de boot-sweep wees (v281). */
-const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel','schuldKoppel','bezitKosten','contantStort'];
+const VLAG_MAPS=['onregelmatig','uitReservering','resPostVraag','fixOvr','bezitKoppel','schuldKoppel','bezitKosten','contantStort'];
 function _vlagAantal(id){
   let n=0;
   if(typeof OVR!=='undefined' && OVR && Object.prototype.hasOwnProperty.call(OVR,id)) n++;

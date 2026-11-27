@@ -2,6 +2,8 @@
 // en het optionele dure-schuld-advies bij een nieuw doel.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 // spaarruimte in de fixture: savingMode 'amount', savingAmount 300 -> monthlySavingTarget() = 300
@@ -33,13 +35,13 @@ const doelen = () => ([
 async function openV(page, payload) {
   await open(page, payload || tweak((s) => { s.goals = doelen(); }));
   await page.evaluate(() => go('vooruit'));
-  await page.waitForSelector('#s-vooruit .plan-item, #s-vooruit .card');
+  await page.waitForSelector('#laagDoelen .plan-item, #s-vooruit .card');
 }
 
 // de planlijst zit achter de zone "Mijn plan"; expert-modus klapt hem standaard open
 // v380: de zonebalk is vervallen; de rijen staan er meteen
 async function openPlanZone(page) {
-  await page.waitForSelector('#s-vooruit .plan-item');
+  await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item');
 }
 
 test.describe('a · planItems en de waterfall', () => {
@@ -124,7 +126,7 @@ test.describe('b · herordenen en het plan', () => {
     // v80: de spaardoel-hero is weg; het bovenste plan-item draagt het doel
     expect(await page.locator('#s-vooruit .vooruit').count()).toBe(0);
     await openPlanZone(page);
-    expect(await page.locator('#s-vooruit .plan-item').first().getAttribute('data-id')).toBe('noodfonds');
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item').first().getAttribute('data-id')).toBe('noodfonds');
   });
 
   test('een plek in de doel-editor verandert SET.planOrder en de hero volgt het nieuwe #1', async ({ page }) => {
@@ -144,7 +146,7 @@ test.describe('b · herordenen en het plan', () => {
     expect(S.planAlloc).toBe(100);                                  // ETA op het eigen maandbedrag
     expect(Math.round(S.monthsLeft)).toBe(10);
 
-    const eerste = page.locator('#s-vooruit .plan-item').first();
+    const eerste = (await LD(page)).locator('#laagDoelen .plan-item').first();
     expect(await eerste.getAttribute('data-id')).toBe('gA');
     const tekst = await eerste.innerText();
     expect(tekst).toContain('Kosten koper huis');
@@ -171,7 +173,7 @@ test.describe('c · het noodfonds', () => {
   test('is herordenbaar maar niet verwijderbaar', async ({ page }) => {
     await openV(page);
     await openPlanZone(page);
-    const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
+    const nf = (await LD(page)).locator('#laagDoelen .plan-item[data-id="noodfonds"]');
     await expect(nf).toHaveCount(1);
     /* v380: de knoppen staan achter een tik op de rij, in de detailsheet; wat er dan staat is onveranderd */
     await nf.locator('text=Noodfonds').click();

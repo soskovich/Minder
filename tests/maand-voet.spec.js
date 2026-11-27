@@ -89,16 +89,6 @@ test.describe('a - de twee kaarten bestaan niet meer', () => {
 
   /* De tegel-structuur blijft juist wél bestaan: het id, .wvo-tiles, .wvo-tile en data-kpi zijn de
      haken waaraan veertien andere specs hun eigenschappen ophangen. Wat verdwijnt is de schil. */
-  test('maandKpiBlok levert nog steeds de tegel, maar zonder kaart en kop', async ({ page }) => {
-    await boot(page);
-    const h = await page.evaluate(() => maandKpiBlok(curMonth || thisYM()));
-    expect(h).toContain('id="maandKpiBlok"');
-    expect(h).toContain('wvo-tiles');
-    expect(h).toContain('data-kpi="inleg"');
-    expect(h).not.toContain('class="card"');
-    expect(h).not.toContain('hlabel');
-    expect(h).not.toMatch(/Vermogensopbouw/i);
-  });
 
   test('de twee uitlegzinnen zijn vervallen', async ({ page }) => {
     await boot(page);
@@ -112,39 +102,9 @@ test.describe('b - geen informatieverlies', () => {
   /* v232: de spaarquote staat op Vermogen, op de laatste afgeronde maand. Label, percentage en
      band gingen mee (tests/spaarquote-op-vermogen.spec.js); hier blijft staan dat Maand hem niet
      meer draagt en dat de renderer zelf niets verloor. */
-  test('label, percentage en band staan er, in de renderer, en niet meer op Maand', async ({ page }) => {
-    await boot(page);
-    const t = await tekst(page);
-    expect(t).not.toMatch(/spaarquote/i);
-    const r = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandKpiBlok(curMonth || thisYM()); return d.textContent.replace(/\s+/g, ' '); });
-    expect(r).toMatch(/spaarquote/i);
-    expect(r).toMatch(/\d+%/);
-    expect(r).toContain('wat je opzij zette en belegde');
-    expect(r).toContain('loopt nog');   // dit draagt de nuance van de vervallen zin, op de lopende maand
-  });
 
-  test('de sparkline staat er bij genoeg historie', async ({ page }) => {
-    await boot(page);
-    const heeft = await page.evaluate(() => /class="spk-wrap"/.test(maandKpiBlok(curMonth || thisYM())));
-    expect(heeft).toBe(true);
-  });
 
-  test('onder de drempel vervalt de sparkline en blijft de deltazin', async ({ page }) => {
-    await boot(page, { maanden: 3 });
-    const uit = await page.evaluate(() => {
-      const h = maandKpiBlok(curMonth || thisYM());
-      const d = document.createElement('div'); d.innerHTML = h;
-      return { spark: /class="spk-wrap"/.test(h), tekst: d.textContent.replace(/\s+/g, ' ') };
-    });
-    expect(uit.spark).toBe(false);
-    expect(uit.tekst).toMatch(/verloop vanaf \d+/);
-  });
 
-  test('de tik naar het detail blijft, en draagt de maand van de tegel', async ({ page }) => {
-    await boot(page);
-    const h = await page.evaluate(() => maandKpiBlok(curMonth || thisYM()));
-    expect(h).toMatch(/openKpiDetail\('inleg','\d{4}-\d{2}'\)/);   // v232: het detail opent op dezelfde maand
-  });
 
   // v315: de rij staat nu in maandVanafRegels(), met hetzelfde bedrag en dezelfde ingang
   // v340: die functie is opgegaan in maandVanafData(), en de rij staat in de tijdlijn op Grip

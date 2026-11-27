@@ -6,7 +6,7 @@
 const { test, expect } = require('./klok');
 const T = require('./plan-toestel-stand');
 
-const rijen = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => {
+const rijen = (page) => page.evaluate(() => [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-id]')].map((e) => {
   const sub = e.querySelector('[data-rijsub]'); const t = sub ? sub.innerText.replace(/\s+/g, ' ').trim() : '';
   return { id: e.dataset.id, sub: t, dezeMaand: sub ? +sub.dataset.rijdezemaand || 0 : 0 }; }));
 

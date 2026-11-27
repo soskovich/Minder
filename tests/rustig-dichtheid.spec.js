@@ -2,24 +2,18 @@
 // twaalf-maands grafiek ingeklapt. Een expliciete keuze van de gebruiker wint altijd van die default.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
-/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
-const { kpiProbe } = require('./kpi-probe');
-test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { seed, open } = require('./budget-fixture');
 const { kaalUit } = require('./bron-kaal');
 
 /* v208: het Kerncijfers-blok is van Inzichten af, dus de drietraps uitklap uit v90 leeft alleen
    nog op Maand, met SET.kpiAllMaand. Wat deze tests bewaken is ongewijzigd: Rustig start met een
    tegel en een uitklap, en je eigen keuze blijft staan. */
-// v232: de spaarquote-tegel staat op Vermogen (laatste afgeronde maand)
 async function openIns(page, mode) {
   const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
-  await page.evaluate(() => go('vermogen'));
-  await page.waitForSelector('#s-vermogen #maandKpiBlok');
+  await page.evaluate(() => go('ins'));
 }
-const tegels = (page) => page.locator('#s-vermogen #maandKpiBlok .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
 /* v178 zette de maandgrafiek op Maand omdat hij maanden naast elkaar zet; v227 bracht hem terug
    naar Inzichten, onder het blok over deze maand. De drietraps default uit v90 verhuist beide keren
@@ -36,23 +30,7 @@ async function openGrafiek(page, mode) {
    maandscherm af is, staat daar nog één cijfer en valt er niets uit te klappen; de knop is
    vervallen omdat hij een dode knop zou zijn. De drietraps zelf leeft onveranderd voor de
    maandgrafiek, en die staat hieronder in blok b. */
-test.describe('a · kerncijfers: één cijfer, in elke modus hetzelfde', () => {
-  test('elke modus toont de spaarquote, zonder uitklap', async ({ page }) => {
-    for (const mode of ['rustig', 'begeleid', 'expert']) {
-      await openIns(page, mode);
-      await expect(tegels(page), mode).toHaveCount(1);
-      const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
-      expect(keys, mode).toEqual(['inleg']);
-      expect(await page.locator('#maandKpiBlok .snz').count(), mode).toBe(0);
-    }
-  });
-
-  test('een achtergebleven kpiAllMaand verandert niets', async ({ page }) => {
-    await openIns(page, 'rustig');
-    await page.evaluate(() => { SET.kpiAllMaand = true; save(); renderVermogen(); });
-    await expect(tegels(page)).toHaveCount(1);
-  });
-});
+/* onderhoud3 (punt 7): blok a (de spaarquote-tegel in elke modus) is weg met de tegel zelf (maandKpiBlok opgeruimd). */
 
 /* v382: weg, "Over de maanden" (spendVsBudgetChart, #insSpendCard, #insSpendChart) staat niet meer op
    Inzichten, en daarmee is openSpendChart de laatste ingang van COLLAP_DEF kwijt. De twee tests over de
@@ -94,23 +72,6 @@ test.describe('c · niets anders verandert', () => {
     expect(r.recent).toBe(b.recent);
   });
 
-  test('de cijfers en de norm-regel blijven in Rustig gewoon staan', async ({ page }) => {
-    await openIns(page, 'rustig');
-    // v208: budgetnaleving en de variabele-lastendruk zijn van Inzichten af; de spaarquote en de
-    // vaste-lastendruk staan onveranderd op Maand. insKpis() rekent nog altijd alle vier.
-    const strip = await page.locator('#s-vermogen #maandKpiBlok').innerText();
-    expect(strip.toLowerCase()).toContain('spaarquote');
-    expect(strip).not.toContain('50/30/20');            // v161: de norm stuurt de kerncijfers niet meer
-    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, waarvan twee getoond
-    // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
-    // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
-    // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft
-    // v382: renderIns() tekent het filter, de maandkaart, de weektegel, de patroontegels en de verschuivingen;
-    // de tegels, het kop-inzicht, de grafiek en de keuzekaart zijn weg, in elke modus.
-    const src = (await kaalUit(page, 'renderIns')).replace(/\s+/g, ' ');
-    for (const f of ['insFilterKnop(', 'insMaandKaart(', 'insWeekTegel(', 'insVerschuiving(']) expect(src).toContain(f);
-    for (const f of ['insPatroonTegels(', 'insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).not.toContain(f);
-  });
 
   test('Rustig past op 360px zonder overflow', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 900 });

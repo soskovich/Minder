@@ -221,11 +221,6 @@ test('e. meer binnen dan je norm blijft staan, en een afgeronde maand blijft de 
   expect(jul.basis).toBe('gedetecteerd');
 });
 
-test('e. de nieuwe basis heeft een herkomst-label', async ({ page }) => {
-  await boot(page);
-  expect(await page.evaluate(() => KPI_INCBRON.halvemaand)).toBeTruthy();
-  expect(await page.evaluate(() => KPI_INCBRON.halvemaand)).not.toBe('halvemaand');
-});
 
 /* ---------- f. de sub onder "Nog te ontvangen" noemt zijn noemer ---------- */
 const nogPost = (page) => page.evaluate(() => {

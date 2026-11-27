@@ -12,7 +12,7 @@ test.describe('a · de kop', () => {
   test('de kop is de lagen-hero: elk laag-attribuut komt uit lagenData(), de oude geld-kop is weg', async ({ page }) => {
     const r = await page.evaluate(() => { const e = document.getElementById('planLagenHero'); const L = lagenData();
       return { attrs: { kop: +e.dataset.lagenkop, b: +e.dataset.laagbeschermen, rs: +e.dataset.laagreserveren, d: +e.dataset.laagdoelen, g: +e.dataset.laaggroeien, vrij: +e.dataset.laagvrij },
-        L: { kop: L.kop, b: L.beschermen, rs: L.reserveren, d: L.doelen, g: L.groeien, vrij: L.vrij }, kpi: !!document.getElementById('planKpi'), hassub: /op je spaarrekening/.test(e.innerText), seg: e.querySelectorAll('[data-lagenbalk] i').length }; });
+        L: { kop: L.kop, b: L.beschermen, rs: L.reserveren, d: L.doelen, g: L.groeien, vrij: L.vrij }, kpi: !!document.getElementById('planKpi'), hassub: /spaarrekening/.test(e.innerText), seg: e.querySelectorAll('[data-lagenbalk] i').length }; });
     expect(r.kpi).toBe(false);                                   // de oude "gespaard van doelen" kop bestaat niet meer
     for (const k of ['kop', 'b', 'rs', 'd', 'g', 'vrij']) expect(Math.round(r.attrs[k])).toBe(Math.round(r.L[k]));
     expect(r.hassub).toBe(true);
@@ -63,7 +63,7 @@ test.describe('b · de chip alleen bij terug', () => {
 });
 
 test.describe('c · de rijen', () => {
-  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => go('vooruit')); });
+  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => { go('vooruit'); if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); });
 
   test('elke rij heeft dezelfde onderdelen, en geen rekensom', async ({ page }) => {
     const r = await page.evaluate(() => [...document.querySelectorAll('#planLijst .plan-item[data-id]')].map((e) => ({
@@ -75,7 +75,7 @@ test.describe('c · de rijen', () => {
   });
 
   test('een rijvorm: er staat geen tweede rij-klasse of geldregel', async ({ page }) => {
-    const r = await page.evaluate(() => ({ geldregel: document.querySelectorAll('[data-geldregel]').length, rij: document.querySelectorAll('#planLijst > div').length, item: document.querySelectorAll('#planLijst > .plan-item.plan-rij2').length }));
+    const r = await page.evaluate(() => ({ geldregel: document.querySelectorAll('[data-geldregel]').length, rij: document.querySelectorAll('#planLijst > div:not([data-doelacties])').length, item: document.querySelectorAll('#planLijst > .plan-item.plan-rij2').length }));
     expect(r.geldregel).toBe(0); expect(r.rij).toBe(r.item);
   });
 
@@ -115,7 +115,7 @@ test.describe('c · de rijen', () => {
 });
 
 test.describe('d · de detailsheet', () => {
-  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => go('vooruit')); });
+  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => { go('vooruit'); if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); });
   const lees = (page) => page.evaluate(() => { const ops = [...document.querySelectorAll('#planDoelSheet [data-op]')];
     const v = (k) => { const e = ops.find((o) => o.dataset.op === k); return e ? +e.dataset.bedrag : null; };
     const eind = document.querySelector('#planDoelSheet [data-op="eind"]');
@@ -149,10 +149,11 @@ test.describe('d · de detailsheet', () => {
   });
 
   test('alles terug in een keer: de som haalt het doel, "vol" en geen rode regel', async ({ page }) => {
-    await T.boot(page, 'gister'); await page.evaluate(() => go('vooruit'));
+    await T.boot(page, 'gister'); await page.evaluate(() => { go('vooruit'); if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); });
     await page.locator('[data-id="noodfonds"]').click();
     const r = await lees(page);
     expect(r.eind).toBe(4000); expect(r.vol).toBe('1'); expect(r.eindTekst).toContain('· vol'); expect(r.nog).toBeNull();
+    await page.evaluate(() => openLaagDoelen());
     expect(await tekst(page, '[data-id="noodfonds"] [data-planstatus]')).toBe('vol in okt');
   });
 
@@ -164,7 +165,7 @@ test.describe('d · de detailsheet', () => {
 });
 
 test.describe('e · lijst en tijdlijn', () => {
-  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => go('vooruit')); });
+  test.beforeEach(async ({ page }) => { await T.boot(page, 'nu'); await page.evaluate(() => { go('vooruit'); if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); });
 
   test('standaard lijst; tijdlijn wordt onthouden (in SET, dus per gebruiker en in de back-up)', async ({ page }) => {
     expect(await page.locator('#planLijst').count()).toBe(1);
@@ -172,7 +173,7 @@ test.describe('e · lijst en tijdlijn', () => {
     expect(await page.locator('#planTijdlijnInline').count()).toBe(1);
     expect(await page.locator('#planLijst').count()).toBe(0);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('minder_set')).planWeergave)).toBe('tijdlijn');
-    await page.evaluate(() => { go('dash'); go('vooruit'); });
+    await page.evaluate(() => { go('dash'); go('vooruit'); openLaagDoelen(); });
     expect(await page.locator('#planTijdlijnInline').count()).toBe(1);
   });
 

@@ -15,6 +15,7 @@ test.describe('a · de lopende maand telt mee en het terugzetbedrag blijft bij d
     const r = await page.evaluate(() => { const Pl = allocatePlan(), V = planVooruit(Pl, planCapacity());
       return Object.fromEntries(Pl.map((p) => [p.id, etaDatum(V[p.id])])); });
     expect(r).toEqual({ noodfonds: 'okt 2026', iw: 'nov 2026', kk: 'jun 2027' });
+    await page.evaluate(() => openLaagDoelen());   // onderhoud3: de rijen staan in de sheet van de laag Doelen
     expect(await page.locator('[data-planwaarschuwing="kk"]').innerText()).toContain('vol jun 2027');
   });
   test('de EUR 231 vult het Noodfonds tot zijn doel en niet erboven, en toegewezen deze maand sluit', async ({ page }) => {
@@ -22,14 +23,15 @@ test.describe('a · de lopende maand telt mee en het terugzetbedrag blijft bij d
     /* v380: de rekensom staat niet meer in de rij ([data-geldregel]) maar in de detailsheet ([data-op]); het controletotaal
        #planToeMaand staat niet meer op het scherm en blijft als functie planToeMaand(P). */
     const g = await page.evaluate(() => { openPlanDoel('noodfonds'); const r = Object.fromEntries([...document.querySelectorAll('#planDoelSheet [data-op]')].map((o) => [o.dataset.op, +o.dataset.bedrag]));
-      r.vol = document.querySelector('#planDoelSheet [data-op="eind"]').dataset.vol; closeSheet(); r.rij = document.querySelector('.plan-item[data-id="noodfonds"] [data-rijvol]').innerText; return r; });
+      r.vol = document.querySelector('#planDoelSheet [data-op="eind"]').dataset.vol; closeSheet(); r.rij = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"] [data-rijvol]').innerText; return r; });
     expect(g).toEqual({ geld: 3407, terug: 231, inleg: 362, eind: 4000, vol: '1', rij: 'vol okt 2026 ›' });
     const t = await page.evaluate(() => ({ T: planToeMaand(), el: document.querySelectorAll('#planToeMaand').length }));
     expect(t.T.toegewezen).toBe(2431); expect(t.T.teVerdelen).toBe(2431); expect(t.el).toBe(0);
   });
   test('een rij noemt geen koers naast een waarschuwing: een uitspraak per rij', async ({ page }) => {
     await boot(page);
-    const t = await page.locator('.plan-item[data-id="kk"]').innerText();
+    await page.evaluate(() => openLaagDoelen());
+    const t = await page.locator('#laagDoelen .plan-item[data-id="kk"]').innerText();
     expect(t).not.toContain('op koers'); expect(t).toContain('niet haalbaar');
     /* de uitspraak van het streepje is dezelfde als de waarschuwing, ook buiten de grendel om; v380: het streepje staat op
        de balk van de detailsheet */
@@ -200,7 +202,7 @@ test.describe('e · layout', () => {
       await P.boot(page, Object.assign({ vp: { width: w, height: 800 } }, VOLGORDE));
       await page.evaluate(() => { terugzetKies('alles'); go('vooruit'); });
       /* v380: de kaart met de kop "Te verdelen" (#planKopBedrag) is vervallen; gemeten wordt de lijst (#planLijst) */
-      const kaart = await page.evaluate(() => { const c = document.querySelector('#planLijst'); return { h: c.getBoundingClientRect().height, over: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+      const kaart = await page.evaluate(() => { openLaagDoelen(); const c = document.querySelector('#planLijst'); /* onderhoud3: de lijst staat in de sheet */ return { h: c.getBoundingClientRect().height, over: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
       await page.evaluate(() => openVerdeling()); const a = await page.evaluate(() => document.getElementById('verdelingSheet').getBoundingClientRect().height);
       await page.evaluate(() => { verdelingModus('zelf'); verdelingBedrag('iw', '1000'); verdelingBedrag('kk', '838'); verdelingBijVol('volgende'); });
       const b = await page.evaluate(() => { const s = document.getElementById('sheet'); return { h: document.getElementById('verdelingSheet').getBoundingClientRect().height, over: s.scrollWidth - s.clientWidth }; });

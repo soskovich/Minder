@@ -85,7 +85,7 @@ test.describe('1 · spaarrekening tegen Plan', () => {
 test.describe('2 · vol pas als het geld het doel haalt', () => {
   test('a. het noodfonds op zijn doel met geld dat nog terug moet heet niet vol', async ({ page }) => {
     await melding(page, { saldoFout: true });   // v472: alleen een mislukt saldo laat het de terugzetkeuze blijven (met het saldo dekt het)
-    const r = await page.evaluate(() => { const rij = document.querySelector('.plan-item[data-id="noodfonds"]');
+    const r = await page.evaluate(() => { const rij = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]');
       return { st: rij.dataset.status, status: rij.querySelector('[data-planstatus]').innerText, vol: rij.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim(), geld: rij.querySelector('[data-rijgeld]').innerText,
         plan: allocatePlan().find((p) => p.id === 'noodfonds').status }; });
     expect(r.plan).toBe('bereikt');                             // de verdeling stuurt er niets meer heen
@@ -98,7 +98,7 @@ test.describe('2 · vol pas als het geld het doel haalt', () => {
   test('b. haalt het geld het doel, dan is het vol', async ({ page }) => {
     await F.boot(page, 'nu');
     const r = await page.evaluate((sav) => { SET.terugzet = {}; SET.terugzetGat = []; SET.nfToegewezen = 4000; SET.manualBal[sav] = 4000.20; save(); renderVooruit();
-      const rij = document.querySelector('.plan-item[data-id="noodfonds"]'); return { st: rij.dataset.status, vol: rij.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim() }; }, F.SAV);
+      const rij = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]'); return { st: rij.dataset.status, vol: rij.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim() }; }, F.SAV);
     expect(r.st).toBe('vol');
     expect(r.vol).toBe('vol');
   });

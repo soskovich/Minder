@@ -21,6 +21,8 @@
 // markering "niet op schaal" zijn vervallen met de vaten waar ze bij hoorden.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { withOpzij } = require('./opzij-inject');
 
 const now = new Date();
@@ -78,9 +80,10 @@ async function boot(page, o, breed) {
    regel [data-rijsub]. Het streepje (v248) en het datumpaar van v307/v318 (vatRegels(p,false), [data-plandetail])
    staan in de detailsheet (openPlanDoel(id), #planDoelSheet). De helper leest per rij de rij en daarna zijn sheet. */
 const balken = (page) => page.evaluate(() => {
-  const ids = [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => e.dataset.id);
+  const ids = [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-id]')].map((e) => e.dataset.id);
   const uit = ids.map((id) => {
-    const tk = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"]`);
+    openLaagDoelen();   // onderhoud3: de lijst staat in de sheet van Doelen, en het doel-sheet vervangt die sheet
+    const tk = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector(`#laagDoelen .plan-item[data-id="${id}"]`);
     const rv = (tk.querySelector('[data-rijvol]') || {}).innerText || '';
     const v = rv.match(/(?:vol|schuldenvrij) \w+ \d{4}/);
     const r = { id, vulling: [...tk.querySelectorAll('[data-rijbalk] > .bar-fill')].map((f) => parseFloat(f.style.width)),
@@ -134,11 +137,11 @@ test.describe('a · de grendel in beeld', () => {
     /* v380 → v524 (punt 1): de inlegbalk is vervallen; wat er deze maand heen gaat leest planStandEind(). Het increment staat
        niet meer in de rij-sub maar als attribuut (data-rijdezemaand); de rij-sub draagt alleen nog een plan-feit. */
     expect(await inleg(page)).toEqual({ noodfonds: 3000, [ID_KK]: 0, [ID_IW]: 0 });   // de andere twee krijgen niets
-    const nfSub = page.locator('#s-vooruit .plan-item[data-id="noodfonds"] [data-rijsub]');
+    const nfSub = (await LD(page)).locator('#laagDoelen .plan-item[data-id="noodfonds"] [data-rijsub]');
     expect((await nfSub.innerText())).not.toMatch(/deze maand/);
     expect(await nfSub.getAttribute('data-rijdezemaand')).toBe('3000');
     for (const id of [ID_KK, ID_IW])
-      expect(await page.locator(`#s-vooruit .plan-item[data-id="${id}"] [data-bijvat]`).count(), id).toBe(0);
+      expect(await (await LD(page)).locator(`#laagDoelen .plan-item[data-id="${id}"] [data-bijvat]`).count(), id).toBe(0);
     expect(await page.locator('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').count()).toBe(0);
   });
 
@@ -265,7 +268,7 @@ test.describe('b · het datumpaar', () => {
       goals: [], planOrder: ['noodfonds'] });
     const onb = await page.evaluate(() => (planMap().noodfonds || {}).nfOnbekend);
     expect(onb, 'de opzet levert een onbekende stand').toBe(true);   // v380: was een test.skip (werkafspraak v312)
-    const t = await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText();
+    const t = await (await LD(page)).locator('#laagDoelen .plan-item[data-id="noodfonds"]').innerText();
     expect(t).toContain('onbekend');
     expect(t).not.toMatch(/€0 toegewezen/);
   });
@@ -494,6 +497,7 @@ test.describe('d · de balk en de takken', () => {
     await boot(page, twee);
     const vrij = await page.evaluate(() => planVrij());
     expect(vrij).toBe(500);                          // 3.000 inleg - 1.500 - 1.000
+    await page.evaluate(() => openLaagDoelen());   // onderhoud3: "Blijft over" staat onder de doelenlijst in de sheet van Doelen
     expect(await page.locator('#planVrij').innerText()).toContain(await page.evaluate((v) => euro0(v), vrij));
   });
 
@@ -502,7 +506,7 @@ test.describe('d · de balk en de takken', () => {
   test('de balk van een rij en die in zijn detailsheet dragen dezelfde kleur', async ({ page }) => {
     await boot(page, twee);
     const r = await page.evaluate((ids) => ids.map((id) => {
-      const f = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"] [data-geldvat]`);
+      const f = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector(`#laagDoelen .plan-item[data-id="${id}"] [data-geldvat]`);
       const rij = getComputedStyle(f).backgroundColor;
       openPlanDoel(id);
       const sf = document.querySelector('#planDoelSheet .bar-track > .bar-fill');
@@ -520,7 +524,7 @@ test.describe('d · de balk en de takken', () => {
     await boot(page, twee);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, Math.round(p.alloc)])));
     for (const id of [ID_KK, ID_IW]) {
-      const rij = page.locator(`#s-vooruit .plan-item[data-id="${id}"]`);
+      const rij = (await LD(page)).locator(`#laagDoelen .plan-item[data-id="${id}"]`);
       const tk = await rij.innerText();
       expect(tk, id).not.toMatch(/deze maand/);
       expect(tk, id).not.toMatch(/\/mnd/);

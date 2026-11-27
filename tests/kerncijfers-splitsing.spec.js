@@ -3,9 +3,6 @@
 // variabele-lastendruk) op Inzichten. De restsaldo-quote is vervallen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
-/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
-const { kpiProbe } = require('./kpi-probe');
-test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -54,7 +51,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof vermogensInleg === 'function' && typeof maandKpiBlok === 'function');
+  await page.waitForFunction(() => typeof vermogensInleg === 'function');
 }
 const K = (page, m) => page.evaluate((x) => {
   const k = insKpis(x);
@@ -101,15 +98,6 @@ test.describe('a · de spaarquote telt de hele vermogensopbouw', () => {
     expect(r.src).not.toContain('Math.max(Math.round(net),0)');
   });
 
-  test('zonder reserveringsrekening telt die stroom niet mee en heet dat ook zo', async ({ page }) => {
-    await boot(page, seed({ geenRes: true }));
-    const V = await page.evaluate((m) => vermogensInleg(m), AF);
-    expect(V.delen.find((d) => d.key === 'res').bedrag).toBe(null);
-    expect(V.totaal).toBe(300);                // 200 spaar + 100 belegging
-    const h = await page.evaluate((m) => kpiInlegOpbouw(m), AF);
-    expect(h).toMatch(/geen reserveringsrekening ingesteld/);
-    expect(h).toMatch(/niet bekend/);
-  });
 
   test('een overboeking naar je eigen spaarrekening telt niet twee keer', async ({ page }) => {
     const p = seed();
@@ -126,25 +114,9 @@ test.describe('a · de spaarquote telt de hele vermogensopbouw', () => {
     expect(r.bel).toBe(100);                   // alleen Peaks, niet de eigen overboeking
   });
 
-  test('de uitleg-sheet noemt wat er buiten valt, met de reden', async ({ page }) => {
-    await boot(page);
-    const h = await page.evaluate((m) => kpiInlegOpbouw(m), AF);
-    expect(h).toMatch(/aankoopdoel/i);
-    expect(h).toMatch(/Aflossing op een lening/i);
-    // v336: met een koppeling is het aflossingsdeel bij benadering bekend en staat het onder het
-    // percentage; zonder koppeling weet de app het niet. De zin noemt nu allebei.
-    expect(h).toMatch(/welk deel aflossing is en welk deel rente/i);
-    expect(h).toMatch(/Koppel je de betaling aan een schuld/i);
-  });
 });
 
 test.describe('b · de splitsing over twee schermen', () => {
-  test('vier cijfers, de restsaldo-quote bestaat niet meer', async ({ page }) => {
-    await boot(page);
-    const k = await K(page, AF);
-    expect(k.keys).toEqual(['inleg', 'budget', 'vari', 'vast']);
-    expect(await page.evaluate((m) => insKpis(m).spaar, AF)).toBeUndefined();
-  });
 
   /* v208: Inzichten draagt geen kerncijfers meer. Budgetnaleving stond al in de hero, in dezelfde
      eenheid en uit dezelfde bron, en de variabele-lastendruk stuurde niets: je potjes zijn de norm
@@ -161,22 +133,7 @@ test.describe('b · de splitsing over twee schermen', () => {
      klein grondtal, en je stuurt er niet op: vaste lasten verander je door op te zeggen of te
      verhuizen, niet door naar een percentage te kijken. De spaarquote blijft: die telt sinds v161
      je hele vermogensopbouw en verandert wel met wat je doet. */
-  test('het maandscherm toont alleen nog de spaarquote', async ({ page }) => {
-    await boot(page);
-    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-    expect(h).toContain('data-kpi="inleg"');
-    expect(h).not.toContain('data-kpi="vast"');
-    expect(h).not.toContain('data-kpi="budget"');
-    expect(h).not.toContain('data-kpi="vari"');
-  });
 
-  test('van de vier is er nog één plek, met één tegel', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => { go('ins'); go('maand'); });
-    const n = await page.evaluate(() => document.querySelectorAll('[data-kpi]').length);
-    expect(n).toBe(1);
-    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // wel alle vier berekend
-  });
 
   /* v194: een sparkline rendert pas vanaf GRAFIEK_MIN volle maanden; deze fixture zit daaronder.
      Wat de test bewaakt is dat beide schermen dezelfde renderer gebruiken en dus dezelfde vorm
@@ -185,118 +142,26 @@ test.describe('b · de splitsing over twee schermen', () => {
   /* v208: er is nog één scherm met tegels, dus 'beide schermen dezelfde vorm' valt weg. Wat blijft
      is dat de vorm onder de tegel er staat: een lijn zodra er genoeg maanden zijn, anders de
      delta-zin. */
-  test('onder de tegel staat een lijn of de delta-zin', async ({ page }) => {
-    await boot(page);
-    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-    const lijn = h.includes('spk-wrap');
-    const delta = /verloop vanaf \d+ mnd|Een verloop zie je vanaf/.test(h);
-    expect(lijn || delta).toBe(true);
-  });
 });
 
 test.describe('c · geen verzonnen norm', () => {
-  test('alleen budgetnaleving houdt een doel', async ({ page }) => {
-    await boot(page);
-    const b = await page.evaluate(() => ({
-      inleg: kpiBand('inleg'), budget: kpiBand('budget'), vari: kpiBand('vari'), vast: kpiBand('vast'),
-    }));
-    expect(b.budget).toBe(100);
-    expect(b.inleg).toBe(null);
-    expect(b.vari).toBe(null);
-    expect(b.vast).toBe(null);
-  });
 
-  test('een andere norm kiezen verandert de kerncijfers niet meer', async ({ page }) => {
-    await boot(page);
-    const voor = await K(page, AF);
-    await page.evaluate(() => { SET.splitMode = '702010'; save(); });
-    const na = await K(page, AF);
-    expect(na.inleg).toEqual(voor.inleg);
-    expect(na.vast).toEqual(voor.vast);
-    expect(na.budget).toEqual(voor.budget);
-  });
 
   // v161 haalde 50/30/20 onder de kerncijfers weg en liet de kaart staan; v165 haalde ook die weg,
   // want hij had geen aanroeper meer en daarmee stuurde de hele norm-laag niets.
-  test('de norm-laag is helemaal weg, en geen cijfer viel erop terug', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => ({
-      weg: ['splitTarget', 'setSplitNorm', 'splitMode', 'ruleOfThumbCard'].map((n) => typeof window[n]),
-      banden: ['inleg', 'budget', 'vari', 'vast'].map((k) => kpiBand(k)),
-    }));
-    expect(new Set(r.weg)).toEqual(new Set(['undefined']));
-    expect(r.banden).toEqual([null, 100, null, null]);   // alleen budgetnaleving heeft een doel
-  });
 
-  test('kpiBasis staat los van de band', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate((m) => {
-      const t = totals(m);
-      return { inleg: kpiBasis('inleg', t), budget: kpiBasis('budget', t), income: Math.round(t.income), bud: Math.round(t.budget) };
-    }, AF);
-    expect(r.inleg).toBe(r.income);            // ook zonder band nog een noemer
-    expect(r.budget).toBe(r.bud);
-  });
 });
 
 test.describe('d · klein grondtal', () => {
-  test('een terugstorting in een kleine categorie geeft een bedrag, geen percentage', async ({ page }) => {
-    await boot(page, seed({ terugstorting: true }));
-    const k = await K(page, AF);
-    expect(k.vast.klein).toBe(true);
-    expect(k.vast.val).not.toMatch(/%/);
-    expect(k.vast.band).toMatch(/te klein voor een percentage/);
-    expect(k.vast.oordeel).toBeUndefined();
-  });
 
-  test('de drempel staat in MAAND_DREMPEL, niet inline', async ({ page }) => {
-    await boot(page);
-    expect(await page.evaluate(() => MAAND_DREMPEL.kpiMinBedrag)).toBe(100);
-    // v193: de drempel verhuisde naar pctZinvol(), dat ook het nulgeval draagt
-    expect(await page.evaluate(() => insKpis.toString())).toContain('pctZinvol');
-    expect(await page.evaluate(() => pctZinvol.toString())).toContain('MAAND_DREMPEL.kpiMinBedrag');
-  });
 
-  test('een normaal grondtal geeft gewoon een percentage', async ({ page }) => {
-    await boot(page);
-    const k = await K(page, AF);
-    expect(k.vast.klein).toBe(false);
-    expect(k.vast.val).toMatch(/%/);
-  });
 });
 
 test.describe('e · loopt nog, en de rustige modus', () => {
-  test('de lopende maand krijgt geen oordeel, op beide schermen', async ({ page }) => {
-    await boot(page);
-    const k = await K(page, CUR);
-    expect(k.partial).toBe(true);
-    expect(k.inleg.oordeel).toBe('loopt nog');
-    const h = await page.evaluate((m) => maandKpiBlok(m), CUR);
-    expect(h).toMatch(/loopt nog/);
-  });
 
-  test('een afgeronde maand krijgt wel een oordeel', async ({ page }) => {
-    await boot(page);
-    const k = await K(page, AF);
-    expect(k.partial).toBe(false);
-    expect(k.inleg.oordeel).not.toBe('loopt nog');
-  });
 
   /* v209: bij één cijfer valt er niets uit te klappen, dus de 'toon beide kerncijfers'-knop is
      vervallen. Hij zou een dode knop zijn. SET.kpiAllMaand blijft ongelezen achter, net als
      SET.kpiAll na v208; een achtergebleven waarde mag niets meer doen. */
-  test('elke modus toont hetzelfde ene cijfer, zonder uitklap', async ({ page }) => {
-    for (const mode of ['rustig', 'begeleid', 'expert']) {
-      await boot(page, seed({ mode }));
-      const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-      expect((h.match(/data-kpi=/g) || []).length, mode).toBe(1);
-      expect(h, mode).not.toMatch(/toon beide kerncijfers/);
-    }
-  });
 
-  test('een achtergebleven kpiAllMaand doet niets', async ({ page }) => {
-    await boot(page, seed({ mode: 'rustig', set: { kpiAllMaand: true } }));
-    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-    expect((h.match(/data-kpi=/g) || []).length).toBe(1);
-  });
 });

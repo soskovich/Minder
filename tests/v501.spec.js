@@ -100,7 +100,7 @@ test.describe('v501', () => {
     expect(voor.sp).toEqual({ status: 'nieuw', verschil: 80, mN: 80 });
     /* de oude post is al maanden stil en staat daarom niet meer in vastGestegenData (v413: oud), wel in de gestopte posten */
     expect(voor.hc).toEqual({ status: 'verlopen', maand: 40 });
-    expect(voor.kies).toMatch(/^Sportcity: nieuw \+€80 · accepteren of nakijken$/i);
+    expect(voor.kies).toMatch(/^Sportcity: nieuw \+€80\/mnd · vervangt dit Health Club\?$/i);   // onderhoud3 (punt 4): de vraag met het voorstel (dezelfde categorie)
     /* de sheet: de optie "vervangt een gestopte post" met Health Club als chip; niets voorgekozen; Vastleggen pas na de keuze */
     await page.evaluate((k) => openVastPostKeuze(k), voor.key);
     await expect(page.locator('#vastPostKeuze [data-vpkoptie="vervangt"]')).toBeVisible();

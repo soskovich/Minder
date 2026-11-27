@@ -151,7 +151,7 @@ test.describe('c - een gepauzeerd doel', () => {
     expect(t.doel).toBe(21334);
     expect(t.nogTeGaan).toBe(5334 - 2500 - 1039);
     expect(t.allesVol).toBe(3);   // alleen het noodfonds doet mee
-    expect(await page.evaluate(() => { go('vooruit'); return document.querySelector('[data-id="g1"] [data-planstatus]').innerText; })).toBe('gepauzeerd');
+    expect(await page.evaluate(() => { go('vooruit'); openLaagDoelen(); return document.querySelector('[data-id="g1"] [data-planstatus]').innerText; })).toBe('gepauzeerd');
   });
 });
 

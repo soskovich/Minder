@@ -45,11 +45,12 @@ test.describe('a · markeren haalt het uit de uitgaven', () => {
 
   // v161: de restsaldo-quote is vervallen. Budgetnaleving draagt hier hetzelfde bewijs, en netSpend
   // toont rechtstreeks dat de post uit je uitgaven is.
-  test('de afgeleide cijfers bewegen mee: budgetnaleving en je uitgaven', async ({ page }) => {
+  test('de afgeleide cijfers bewegen mee: je uitgaven en je budgetstand', async ({ page }) => {
     await boot(page, [LEEN]);
-    const voor = await page.evaluate((m) => ({ b: insKpis(m).budget.raw, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
+    // onderhoud3 (punt 7): insKpis (de opgeruimde kerncijfers) is weg; de budgetstand leest totals().spendNorm
+    const voor = await page.evaluate((m) => ({ b: totals(m).spendNorm, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
     await page.evaluate((i) => markLoan(i, 'uit', 'lening'), await UIT(page));
-    const na = await page.evaluate((m) => ({ b: insKpis(m).budget.raw, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
+    const na = await page.evaluate((m) => ({ b: totals(m).spendNorm, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
     expect(na.sp).toBeLessThan(voor.sp);                     // het was geen uitgave
     expect(na.b).toBeLessThan(voor.b);
   });

@@ -27,13 +27,12 @@ test.describe('a · Nederlandse getalnotatie', () => {
 
   test('euroK is één compacte notatie met Nederlandse komma', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => ({ k: euroK(4400), rond: euroK(2000), klein: euroK(940), groot: euroK(120000), neg: euroK(-4400), chart: chartK(4400) }));
+    const r = await page.evaluate(() => ({ k: euroK(4400), rond: euroK(2000), klein: euroK(940), groot: euroK(120000), neg: euroK(-4400) }));
     expect(r.k).toBe('€4,4K');
     expect(r.rond).toBe('€2K');
     expect(r.klein).toBe('€940');                  // onder 1000 gewoon voluit
     expect(r.groot).toBe('€120K');
     expect(r.neg).toBe('-€4,4K');
-    expect(r.chart).toBe(r.k);                     // grafieken gebruiken dezelfde notatie
   });
 
   test('geen punt-als-decimaal of losse k-varianten op het scherm', async ({ page }) => {
@@ -67,12 +66,6 @@ test.describe('b · tokens en kleurgebruik', () => {
 
   // v382: weg, 'grafiekstaven zijn neutraal; teal alleen voor de lopende maand' ging over spendVsBudgetChart, de staafgrafiek op Inzichten die er niet meer is
 
-  test('de KPI-sparklines gebruiken één rustige kleur binnen de band', async ({ page }) => {
-    await boot(page, 'ins');
-    const strip = await page.evaluate((m) => maandKpiBlok(m), CUR);   // v208: de tegels staan alleen nog op Maand
-    expect(strip).toContain('var(--bar)');
-    expect(strip).not.toContain('var(--teal-d)');                       // geen oude donkerteal-staafjes
-  });
 });
 
 test.describe('c · kaarten, knoppen en navbar', () => {

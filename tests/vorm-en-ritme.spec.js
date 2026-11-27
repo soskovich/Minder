@@ -132,7 +132,8 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
     }
     // op Plan draagt de vulling van een lopend doel accent: dat is beweging, geen ingang
     const bar = await page.evaluate(() => {
-      const f = [...document.querySelectorAll('#s-vooruit .bar-fill')]
+      openLaagDoelen();   // onderhoud3: de doelrijen met hun vulling staan in de sheet van de laag Doelen
+      const f = [...document.querySelectorAll('#laagDoelen .bar-fill')]
         .map((x) => x.getAttribute('style') || '');
       return f.some((x) => /--teal|--accent/.test(x));
     });
@@ -226,7 +227,7 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => {
-      const item = document.querySelector('#s-vooruit .plan-item[data-status="actief"]') || document.querySelector('#s-vooruit .plan-item');
+      const item = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-status="actief"]') || (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item');
       const naam = item.querySelector('.wf-naam'), g = item.querySelector('[data-rijgeld]');
       return { naamGewicht: +getComputedStyle(naam).fontWeight, geldGewicht: +getComputedStyle(g.querySelector('b')).fontWeight,
                noemer: getComputedStyle(g.querySelector('span')).color !== getComputedStyle(g.querySelector('b')).color, tekst: g.innerText };
@@ -240,7 +241,7 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     await boot(page, seed({ savingsAcc: {}, manualBal: { [ACC]: 4200 } }));
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const t = await page.evaluate(() => {
-      const rij = [...document.querySelectorAll('#s-vooruit .plan-item')]
+      const rij = [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item')]
         .find((x) => /Noodfonds/.test(x.innerText));
       return rij ? rij.innerText.replace(/\s+/g, ' ') : '';
     });
@@ -289,7 +290,7 @@ test.describe('e · Plan opent open', () => {
     test(`in ${modus} staat de doelenlijst er bij het openen`, async ({ page }) => {
       await boot(page, seed({ mode: modus }));
       await page.evaluate(() => { delete SET.vooruitDoelOpen; save(); render(); go('vooruit'); });
-      const n = await page.evaluate(() => document.querySelectorAll('#s-vooruit .plan-item').length);
+      const n = await page.evaluate(() => (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item').length);
       expect(n).toBeGreaterThan(0);
     });
   }
@@ -298,7 +299,7 @@ test.describe('e · Plan opent open', () => {
   test('een oude inklapkeuze verbergt de lijst niet meer', async ({ page }) => {
     await boot(page, seed({ vooruitDoelOpen: false }));
     await page.evaluate(() => go('vooruit'));
-    expect(await page.evaluate(() => document.querySelectorAll('#s-vooruit .plan-item').length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item').length)).toBeGreaterThan(0);
     expect(await page.evaluate(() => !!document.querySelector('[data-zone]'))).toBe(false);
   });
 });
@@ -310,7 +311,7 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
     const r = await page.evaluate(() => {
       /* v318: de vulling zit in het VAT, dus in de kolom naast het tekstblok. De eigenschap is
          onveranderd: grijs, en geen tweede laag, want er komt niets bij. */
-      const rij = [...document.querySelectorAll('#s-vooruit .plan-item')]
+      const rij = [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item')]
         .find((x) => /Keuken/.test(x.innerText));
       const fills = [...rij.querySelectorAll('.bar-fill')]
         .map((x) => x.getAttribute('style') || '');

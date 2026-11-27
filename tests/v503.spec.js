@@ -17,7 +17,7 @@ test.describe('v503', () => {
     await S.boot(page, { sport: 'reeks' });
     const r = await sport(page);
     expect(r).toMatchObject({ status: 'nieuw', mN: 40, verschil: 40, sinds: '2026-08-10', onbekend: false });
-    expect(r.kies).toBe('SportCity: nieuw +€40 · accepteren of nakijken');
+    expect(r.kies).toBe('SportCity: nieuw +€40/mnd · vervangt dit Health Club?');   // onderhoud3 (punt 4): met een gestopte post in dezelfde categorie vraagt Kiezen of hij die vervangt
     expect(r.reden).toContain('nieuwe vaste last sinds 10 aug');
     await openSheet(page, r.key);
     await expect(page.locator('#vastPostKeuze [data-vpkfeit]')).toContainText('nieuw sinds 10 aug, €40 per maand');
@@ -98,8 +98,8 @@ test.describe('v503', () => {
 
   test('e: "blijft vol X" als de vol-maand niet verschuift ("2e keer" bij te ruim begroot: grip-kiezen-v391 10)', async ({ page }) => {
     await V.boot(page);
-    await page.evaluate(() => { closeSheet(); go('vooruit'); });
-    await page.locator('[data-verplaats="kk"]').click();
+    await page.evaluate(() => { closeSheet(); go('vooruit'); openLaagDoelen(); });   // onderhoud3: verplaats staat in de sheet van de laag Doelen
+    await page.locator('#laagDoelen [data-verplaats="kk"]').click();
     await page.locator('[data-pvnaar="iw"]').click();
     await page.locator('#pvBedrag').fill('10');
     const vol = await page.locator('#planVerplaats [data-pvvol]').allInnerTexts();

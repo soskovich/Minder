@@ -286,40 +286,8 @@ test.describe('e · de compacte maandrij houdt zijn eenheid', () => {
    die hij droeg niet: het blok mag geen verloop beloven dat er niet is. Die uitspraak staat nu in
    de tegel zelf, in de deltazin. De tests wijzen daarheen; de eis is dezelfde. */
 test.describe('f · het kerncijfer belooft geen verloop dat er niet is', () => {
-  test('meerdere maanden: het noemt de vorige maand', async ({ page }) => {
-    await boot(page, { maanden: 4 });
-    const t = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = maandKpiBlok(kijkMaand());
-      return d.innerText.replace(/\s+/g, ' ');
-    });
-    expect(t).toMatch(/vorige maand/);
-    expect(t).not.toMatch(/nog geen verloop|vanaf \d+ afgeronde maanden/);
-  });
 
-  test('een afgesloten maand ook, want de reeks loopt tot daar', async ({ page }) => {
-    await boot(page, { maanden: 4 });
-    const r = await page.evaluate(() => {
-      const ms = months(); const eerder = ms[ms.length - 2];
-      const d = document.createElement('div'); d.innerHTML = maandKpiBlok(eerder);
-      const K = insKpis(eerder);
-      return { tekst: d.innerText.replace(/\s+/g, ' '),
-        punten: Math.max(0, ...K.items.filter((k) => ['inleg', 'vast'].includes(k.key))
-          .map((k) => (k.series || []).filter((x) => x != null).length)) };
-    });
-    expect(r.punten).toBeGreaterThan(1);
-    expect(r.tekst).toMatch(/vorige maand/);
-  });
 
-  test('één gemeten maand: geen belofte over verloop', async ({ page }) => {
-    await boot(page, { maanden: 1 });
-    const r = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = maandKpiBlok(kijkMaand());
-      return d.innerText.replace(/\s+/g, ' ');
-    });
-    test.skip(!r, 'geen kerncijferblok in deze opzet');
-    expect(r).not.toMatch(/vorige maand/);
-    expect(r).toMatch(/verloop zie je vanaf \d+ afgeronde maanden/);
-  });
 });
 
 /* v228: groep g toetste de rij 'Boven je inkomen-limiet' (v193: een zin met richting en een
@@ -366,31 +334,7 @@ test.describe('h · de ingang herhaalt niet wat er al staat', () => {
 
 test.describe('i · het nulgeval van een kerncijfer', () => {
   /* v359: de stand-kaart met zijn percentage is vervallen; Inzichten draagt geen percentage meer. De tegel blijft. */
-  test('grondtal €0: de tegel zegt 0%', async ({ page }) => {
-    await boot(page, { geenUitgaven: true });
-    const r = await page.evaluate(() => {
-      const m = kijkMaand(); const t = totals(m);
-      const b = insKpis(m).items.find((k) => k.key === 'budget');
-      return { spend: Math.round(t.spend), val: b.val, klein: b.klein, raw: b.raw };
-    });
-    expect(r.spend).toBe(0);
-    expect(r.raw).toBe(0);
-    expect(r.klein).toBe(false);                 // nul is een meting, geen ondergrens
-    expect(r.val).toBe('0%');
-  });
 
-  test('een klein maar niet-nul grondtal blijft het bedrag tonen', async ({ page }) => {
-    await boot(page, {});
-    const r = await page.evaluate(() => ({
-      nul: pctZinvol(0), klein: pctZinvol(40), grens: pctZinvol(MAAND_DREMPEL.kpiMinBedrag),
-      negatiefKlein: pctZinvol(-40), groot: pctZinvol(5000), onbekend: pctZinvol(null) }));
-    expect(r.nul).toBe(true);
-    expect(r.klein).toBe(false);
-    expect(r.negatiefKlein).toBe(false);         // de -1% uit v161 blijft afgevangen
-    expect(r.grens).toBe(true);
-    expect(r.groot).toBe(true);
-    expect(r.onbekend).toBe(false);              // onbekend is een andere zaak (v163)
-  });
 });
 
 /* v340: de beleggen-regel ("Niet te beoordelen zolang a, b en c ontbreken") is vervallen met

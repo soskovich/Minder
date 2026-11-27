@@ -4,6 +4,8 @@
    nodig heeft, afgekapt op de inleg, en wat overblijft of vrijkomt zakt door op volgorde (zolang er geen vol-keuze is, of
    bij "het volgende doel"). De tests over de modi zelf (chips, percentage, de zachte hint op modi) zijn vervallen. */
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open } = require('./budget-fixture');
 const { pinDag } = require('./vaste-dag');   // v495: de advies-terugval van planCapacity (zonder spaarinleg) hangt aan de dag; pin hem
 
@@ -74,7 +76,7 @@ test.describe('a · een bedrag per doel in de verdeling', () => {
   });
   test('de rij noemt bij een doel geen modus meer, alleen wat het krijgt', async ({ page }) => {
     await openV(page, zelf([D('gA', 'Vakantie', 5000), D('gB', 'Laptop', 5000)], { gA: 90, gB: 50 }));
-    const t = await page.locator('#s-vooruit .plan-item[data-id="gB"]').innerText();
+    const t = await (await LD(page)).locator('#laagDoelen .plan-item[data-id="gB"]').innerText();
     expect(t).not.toMatch(/vast ·|% ·/); expect(t).toContain('€');
   });
 });

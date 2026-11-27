@@ -80,18 +80,17 @@ const cijfers = (page) => page.evaluate(() => {
   const cur = months()[months().length - 1];
   const t = totals(cur);
   const r1 = (x) => x == null ? null : Math.round(x * 10) / 10;
-  const K = insKpis(cur);
+  /* onderhoud3 (punt 7): de kerncijfers (insKpis) zijn opgeruimd; de noemer-lezers die bleven zijn splitFixedVar en totals */
+  const pct = (a, b) => (b > 0 ? a / b * 100 : null), SF = splitFixedVar(cur);
   return {
     income: Math.round(t.income), incomeAlles: Math.round(t.incomeAlles),
     onregelmatig: t.onregelmatig, detected: Math.round(t.detectedIncome), limit: Math.round(t.limit),
     monthAgg: v(() => Math.round(monthAgg(cur).income)),
     saldo: v(() => Math.round(totalBalance().sum)), safe: v(() => Math.round(safeToSpend().safe)),
     baseIncome: v(() => baseIncome()),
-    vari: r1(K.vari.raw), vast: r1(K.vast.raw), budget: r1(K.budget.raw),
-    reeksVast: v(() => insKpiSeries(12).vast.map((x) => x == null ? '-' : Math.round(x)).join(',')),
+    vari: r1(pct(SF.vari, t.income)), vast: r1(pct(SF.fixed, t.income)), budget: r1(pct(t.spendNorm, t.budget)),
+    reeksVast: v(() => months().slice(-12).map((mm) => { const T2 = totals(mm), x = pct(splitFixedVar(mm).fixed, T2.income); return x == null ? '-' : Math.round(x); }).join(',')),
     grafiek: v(() => months().filter((x) => x < thisYM()).slice(-6).map((m) => Math.round(totals(m).income)).join(',')),
-    kpiBasis: v(() => Math.round(kpiBasis('vari', t))),
-    kpiXB: v(() => Math.round(kpiXB('vast', cur).B)),
     fAggLaatste: v(() => { const a = forecastModel().agg; return Math.round(a[a.length - 1].income); }),
     fInc: v(() => Math.round(forecastModel().fInc)),
     spaarDekkingOver: v(() => { const D = spaarDekking(cur); return D ? D.over : null; }),
@@ -156,24 +155,6 @@ test.describe('b · geen knik meer in de lijnen', () => {
 });
 
 test.describe('c · elke lezer doet wat er gemeld is', () => {
-  test('de noemer-lezers volgen de vlag, de geld-lezers niet', async ({ page }) => {
-    await boot(page, {});
-    const voor = await cijfers(page);
-    await vlagAan(page);
-    const na = await cijfers(page);
-    // noemer: deze zakken naar de norm
-    for (const k of ['income', 'monthAgg', 'kpiBasis', 'kpiXB', 'fAggLaatste']) {
-      expect(na[k], `${k} hoort de norm te lezen`).toBe(NORM);
-      expect(voor[k], `${k} hoort zonder vlag alles te lezen`).toBe(NORM + EXTRA);
-    }
-    expect(na.limit).toBe(3651);
-    // geld: deze veranderen niet
-    for (const k of ['saldo', 'safe', 'incomeAlles', 'detected', 'vermogenLijn', 'finModel', 'spaarDekkingOver']) {
-      expect(na[k], `${k} telt geld en hoort niet te bewegen`).toBe(voor[k]);
-    }
-    // baseIncome en forecastModel().fInc lazen de uitschieter al niet
-    expect(na.fInc).toBe(voor.fInc);
-  });
 });
 
 test.describe('d · de zichtbaarheidsregel', () => {

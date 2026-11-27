@@ -195,7 +195,7 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
     await O.boot(page);
     await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => ({ vat: document.querySelectorAll('#s-vooruit [data-vat], #s-vooruit .wf-kol').length,
-      rij: [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => [e.dataset.id, e.querySelector('[data-planstatus]').innerText]),
+      rij: [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-id]')].map((e) => [e.dataset.id, e.querySelector('[data-planstatus]').innerText]),
       volg: !!document.querySelector('[data-planvolgorde]'), regel: !!document.getElementById('terugzetRegel'), kaart: !!document.getElementById('terugzetKaart') }));
     expect(r.vat).toBe(0);
     /* v380: de status heet "vanaf <maand>" in plaats van "wacht tot <maand jaar>", en de maand schuift een op. De fixture
@@ -214,22 +214,23 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
     /* v380: de vol-datum staat in [data-rijvol] (was [data-planrechts]), de streefdatum in [data-rijsub], en de zin van de
        waarschuwing in de detailsheet (de rij draagt alleen data-planwaarschuwing). */
     const r = await page.evaluate(() => { const P = allocatePlan(), VOL = planVooruit(P, planCapacity());
-      const el = (id) => document.querySelector(`#s-vooruit .plan-item[data-id="${id}"]`);
+      const el = (id) => (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector(`#laagDoelen .plan-item[data-id="${id}"]`);
       return { verwacht: Object.fromEntries(P.map((p) => [p.id, etaDatum(VOL[p.id])])),
         rechts: Object.fromEntries(P.map((p) => [p.id, el(p.id).querySelector('[data-rijvol]').innerText])),
         sub: el('iw').querySelector('[data-rijsub]').innerText,
-        rijWarn: [...document.querySelectorAll('#s-vooruit .plan-item[data-planwaarschuwing]')].map((e) => e.dataset.planwaarschuwing) }; });
+        rijWarn: [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-planwaarschuwing]')].map((e) => e.dataset.planwaarschuwing) }; });
     expect(r.rechts.noodfonds).toContain(`vol ${r.verwacht.noodfonds}`);
     expect(r.rechts.kk).toContain(`vol ${r.verwacht.kk}`);
     expect(r.rechts.iw).toContain(`vol ${r.verwacht.iw}`);
     expect(r.sub).toContain('streef mrt 2027 · niet haalbaar');
     expect(r.rijWarn).toEqual(['iw']);
-    await page.click('#s-vooruit .plan-item[data-id="iw"]');
+    await page.click('#laagDoelen .plan-item[data-id="iw"]');
     const warn = await page.evaluate(() => document.querySelector('#planDoelSheet [data-planwaarschuwing]').innerText);
     expect(warn).toContain(`streefdatum niet haalbaar in deze volgorde: vol ${r.verwacht.iw}`);
     await page.evaluate(() => closeSheet());
     // v380: de knop [data-plantijdlijn] is vervallen; de tijdlijn staat achter de schakelaar, met dezelfde planTijdlijnHTML()
-    await page.click('[data-planweergave="tijdlijn"]');
+    await page.evaluate(() => openLaagDoelen());   // onderhoud3: de schakelaar staat in de sheet van de laag Doelen
+    await page.click('#laagDoelen [data-planweergave="tijdlijn"]');
     const t = await page.evaluate(() => { const P = allocatePlan(), D = planTijdlijnData(P, planCapacity());
       const rij = (id) => [...document.querySelectorAll(`#planTijdlijnInline [data-tlrij="${id}"] [data-tlm]`)];
       return { iwEerste: rij('iw').findIndex((c) => +c.dataset.a > 0), d: D.per.iw.eerste, ruit: rij('iw').findIndex((c) => c.querySelector('[data-ruit]')), K: doelMaandenTot('2027-03'),
@@ -243,7 +244,7 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
   test('de waarschuwing staat er alleen bij een streefdatum die in deze volgorde niet haalbaar is', async ({ page }) => {
     await O.boot(page);
     await page.evaluate(() => { SET.goals.find((g) => g.id === 'iw').streefdatum = '2027-12'; save(); go('vooruit'); render(); });
-    const r = await page.evaluate(() => ({ w: document.querySelectorAll('[data-planwaarschuwing]').length, laat: [...document.querySelectorAll('.plan-item[data-laat="1"]')].length }));
+    const r = await page.evaluate(() => ({ w: document.querySelectorAll('[data-planwaarschuwing]').length, laat: [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-laat="1"]')].length }));
     expect(r.w).toBe(0);
     expect(r.laat).toBe(0);
   });
@@ -257,7 +258,7 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
       await O.boot(page);
       await page.setViewportSize(vp);
       await page.evaluate(() => go('vooruit'));
-      const r = await page.evaluate(() => { const items = [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')];
+      const r = await page.evaluate(() => { const items = [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-id]')];
         const kaart = items[0].closest('.card'); const nav = document.querySelector('nav, .nav, #nav');
         const prim = document.getElementById('planLagenKaart');
         return { kaart: Math.round(kaart.getBoundingClientRect().height), primBot: prim ? Math.round(prim.getBoundingClientRect().bottom) : null,

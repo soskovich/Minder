@@ -49,9 +49,9 @@ test.describe('v524 onderdeel 5: verschuiving tussen lagen en doelen', () => {
       const lagen = [...sh.querySelectorAll('[data-verschlaag]')].map((x) => x.dataset.verschlaag);
       const keuzes = [...sh.querySelectorAll('[data-verschlaag] [data-verschkeuze]')].map((x) => x.dataset.verschkeuze);
       const doelen = [...sh.querySelectorAll('[data-verschdoel]')].map((x) => x.textContent.replace(/\s+/g, ' ').trim());
-      return { n: +sh.dataset.verschn, lagen: lagen.length, keuzes, doelen, nogterug: /nog terug/i.test(sh.textContent) && /€0/.test(sh.textContent) };
+      return { n: +sh.dataset.verschn + (+sh.dataset.verschnvorige || 0), lagen: lagen.length, keuzes, doelen, nogterug: /nog terug/i.test(sh.textContent) && /€0/.test(sh.textContent) };
     });
-    expect(r.n).toBe(2);               // 1 lagen-verschuiving + 1 doel→doel
+    expect(r.n).toBe(2);               // 1 lagen-verschuiving + 1 doel→doel (onderhoud3: september is op 10 okt de vorige periode, die staat er nu ook)
     expect(r.lagen).toBe(1);
     expect(r.keuzes).toEqual(['nee', '3', '6']);   // niets voorgekozen, drie keuzes
     expect(r.doelen.length).toBe(1);

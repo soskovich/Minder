@@ -93,7 +93,7 @@ test.describe('a · de grendel', () => {
     /* v380: het datumpaar staat in de detailsheet ([data-plandetail]); de status in de rij zegt "vanaf <maand>", de
        eerste maand waarin het doel in de projectie iets krijgt. Dat is de maand van de laatste buffer-inleg, want wat
        de buffer dan niet meer nodig heeft zakt door (v255), dus dezelfde maand als planGrendelDatum(). */
-    const r = await page.evaluate(() => { const e = document.querySelector('#s-vooruit .plan-item[data-id="g1"]');
+    const r = await page.evaluate(() => { const e = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="g1"]');
       const status = e.querySelector('[data-planstatus]').innerText.trim();
       openPlanDoel('g1'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet();
       const G = planGrendel(), eerste = planTijdlijnData().per.g1.eerste;
@@ -196,7 +196,7 @@ test.describe('b · de streefdatum', () => {
     /* v380 → v524 (punt 1): de rij-sub draagt niet meer "+EUR X deze maand". De sub is nu een plan-feit, en voor een doel
        zonder streefdatum is dat "geen streefdatum" (ook als het deze maand geld krijgt). Het increment staat als attribuut
        (data-rijdezemaand), en de zin "Streefdatum ontbreekt" + de ingang "datum zetten" staan in het datumpaar van de detailsheet. */
-    const lees = () => page.evaluate(() => { const sub = document.querySelector('#s-vooruit .plan-item[data-id="oud"] [data-rijsub]');
+    const lees = () => page.evaluate(() => { const sub = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="oud"] [data-rijsub]');
       openPlanDoel('oud'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet(); return { sub: sub.innerText.trim(), dezeMaand: +sub.dataset.rijdezemaand, t }; });
     const v = await lees();
     expect(v.sub).toBe('geen streefdatum');   // het plan-feit; het increment staat als attribuut

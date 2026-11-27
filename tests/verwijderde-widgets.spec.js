@@ -2,6 +2,8 @@
 // Deze spec bewaakt dat ze weg zijn én dat wat eromheen stond gewoon blijft werken.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 async function boot(page, scherm, payload) {
@@ -59,7 +61,7 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
        dashboard en de rijen */
     expect(v).not.toContain('Bestemmingen');
     expect(await page.locator('#s-vooruit #planLagenHero').count()).toBe(1);   // v524: de kop is de lagen-hero
-    expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item').count()).toBeGreaterThan(0);
   });
 
   test('de rest van Vooruitblik blijft staan', async ({ page }) => {
@@ -70,7 +72,7 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
        ("Je geld in lagen") met de rijen eronder */
     expect(v).not.toContain('Te verdelen');
     expect(v).toMatch(/je geld in lagen/i);                       // de kop staat in hoofdletters (CSS)
-    expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item').count()).toBeGreaterThan(0);
   });
 
   // v164: vooruitFocus() had geen aanroeper meer en is opgeruimd. Wat overeind blijft is de vraag

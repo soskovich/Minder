@@ -7,23 +7,7 @@ const { test, expect } = require('./klok');
 const B = require('./v518-bedragen');
 const VOOR = require('./v518-voor.json');
 
-test('a. de kaart Spaarquote staat niet op Vermogen (op 3faf02b wel)', async ({ page }) => {
-  await B.boot(page);
-  expect(VOOR.vermKaart).toBe(true);   // de stand draagt het geval: op 3faf02b stond de kaart er
-  const r = await page.evaluate(() => { go('vermogen'); renderVermogen(); const s = document.getElementById('s-vermogen'); return { kaart: s.querySelectorAll('#maandKpiBlok, [data-kpi="inleg"]').length, tekst: /Spaarquote/.test(s.innerText) }; });
-  expect(r.kaart).toBe(0);
-  expect(r.tekst).toBe(false);
-});
 
-test('b. de berekening achter de spaarquote geeft hetzelfde als op 3faf02b', async ({ page }) => {
-  await B.boot(page);
-  const r = await page.evaluate(() => { const m = vermogenSpaarquoteMaand(), K = insKpis(m); return { m, inleg: K.inleg ? [K.inleg.raw, K.inleg.val] : null, inlegM: JSON.stringify(vermogensInleg(m)), opzij: JSON.stringify(opzijGemiddeld()), blok: /data-kpi="inleg"/.test(maandKpiBlok(m)) }; });
-  expect(r.m).toBe(VOOR.spaarquote.m);
-  expect(r.inleg).toEqual(VOOR.spaarquote.inleg);
-  expect(r.inlegM).toBe(VOOR.spaarquote.inlegM);
-  expect(r.opzij).toBe(VOOR.spaarquote.opzij);
-  expect(r.blok).toBe(true);   // maandKpiBlok() levert de tegel nog, voor wie hem leest
-});
 
 test('c. "Gepland · op datum" staat op datum, bij gelijke datum op naam', async ({ page }) => {
   await B.boot(page);

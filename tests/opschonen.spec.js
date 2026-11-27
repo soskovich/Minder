@@ -251,6 +251,7 @@ test.describe('e · Plan', () => {
     expect(r.terug).toEqual(['noodfonds:231']); expect(r.nf).toBe(3638); expect(r.save).toBe(2431);
     expect(r.eta).toEqual({ noodfonds: 1, kk: 7, iw: null });
     /* v380: terug en inleg staan samen gearceerd in de rij (231 + 362 = 593 van 4.000) */
+    await page.evaluate(() => openLaagDoelen());   // onderhoud3: de rijen staan in de sheet van de laag Doelen
     expect(+(await page.locator('[data-bijvat="noodfonds"]').getAttribute('data-pct'))).toBeCloseTo((231 + 362) / 4000 * 100, 1);
   });
   /* v380: de twee delen die nog komen (nov 77, dec 77) zijn pending: het Noodfonds is vol in december (eta 3, was 1), en

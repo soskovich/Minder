@@ -1,6 +1,8 @@
 // Vooruitblik (v80): de spaardoel-hero is weg en elk doel met een looptijd noemt zijn einddatum.
 // Alleen weergave — de looptijd zelf komt onveranderd uit allocatePlan()/renderGoals().
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 function tweak(fn) {
@@ -23,7 +25,7 @@ async function openV(page, payload) {
   await open(page, payload);
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
-  await page.waitForSelector('#s-vooruit .plan-item');   // v380: de zonebalk is vervallen, de rijen staan er meteen
+  await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item');   // v380: de zonebalk is vervallen, de rijen staan er meteen
 }
 /* v380: de open rij is vervallen; het datumpaar (vatRegels(p,false), met de eta-regel van planSub()) staat in de
    detailsheet als [data-plandetail]. */
@@ -44,7 +46,7 @@ test.describe('a · de spaardoel-hero is weg', () => {
     expect(await page.locator('#s-vooruit .vh-hef, #s-vooruit .vh-chip, #s-vooruit .vh-lbl').count()).toBe(0);
     // wat blijft: het plan zelf ("Nog deze maand" is sinds v144 alleen nog een Inzichten-kaart)
     expect(v).not.toMatch(/nog deze maand/i);
-    expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item').count()).toBeGreaterThan(0);
   });
 
   // v160: vooruitForecast() bouwde de hero nog wel maar werd sinds v80 nergens aangeroepen; hij is
@@ -110,8 +112,8 @@ test.describe('b · einddatum per doel', () => {
       s.planOrder = ['klaar', 'pauze', 'noodfonds'];
       s.planPaused = { pauze: true };
     }));
-    expect(await page.locator('#s-vooruit .plan-item[data-id="klaar"]').innerText()).not.toMatch(/rond /);
-    expect(await page.locator('#s-vooruit .plan-item[data-id="pauze"]').innerText()).not.toMatch(/rond /);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item[data-id="klaar"]').innerText()).not.toMatch(/rond /);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item[data-id="pauze"]').innerText()).not.toMatch(/rond /);
   });
 
   test('een doel dat op capaciteit wacht toont geen datum', async ({ page }) => {

@@ -2,6 +2,8 @@
 // lopende doel (echte waterval), plus uitleg bij "wacht op capaciteit".
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 const CAP = 500;   // savingMode 'amount' -> monthlySavingTarget()
@@ -50,7 +52,7 @@ async function openV(page, payload) {
 }
 /* v380: de zonebalk "Bestemmingen" is vervallen; de rijen staan er meteen */
 async function openPlanZone(page) {
-  await page.waitForSelector('#s-vooruit .plan-item');
+  await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item');
 }
 const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({
   id: x.id, mode: x.mode, rest: x.rest, base: x.base, extra: x.extra, alloc: x.alloc,
@@ -265,7 +267,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
 
     // en die blokkeerder is vanaf zijn eigen rij te openen
     /* v380: een tik op de rij opent de detailsheet, en daar staat "Doel aanpassen" naar de bestaande editor */
-    await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Vakantie').click();
+    await (await LD(page)).locator('#laagDoelen .plan-item[data-id="gA"] >> text=Vakantie').click();
     await page.locator('#planDoelSheet[data-doel="gA"] [data-doelaanpassen]').click();
     await page.waitForSelector('[data-goalkrijgt]');
     expect(await page.locator('#gNaam').inputValue()).toBe('Vakantie');
@@ -299,7 +301,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
        waar hij hoort. */
     /* v380: de rij opent de detailsheet; de ingang naar het maandbedrag van een aflos-item hoort daar te staan, want
        de open rij met [data-acties] is vervallen. */
-    await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=Creditcard').click();
+    await (await LD(page)).locator('#laagDoelen .plan-item[data-id="af:d1"] >> text=Creditcard').click();
     await page.locator('#planDoelSheet[data-doel="af:d1"] >> text=maandbedrag').click();
     await page.waitForSelector('#paModes');
     expect(await page.locator('#paModes .chip').count()).toBe(3);

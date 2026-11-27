@@ -2,6 +2,8 @@
 // v126: de regel is verhuisd van de noodfonds-plan-rij naar planniveau; de selector volgt mee.
 // aan het bovenste lopende spaardoel. De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open } = require('./budget-fixture');
 
 // nfMaanden 1 maakt het noodfonds-doel klein genoeg (1 x crisislast) dat het spaarsaldo
@@ -25,10 +27,10 @@ async function openV(page, payload) {
   await open(page, payload);
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
-  if (await page.locator('#s-vooruit .plan-item').count() === 0) {
+  if (await (await LD(page)).locator('#laagDoelen .plan-item').count() === 0) {
     await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
   }
-  await page.waitForSelector('#s-vooruit .plan-item');
+  await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item'); await page.evaluate(() => closeSheet());   // onderhoud3: de regel staat op Plan, de rijen in de sheet
 }
 const meet = (page) => page.evaluate(() => ({
   vrij: spaarVrij(), saved: Math.round(spaarSaldo().cur), doel: Math.round(noodfondsModel().doel),
@@ -56,7 +58,7 @@ test.describe('a · het bedrag klopt en is zichtbaar', () => {
     expect(t).toMatch(/aan geen enkel item in je plan is toegewezen/i);
     expect(t).toContain('toewijzen aan Kosten koper');
     // v126: buiten de plan-rijen, dus hij overleeft een gepauzeerd of ontbrekend noodfonds
-    expect(await page.locator('#s-vooruit .plan-item .spaar-vrij').count()).toBe(0);
+    expect(await (await LD(page)).locator('#laagDoelen .plan-item .spaar-vrij').count()).toBe(0);
   });
 
   test('wat al bij een doel staat telt niet nog een keer als vrij', async ({ page }) => {
@@ -103,7 +105,7 @@ test.describe('b · toewijzen', () => {
     expect(na.vrij.vrij).toBe(0);                              // niet nog eens aan te bieden
     expect(await regel(page).count()).toBe(0);
     // de voortgang van het doel beweegt mee
-    const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
+    const rij = await (await LD(page)).locator('#laagDoelen .plan-item[data-id="gA"]').innerText();
     expect(rij).toContain(await page.evaluate((n) => euro0(n), v));
     // en het blijft handmatig te corrigeren
     await page.evaluate(() => openGoal('gA'));

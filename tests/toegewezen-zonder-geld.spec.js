@@ -155,7 +155,7 @@ test.describe('c · gelijktrekken laat de melding verdwijnen', () => {
    terug plus inleg op tot de stand eind deze maand. Zonder geld telt sinds v380 NIET in die stand (planStandEind()): het
    staat er als eigen regel ([data-op="zg"]) onder de som. */
 test.describe('d · de rij laat geld en plan apart zien', () => {
-  const rij = (page, id) => page.evaluate((i) => { go('vooruit'); const e = document.querySelector(`.plan-item[data-id="${i}"]`);
+  const rij = (page, id) => page.evaluate((i) => { go('vooruit'); const e = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector(`#laagDoelen .plan-item[data-id="${i}"]`);
     const vat = e.querySelector('[data-geldvat]'), bij = e.querySelector('[data-bijvat]');
     const r = { status: e.dataset.status, geld: e.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' ').trim(), vol: e.querySelector('[data-rijvol]').innerText,
       tekst: e.innerText, geldPct: vat ? +vat.dataset.pct : null, bijPct: bij ? +bij.dataset.pct : null, geldregel: e.querySelectorAll('[data-geldregel]').length };
@@ -219,7 +219,7 @@ test.describe('e · layout', () => {
       // v440: "toegewezen zonder geld" staat niet meer als Plan-regel (die is nu Inhalen); deze test meet de keuze-sheet
       // (openSpaarOver) en de pagina-overflow. De Inhalen-regel-hoogte staat in v440.spec.js.
       const m = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        rij: document.querySelector('.plan-item[data-id="noodfonds"]').getBoundingClientRect().height }));
+        rij: (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]').getBoundingClientRect().height }));
       await page.evaluate(() => openSpaarOver());
       const s = await page.evaluate(() => { const e = document.getElementById('sheet'); return { h: document.getElementById('spaarOverSheet').getBoundingClientRect().height, over: e.scrollWidth - e.clientWidth }; });
       console.log(`v371 ${w}px: rij ${Math.round(m.rij)}, sheet ${Math.round(s.h)}`);

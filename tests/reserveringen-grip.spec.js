@@ -137,8 +137,10 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     expect(s).toContain(`Je bent gedekt tot en met ${mnd(1)}`);
     expect(s).toContain('Er is niets meer nodig tot de volgende post.');
     expect(s).not.toMatch(/per maand nodig/);
-    const rij = await page.evaluate(() => document.querySelector('[data-resnodig]').innerText.replace(/\s+/g, ' '));
-    expect(rij).toBe('Nog nodig per maand niets tot de volgende post');
+    /* onderhoud3 (punt 6): met een bedrag in de verdeling noemt het sheet zijn inleg een keer, in de kop (per salarisperiode), en de
+       opbouw-rij "Nog nodig per maand" staat er dan niet. Hier dekt de pot de boete al: de inleg is 0. */
+    expect(await page.locator('[data-resnodig]').count()).toBe(0);
+    expect(await page.evaluate(() => +document.querySelector('[data-resperiodekop]').dataset.resperiodekop)).toBe(0);
     const t = await tegel(page);
     expect(t.tekst).toContain(`€299 gedekt t/m ${mndKort(1)}`);  // v510 punt 2: maand + jaar   // v387: de regel in de sheet van de Beleggen-meter
     expect(t.tekst).not.toContain('nodig');
@@ -161,11 +163,17 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     expect(r.gevolg).toContain('Dat is €131 per maand tot');
     expect(r.gevolg).not.toContain('€299 per maand');
     expect(r.gevolg.match(/per maand/g).length).toBe(1);   // geen tweede zin bij gelijk bedrag
+    /* onderhoud3 (punt 6): Grip blijft de regel per maand (de dekkingsregel en zijn gevolg zijn niet aangeraakt); het sheet rekent per
+       salarisperiode met het bedrag van de verdeling, noemt dat bedrag een keer (de kop) en geen bedrag per maand. Hier is de inleg
+       (EUR 262, het gat) deze periode nog niet gestort, dus de zin zegt wat de pot zonder die inleg dekt. */
     await page.evaluate(() => openReserveringen());
     const s = await sheetTekst(page);
-    expect(s).toContain(r.gevolg);
-    const rij = await page.evaluate(() => document.querySelector('[data-resnodig]').innerText.replace(/\s+/g, ' '));
-    expect(rij).toBe('Nog nodig per maand €131');
+    const per = await page.evaluate(() => Math.round(rekVoorstel().reserveringen));
+    expect(await page.evaluate(() => +document.querySelector('[data-resperiodekop]').dataset.resperiodekop)).toBe(per);
+    expect(s).not.toMatch(/per maand/);
+    expect(s.split('€' + per + ' per salarisperiode').length - 1).toBe(1);
+    expect(await page.evaluate(() => document.querySelector('[data-resdekzin]').innerText)).toContain('Zonder die inleg dekt je pot de eerstvolgende post niet');
+    expect(await page.locator('[data-resnodig]').count()).toBe(0);
   });
 
   test('vragen de posten na het gat meer, dan noemt de zin ook het jaarbedrag', async ({ page }) => {
@@ -208,9 +216,10 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     await boot(page, seed(100, [{ id: 'n', naam: 'Nu', bedrag: 299, vervalmaand: CUR, intervalM: 0 }]));
     const D = await page.evaluate(() => dekking(12));
     expect(D.nodigPerMaand).toBe(0);
+    /* onderhoud3 (punt 6): de opbouw-rij per maand staat er met een bedrag in de verdeling niet; het tekort van nu staat in de zin */
     await page.evaluate(() => openReserveringen());
-    const rij = await page.evaluate(() => document.querySelector('[data-resnodig]').innerText.replace(/\s+/g, ' '));
-    expect(rij).toBe('Nog nodig per maand €199 deze maand');
+    expect(await page.locator('[data-resnodig]').count()).toBe(0);
+    expect(await page.evaluate(() => document.querySelector('[data-resdekzin]').innerText)).toContain('€199 tekort');
   });
 });
 

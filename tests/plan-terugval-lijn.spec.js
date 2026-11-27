@@ -336,17 +336,17 @@ test.describe('e · de inlegbalk is weg; een rij die niets krijgt draagt niets e
     await boot(page, { cap: 2200, order: ['noodfonds', A, B], goals: [
       { id: A, naam: 'Groot', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'pct', pct: 99.5 },
       { id: B, naam: 'Mini', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'pct', pct: 0.5 }] });
-    const r = await page.evaluate(() => ({ balk: document.querySelectorAll('#s-vooruit .inleg-balk').length,
+    const r = await page.evaluate(() => ({ _o: openLaagDoelen(), balk: document.querySelectorAll('#s-vooruit .inleg-balk').length,
       seg: document.querySelectorAll('#s-vooruit [data-seg]').length, rijen: document.querySelectorAll('#planLijst .plan-item[data-id]').length,
       fn: typeof planSegmenten, min: typeof SEG_MIN_PCT === 'undefined' ? 'undefined' : 'bestaat' }));
-    expect(r).toEqual({ balk: 0, seg: 0, rijen: 3, fn: 'undefined', min: 'undefined' });
+    delete r._o; expect(r).toEqual({ balk: 0, seg: 0, rijen: 3, fn: 'undefined', min: 'undefined' });
   });
 
   test('een bestemming die niets krijgt heeft geen gearceerd deel in zijn balk', async ({ page }) => {
     await boot(page, { cap: 2500, order: ['noodfonds', A, B], goals: [
       { id: A, naam: 'Alles', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'auto' },
       { id: B, naam: 'Niets', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'vast', perMaand: 0 }] });
-    const r = await page.evaluate((ids) => { const P = allocatePlan(); const SE = planStandEind(P);
+    const r = await page.evaluate((ids) => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); const P = allocatePlan(); const SE = planStandEind(P);
       const bij = (id) => document.querySelectorAll(`#planLijst .plan-item[data-id="${id}"] [data-bijvat]`).length;
       return { aA: P.find((p) => p.id === ids[0]).alloc, aB: P.find((p) => p.id === ids[1]).alloc,
         bijB: SE.per[ids[1]].tb + SE.per[ids[1]].inleg, rijA: bij(ids[0]), rijB: bij(ids[1]) }; }, [A, B]);

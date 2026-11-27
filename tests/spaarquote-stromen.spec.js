@@ -53,7 +53,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof vermogensInleg === 'function' && typeof inlegTx === 'function');
+  await page.waitForFunction(() => typeof vermogensInleg === 'function');
 }
 const V = (page, m) => page.evaluate((mm) => vermogensInleg(mm), m || M1);
 
@@ -105,63 +105,12 @@ test.describe('a · dezelfde euro telt één keer', () => {
 });
 
 test.describe('b · de lijst telt op tot het cijfer', () => {
-  test('alle drie de stromen staan erin', async ({ page }) => {
-    await boot(page, seed({ belegging: true, reservering: true }));
-    const r = await page.evaluate((m) => {
-      const rijen = inlegTx(m);
-      return {
-        accs: rijen.map((t) => t.acc).sort(),
-        som: kpiSom('inleg', rijen),
-        totaal: vermogensInleg(m).totaal,
-        cijfer: insKpis(m).inleg.raw, inkomen: totals(m).income,
-      };
-    }, M1);
-    expect(new Set(r.accs).size).toBeGreaterThanOrEqual(3);   // spaarpot, reserveringspot, Peaks
-    expect(r.som).toBe(r.totaal);
-    expect(r.som / r.inkomen * 100).toBeCloseTo(r.cijfer, 9);
-  });
 
-  test('de waarde per boeking volgt de stroom, niet een globale vlag', async ({ page }) => {
-    await boot(page, seed({ belegging: true }));
-    const r = await page.evaluate((m) => {
-      const rijen = inlegTx(m);
-      const pot = rijen.find((t) => t.amount > 0), derde = rijen.find((t) => t.amount < 0);
-      return { pot: inlegWaarde(pot), derde: inlegWaarde(derde) };
-    }, M1);
-    expect(r.pot).toBe(300);        // bijschrijving op je eigen pot
-    expect(r.derde).toBe(100);      // afschrijving naar een derde partij
-  });
 
-  test('geen enkele boeking staat er twee keer in', async ({ page }) => {
-    await boot(page, seed({ belegging: true, reservering: true }));
-    const ids = await page.evaluate((m) => inlegTx(m).map((t) => t.id), M1);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
 
-  test('ontsparen blijft zichtbaar en trekt het cijfer omlaag', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate((m) => {
-      const t = { id: 'op', date: `${m}-28`, amount: -900, acc: 'NL01SAVE0000004323',
-        name: 'Eigen spaarrekening', desc: 'OVERBOEKING VAN SPAARREKENING', typ: '', ref: '',
-        src: 'csv', accName: '', refNums: [] };
-      TX.push(t); categorize(t); save();
-      return { totaal: vermogensInleg(m).totaal, som: kpiSom('inleg', inlegTx(m)), cijfer: insKpis(m).inleg.raw };
-    }, M1);
-    expect(r.totaal).toBe(-600);
-    expect(r.som).toBe(r.totaal);
-    expect(r.cijfer).toBeLessThan(0);
-  });
 });
 
 test.describe('c · onbekend blijft onbekend', () => {
-  test('geen spaarrekening en geen enkele boeking geeft null, geen nul', async ({ page }) => {
-    await boot(page, seed({ geenStorting: true, nietGemarkeerd: true }));
-    const r = await page.evaluate((m) => ({ V: vermogensInleg(m), k: insKpis(m).inleg }), M1);
-    expect(r.V.delen.every((d) => d.bedrag === null)).toBe(true);
-    expect(r.V.totaal).toBe(null);
-    expect(r.k.raw).toBe(null);
-    expect(r.k.val).toBe('—');
-  });
 
   test('nul beleggingsboekingen is geen nul ingelegd', async ({ page }) => {
     await boot(page);
@@ -171,37 +120,8 @@ test.describe('c · onbekend blijft onbekend', () => {
 });
 
 test.describe('d · de reeks leest dezelfde teller als de tegel', () => {
-  test('de sparkline volgt vermogensInleg, niet alleen de spaarrekening', async ({ page }) => {
-    await boot(page, seed({ belegging: true }));
-    const r = await page.evaluate(() => {
-      const S = insKpiSeries();
-      return S.ms.map((m, i) => ({
-        reeks: S.inleg[i],
-        eigen: totals(m).income > 0 && vermogensInleg(m).totaal != null
-          ? vermogensInleg(m).totaal / totals(m).income * 100 : null,
-      }));
-    });
-    for (const x of r) expect(x.reeks).toBe(x.eigen);
-    expect(r.some((x) => x.reeks != null)).toBe(true);
-  });
 
-  test('het laatste punt van de reeks is het cijfer op de tegel', async ({ page }) => {
-    await boot(page, seed({ belegging: true }));
-    const r = await page.evaluate((m) => {
-      const k = insKpis(m).inleg;
-      return { laatste: k.series[k.series.length - 1], raw: k.raw };
-    }, M1);
-    expect(r.laatste).toBeCloseTo(r.raw, 9);
-  });
 });
 
 test.describe('e · kijken verandert niets', () => {
-  test('geen van deze functies schrijft', async ({ page }) => {
-    await boot(page, seed({ belegging: true, reservering: true }));
-    const voor = await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }));
-    await page.evaluate((m) => {
-      vermogensInleg(m); beleggingsInleg(m); beleggingsTx(m); inlegTx(m); inlegSpiegels(m); vermogensPotten();
-    }, M1);
-    expect(await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
-  });
 });

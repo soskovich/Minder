@@ -18,6 +18,7 @@ test('een bereikt (vol) doel toont in het app-pad "vol", en de Plan-paint rondt 
     SET.nfToegewezen = 0; SET.terugzet = {}; SET.terugzetGat = []; SET.extraSavings = 20000;
     const g = (SET.goals || []).find(x => x.id === 'iw'); g.gespaard = g.doel; _dataGen++;
     render(); go('vooruit');   // het app-pad: render() hertekent Plan; go('vooruit') navigeert alleen (hertekent niet)
+    openLaagDoelen();   // onderhoud3: de rijen staan in de sheet van de laag Doelen
     const rij = document.querySelector('#planLijst .plan-item[data-id="iw"]');
     const P = allocatePlan(); const p = P.find(x => x.id === 'iw'); const x = planStandEind(P).per['iw'];
     return { kids: document.getElementById('s-vooruit').children.length,
@@ -31,5 +32,6 @@ test('een bereikt (vol) doel toont in het app-pad "vol", en de Plan-paint rondt 
   expect(st.rijStatus).toMatch(/vol/);         // de rij toont "vol", NIET "nu actief" (punt 6)
   expect(st.geldvat).toBe(100);                // de geld-balk is vol
   // de paint zelf: een schermafdruk van het volle Plan-scherm met de vol-stand moet binnen 5 s af zijn
+  await page.evaluate(() => closeSheet());
   await page.locator('#s-vooruit').screenshot({ path: test.info().outputPath('plan-vol.png'), timeout: 5000 });
 });

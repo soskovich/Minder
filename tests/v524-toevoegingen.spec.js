@@ -62,29 +62,31 @@ test.describe('v524 toevoeging 1: geen herkende spaarrekening', () => {
 });
 
 test.describe('v524 toevoeging 2: tik op de laag Doelen', () => {
-  test('a: de Doelen-laag is bekabeld op planScrollDoelen', async ({ page }) => {
+  /* onderhoud3 (punt 1): de doelenlijst staat niet meer op Plan maar in de sheet van de laag Doelen, dus de tik scrollt niet meer
+     (planScrollDoelen is vervallen) maar opent die sheet, met de weergave (Lijst of Tijdlijn) die je koos. */
+  test('a: de Doelen-laag opent de sheet van de laag Doelen', async ({ page }) => {
     await T.boot(page, 'nu');
     const onclick = await page.evaluate(() => { go('vooruit'); renderVooruit();
       const el = document.querySelector('#planLagenKaart [data-laag="doelen"]'); return el ? el.getAttribute('onclick') : null; });
-    expect(onclick).toContain('planScrollDoelen');
+    expect(onclick).toContain('openLaagDoelen');
+    expect(await page.evaluate(() => typeof planScrollDoelen)).toBe('undefined');
   });
 
-  test('b: in Lijst scrollt de tik de doelenlijst in beeld', async ({ page }) => {
+  test('b: in Lijst opent de tik de doelenlijst in de sheet, en Plan draagt hem niet', async ({ page }) => {
     await T.boot(page, 'nu');
-    await page.evaluate(() => { if (planWeergave() !== 'lijst') { SET.planWeergave = 'lijst'; save(); } go('vooruit'); renderVooruit();
-      window.__scrolled = []; const o = Element.prototype.scrollIntoView;
-      Element.prototype.scrollIntoView = function () { window.__scrolled.push(this.id || '?'); return o.apply(this, arguments); }; });
-    expect(await page.locator('#planLijst').count()).toBe(1);
+    await page.evaluate(() => { if (planWeergave() !== 'lijst') { SET.planWeergave = 'lijst'; save(); } go('vooruit'); renderVooruit(); });
+    expect(await page.locator('#s-vooruit #planLijst').count()).toBe(0);
     await page.locator('#planLagenKaart [data-laag="doelen"]').click();
-    expect(await page.evaluate(() => window.__scrolled)).toContain('planLijst');
+    expect(await page.locator('#laagDoelen #planLijst').count()).toBe(1);
   });
 
-  test('c: vanuit Tijdlijn zet de tik eerst Lijst aan en toont de doelenlijst', async ({ page }) => {
+  test('c: vanuit Tijdlijn toont de sheet de tijdlijn, en de schakelaar zet Lijst aan', async ({ page }) => {
     await T.boot(page, 'nu');
     await page.evaluate(() => { SET.planWeergave = 'tijdlijn'; save(); go('vooruit'); renderVooruit(); });
-    expect(await page.locator('#planLijst').count()).toBe(0);   // tijdlijn: geen doelenlijst
     await page.locator('#planLagenKaart [data-laag="doelen"]').click();
+    expect(await page.locator('#laagDoelen #planTijdlijnInline').count()).toBe(1);
+    await page.locator('#laagDoelen [data-planweergave="lijst"]').click();
     expect(await page.evaluate(() => planWeergave())).toBe('lijst');
-    expect(await page.locator('#planLijst').count()).toBe(1);
+    expect(await page.locator('#laagDoelen #planLijst').count()).toBe(1);
   });
 });

@@ -4,8 +4,9 @@
 const { test, expect } = require('./klok');
 const V = require('./v502-stand');
 
+/* onderhoud3 (punt 1): de doelrijen met hun ⇄ verplaats staan in de sheet van de laag Doelen */
 const naarPlan = async page => { await page.evaluate(() => { closeSheet(); go('vooruit'); }); };
-const openVan = async (page, id) => { await naarPlan(page); await page.locator(`[data-verplaats="${id}"]`).click(); await expect(page.locator('#planVerplaats')).toBeVisible(); };
+const openVan = async (page, id) => { await naarPlan(page); await page.evaluate(() => openLaagDoelen()); await page.locator(`[data-verplaats="${id}"]`).click(); await expect(page.locator('#planVerplaats')).toBeVisible(); };
 const stand = page => page.evaluate(() => ({ kk: planToeVan('kk'), iw: planToeVan('iw'), nf: planToeVan('noodfonds'),
   goals: JSON.stringify(SET.goals), nfRaw: SET.nfToegewezen, saldo: spaarSaldo().cur, allesVol: planKpiData().allesVol, log: (SET.planVerplaatsLog || []).length }));
 

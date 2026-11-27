@@ -223,7 +223,7 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
          eigen helft te lezen en niet in één omhullende rij. */
       /* v380: de inlegbalk met een segment per bestemming is vervallen. Wat de rij nu draagt: de status "nu actief" en,
          gearceerd in zijn eigen balk, wat er deze maand bijkomt (de 466). */
-      const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
+      const tk = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="kk"]');
       const bij = tk.querySelector('[data-bijvat="kk"]');
       return { dof: tk.dataset.status === 'wacht', status: tk.dataset.status,
         tak: !!bij, bijPct: bij ? +bij.dataset.pct : null,
@@ -307,7 +307,7 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
   test('het doorgezakte bedrag staat er één keer, als attribuut, en niet als "doorgezakt"', async ({ page }) => {
     await boot(page, { kkMode: 'fixed', kkPer: 250 });
     const r = await page.evaluate(() => {
-      const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
+      const tk = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="kk"]');
       const sub = tk.querySelector('[data-rijsub]');
       return { tekst: tk.innerText.replace(/\s+/g, ' '), dezeMaand: sub ? +sub.dataset.rijdezemaand : null };
     });

@@ -44,7 +44,7 @@ async function boot(page, o) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, withOpzij(seed(o)));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof renderPlan === 'function' && typeof insKpis === 'function');   // v382: spendVsBudgetChart is weg
+  await page.waitForFunction(() => typeof renderPlan === 'function');   // v382: spendVsBudgetChart is weg
 }
 
 // het budget in de lopende maand is huur 900 + boodschappen 500 = 1400; huur valt in de maand zelf
@@ -153,70 +153,9 @@ test.describe('d · de budgetlijn en de legenda', () => {
   /* v359: 'een maand zonder budget: geen lijn' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, lichter en met t/m <dag>, met het bedrag in de balk en een budgetlabel; inzichten-dashboard.spec.js draagt dat */
 });
 
-test.describe('e · de sparkline onder de drempel', () => {
-  const tegel = (page, m) => page.evaluate((mm) => {
-    const K = insKpis(mm || kijkMaand());
-    const items = K.items.filter((k) => ['budget', 'vari'].includes(k.key));
-    const d = document.createElement('div'); d.innerHTML = kpiTegels(items);
-    return items.map((k, i) => {
-      const el = d.querySelectorAll('.wvo-tile')[i];
-      return { key: k.key, val: k.val, klein: k.klein, volle: kpiVolleMaanden(k),
-        lijn: !!el.querySelector('.spk-in'), tekst: el.innerText.replace(/\s+/g, ' ') };
-    });
-  }, m);
-
-  test('drie maanden: geen lijn, wel de vorige waarde en vanaf wanneer', async ({ page }) => {
-    await boot(page, { maanden: 3 });
-    const r = await tegel(page);
-    for (const k of r) {
-      expect(k.volle, k.key).toBeLessThan(6);
-      expect(k.lijn, k.key).toBe(false);
-      expect(k.tekst).toMatch(/vorige maand \d+%|Een verloop zie je vanaf/);
-      expect(k.tekst).toContain('verloop vanaf 6');
-    }
-  });
-
-  test('zes volle maanden: de lijn verschijnt en de delta-zin verdwijnt', async ({ page }) => {
-    await boot(page, { maanden: 7 });
-    const r = await tegel(page);
-    for (const k of r) {
-      expect(k.volle, k.key).toBeGreaterThanOrEqual(6);
-      expect(k.lijn, k.key).toBe(true);
-      expect(k.tekst).not.toContain('verloop vanaf');
-    }
-  });
-
-  test('de lopende maand telt niet mee als volle maand', async ({ page }) => {
-    await boot(page, { maanden: 7 });
-    const r = await page.evaluate(() => {
-      const k = insKpis(kijkMaand()).items.find((x) => x.key === 'budget');
-      return { punten: k.series.filter((x) => x != null).length, volle: kpiVolleMaanden(k), partial: k.partial };
-    });
-    expect(r.partial).toBe(true);
-    expect(r.volle).toBe(r.punten - 1);
-  });
-});
+/* onderhoud3 (punt 7): blok e (de sparkline van de kerncijfer-tegel) is weg met de tegel (insKpis, kpiTegels opgeruimd). */
 
 test.describe('f · een te klein grondtal krijgt geen lijn', () => {
-  test('bedrag in de tegel en procenten in de lijn kan niet samen', async ({ page }) => {
-    // veel historie, dus de drempel is geen reden om te zwijgen; het grondtal wel
-    await boot(page, { maanden: 10, nu: 0, set: { budgets: { boodschappen: 500 } } });
-    const r = await page.evaluate(() => {
-      const echt = splitFixedVar;
-      window.splitFixedVar = (mm) => Object.assign({}, echt(mm), { vari: 20 });
-      const k = insKpis(kijkMaand()).items.find((x) => x.key === 'vari');
-      const d = document.createElement('div'); d.innerHTML = kpiTegels([k]);
-      window.splitFixedVar = echt;
-      return { klein: k.klein, val: k.val, volle: kpiVolleMaanden(k),
-        lijn: !!d.querySelector('.spk-in'), tekst: d.innerText.replace(/\s+/g, ' ') };
-    });
-    expect(r.klein).toBe(true);
-    expect(r.val).toMatch(/^€/);                   // een bedrag, geen percentage
-    expect(r.volle).toBeGreaterThanOrEqual(6);          // dus niet de drempel houdt hem tegen
-    expect(r.lijn).toBe(false);
-    expect(r.tekst).not.toMatch(/vorige maand \d+%/);   // en ook geen delta in procenten
-    expect(r.tekst).toContain('te klein voor een percentage');
-  });
 });
 
 test.describe('g · layout', () => {

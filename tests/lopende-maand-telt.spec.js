@@ -6,7 +6,7 @@ const { test, expect } = require('./klok');
 const P = require('./opschonen-stand');
 const ORDE = { planOrder: ['noodfonds', 'iw', 'kk'] };
 /* v380: de rij draagt geen rechterkolom met maandbedrag meer; de vol-datum staat in [data-rijvol] */
-const rijTekst = (page, id) => page.evaluate((i) => { go('vooruit'); const r = document.querySelector(`.plan-item[data-id="${i}"] [data-rijvol]`); return r ? r.innerText : null; }, id);
+const rijTekst = (page, id) => page.evaluate((i) => { go('vooruit'); const r = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector(`#laagDoelen .plan-item[data-id="${i}"] [data-rijvol]`); return r ? r.innerText : null; }, id);
 
 test.describe('a · de lopende maand telt mee', () => {
   /* v380: de fixture draagt de opname van EUR 231 ZONDER keuze, dus spaarOver().zonder is 231 (3.638 toegewezen, 3.407
@@ -54,7 +54,7 @@ test.describe('a · de lopende maand telt mee', () => {
     expect(r.volNf).toBe(2);
     expect(r.eerste).toBe(1);   // Kosten Koper begint in november (kolom 1)
     /* v380: de status van een wachtend doel zegt "vanaf <maand>" uit dezelfde kolom (tlMaand(eerste)) */
-    const st = await page.evaluate(() => { go('vooruit'); return { st: document.querySelector('.plan-item[data-id="kk"] [data-planstatus]').innerText, k: tlMaand(planTijdlijnData().per.kk.eerste).k }; });
+    const st = await page.evaluate(() => { go('vooruit'); return { st: (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="kk"] [data-planstatus]').innerText, k: tlMaand(planTijdlijnData().per.kk.eerste).k }; });
     expect(st.k).toBe('nov');
     expect(st.st).toBe('vanaf ' + st.k);
   });

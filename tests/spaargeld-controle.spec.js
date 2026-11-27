@@ -83,14 +83,20 @@ test.describe('b · de regel staat op planniveau', () => {
     });
   }
 
-  test('de regel staat boven de rijen, naast de andere plan-brede regels', async ({ page }) => {
+  /* onderhoud3 (punt 1): de rijen staan in de sheet van de laag Doelen; de regel blijft een plan-brede regel op Plan zelf,
+     boven de lagen, en staat niet in de sheet (een regel op een plek). */
+  test('de regel staat op Plan boven de lagen, en niet in de doelenlijst', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => renderPlan(true));
     const iVrij = h.indexOf('spaar-vrij');
-    const iRij = h.indexOf('plan-item');
+    const iHero = h.indexOf('planLagenHero');
     expect(iVrij).toBeGreaterThan(-1);
-    expect(iRij).toBeGreaterThan(-1);
-    expect(iVrij).toBeLessThan(iRij);
+    expect(iHero).toBeGreaterThan(-1);
+    expect(iVrij).toBeLessThan(iHero);
+    expect(h).not.toContain('plan-item');
+    const sheet = await page.evaluate(() => { openLaagDoelen(); return document.querySelector('#sheetBg.show #laagDoelen').innerHTML; });
+    expect(sheet).toContain('plan-item');
+    expect(sheet).not.toContain('spaar-vrij');
   });
 });
 

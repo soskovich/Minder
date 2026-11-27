@@ -5,9 +5,6 @@
 // maandregel op Maand laat je niet van scherm wisselen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
-/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
-const { kpiProbe } = require('./kpi-probe');
-test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 const { seed, open } = require('./budget-fixture');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
@@ -117,13 +114,13 @@ test.describe('b · de ingeklapte kop noemt wat eronder staat', () => {
      bewaakte - de kop noemt wat eronder staat - heeft geen kop meer om te noemen. Wat er voor in de
      plaats komt is de andere helft van dezelfde regel: op Maand staan precies de twee structurele
      cijfers, en op Inzichten staat er geen enkele. */
-  test('de tegels staan op Maand, en Inzichten draagt er geen', async ({ page }) => {
+  test('geen kerncijfer-tegel op Grip of Inzichten', async ({ page }) => {
     await boot(page, 'maand');
     const r = await page.evaluate(() => ({
       maand: [...document.querySelectorAll('#maandKpiBlok .wvo-tile')].map((e) => e.dataset.kpi),
       vouw: typeof insKpiSamenvatting,
     }));
-    expect(r.maand).toEqual(['inleg']);        // v209: de vaste-lastendruk is van Maand af
+    expect(r.maand).toEqual([]);        // onderhoud3 (punt 7): de spaarquote-tegel is opgeruimd, er staat op Grip geen enkele tegel
     expect(r.vouw).toBe('undefined');
     const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
     expect(ins.toLowerCase()).not.toContain('spaarquote');

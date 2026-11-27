@@ -229,7 +229,7 @@ test.describe('d · opslaan en tonen', () => {
   test('de regel staat in de planlijst en in de editor', async ({ page }) => {
     await boot(page, seedDoel([G({ streefdatum: overMnd(28) })]));
     await page.evaluate(() => { go('vooruit'); });
-    await page.waitForSelector('.plan-item');
+    await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item');
     /* v246: de planlijst zei "heb je €X per maand nodig" in doelTempoLine(). Die zin is met de
        vertakte waterval vervallen; het vat noemt hetzelfde bedrag uit dezelfde bron (doelTempo().
        benodigd) in zijn datumpaar, als het bedrag dat de datum wel zou halen. De editor houdt zijn
@@ -244,7 +244,7 @@ test.describe('d · opslaan en tonen', () => {
   test('een doel zonder streefdatum toont geen terugrekening, wel een ingang om hem te zetten', async ({ page }) => {
     await boot(page, seedDoel([G()]));
     await page.evaluate(() => { go('vooruit'); });
-    await page.waitForSelector('.plan-item');
+    await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); await page.waitForSelector('#laagDoelen .plan-item');
     const t = await detail(page, 'g1');   // v380: het datumpaar staat in de detailsheet
     expect(t).not.toContain('per maand nodig');
     expect(t).toContain('op dit tempo');                              // de bestaande eta-regel blijft

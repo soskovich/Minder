@@ -6,6 +6,8 @@
 // ronde niet aangeraakt, en hun eigen specs (plan-doorzakken, verdeelmodus) blijven de bron.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('./klok');
+/* onderhoud3 (punt 1): de doelenlijst staat in de sheet van de laag Doelen; LD opent die sheet als hij nog niet open is */
+const LD = async (page) => { await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); }); return page; };
 const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 const CAP = 500;   // savingMode 'amount' -> monthlySavingTarget()
@@ -49,7 +51,7 @@ async function openV(page, payload) {
    maandbedrag "/mnd" op de rij en de open rij met knoppen ([data-acties]) zijn vervallen; het datumpaar van
    vatRegels() en de handelingen staan in de detailsheet (openPlanDoel(id), #planDoelSheet). */
 const rijen = (page) => page.evaluate(() =>
-  [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')]
+  [...(document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelectorAll('#laagDoelen .plan-item[data-id]')]
     .map((x) => ({ id: x.dataset.id, tekst: x.innerText.replace(/\s+/g, ' '),
       nr: ((x.querySelector('[data-rijnr]') || {}).innerText || '').trim(),
       naam: ((x.querySelector('.wf-naam') || {}).innerText || '').replace(/\s+/g, ' ').trim() })));
@@ -108,7 +110,7 @@ test.describe('a · de kaart toont het mechanisme', () => {
   test('elke rij noemt wat er deze maand bijkomt en waar hij staat', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 1500, allocMode: 'fixed', perMaand: 200 }]));
     const r = await page.evaluate(() => {
-      const e = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
+      const e = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="gA"]');
       const x = planStandEind().per.gA, p = allocatePlan().find((y) => y.id === 'gA');
       const sub = e.querySelector('[data-rijsub]');
       return { naam: e.querySelector('[data-rijnaam]').innerText.trim(), sub: sub.innerText.trim(), dezeMaand: +sub.dataset.rijdezemaand,
@@ -130,6 +132,7 @@ test.describe('a · de kaart toont het mechanisme', () => {
 test.describe('b · de sluitpost staat er alleen als er iets overblijft', () => {
   test('met vrije ruimte: het bedrag en een keuze', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Bijna klaar', doel: 300, gespaard: 200, allocMode: 'auto' }]));
+    await page.evaluate(() => { if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); });
     const t = await page.locator('#planVrij').innerText();
     expect(t).toMatch(/Blijft over/);
     expect(t).toContain(await page.evaluate(() => euro0(planVrij())));
@@ -258,7 +261,7 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
      detailsheet van precies dat doel, en daar staan aanpassen en pauzeren. */
   test('een tik op de rij haalt pauzeren en aanpassen tevoorschijn', async ({ page }) => {
     await openV(page, twee());
-    await page.locator('#s-vooruit .plan-item[data-id="gB"] >> text=Vakantie').click();
+    await (await LD(page)).locator('#laagDoelen .plan-item[data-id="gB"] >> text=Vakantie').click();
     await page.waitForSelector('#planDoelSheet[data-doel="gB"]');
     expect(await page.locator('#planDoelSheet [data-doelaanpassen]').innerText()).toMatch(/aanpassen/);
     expect(await page.locator('#planDoelSheet [data-doelpauze]').innerText()).toMatch(/Pauzeren/);
@@ -271,7 +274,7 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
     await page.evaluate(() => openGoal('gB'));
     await page.locator('#planOrdeChips .chip[data-plek="0"]').click();
     await page.waitForFunction(() =>
-      (document.querySelector('#s-vooruit .plan-item[data-id]') || {})
+      ((document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id]') || {})
         .dataset.id === 'gB');
     const R = await rijen(page);
     expect(R[0].id).toBe('gB');
@@ -297,7 +300,7 @@ test.describe('f · de controlelijst', () => {
     /* v380: geen "/mnd" meer op de rij; de status zegt gepauzeerd, de grijze regel "krijgt nu niets", en de balk
        heeft geen gearceerd deel voor deze maand. In de detailsheet staat de inleg op nul. */
     const r = await page.evaluate(() => {
-      const rij = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
+      const rij = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="gA"]');
       return { status: rij.dataset.status, st: rij.querySelector('[data-planstatus]').innerText.trim(),
         sub: rij.querySelector('[data-rijsub]').innerText.trim(), seg: document.querySelectorAll('[data-seg]').length,
         bij: rij.querySelectorAll('[data-bijvat]').length,
@@ -321,7 +324,7 @@ test.describe('f · de controlelijst', () => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Al binnen', doel: 500, gespaard: 500, allocMode: 'fixed', perMaand: 50 }]));
     /* v380: de rij zegt "vol" met "geen inleg meer nodig"; het woord "Bereikt" staat in het datumpaar van de sheet */
     const r = await page.evaluate(() => {
-      const rij = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
+      const rij = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="gA"]');
       return { status: rij.dataset.status, st: rij.querySelector('[data-planstatus]').innerText.trim(),
         sub: rij.querySelector('[data-rijsub]').innerText.trim(), vol: rij.querySelector('[data-rijvol]').innerText.trim(),
         geld: rij.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' ').trim(),
@@ -347,9 +350,9 @@ test.describe('f · de controlelijst', () => {
     await openV(page, tweak((s) => { s.goals = []; s.planOrder = []; s.planPaused = {}; s.nfUit = true; }));
     expect(await page.evaluate(() => allocatePlan().map((p) => p.id))).toEqual(['noodfonds']);
     const r = await page.evaluate(() => {
-      const v = document.getElementById('s-vooruit');
-      return { ids: [...v.querySelectorAll('#planLijst .plan-item[data-id]')].map((e) => e.dataset.id),
-        naam: (v.querySelector('[data-rijnaam]') || {}).innerText, kop: !!document.getElementById('planLagenHero'),   // v524: de kop is de lagen-hero
+      const v = document.getElementById('s-vooruit'); if (!document.querySelector('#sheetBg.show #laagDoelen')) openLaagDoelen(); const sh = document.querySelector('#sheetBg.show #laagDoelen');   // onderhoud3: de rijen staan in de sheet
+      return { ids: [...sh.querySelectorAll('#planLijst .plan-item[data-id]')].map((e) => e.dataset.id),
+        naam: (sh.querySelector('[data-rijnaam]') || {}).innerText, kop: !!document.getElementById('planLagenHero'),   // v524: de kop is de lagen-hero
         leeg: /Nog geen bestemmingen/.test(v.innerText), t: v.innerText };
     });
     expect(r.ids).toEqual(['noodfonds']);
@@ -378,7 +381,7 @@ test.describe('f · de controlelijst', () => {
       expect(o.body).toBeLessThanOrEqual(1);
 
       /* v380: de knoppen staan in de detailsheet en niet meer onder de open rij */
-      await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Kosten koper').click();
+      await (await LD(page)).locator('#laagDoelen .plan-item[data-id="gA"] >> text=Kosten koper').click();
       await page.waitForSelector('#planDoelSheet[data-doel="gA"]');
       o = await meet();
       expect(o.v).toBeLessThanOrEqual(1);

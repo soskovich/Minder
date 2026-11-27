@@ -7,9 +7,6 @@
 // voor dezelfde vraag zijn. Dat percentage daalde bovendien zodra je vaste lasten stegen, zonder
 // dat je gedrag veranderde.
 const { test, expect } = require('./klok');
-/* v518: de kaart Spaarquote staat niet meer op Vermogen; deze spec bewaakt de tegel via de probe (tests/kpi-probe.js) */
-const { kpiProbe } = require('./kpi-probe');
-test.beforeEach(async ({ page }) => { await kpiProbe(page); });
 /* v507: tests met "· voor de salarisperiode" in hun naam toetsen de wereld van VOOR de salarisperiode (de kalendermaand, de
    maandkaart en de Let op-route van voor 1 nov) en draaien op de standaardklok van tests/klok.js (31 okt 2026). Op de echte klok in
    november vielen ze, en terecht: in de periode toont de app een ander scherm. Het vangnet voor de periode is periode-vangnet.spec.js. */
@@ -106,22 +103,7 @@ test.describe('b - de kerncijfers op Maand zijn ongemoeid', () => {
   // v223: de kaartschil met de kop is vervallen; de tegel staat nu onder de streep in de kaart met
   // je maandregels. Het cijfer en zijn eigen data-kpi blijven, en dat is wat deze test bewaakt.
   // v232: de spaarquote staat op Vermogen; Maand draagt hem niet meer, en de tegel is dezelfde
-  test('de spaarquote staat op Vermogen, met zijn eigen tegel, en niet op Maand', async ({ page }) => {
-    await open(page, seed({ maanden: 8 }));
-    const t = await maand(page);
-    expect(t.toLowerCase()).not.toContain('spaarquote');
-    expect(t.toLowerCase()).not.toContain('vaste-lasten-druk');
-    const v = await page.evaluate(() => { go('vermogen'); return $('#s-vermogen').innerText.toLowerCase(); });
-    expect(v).toContain('spaarquote');
-    expect(await page.evaluate(() => [...document.querySelectorAll('#s-vermogen #maandKpiBlok [data-kpi]')].map((e) => e.dataset.kpi)))
-      .toEqual(['inleg']);
-  });
 
-  test('insKpis rekent nog altijd alle vier', async ({ page }) => {
-    await open(page, seed());
-    const keys = await page.evaluate((m) => insKpis(m).items.map((k) => k.key), null);
-    expect(keys.sort()).toEqual(['budget', 'inleg', 'vari', 'vast']);
-  });
 });
 
 test.describe('c - de potjes-tegel is een voortgang', () => {

@@ -20,7 +20,7 @@ async function stand(page, o) {
       SET.psd2Diag = SET.psd2Diag || {}; SET.psd2Diag[sav] = { balGeland: false, balFout: 'EXPIRED_SESSION', txFout: '', _op: nu, _veldOp: { balGeland: nu } }; }
     save(); renderVooruit(); }, [F.SAV, o]);
 }
-const rij = (page) => page.evaluate(() => { const r = document.querySelector('.plan-item[data-id="noodfonds"]');
+const rij = (page) => page.evaluate(() => { const r = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]');
   return { st: r.dataset.status, status: r.querySelector('[data-planstatus]').innerText, vol: r.querySelector('[data-rijvol]').innerText.replace(/\s*›\s*$/, '').trim() }; });
 
 test.describe('1 · nog terug volgt het saldo', () => {
@@ -80,7 +80,7 @@ test.describe('2 · een bron voor terugzetten', () => {
     expect(voor.som).toBe(349.8);
     expect(voor.controle).toMatch(/€349,80 tegen €349,80 → klopt/);
     const na = await page.evaluate((sav) => { SET.manualBal[sav] = 5350.20; save(); renderVooruit();
-      const r = document.querySelector('.plan-item[data-id="noodfonds"]');
+      const r = (document.querySelector('#sheetBg.show #laagDoelen') || openLaagDoelen(), document).querySelector('#laagDoelen .plan-item[data-id="noodfonds"]');
       return { regel: !!document.querySelector('#spaarPlanRegel'), st: r.dataset.status, controle: diagMaandBudget(maandVooruit(), true, null).join('\n').split('\n').find((l) => /CONTROLE terug te zetten op Plan/.test(l)) || '' }; }, F.SAV);
     expect(na.regel).toBe(false);                      // de storting lost Terug te zetten af
     expect(na.st).toBe('vol');                         // en nog terug bij het noodfonds
