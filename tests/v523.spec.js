@@ -11,11 +11,13 @@ async function bevestig(page, opzij) {
   return page.evaluate(({ BET, LEEF, MAIN, opzij }) => {
     openPeriodeStart(); const S0 = window._salv, vooraf = { bet: S0.eigen[BET], leef: S0.eigen[LEEF], opzij: S0.eigenOpzij, res: S0.eigenRes, modus: S0.modus };
     salVerdelingVeld(BET, '1700'); salVerdelingVeld(LEEF, '1695'); salVerdelingVeld('__res', '36'); salVerdelingVeld('__opzij', String(opzij));
-    const on = [...document.querySelectorAll('#salVerdeling [data-salvoudnieuw]')].map((x) => [x.dataset.salvoudnieuw, x.dataset.oud, x.dataset.nieuw, x.textContent]);
+    /* v525b: de sheet toont de rij-vorm van de kaart (rekening · erbij nodig · je overboeking · verschil) in plaats van oud → nieuw */
+    const on = [...document.querySelectorAll('#salVerdeling [data-salvsheetrij]')].map((x) => [x.dataset.salvsheetrij, x.dataset.erbij, x.dataset.overboeking, x.dataset.verschil]);
+    const voet = (document.querySelector('#salVerdeling [data-voet]') || {}).textContent || '';
     const rest = (document.querySelector('#salVerdeling [data-salvrest]') || {}).textContent || '';
     const gevolg = (document.querySelector('#salVerdeling [data-salvgevolg]') || {}).textContent || '';
     document.querySelector('#salVerdeling [data-salvakkoord]').click();
-    return { vooraf, on, rest, gevolg, SV: SET.salVerdeling };
+    return { vooraf, on, voet, rest, gevolg, SV: SET.salVerdeling };
   }, Object.assign({ opzij }, A));
 }
 
@@ -25,11 +27,12 @@ test.describe('v523', () => {
     const r = await bevestig(page, 1500);
     // vooringevuld met de laatste afspraak, niet met het voorstel
     expect(r.vooraf).toEqual({ bet: 1600, leef: 1700, opzij: 1766, res: 0, modus: 'aanpassen' });
-    // oud → nieuw staat er vooraf
+    // v525b: de rij-vorm van de kaart met de bedragen uit de sheet, geen pijlen oud → nieuw
     const bet = r.on.find((x) => x[0] === S.BET);
-    expect(bet.slice(1, 3)).toEqual(['1600', '1700']);
-    expect(bet[3]).toContain('€1.600 → €1.700');
-    expect(r.on.find((x) => x[0] === '__opzij').slice(1, 3)).toEqual(['1766', '1500']);
+    expect(bet[2]).toBe('1700');
+    expect(+bet[3]).toBe(1700 - +bet[1]);
+    expect(r.on.find((x) => x[0] === '__res')[2]).toBe('36');
+    expect(r.voet).not.toContain('→');
     expect(r.rest).toContain('€285');   // 5216 − 1700 − 1695 − 36 − 1500
     expect(r.gevolg).toContain('Opzij €1.500');   // het gevolg rekent met je eigen reserveringen, niet met het voorstel
     expect(r.SV.rek).toEqual({ [S.MAIN]: 285, [S.BET]: 1700, [S.LEEF]: 1695 });

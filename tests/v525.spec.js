@@ -1,12 +1,12 @@
 /* v525: salarisverdeling · een oordeel, wat er echt binnenkwam, en het salaris van nu eerst.
    Stand: tests/v523-stand.js (GECONSTRUEERD naar de melding; de boekingen van het toestel staan alleen daar). Het salaris van november kwam
    op wo 25 nov, de afspraak (SET.salVerdeling) is Salarisrekening EUR 150, Betaalrekening EUR 1.600, Leefgeld EUR 1.700, opzij EUR 1.766,
-   reserveringen EUR 0. Test f vergelijkt met de vorige main (d8c90b9, git show), dus de spec draait in een checkout met die commit. */
+   reserveringen EUR 0. Test f vergelijkt met de vorige main (sinds v525b 6a01b7f, git show), dus de spec draait in een checkout met die commit. */
 const { execSync } = require('child_process');
 const { test, expect } = require('./klok');
 const S = require('./v523-stand');
 const A = { MAIN: S.MAIN, BET: S.BET, LEEF: S.LEEF, SPAAR: S.SPAAR, RES: S.RES };
-const MAIN_HTML = (() => { try { return execSync('git show d8c90b9:index.html', { cwd: __dirname + '/..', maxBuffer: 64 << 20 }).toString(); } catch (_) { return null; } })();
+const MAIN_HTML = (() => { try { return execSync('git show 6a01b7f:index.html', { cwd: __dirname + '/..', maxBuffer: 64 << 20 }).toString(); } catch (_) { return null; } })();
 
 /* boekingen erbij (gepaard: de afschrijving op de salarisrekening en de bijschrijving op de doelrekening), plus eventueel een afspraak en een
    bevestigde periode */
@@ -134,8 +134,8 @@ test.describe('v525', () => {
     }
   });
 
-  test('f: elk bedrag buiten de vorm is gelijk aan de vorige main (d8c90b9) op dezelfde stand', async ({ browser }) => {
-    test.skip(!MAIN_HTML, 'd8c90b9 niet beschikbaar');
+  test('f: elk bedrag buiten de vorm is gelijk aan de vorige main (6a01b7f) op dezelfde stand', async ({ browser }) => {
+    test.skip(!MAIN_HTML, '6a01b7f niet beschikbaar');
     test.setTimeout(180000);
     const lees = async (html) => {
       const page = await browser.newPage();
@@ -148,7 +148,10 @@ test.describe('v525', () => {
           return { P: P.ok ? { start: P.start, eind: P.eind, salaris: P.salaris, opzij: P.opzij, res: P.reserveringen, rek: P.rek.map((r) => [r.acc, Math.round(r.laten), Math.round(r.buffer), Math.round(r.verwacht)]) } : null,
             N: (() => { const N = salVoorstelNu(); return N ? [N.opzij, N.bed] : null; })(), ov: overboekVerwacht().map((o) => [o.naar, o.bedrag, o.binnen, Math.round(o.nog * 100), o.dag, o.laat]),
             krap: salTekortData().map((x) => JSON.stringify(x).replace(/"[a-z]*[Hh]tml?":"[^"]*"/g, '')), opzij: opzijPeriode().netto, cur: [SP.cur.start, SP.cur.eind, SP.cur.werkelijk] }; });
-        out[dag].bedragen = await S.bedragen(page);
+        /* v525b: de rekensom in de Terugblik (data-rekuitleg) rekent voor de storting met het verwachte saldo; die bedragen staan in v525b.spec
+           g, hier tellen ze niet mee. Wel: nodig, saldo nu en je afspraak per rekening zijn gelijk. */
+        out[dag].bedragen = await S.bedragen(page, '[data-rekuitleg]');
+        out[dag].uitleg = await page.evaluate(() => { go('maand'); gripKiesTab('terugblik'); return [...document.querySelectorAll('[data-rekuitleg]')].map((e) => [e.dataset.rekuitleg, e.dataset.nodig, e.dataset.saldo, e.dataset.afspraak]); });
       }
       await page.close(); return out;
     };

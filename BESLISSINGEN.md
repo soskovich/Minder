@@ -1167,3 +1167,18 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   rij met een overboeking toetsen zou hem twee keer tellen. De rij zegt in welke rekening hij zit.
 - **Valkuil:** een `//`-commentaar midden in een `const`-reeks slokte de rest van de regel op en gaf in de browser "Unexpected token 'const'";
   de boot liep vast en elke test timede uit. Na een edit op een lange regel: `node check.js` en een pagina laden, niet alleen de spec.
+
+## v525b · erbij nodig voor de storting, de sheet in de rij-vorm van de kaart
+- **Voor de storting is de basis het verwachte saldo op de dag voor de verwachte storting.** `rekVoorstelRuw` rekende `verwachtSaldo` al (saldo nu
+  min de daling van morgen tot die dag, via `uitDag`, dus ook de verwachte overboekingen van v523); de kaart en `rekUitlegRij` lazen het saldo van
+  nu. GEMELD op de back-up (26 nov): Betaalrekening laten EUR 3.650, saldo nu EUR 1.521, verwacht EUR -106, dus EUR 3.756 erbij en niet EUR 2.129.
+  Vanaf de stortingsdag (`P.nu`) is er geen `verwachtSaldo` en blijft het het saldo van nu. De daling staat als eigen regel in de rekensom, zodat
+  saldo nu - daling = verwacht in hele euro's optelt.
+- **Het voorstel en opzij veranderen niet, en dat is per constructie.** Het voorstel per rekening is `laten staan` en opzij is salaris min de som
+  van laten min reserveringen; geen van beide leest het saldo. Wat verschuift is alleen erbij nodig (kaart, rekensom, Terugblik moment 2) en dus het
+  oordeel. Tegengesteld aan de verwachting in de opdracht ("dit raakt ook het voorstel en opzij"); gemeten in `v525b.spec` g3 en de probe tegen 6a01b7f.
+- **De sheet toont dezelfde rij als de kaart.** `salKaartRijHtml()` is de ene rij-vorm (twee lezers); de sheet geeft `salKaartData(P, A)` de
+  bedragen die je daar kiest. De rij heet in de sheet `data-salvsheetrij`, zodat een selector op de kaart de sheet niet meeleest. De route van het
+  salaris (v441, "Salaris → ...") blijft: dat is geen oud → nieuw. De melding na vastleggen noemt alleen de nieuwe bedragen.
+- **Valkuil:** een guard die per constructie niet vuurt (`!P.nu` in `rekUitlegRij`: zonder `P.nu` is `verwachtSaldo` er toch niet) heeft geen eigen
+  sabotage; de eigenschap staat in g2.

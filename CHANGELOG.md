@@ -1886,3 +1886,9 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   spaarrekening sinds de storting. `salKaartStand()`: na een storting gaat Zien over dat salaris tot de periode bevestigd is en er niets meer
   verwacht wordt; het volgende salaris pas vanaf 5 werkdagen voor de verwachte storting, daarvoor "Volgend salaris rond <dag>". Geen bedrag
   verandert (`v525.spec.js` f tegen d8c90b9). Spec `v525.spec.js` (a-f), `tests/wip/v525-export.spec.js`; tien tests in zes specs gemigreerd.
+- **v525b: erbij nodig voor de storting tegen het verwachte saldo, de sheet in de rij-vorm van de kaart** (`minder-v525a`, tak `werk/v525b` vanaf
+  6a01b7f, gevraagd door de gebruiker). (1) `rekUitlegRij()` en de kaart rekenen erbij nodig voor de storting met `verwachtSaldo` (de dag voor de
+  verwachte storting), vanaf de stortingsdag met het saldo van nu; de rekensom draagt "Gaat er nog af tot <dag>". Voorstel en opzij veranderen niet.
+  (2) `tests/wip/v525-export.spec.js` a vergelijkt het oordeel met `salKaartData()` op dezelfde stand; b vergelijkt met 6a01b7f. (3) De sheet "Zo
+  verdeel je je salaris" toont in Aanpassen de rij-vorm van de kaart (`salSheetRijenHtml`, `salKaartRijHtml`) in plaats van oud → nieuw. Spec
+  `v525b.spec.js` (g, g2, g3, h; 5 van 5 sabotages rood); `v500` b, `v523` a en `v525` f gemigreerd.

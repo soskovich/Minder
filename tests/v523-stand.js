@@ -57,18 +57,19 @@ async function boot(page, o) {
   }, { MAIN, LEEF, BET, SPAAR, RES, o });
 }
 /* de bedragen per scherm buiten de salarisverdeling, de krap-melding en de reserveringen: Home, Inzichten, de vier tabs van Grip zonder de
-   kaarten van de salarisverdeling (#salVoorstelKaart, moment 1 [data-salmoment1], de melding [data-salvmelding]), Plan en Vermogen */
-async function bedragen(page) {
-  return page.evaluate(() => {
+   kaarten van de salarisverdeling (#salVoorstelKaart, moment 1 [data-salmoment1], de melding [data-salvmelding]), Plan en Vermogen; weg (v525b) is
+   een extra selector die niet meetelt */
+async function bedragen(page, weg) {
+  return page.evaluate((weg) => {
     const re = /-?€\s?[\d.]+(?:,\d{2})?/g, uit = {};
     const tekst = (el) => { if (!el) return ''; const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let s = '', n; while ((n = w.nextNode())) s += n.nodeValue + ' '; return s; };
-    const leesT = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salmoment1],[data-salvmelding],[data-salvvolgend],#salTekort')) x.remove(); return tekst(c).match(re) || []; };
+    const leesT = (id) => { const el = document.getElementById(id); if (!el) return []; const c = el.cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salmoment1],[data-salvmelding],[data-salvvolgend],#salTekort' + (weg ? ',' + weg : ''))) x.remove(); return tekst(c).match(re) || []; };
     go('dash'); renderDash(); uit.home = leesT('s-dash');
     go('ins'); renderIns(); uit.ins = leesT('s-ins');
     go('maand'); for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { try { gripKiesTab(t); } catch (_) {} uit['grip-' + t] = leesT('s-maand'); }
     go('vooruit'); renderVooruit(); uit.plan = leesT('s-vooruit');
     go('vermogen'); renderVermogen(); uit.vermogen = leesT('s-vermogen');
     return uit;
-  });
+  }, weg || '');
 }
 module.exports = { boot, bedragen, DAG, MAIN, LEEF, BET, SPAAR, RES };
