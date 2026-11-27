@@ -156,6 +156,15 @@ test.describe('v525', () => {
       await page.close(); return out;
     };
     const oud = await lees(MAIN_HTML), nu = await lees(null);
-    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
+    /* onderhoud3: Plan noemt elk getal een keer. De legenda draagt geen bedrag meer en de doelenlijst staat in de sheet van de laag
+       Doelen, dus op Plan VALLEN bedragen weg. De eis daar: wat er staat is een deelreeks van 6a01b7f (geen bedrag gewijzigd of erbij),
+       en wat wegviel staat in de oude legenda of de oude lijst. Elk ander scherm blijft gelijk. */
+    const deelreeks = (a, b) => { let i = 0; for (const x of b) if (i < a.length && a[i] === x) i++; return i === a.length; };
+    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) {
+      if (k !== 'bedragen') { expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k])); continue; }
+      const { plan: pNu, ...rNu } = nu[dag][k], { plan: pOud, ...rOud } = oud[dag][k];
+      expect(JSON.stringify(rNu), `${dag} bedragen buiten Plan`).toBe(JSON.stringify(rOud));
+      expect(deelreeks(pNu || [], pOud || []), `${dag} Plan is een deelreeks van 6a01b7f: ${JSON.stringify(pNu)} tegen ${JSON.stringify(pOud)}`).toBe(true);
+    }
   });
 });
