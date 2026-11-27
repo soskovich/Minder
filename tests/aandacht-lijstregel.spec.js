@@ -73,7 +73,7 @@ test.describe('a · het gemelde geval onder Vraagt aandacht', () => {
     const k = await kaart(page, 'Vraagt aandacht');
     expect(k.tekst).not.toContain('Je pot dekt de eerstvolgende post');
     expect(k.tekst).not.toContain('deze maand meegeteld');
-    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
+    await page.click('#s-maand [data-meter="fundament"]'); await page.click('[data-fundamentvw="dekking"]');   // v526: de ingang staat in de sheet van de tegel Fundament
     const sh = await page.locator('#sheet').innerText();
     expect(sh).toContain('Je pot dekt de eerstvolgende post nu al niet');
     expect(sh).toContain('Dat is €131 per maand tot november 2026, deze maand meegeteld.');
@@ -109,7 +109,7 @@ test.describe('b · van beslissing naar aandacht behoudt de vorm', () => {
     expect(k.rij).toBe(true);
     expect(k.bedrag).toBe('€262 tekort');
     expect(await kaart(page, 'Vraagt een beslissing')).toBeNull();
-    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
+    await page.click('#s-maand [data-meter="fundament"]'); await page.click('[data-fundamentvw="dekking"]');   // v526: de ingang staat in de sheet van de tegel Fundament
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 });

@@ -83,22 +83,23 @@ test.describe('5 · Kiezen opgeschoond', () => {
 test.describe('6 · beleggen', () => {
   test('de meter noemt de voorwaarde die ontbreekt', async ({ page }) => {
     await grip(page, { set: PEAKS }); await inleg(page, '2026-09-29');
-    expect(await tekst(page, '[data-meter="beleggen"] [data-metermist]')).toBe('reserveringen nov 2026 open');  // v510 punt 2: maand + jaar
+    /* v526: de Beleggen-meter is de tegel Fundament; die noemt het grootste bedrag dat niet gehaald is, met de voorwaarde eronder */
+    expect(await tekst(page, '[data-meter="fundament"] [data-fundamentsub]')).toMatch(/^reserveringen (niet gestort|tekort)$/);
   });
   test('inleg die loopt maar deze maand nog niet geboekt is, geeft het patroon "Beleggen vóór fundament"', async ({ page }) => {
     await grip(page, { set: PEAKS }); await inleg(page, '2026-09-29');
     const p = await page.evaluate(() => { const x = gripPatronen().find(p => p.id === 'beleggen'); return x && { bewijs: x.bewijs, sub: x.sig[0].sub, bv: belegVragen().length }; });
     expect(p).not.toBeNull();
     expect(p.bv).toBe(0);   // belegVragen() eist inleg in deze maand en ziet hem niet
-    expect(p.bewijs).toBe('€100 naar Peaks in sep · dekking reserveringen €37 tegen €299');
+    expect(p.bewijs).toBe('€100 naar Peaks in sep · dekking reserveringen €37 tegen €299');   // v526: de voorwaarde van het fundament, in dezelfde vorm
     expect(p.sub).toMatch(/^loopt: €100 vorige maand, deze maand nog niet geboekt/);
     /* v428: Begrijpen verandert niets en een tak opent geen sheet meer; zonder vraag over geboekte inleg is er geen keuze
        in Kiezen, en de meter blijft de ingang. */
     await page.evaluate(() => gripNaarSymptoom('pat:beleggen'));
     expect(await page.locator('#gripSymptoom [data-patsig="inleg"]').count()).toBe(1);
     expect(await page.evaluate(() => gripCyc().kies.some(k => k.id.startsWith('beleg:')))).toBe(false);
-    await page.click('[data-meter="beleggen"]');
-    expect(await page.locator('#gripMeterSheet[data-meter="beleggen"]').count()).toBe(1);
+    await page.click('[data-meter="fundament"]');   // v526: de tegel Fundament is de ingang
+    expect(await page.locator('#gripFundamentSheet').count()).toBe(1);
   });
   test('een ingevulde periodieke inleg zonder gekoppelde boeking is geen meting (v332), en "voorwaarden gelden niet" telt niet', async ({ page }) => {
     await grip(page, { set: PEAKS });   // per 100, geen koppeling

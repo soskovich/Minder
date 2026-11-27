@@ -192,7 +192,7 @@ test('v512 f: een tabwissel rekent geen rekVoorstelRuw en geen gripCyclus, en al
       const koud = { rv: PERF.n.rekVoorstelRuw || 0, gc: PERF.n.gripCyclus || 0 };
       /* v525: de kaarten van de salarisverdeling (de vorm die v525 verandert) staan buiten de telling; de zien-ijk is opnieuw gemeten op
          d8c90b9 met dezelfde uitsluiting (tests/wip-meting, gelijk aan v525), de andere drie tabs zijn ongewijzigd */
-      const getallen = () => { const c = document.getElementById('s-maand').cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salvmelding],[data-salvvolgend]')) x.remove(); document.body.appendChild(c); const t = c.innerText; c.remove(); return t.match(/-?€\s?[\d.]+(,\d+)?|\d+%/g) || []; };
+      const getallen = () => { const c = document.getElementById('s-maand').cloneNode(true); for (const x of c.querySelectorAll('#salVoorstelKaart,[data-salvmelding],[data-salvvolgend],[data-meter="lagen"],[data-meter="fundament"],[data-meter="doelen"],[data-meter="beleggen"],[data-nietgebruikt],[data-meternuverwacht],[data-kies="lagen:res"],[data-kies^="fundament:"]')) x.remove(); document.body.appendChild(c); const t = c.innerText; c.remove(); return t.match(/-?€\s?[\d.]+(,\d+)?|\d+%/g) || []; };
       const tabs = {}, wissel = {};
       for (const t of ['zien', 'begrijpen', 'kiezen', 'terugblik']) { if (t === 'zien') { gripKiesTab('kiezen'); }
         const g0 = _dataGen; perfReset(); PERF.on = true; gripKiesTab(t); PERF.on = false;

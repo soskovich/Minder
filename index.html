@@ -8184,10 +8184,16 @@ function maandBeslisDeel(r){
    wordt bewaard als afspraak die Minder aan je gekoppelde boekingen meet. a.pauze en belegHervat()
    blijven alleen voor een pauze van voor v337. De overboeking zelf stop je bij je
    bank, en dat zegt de sheet. Gaat er de maand erna toch weer inleg heen, dan staat de regel er weer. */
+/* v526: DE VOORWAARDEN ZIJN DIE VAN HET FUNDAMENT (fundamentData()): buffer op norm en reserveringen gedekt, met een inleg die pas
+   telt als hij gestort is of zijn moment nog komt. Een spaardoel is hier geen voorwaarde meer. Alleen Grip leest deze functie. */
 function belegVoorwaardenNietGehaald(){
-  let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){ return []; }
-  if(!B) return [];
-  return B.voorwaarden.filter(v=>!v.gehaald && !v.ontbreekt);
+  let F=null; try{ F=fundamentData(); }catch(_){ return []; }
+  if(!F) return [];
+  /* in de vorm van beleggenKlaar() ("buffer 1,4 maanden tegen 2 maanden", "dekking reserveringen EUR 0 tegen EUR 159"): de pot tegen de
+     eerste post die hij (zonder de niet-gestorte inleg) niet dekt */
+  return F.mist.map(v=>{ if(v.key==='buffer') return {key:v.key, naam:'buffer', gehaald:false, ontbreekt:false, bedrag:v.bedrag, waarde:`${String(v.maanden).replace('.',',')} maanden`, drempel:maandLabel(v.norm)};
+    const g=(v.D&&((v.D.inlegDekt&&v.D.inlegDekt.gat)||v.D.gat))||v.gat||null, st=v.D?v.D.werkelijkeStand:null;
+    return {key:v.key, naam:'dekking reserveringen', gehaald:false, ontbreekt:false, bedrag:v.bedrag, waarde:st==null?v.label:euro0(st), drempel:g?euro0(g.bedrag):'gedekt'}; });
 }
 function belegVragen(ym){
   ym=ym||thisYM();
@@ -8196,7 +8202,7 @@ function belegVragen(ym){
   for(const a of (SET.assets||[])){
     if(!a.grow || a.voorwaarden!==true) continue;   // v501 punt 6: zonder keuze is het een vraag (belegVwVragen), geen signaal
     const inleg=bezitInleg(a.id, ym); if(!(inleg>0)) continue;
-    if(K[a.id] && K[a.id].maand===ym) continue;
+    if(K[a.id] && (K[a.id].maand===ym || fundamentGekozen(a.id))) continue;   // v526: een keuze per salarisperiode
     uit.push({key:'beleg:'+a.id, asset:a, inleg, open:a.voorwaarden!==true, mist});
   }
   return uit;
@@ -11896,48 +11902,210 @@ function gripMeterKleur(k, M){
   if(k==='doelen') return M.pct>=100?'var(--green)':'var(--amber)';
   return (M.n>0 && M.gehaald===M.n && !M.onb.length)?'var(--green)':'var(--mut2)';   // niet gehaald is geen fout (v314)
 }
+/* ===== v526: DE TEGELS LAGEN EN FUNDAMENT (gevraagd door de gebruiker, mockup "Grip KPI v3") =====
+   LAGEN vervangt Doelen: per laag of het plan van deze salarisperiode gehaald is, uit lagenGestort() (de ENE telling, dezelfde
+   die Plan blok 2 "Naar je lagen" leest; hier wordt niets opnieuw geteld). Een laag telt pas mee als zijn MOMENT in de periode
+   voorbij is: Beschermen, Doelen en Reserveren de overboeking na je salaris (lagenOverboekMoment(), de regel van onderhoud 3:
+   OVERBOEK_LAAT_DAGEN werkdagen na de storting), Groeien de laatste termijn van zijn inleg in de periode plus dezelfde werkdagen
+   (lagenGroeienMoment()). Een laag die zijn plan haalt telt meteen; een laag onder plan voor zijn moment heet "nog niet" en is
+   geen tekort. Een laag zonder plan en zonder storting telt niet. */
+function lagenOverboekMoment(){ let komt=false, moment=null;
+  try{ const SP=salPeriode(); const w=SP&&SP.cur&&SP.cur.werkelijk; if(!w) komt=true; else { moment=werkdagPlus(String(w).slice(0,10), OVERBOEK_LAAT_DAGEN); komt=vandaagYMD()<moment; } }catch(_){ komt=false; }
+  return {komt, moment}; }
+function lagenGroeienMoment(PW){ if(!PW) return null; let laatste=null;
+  try{ const set=new Set(rekBetaal()); let salAcc=null; try{ salAcc=(SET.salVerdeling||{}).salAcc||null; }catch(_){}
+    for(const x of rekBelegInleg(PW.perStart, PW.perEind, set, salAcc)) for(const d of (x.data||[])) if(!laatste || d>laatste) laatste=d; }catch(_){}
+  const basis=laatste||PW.perEind; return {laatste, moment:laatste?werkdagPlus(String(basis).slice(0,10), OVERBOEK_LAAT_DAGEN):String(PW.perEind).slice(0,10)}; }
+function lagenTegelData(){
+  let G=null; try{ G=lagenGestort(); }catch(_){} if(!G) return null;
+  const OM=lagenOverboekMoment(), GM=lagenGroeienMoment(G.PW), vd=vandaagYMD();
+  const lagen=G.lagen.map(l=>{ const plan=Math.round(+l.plan||0), gestort=Math.round((+l.gestort||0)*100)/100, verschil=Math.round((gestort-plan)*100)/100;
+    let stand;
+    if(!(plan>0.5) && !(gestort>0.5)) stand='geen';
+    else if(gestort>=plan-0.5) stand='gehaald';
+    else { const voorbij=l.k==='groeien'?!!(GM && vd>=GM.moment):!OM.komt; stand=voorbij?'tekort':'nognie'; }
+    return {k:l.k, naam:LAAG_NAAM[l.k], sub:l.sub||'', plan, gestort, verschil, stand, tekort:stand==='tekort'?Math.round((plan-gestort)*100)/100:0}; });
+  const geteld=lagen.filter(l=>l.stand==='gehaald' || l.stand==='tekort'), gehaald=geteld.filter(l=>l.stand==='gehaald'), mist=geteld.filter(l=>l.stand==='tekort');
+  const ontbreekt=Math.round(mist.reduce((a,l)=>a+l.tekort,0)), opzij=Math.round(geteld.reduce((a,l)=>a+l.gestort,0));
+  return {G, PW:G.PW, OM, GM, lagen, n:geteld.length, gehaald:gehaald.length, mist, ontbreekt, opzij}; }
+function lagenTegelSub(T){ if(!T.mist.length) return '';
+  if(T.mist.length===1){ const l=T.mist[0]; return `${l.naam} ${l.gestort>0.5?'deels gestort':'niet gestort'}`; }
+  return `${T.mist.map(l=>l.naam).join(' · ')} onder plan`; }
+/* DE KEUZE BIJ RESERVEREN ONDER PLAN, een keer per salarisperiode (SET.lagenKeuze[<periodestart>].res). Niets voorgekozen. De keuze
+   verandert geen bedrag: "zelf over" en "bewust overslaan" leggen alleen het voornemen vast (de laag wordt gehaald zodra de storting
+   er is); "vanaf de volgende periode" zet het bedrag Y (rekReserveringen() vanaf de start van de volgende periode, de bron van het
+   voorstel) als je reserveringen in de verdeling van de volgende periode: openPeriodeStart() leest hem (lagenResVolgende()). */
+function lagenKeuzeRes(PW){ PW=PW||lagenPeriode(); if(!PW) return null; return ((SET.lagenKeuze||{})[PW.perStart]||{}).res||null; }
+function lagenResVolgendeStart(PW){ PW=PW||lagenPeriode(); if(!PW || !PW.perEind) return null; return rekDag(PW.perEind, 1); }
+function lagenResVolgendeBedrag(PW){ const st=lagenResVolgendeStart(PW); if(!st) return null; try{ const RR=rekReserveringen(st); return RR.ok?Math.round(RR.totaal):null; }catch(_){ return null; } }
+function lagenResKeuzeOpen(T){ T=T||lagenTegelData(); if(!T) return null; const r=T.lagen.find(l=>l.k==='reserveren'); if(!r || r.stand!=='tekort') return null;
+  if(lagenKeuzeRes(T.PW)) return null;
+  try{ const VO=lagenOverVraag(); if(VO && VO.naar==='reserveren') return null; }catch(_){}   // een vraag per bedrag: de surplus-vraag van v524 gaat al over Reserveren
+  return {laag:r, PW:T.PW, Y:lagenResVolgendeBedrag(T.PW)}; }
+function lagenResKies(keuze){ if(!['zelf','volgende','overslaan'].includes(keuze)) return; const T=lagenTegelData(); if(!T) return; const r=T.lagen.find(l=>l.k==='reserveren'); if(!r) return;
+  const herstel=setSnap(['lagenKeuze']); const Y=keuze==='volgende'?lagenResVolgendeBedrag(T.PW):null;
+  SET.lagenKeuze=Object.assign({}, SET.lagenKeuze||{}); SET.lagenKeuze[T.PW.perStart]=Object.assign({}, SET.lagenKeuze[T.PW.perStart]||{}, {res:{keuze, bedrag:Math.round(r.tekort), Y, volgendStart:lagenResVolgendeStart(T.PW), op:vandaagYMD()}});
+  save(); keuzeKlaar(keuze==='zelf'?`Reserveren: je maakt ${euro0(r.tekort)} zelf over`:keuze==='volgende'?`Reserveren: vanaf de volgende periode ≈${euro0(Y||0)}`:'Reserveren: bewust overgeslagen', herstel); }
+/* openPeriodeStart() leest dit: de reserveringen van de verdeling van DE periode die na je keuze begint. */
+function lagenResVolgende(start){ const K=SET.lagenKeuze||{}; let best=null;
+  for(const k of Object.keys(K)){ const r=K[k]&&K[k].res; if(!r || r.keuze!=='volgende' || !(+r.Y>0) || !r.volgendStart) continue; if(start && (String(r.volgendStart)>String(start) || rekDag(r.volgendStart, 20)<String(start))) continue;   /* alleen de periode direct na je keuze */ if(!best || String(r.volgendStart)>String(best.volgendStart)) best=r; }
+  return best?Math.round(+best.Y):null; }
+/* FUNDAMENT vervangt Beleggen. De vraag is of je fundament draagt wat je al inlegt (besluit 5 nov), niet of je mag beleggen. Twee
+   voorwaarden: je BUFFER op je ondergrens (bufferNorm(), het opbouwpad als je er een koos) en je RESERVERINGEN GEDEKT, waarbij je
+   inleg pas telt als hij deze periode gestort is of zijn moment nog komt (resSheetPeriode(), dezelfde regel als het
+   reserveringen-sheet van onderhoud 3). Een spaardoel is geen voorwaarde: een doel dat vol is of op "besteden" staat staat erbij
+   als "telt niet mee". beleggenKlaar() is niet aangeraakt: de verdeelregel voor onregelmatig inkomen (meevallerPlan) leest hem
+   nog, en die ligt buiten Grip. */
+function fundamentBuffer(){ let M=null; try{ M=noodfondsModel(); }catch(_){}
+  const ess=M&&M.essCrisis>0?M.essCrisis:0, teller=bufferTeller(), maanden=bufferMaanden(), norm=bufferNorm();
+  if(maanden==null || norm==null || !(ess>0) || teller==null) return {key:'buffer', naam:'Buffer op norm', ontbreekt:true, reden:norm==null?'je hebt nog geen ondergrens voor je buffer gekozen':'het saldo van je spaarrekening is onbekend'};
+  const nodig=Math.round(norm*ess), tekort=Math.max(nodig-teller,0), gehaald=maanden>=norm-0.0001;
+  let vol=null; try{ const p=allocatePlan().find(x=>x.type==='noodfonds'); if(p && p.eta) vol=etaDatum(p.eta); }catch(_){}
+  return {key:'buffer', naam:'Buffer op norm', gehaald, bedrag:gehaald?0:tekort, label:gehaald?'gehaald':`${euro0(tekort)} tekort`, sub:'buffer onder norm', maanden:Math.round(maanden*10)/10, norm, teller, nodig, vol, pad:ondergrensNu()!=null}; }
+function fundamentReserveringen(){ let RP=null; try{ RP=resSheetPeriode(); }catch(_){}
+  if(!resLijst().some(v=>v && (+v.bedrag||0)>0)) return {key:'dekking', naam:'Reserveringen gedekt', ontbreekt:true, reden:'er staan geen reserveringen in je lijst'};
+  const per=RP&&RP.per!=null?Math.max(RP.per,0):0, telt=RP?RP.telt:0;
+  const D=dekking(12, {inleg:telt, bron:'periode'});
+  if(D.werkelijkeStand==null) return {key:'dekking', naam:'Reserveringen gedekt', ontbreekt:true, reden:'je reserveringsrekening is niet aangewezen of het saldo is onbekend'};
+  const gedekt=D.inlegDekt?D.inlegDekt.ok:!D.gat;
+  const posten=D.regels.filter(r=>r.soort==='post').slice(0,3);
+  if(gedekt) return {key:'dekking', naam:'Reserveringen gedekt', gehaald:true, bedrag:0, label:'gehaald', D, RP, per, posten};
+  /* niet gedekt: dekt je inleg het als hij er wel is, dan is het bedrag dat ontbreekt de inleg die nog niet gestort is; anders het tekort met je volle inleg */
+  const Dvol=per>telt?dekking(12, {inleg:per, bron:'periode'}):D, volOk=Dvol.inlegDekt?Dvol.inlegDekt.ok:!Dvol.gat;
+  if(volOk && per>telt){ const nog=Math.max(Math.round(per-(RP.gestort||0)),0); return {key:'dekking', naam:'Reserveringen gedekt', gehaald:false, bedrag:nog, label:`${euro0(nog)} niet gestort`, sub:'reserveringen niet gestort', D, RP, per, posten, nietGestort:true}; }
+  const g=(Dvol.inlegDekt&&Dvol.inlegDekt.gat)||Dvol.gat, tk=g?Math.round(g.tekort):0;
+  return {key:'dekking', naam:'Reserveringen gedekt', gehaald:false, bedrag:tk, label:`${euro0(tk)} tekort`, sub:'reserveringen tekort', D, RP, per, posten, gat:g}; }
+function fundamentData(){
+  const vw=[fundamentBuffer(), fundamentReserveringen()];
+  const te=vw.filter(v=>!v.ontbreekt), mist=te.filter(v=>!v.gehaald).sort((a,b)=>(b.bedrag||0)-(a.bedrag||0));
+  /* een spaardoel dat vol is of op besteden staat: "telt niet mee" (tot v526 een voorwaarde van beleggenKlaar()) */
+  const geen=[]; try{ const P=allocatePlan(); for(const g of (SET.goals||[])){ if(!g || !g.id) continue; const p=P.find(x=>x.id===g.id); const doel=Math.round(+g.doel||0);
+    const geld=p?Math.round(+p.gespaard||0):Math.round(+g.gespaard||0);
+    if(g.besteden) geen.push({id:g.id, naam:g.naam||'Doel', reden:'je besteedt dit doel', geld, doel});
+    else if(doel>0 && geld>=doel-0.5 && g.streefdatum) geen.push({id:g.id, naam:g.naam||'Doel', reden:'vol', geld, doel}); }
+    /* het doel dat de regel op Grip leest (maandDoel) en dat niet vol is en niet op besteden staat: ook geen voorwaarde, wel de ingang
+       naar zijn regel (die sheet had tot v526 alleen de Beleggen-meter als ingang op Grip) */
+    const MD=maandDoel(); { const al=MD&&MD.p?geen.find(x=>x.id===MD.p.id):null; if(al) al.regel=true; }
+    if(MD && MD.p && !geen.some(x=>x.id===MD.p.id)) geen.push({id:MD.p.id, naam:MD.p.naam||'Doel', reden:'een spaardoel is geen voorwaarde voor je fundament; het staat op Plan', geld:Math.round(+MD.p.gespaard||0), doel:Math.round(+MD.p.doel||0), regel:true}); }catch(_){}
+  return {vw, te, n:te.length, gehaald:te.filter(v=>v.gehaald).length, mist, groot:mist[0]||null, klaar:te.length>0 && !mist.length, geen}; }
+/* de inleg en per belegging of de voorwaarden ervoor gelden (a.voorwaarden: true, false, of nog niet gekozen) */
+function fundamentInleg(){ const uit=[];
+  for(const a of (SET.assets||[])){ if(!a || !a.grow) continue; let I=null; try{ I=inlegStand(a); }catch(_){} const per=Math.round(+a.per||0); if(!I && !(per>0)) continue;
+    let partij=''; try{ const tx=bezitInlegTx(a.id, thisYM()).concat(bezitInlegTx(a.id, prevYM(thisYM()))).sort((x,y)=>y.date<x.date?-1:1); if(tx[0]) partij=titleCase(cleanMerch(tx[0].name)||tx[0].name||''); }catch(_){}
+    uit.push({id:a.id, naam:a.naam||'Bezitting', bedrag:I?Math.round(I.bedrag):per, soort:I?I.soort:'gepland', vanaf:a.perVanaf||null, vw:a.voorwaarden===true?'ja':a.voorwaarden===false?'nee':'open', partij:partij||(a.naam||'je belegging')}); }
+  return uit; }
+/* een keuze per salarisperiode (SET.belegKeuze[id].periode); de maand-sleutel van v332 blijft geldig */
+function fundamentPeriodeStart(){ try{ const PW=lagenPeriode(); return PW?PW.perStart:null; }catch(_){ return null; } }
+function fundamentGekozen(id){ const K=(SET.belegKeuze||{})[id]; if(!K) return null; const ps=fundamentPeriodeStart(); return (K.maand===thisYM() || (ps && K.periode===ps))?K:null; }
+function fundamentKeuzes(F){ F=F||fundamentData(); if(F.klaar || !F.mist.length) return [];
+  return fundamentInleg().filter(i=>i.vw==='ja' && !fundamentGekozen(i.id)); }
+function fundamentKies(id, keuze){ const a=(SET.assets||[]).find(x=>x.id===id); if(!a || !['door','pauze'].includes(keuze)) return; const herstel=setSnap(['belegKeuze','afspraken']);
+  const ym=thisYM(); SET.belegKeuze=SET.belegKeuze||{}; SET.belegKeuze[id]={maand:ym, periode:fundamentPeriodeStart(), keuze, op:vandaagYMD()};
+  if(keuze==='pauze'){ try{ afspraakMaak({soort:'pauze', assetId:id, naam:a.naam||'Bezitting', van:ym, tot:nextYM(ym), wat:`Inleg naar ${a.naam||'je bezitting'} zelf stilzetten`}); }catch(_){} }
+  save(); keuzeKlaar(keuze==='door'?`${a.naam||'Bezitting'}: bewust doorgelaten`:`${a.naam||'Bezitting'}: je zet de inleg zelf stil`, herstel); }
+/* v526: TWEE SHEETS. Lagen: per laag plan · gestort · verschil uit lagenTegelData() (zonder de waarom-uitleg, die staat op Plan),
+   en bij Reserveren onder plan de keuze. Fundament: per voorwaarde een meter en de getallen, wat niet meetelt, en je inleg met per
+   belegging of de voorwaarden gelden, plus de keuze voor wie ze wel gelden. Openen en kiezen schrijven niets tot je tikt. */
+function renderGripLagen(){
+  const T=lagenTegelData(); if(!T){ $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLagenSheet"><div style="font-weight:800;font-size:var(--fs-lg)">Lagen</div><div class="small muted" style="margin-top:6px;line-height:1.5">Er is nog geen salarisperiode met een verdeling, dus er is per laag nog niets te tellen.</div></div>`; return; }
+  const PW=T.PW, dagT=PW.dagen>0?`dag ${PW.dag} van ${PW.dagen}`:'';
+  const cel=l=>{ if(l.stand==='nognie' && !(l.gestort>0.5)) return '<span class="vb" data-nognie style="font-size:var(--fs-xs);font-weight:600;border:1px dashed var(--mut2);color:var(--mut);border-radius:6px;padding:0 5px">nog niet</span>';
+    if(l.stand==='nognie') return `<span data-nognie style="color:var(--mut);font-weight:700">−${euro0(l.plan-l.gestort)} · nog niet</span>`;
+    if(l.stand==='tekort') return `<span style="color:var(--amber);font-weight:700">−${euro0(l.tekort)}</span>`;
+    if(l.stand==='geen') return '<span style="color:var(--mut2)">–</span>';
+    return `<span style="color:var(--teal);font-weight:700">✓${l.verschil>0.5?` +${euro0(l.verschil)}`:''}</span>`; };
+  const sub=l=>l.k==='groeien'&&l.stand==='nognie'&&T.GM&&T.GM.laatste?`afschrijving ${dagKort(T.GM.laatste)}${l.sub?' · '+l.sub:''}`:l.sub;
+  const rij=l=>`<div class="row" data-lagenrij="${l.k}" data-plan="${l.plan}" data-gestort="${l.gestort}" data-stand="${l.stand}" style="gap:8px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b style="font-weight:700">${l.naam}</b>${sub(l)?`<span class="small muted" style="display:block">${esc(sub(l))}</span>`:''}</span><span class="small" style="white-space:nowrap;color:var(--mut)">plan ${euro0(l.plan)}</span><span style="white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;min-width:52px;text-align:right">${(l.stand==='nognie'&&!(l.gestort>0.5))?'–':euro0(l.gestort)}</span><span style="white-space:nowrap;min-width:60px;text-align:right">${cel(l)}</span></div>`;
+  const RK=lagenResKeuzeOpen(T), R=T.lagen.find(l=>l.k==='reserveren'), Kz=lagenKeuzeRes(PW);
+  let keuze='';
+  if(R && R.stand==='tekort'){
+    let stand=null; try{ stand=resSaldo(); }catch(_){} let posten=[]; try{ posten=dekking(12).regels.filter(r=>r.soort==='post').slice(0,2); }catch(_){}
+    const Y=RK?RK.Y:lagenResVolgendeBedrag(PW), vlgStart=lagenResVolgendeStart(PW), vlgMnd=vlgStart?MFULL[+vlgStart.slice(5,7)-1].toLowerCase():'de volgende periode';
+    let salD=null; try{ salD=salVolgendeDatum(vlgStart?rekDag(vlgStart,-3):null); }catch(_){}
+    const zin=`Je reserveringsrekening staat op ${stand==null?'een onbekend bedrag':euro0(stand)}.${posten.length?` ${posten.map(p=>`${esc(p.naam)} ${euro0(p.bedrag)} (${resMaandKort(p.maand)})`).join(' en ')} ${posten.length>1?'zijn':'is'} gedekt als er elke periode ${euro0(R.plan)} bijkomt.`:''}${Y!=null?` Sla je deze periode over, dan wordt dat ≈${euro0(Y)} vanaf ${vlgMnd}.`:''}`;
+    const knop=(k,l,s)=>`<button class="btn sec" data-lagenkeuze="${k}" style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="lagenResKies('${k}')"><b>${l}</b><span class="small muted" style="display:block;font-weight:400">${s}</span></button>`;
+    keuze=`<div class="card" data-lagenres style="padding:9px 14px 11px;margin-top:9px"><div style="font-weight:700">Reserveren · ${euro0(R.tekort)} ${R.gestort>0.5?'te weinig gestort':'niet gestort'}</div>
+      <div class="small muted" style="margin:4px 0 4px;line-height:1.45">${zin}</div>
+      ${Kz?`<div class="small" data-lagengekozen="${esc(Kz.keuze)}" style="margin-top:6px;line-height:1.45">Gekozen op ${dagKort(Kz.op)}: ${Kz.keuze==='zelf'?`je maakt ${euro0(Kz.bedrag)} zelf over`:Kz.keuze==='volgende'?`vanaf ${vlgMnd} ≈${euro0(Kz.Y||0)}`:'bewust overslaan'}.</div>`
+      :RK?knop('zelf', `Ik maak ${euro0(R.tekort)} zelf over`, 'Minder vinkt het af zodra hij de overboeking ziet')
+        +(Y!=null?knop('volgende', `Vanaf ${vlgMnd} ≈${euro0(Y)}`, `je verdeling${salD?` van ${dagKort(salD)}`:' van de volgende periode'} rekent ermee`):'')
+        +knop('overslaan', 'Bewust overslaan', 'de vraag komt terug als een post niet meer gedekt is')
+      :'<div class="small muted" style="margin-top:6px">Je surplus gaat al naar Reserveren; de keuze daarover staat bij Kiezen.</div>'}</div>`; }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLagenSheet" data-lagengehaald="${T.gehaald}" data-lagenn="${T.n}" data-lagenontbreekt="${T.ontbreekt}">
+    <div class="row" style="align-items:baseline;margin-bottom:4px"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">Lagen · ${esc(PW.label||'deze periode')}</span>${dagT?`<span class="small muted">${dagT}</span>`:''}</div>
+    <div class="row small" style="gap:8px;color:var(--mut2);font-size:var(--fs-xs);padding:2px 0"><span style="flex:1">Laag</span><span>Plan</span><span style="min-width:52px;text-align:right">Gestort</span><span style="min-width:60px"></span></div>
+    ${T.lagen.map(rij).join('')}
+    <div class="small" data-lagennaarplan role="button" onclick="closeSheet();go('vooruit')" style="padding:9px 0 0;border-top:1px solid var(--line);color:var(--mut);cursor:pointer">Waar het verschil vandaan komt staat op Plan <span style="color:var(--teal);font-weight:700">›</span></div>
+    ${keuze}</div>`; }
+function openGripLagen(){ renderGripLagen(); showSheetBg(); }
+function renderGripFundament(){
+  const F=fundamentData(), IL=fundamentInleg();
+  const meter=(pct)=>`<div style="height:6px;border-radius:4px;background:var(--bar);margin:6px 0 4px;overflow:hidden"><i style="display:block;height:100%;width:${Math.min(Math.max(pct,0),100).toFixed(1)}%;background:var(--teal)"></i></div>`;
+  const vwH=v=>{ const mark=v.ontbreekt?'<span style="color:var(--mut2);font-weight:800">?</span>':v.gehaald?'<span style="color:var(--teal);font-weight:800">✓</span>':'<span style="color:var(--amber);font-weight:800">!</span>';
+    let det='';
+    if(v.ontbreekt) det=`onbekend: ${esc(v.reden)}`;
+    else if(v.key==='buffer'){ det=`<b>${String(v.maanden).replace('.',',')} ${v.maanden===1?'maand':'maanden'}</b> van ${esc(maandLabel(v.norm))}${v.pad?' (je opbouwpad)':''} · ${euro0(v.teller)} van ${euro0(v.nodig)}${v.vol?` · vol ${esc(v.vol)} bij je verdeling`:''}`; }
+    else { const st=v.D?v.D.werkelijkeStand:null; det=`pot <b>${st==null?'onbekend':euro0(st)}</b>${(v.posten||[]).map(p=>` · ${esc(p.naam)} ${euro0(p.bedrag)} ${resMaandKort(p.maand)}`).join('')}${v.per>0?` · ${v.nietGestort?`gedekt alleen als ${euro0(v.per)} per periode echt binnenkomt`:`je inleg ${euro0(v.per)} per periode${v.RP&&v.RP.telt>0?(v.RP.gestort>=v.per-0.5?' · gestort':' · zijn moment komt nog'):' · nog niet gestort'}`}`:''}`; }
+    /* de rij is de ingang naar de bestaande sheet van die regel (tot v526 in de sheet achter de Beleggen-meter): openMaandBeslis, of
+       zonder regel de lijst of de noodfonds-sheet */
+    const heeft=(function(){ try{ return maandRegels().some(r=>r.key===v.key); }catch(_){ return false; } })();
+    const tik=heeft?`closeSheet();openMaandBeslis('${v.key}')`:(v.key==='dekking'?'closeSheet();openReserveringen()':'closeSheet();openNoodfondsPanel()');
+    return `<div data-fundamentvw="${v.key}" data-gehaald="${v.ontbreekt?'onbekend':v.gehaald?'1':'0'}" data-bedrag="${Math.round(v.bedrag||0)}" role="button" onclick="${tik}" style="padding:9px 0;border-top:1px solid var(--line);cursor:pointer">
+      <div class="row" style="gap:8px;align-items:baseline">${mark}<b style="flex:1;font-weight:700">${v.naam}</b><span class="small" style="font-weight:700;color:${v.ontbreekt?'var(--mut2)':v.gehaald?'var(--teal)':'var(--amber)'}">${v.ontbreekt?'onbekend':esc(v.label)}</span><span style="color:var(--teal);font-weight:700">›</span></div>
+      ${v.key==='buffer'&&!v.ontbreekt?meter(v.nodig>0?v.teller/v.nodig*100:0):''}<div class="small muted" style="line-height:1.45;margin-top:2px">${det}</div></div>`; };
+  const geenH=F.geen.map(g=>`<div data-fundamentgeen="${esc(g.id)}" role="button" onclick="${g.regel?"closeSheet();openMaandBeslis('doel')":"closeSheet();go('vooruit')"}" style="padding:9px 0;border-top:1px solid var(--line);opacity:.7;cursor:pointer"><div class="row" style="gap:8px;align-items:baseline"><span style="color:var(--mut2);font-weight:800">–</span><b style="flex:1;font-weight:700">${esc(g.naam)}</b><span class="small muted">telt niet mee</span></div><div class="small muted" style="margin-top:2px">${esc(g.reden)} · ${euro0(g.geld)} van ${euro0(g.doel)}</div></div>`).join('');
+  const lop=IL.filter(i=>i.soort==='lopend' || !i.vanaf || String(i.vanaf).slice(0,7)<=thisYM()).reduce((a,i)=>a+i.bedrag,0);
+  const ja=IL.filter(i=>i.vw==='ja'), nee=IL.filter(i=>i.vw==='nee'), open=IL.filter(i=>i.vw==='open');
+  const nm=i=>`${esc(i.naam)} ${euro0(i.bedrag)}${i.vanaf && String(i.vanaf).slice(0,7)>thisYM()?` vanaf ${MNAMES[+String(i.vanaf).slice(5,7)-1]}`:''}`;
+  const inlegZin=[ja.length?`${ja.map(nm).join(', ')} <b>${ja.length===1?'valt':'vallen'} onder je voorwaarden</b>.`:'', nee.length?`${nee.map(nm).join(', ')} niet: dat koos je zelf.`:'', ...open.map(i=>`<span data-fundamentopen="${esc(i.id)}">${nm(i)}: <b>nog niet gekozen</b> <span role="button" style="color:var(--teal);font-weight:700;cursor:pointer" onclick="closeSheet();openAsset('${esc(i.id)}')">kiezen ›</span></span>`)].filter(Boolean).join(' ');
+  const KZ=fundamentKeuzes(F), bufV=F.vw.find(v=>v.key==='buffer');
+  const knop=(id,k,l,s)=>`<button class="btn sec" data-fundamentkeuze="${k}" data-asset="${esc(id)}" style="width:100%;text-align:left;min-height:44px;margin-top:6px" onclick="fundamentKies('${esc(id)}','${k}')"><b>${l}</b><span class="small muted" style="display:block;font-weight:400">${s}</span></button>`;
+  const keuzes=KZ.map(i=>knop(i.id,'door',`${esc(i.naam)} bewust doorlaten`, bufV&&!bufV.ontbreekt&&!bufV.gehaald&&bufV.vol?`tot je buffer op norm is (${esc(bufV.vol)})`:'tot je fundament je inleg draagt')
+    +knop(i.id,'pauze',`${esc(i.naam)} zelf stilzetten bij ${esc(i.partij)}`,'Minder bewaart het voornemen en meet het aan je boekingen')).join('');
+  const gekozen=IL.filter(i=>i.vw==='ja' && fundamentGekozen(i.id)).map(i=>{ const K=fundamentGekozen(i.id); return `<div class="small" data-fundamentgekozen="${esc(i.id)}" style="margin-top:6px">${esc(i.naam)}: ${K.keuze==='door'?'bewust doorgelaten':'je zet de inleg zelf stil'} (${dagKort(K.op)})</div>`; }).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripFundamentSheet" data-fundamentgehaald="${F.gehaald}" data-fundamentn="${F.n}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Fundament · draagt het je inleg?</div>
+    ${F.vw.map(vwH).join('')}${geenH}
+    ${IL.length?`<div class="card" data-fundamentinleg="${Math.round(lop)}" style="padding:9px 14px 11px;margin-top:10px"><div style="font-weight:700">Je inleg · ${euro0(lop)} per periode</div>
+      <div class="small muted" style="line-height:1.5;margin-top:3px">${inlegZin}</div>${keuzes}${gekozen}</div>`:''}</div>`; }
+function openGripFundament(){ renderGripFundament(); showSheetBg(); }
 function gripMeters(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
-  const MB=gripMeterBudget(V), MD=gripMeterDoelen(), ML=gripMeterBeleggen();
+  const MB=gripMeterBudget(V);
+  let T=null, F=null; try{ T=lagenTegelData(); }catch(_){} try{ F=fundamentData(); }catch(_){}
   const ring=(pct,kl,txt)=>`<div class="gm-ring" style="background:conic-gradient(${kl} 0 ${Math.min(Math.max(pct,0),100)}%,var(--bar) ${Math.min(Math.max(pct,0),100)}% 100%)"><span style="color:${kl}">${txt}</span></div>`;
-  const dial=(k,l,M,pct,txt,v,sub)=>{ const kl=gripMeterKleur(k,M);
-    return `<div class="gm-dial" data-meter="${k}" role="button" onclick="${k==='budget'?'gripNaarBrug()':`openGripMeter('${k}')`}"><div class="gm-l">${l}</div>${ring(pct,kl,txt)}<div class="gm-v" style="color:${kl}">${v}</div><div class="gm-s">${sub}</div></div>`; };
-  const b=MB.onbekend?dial('budget','Budget',MB,0,'?','nog niet','nog niet te rekenen')
-    :dial('budget','Budget',MB,MB.pctNetto,MB.pctNetto+'%',`<span data-meternetto="${MB.netto}">${euro0(Math.abs(MB.netto))}</span>`,(MB.netto>0?'boven budget':MB.netto<0?'onder budget':'precies je budget')+(MB.buiten>0?' · netto':''));   // v505: netto, met buiten budget
-  const d=MD.overgang?dial('doelen','Doelen',{onbekend:true},0,MD.netto==null?'?':euroK(MD.netto),'geen doel',`<span data-meterovergang data-start="${esc(MD.start)}" data-eind="${esc(MD.eind)}">${MD.geenMeting?'geen spaarrekening':`${euro0(MD.netto)} opzij · overgangsmaand`}</span>`)   // v508 (punt 1/2): november 1–23 heeft geen doel
-    :MD.onbekend?dial('doelen','Doelen',MD,0,'?','nog geen doel',MD.geenMeting?'geen spaarrekening':'kies opzij in Kiezen')
-    :dial('doelen','Doelen',MD,MD.pct,euroK(MD.netto),'deze periode',`<span data-meterverwachtdoel>${euro0(MD.netto)} opzij · volgens je verdeling ${euro0(MD.opzij)}</span>`);   // v470 punt 3: geen percentage, geen "van je doel"
-  /* v510 punt 1: de som van de LOPENDE inleg (dezelfde als "Lopende inleg samen" in de sheet, in centen), met "+ EUR X gepland" zolang er
-     iets gepland staat; tot v510 de eerste belegging uit de lijst (inlegLijst[0]). */
-  const inl=(ML.lopendCent>0||ML.geplandCent>0)?`<span data-meterinlegtegel="${ML.lopendCent||0}" data-meterinleggepland="${ML.geplandCent||0}">${ML.lopendCent>0?`${euro0(ML.lopendCent/100)}/mnd`:''}${ML.geplandCent>0?`${ML.lopendCent>0?' + ':''}${euro0(ML.geplandCent/100)} gepland`:''}</span>`:'';
-  /* v390: ontbreekt er een voorwaarde, dan staat die in de meter (de eerste, in de vaste volgorde buffer, dekking, doel). */
-  /* v510 punt 1: de inleg staat er ook naast een ontbrekende voorwaarde, anders valt "+ EUR X gepland" juist weg als je nog niet klaar bent */
-  const lsub=ML.onbekend?inl:(ML.mist&&ML.mist.length?[`<span data-metermist>${esc(ML.mist[0])}${ML.mist.length>1?` +${ML.mist.length-1}`:''}</span>`, inl].filter(Boolean).join(' · ')
-    :[ML.onb.length?`${ML.onb.length} onbekend`:'', inl].filter(Boolean).join(' · ')||'voorwaarden');
-  const l=ML.onbekend||!ML.n?dial('beleggen','Beleggen',{onbekend:true},0,'?','nog niet',ML.leeg?'geen doel of bezitting':(lsub||'voorwaarden'))
-    :dial('beleggen','Beleggen',ML,ML.gehaald/ML.n*100,`${ML.gehaald}/${ML.n}`,`${ML.gehaald}/${ML.n}`,lsub);
-  return `<div class="gm" id="gripMeters">${b}${d}${l}</div>
-    ${MB.onbekend?'':gripNietGebruiktRegel(MB.TR)}<div class="small" data-meternuverwacht style="color:var(--mut2);font-size:var(--fs-xs);margin:-2px 2px 8px;line-height:1.35">${gripDoelenNuTekst(MD)}</div>`;
+  const dial=(k,l,kl,vkl,pct,txt,v,sub,tik)=>`<div class="gm-dial" data-meter="${k}" role="button" onclick="${tik}"><div class="gm-l">${l}</div>${ring(pct,kl,txt)}<div class="gm-v" style="color:${vkl}">${v}</div><div class="gm-s">${sub}</div></div>`;
+  const bkl=MB.onbekend?'var(--mut2)':gripMeterKleur('budget', MB);
+  const b=MB.onbekend?dial('budget','Budget',bkl,bkl,0,'?','nog niet','nog niet te rekenen','gripNaarBrug()')
+    :dial('budget','Budget',bkl,bkl,MB.pctNetto,MB.pctNetto+'%',`<span data-meternetto="${MB.netto}">${euro0(Math.abs(MB.netto))}</span>`,(MB.netto>0?'boven budget':MB.netto<0?'onder budget':'precies je budget')+(MB.buiten>0?' · netto':''),'gripNaarBrug()');   // v505: netto, met buiten budget
+  /* v526: LAGEN (lagenTegelData(), dezelfde telling als Plan blok 2). Ring: gehaald van de lagen waarvan het moment voorbij is; groot:
+     wat ontbreekt, of bij alles gehaald het groene feit "EUR X opzij". */
+  let d;
+  if(!T) d=dial('lagen','Lagen','var(--mut2)','var(--mut2)',0,'?','nog niet','nog geen verdeling','openGripLagen()');
+  else if(!T.n) d=dial('lagen','Lagen','var(--mut2)','var(--mut2)',0,'?','nog niet',T.OM&&T.OM.komt?'salaris nog niet verdeeld':'nog niets te tellen','openGripLagen()');
+  else if(T.mist.length) d=dial('lagen','Lagen','var(--teal)','var(--amber)',T.gehaald/T.n*100,`${T.gehaald}/${T.n}`,`<span data-lagengroot="${T.ontbreekt}">${euro0(T.ontbreekt)}</span>`,`<span data-lagensub>${esc(lagenTegelSub(T))}</span>`,'openGripLagen()');
+  else d=dial('lagen','Lagen','var(--green)','var(--green)',100,`${T.gehaald}/${T.n}`,`<span data-lagenopzij="${T.opzij}">${euro0(T.opzij)} opzij</span>`,'<span data-lagensub>plan gehaald</span>','openGripLagen()');
+  /* v526: FUNDAMENT (fundamentData()). Ring: gehaald van de voorwaarden die te beoordelen zijn; groot: het grootste bedrag dat niet
+     gehaald is. Niet gehaald is geen fout, dus de ring blijft neutraal (v314); het bedrag vraagt wel aandacht. */
+  let l;
+  if(!F || !F.n) l=dial('fundament','Fundament','var(--mut2)','var(--mut2)',0,'?','nog niet','voorwaarden onbekend','openGripFundament()');
+  else if(F.klaar) l=dial('fundament','Fundament','var(--green)','var(--green)',100,`${F.gehaald}/${F.n}`,'<span data-fundamentgroot="0">klaar</span>','<span data-fundamentsub>fundament op orde</span>','openGripFundament()');
+  else l=dial('fundament','Fundament','var(--mut2)','var(--amber)',F.gehaald/F.n*100,`${F.gehaald}/${F.n}`,`<span data-fundamentgroot="${Math.round(F.groot.bedrag)}">${euro0(F.groot.bedrag)}</span>`,`<span data-fundamentsub>${esc(F.groot.sub)}</span>`,'openGripFundament()');
+  /* v526 (punt 4): de twee regels onder de tegels ("waarvan EUR X niet gebruikt" en "Doelen: opzij deze periode ...") zijn weg; wat
+     aandacht vraagt staat bij Kiezen. */
+  return `<div class="gm" id="gripMeters">${b}${d}${l}</div>`;
 }
 /* v398: DE FEITREGEL ONDER DE BUDGET-METER (in plaats van "Eerlijk budget lager", v393). Een te ruim potje: "waarvan EUR 629
    Huur niet gebruikt ›"; meer potjes: "waarvan EUR X niet gebruikt in n potjes ›"; heb je er deze maand zelf over gekozen
    (laten staan of een eigen bedrag), dan "· zelf gekozen". Een feit en geen aftrek: de meter rekent met het maandbudget.
    De tik opent de te-ruim-sheet, bij een potje op dat potje. */
 function teRuimZelf(k, ym){ ym=ym||thisYM(); return !!(potLaten(k, ym) || gripTeRuimUitgevoerd(ym).some(x=>x.k===k)); }   // v408: laten staan geldt voor elk signaal van het potje
-function gripNietGebruiktRegel(TR){
-  TR=TR||[]; if(!TR.length) return '';
-  const som=TR.reduce((a,x)=>a+x.teRuim,0), zelf=TR.every(x=>teRuimZelf(x.k));
-  const t=TR.length===1?`waarvan ${euro0(TR[0].teRuim)} ${esc(TR[0].naam)} niet gebruikt`:`waarvan ${euro0(som)} niet gebruikt in ${TR.length} potjes`;
-  return `<div class="small" data-nietgebruikt="${TR.length}" data-nietgebruiktbedrag="${Math.round(som)}" role="button" onclick="openTeRuim(${TR.length===1?`'${esc(TR[0].k)}'`:''})" style="color:var(--mut);font-size:var(--fs-xs);margin:-2px 2px 4px;line-height:1.35;cursor:pointer">${t} <span style="color:var(--teal);font-weight:700">›</span>${zelf?' <span data-zelfgekozen style="color:var(--mut2)">· zelf gekozen</span>':''}</div>`;
-}
+/* v526: gripNietGebruiktRegel() ("waarvan EUR X niet gebruikt ›") is weg met de regel onder de tegels; de te ruime potjes staan in de
+   sheet van de Budget-meter (data-meterruim) en als grijze stap in de brug in Begrijpen, met dezelfde ingang openTeRuim(). */
 /* v391: onder de meters EEN regel met het verschil tussen nu en verwacht: wat er nu netto naar je spaarrekening ging
    (savedNet, dezelfde bron als het spaardoel in de Terugblik) en waar de Doelen-meter op uitkomt (Plan opzij min eruit).
    De uitleg van die twee staat in de sheet achter de meter. */
-function gripDoelenNuTekst(MD){ let O=null; try{ O=opzijPeriode(); }catch(_){}   // v440: opzij deze periode (opzijPeriode); "Doelen:" ervoor (v406), zodat de regel niet als budget leest
-  if(!O || !O.meetbaar) return 'Doelen: opzij nog niet te meten (geen spaarrekening)';
-  const n=O.netto==null?'onbekend':euro0(O.netto);
-  if(O.overgang) return `Doelen: opzij ${O.label} ${n} · overgangsmaand · geen doel`;   // v508 (punt 1/2)
-  return `Doelen: opzij deze periode ${n}${O.doel!=null?` · volgens je verdeling ${euro0(O.doel)}`:' · nog geen verdeling'}`; }   // v464 punt 4: dezelfde woorden als de opzij-rij (v462 H5)
+/* v526: gripDoelenNuTekst() ("Doelen: opzij deze periode ...") is weg met de regel onder de tegels (gevraagd door de gebruiker). */
 function openGripMeter(k){ window._gripMeter=k; renderGripMeter(); showSheetBg(); }
 function renderGripMeter(){
   const k=window._gripMeter;
@@ -12758,6 +12926,14 @@ function gripCyclus(SIG){
     if(g.soort==='inleg' && g.id && BVv.some(v=>v.asset.id===g.id)) kies.push({id:'beleg:'+g.id, sym:'pat:'+p.id, bron:'letop', soort:'beleg', naam:`${g.naam}: bewust doorgaan of inleg stilzetten`, reden:`signaal: ${g.sub||'voorwaarden nog niet gehaald'} · in ${p.naam}`, act:`openBelegVraag('${esc(g.id)}')`}); }
   for(const x of LZ){ if(GRIP_LETOP_TERUG.has(x.soort) || GRIP_LETOP_FEIT.has(x.soort)) continue;
     const t=gripKiesTitel(x); kies.push({id:lid(x), sym:sym.some(z=>z.id===lid(x))?lid(x):null, k:(x.key && CATS[x.key] && CATS[x.key].type==='expense')?x.key:null, bron:'letop', soort:x.soort, naam:t, reden:t===x.naam?(x.sub||''):x.naam+(x.sub?' · '+x.sub:''), act:x.act, x}); }
+  /* v526 (punt 5): DE KEUZES VAN DE SHEETS LAGEN EN FUNDAMENT, een keer per salarisperiode. Reserveren onder plan (lagenResKeuzeOpen()
+     zwijgt als de surplus-vraag van v524 al over Reserveren gaat, of als je deze periode al koos). Per belegging waarvoor de voorwaarden
+     gelden een keuze, tenzij er al een keuze over dezelfde belegging (beleg:<id>) of het patroon "Beleggen vóór fundament" in de lijst staat:
+     dan is het dezelfde vraag. */
+  try{ const RK=lagenResKeuzeOpen(); if(RK) kies.push({id:'lagen:res', sym:'', bron:'lagen', naam:`Reserveren · ${euro0(RK.laag.tekort)} ${RK.laag.gestort>0.5?'te weinig gestort':'niet gestort'}`, reden:`plan ${euro0(RK.laag.plan)} · gestort ${euro0(RK.laag.gestort)} · zelf overmaken, vanaf de volgende periode, of bewust overslaan`, act:'openGripLagen()'}); }catch(_){}
+  try{ const FK=fundamentKeuzes(); const al=kies.some(x=>x.id==='pat:beleggen');
+    for(const i of FK){ if(al || kies.some(x=>x.id==='beleg:'+i.id || String(x.act||'').includes(`'${i.id}'`))) continue;
+      kies.push({id:'fundament:'+i.id, sym:'', bron:'fundament', naam:`${i.naam}: bewust doorlaten of zelf stilzetten`, reden:`je fundament draagt je inleg nog niet · ${(fundamentData().mist||[]).map(v=>v.sub).join(' · ')}`, act:'openGripFundament()'}); } }catch(_){}
   const mee=L.filter(x=>GRIP_LETOP_TERUG.has(x.soort));
   const gekozen=P.filter(p=>K[p.id]).map(p=>({id:'pat:'+p.id, p, k:K[p.id]}));
   let uitg=[]; try{ uitg=gripTeRuimUitgevoerd(m); }catch(_){}
@@ -14325,7 +14501,9 @@ function openPeriodeStart(){ const M=periodeMoment()||{}; window._salv={key:'per
   /* v523 (punt 1): met een vorige afspraak de velden op die afspraak (je echte overboekingen), niet op het voorstel */
   const SV=SET.salVerdeling; let P=null; try{ P=rekVoorstel(); }catch(_){}
   if(SV && SV.rek && P && P.ok){ const S=window._salv, e={}; for(const r of P.rek) if(!r.sal && SV.rek[r.acc]!=null) e[r.acc]=Math.round(+SV.rek[r.acc]||0);
-    S.eigen=Object.assign(rekBedragen(P), e); S.eigenOpzij=SV.opzij!=null?Math.round(+SV.opzij||0):null; S.eigenRes=SV.reserveringen!=null?Math.round(+SV.reserveringen||0):null; S.modus='aanpassen'; S.vanAfspraak=true; }
+    S.eigen=Object.assign(rekBedragen(P), e); S.eigenOpzij=SV.opzij!=null?Math.round(+SV.opzij||0):null; S.eigenRes=SV.reserveringen!=null?Math.round(+SV.reserveringen||0):null; S.modus='aanpassen'; S.vanAfspraak=true;
+    /* v526: koos je bij Reserveren onder plan "vanaf de volgende periode", dan staan je reserveringen hier op dat bedrag */
+    try{ const PV=periodeVan(vandaagYMD()), Y=lagenResVolgende(PV&&PV.start?String(PV.start):vandaagYMD()); if(Y!=null) S.eigenRes=Y; }catch(_){} }
   renderSalVerdeling(); showSheetBg(); }
 /* het budget-blok van de nieuwe periode in de indeling van v497: VAST (de vaste lasten in de periode op hun datum, inclusief het vaste
    deel van een gesplitst potje), POTJES (alleen het variabele deel, per dag / per keer), en Contant apart; het totaal is ongewijzigd.
@@ -15916,7 +16094,7 @@ function gripBelegLopend(m){
   const prev=valtOpYmPlus(m,-1), K=SET.belegKeuze||{}, uit=[];
   for(const a of (SET.assets||[])){
     if(!a.grow || a.voorwaarden!==true) continue;   // v501 punt 6: alleen een bezitting met ja (zie belegVragen)
-    if(K[a.id] && K[a.id].maand===m) continue;
+    if(K[a.id] && (K[a.id].maand===m || fundamentGekozen(a.id))) continue;   // v526: een keuze per salarisperiode
     let nu=0, vorig=0; try{ nu=bezitInleg(a.id, m); vorig=bezitInleg(a.id, prev); }catch(_){}
     if(!(nu>0) && !(vorig>0)) continue;
     uit.push({asset:a, deze:nu>0, bedrag:nu>0?nu:vorig, vorig, open:a.voorwaarden!==true, mist});
@@ -16002,7 +16180,7 @@ function gripSigTik(soort, k){
     let S=[]; try{ S=valtOpSignals(thisYM())||[]; }catch(_){}
     if(S.some(s=>s.id===id)) return openGripLetOp('sig', id);
     return gripBrugTik('potje', k); }
-  if(soort==='inleg'){ try{ if(belegVragen().some(v=>v.asset.id===k)) return openBelegVraag(k); }catch(_){} return openGripMeter('beleggen'); }   // v390: inleg die loopt maar nog niet geboekt is: de meter
+  if(soort==='inleg'){ try{ if(belegVragen().some(v=>v.asset.id===k)) return openBelegVraag(k); }catch(_){} return openGripFundament(); }   // v526: de tegel Fundament; v390: inleg die loopt maar nog niet geboekt is: de meter
   if(soort==='onttrekking') return openGripMeter('doelen');
 }
 /* Ga naar het patroon waarin een signaal staat (voor een ingang van buiten, en voor tests). */
@@ -16877,7 +17055,7 @@ function resSheetPeriode(){
   if(per==null){ try{ const RR=rekReserveringen(PW?PW.perStart:thisYM()+'-01'); if(RR.ok){ per=RR.totaal; rijen=RR.rijen.map(x=>Object.assign({}, x, {perR:Math.round(x.per)})); bron='reserveringen'; } }catch(_){} }
   let ra=null; try{ ra=resAccId(); }catch(_){}
   const gestort=(ra && PW)?Math.round(lagenGestortOp(ra, PW)):0;
-  let komt=false, moment=null; try{ const SP=salPeriode(); const w=SP&&SP.cur&&SP.cur.werkelijk; if(!w) komt=true; else { moment=werkdagPlus(String(w).slice(0,10), OVERBOEK_LAAT_DAGEN); komt=vandaagYMD()<moment; } }catch(_){ komt=false; }
+  const OM=lagenOverboekMoment(), komt=OM.komt, moment=OM.moment;   // v526: dezelfde moment-regel als de tegel Lagen (een bron)
   const gedekt=per!=null && per>0 && (gestort>=per-0.5 || komt);
   return {PW, per, rijen, bron, gestort, komt, moment, gedekt, telt:per!=null&&per>0?(gedekt?per:0):0}; }
 /* onderhoud3 (punt 6): DE ZIN VAN HET SHEET, PER SALARISPERIODE. dekkingTekst() noemt bij een gat het bedrag PER MAAND om het te

@@ -45,9 +45,9 @@ test('a. de stand op 4 oktober: de regels en hun status, en de Beleggen-meter wa
   await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   const st = await page.evaluate(() => { const R = maandMetAfspraak(maandMetAccept(maandRegels())); return Object.fromEntries(R.map((r) => [r.key, r.status])); });
   expect(st).toMatchObject({ dekking: 'let op', buffer: 'ok', doel: 'ok' });
-  await page.click('[data-meter="beleggen"]');
-  const rij = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-meterwv]')].map((e) => [e.dataset.meterwv, e.innerText.replace(/\s+/g, ' ')])));
-  expect(rij.dekking).toContain('€37 tegen');
+  await page.click('[data-meter="fundament"]');   // v526: de tegel Fundament
+  const rij = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-fundamentvw]')].map((e) => [e.dataset.fundamentvw, e.innerText.replace(/\s+/g, ' ')])));
+  expect(rij.dekking).toContain('pot €37');
   expect(rij.buffer).toContain('gehaald');
 });
 
@@ -70,8 +70,8 @@ test('d. een regel in de sheet van de Beleggen-meter opent de bestaande sheet me
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
   await page.waitForTimeout(400);
-  await page.click('[data-meter="beleggen"]');
-  await page.click('[data-meterwv="dekking"]');
+  await page.click('[data-meter="fundament"]');   // v526: de ingang staat in de sheet van de tegel Fundament
+  await page.click('[data-fundamentvw="dekking"]');
   const t = await page.evaluate(() => $('#sheet').innerText.replace(/\s+/g, ' '));
   expect(t).toContain('Dekking reserveringen');
   expect(t).toContain('€131 per maand tot november');
@@ -279,12 +279,13 @@ test('p. zonder Let op-signaal staat er geen Let op', async ({ page }) => {
 test('q. een voorwaarde die niet te beoordelen is: de Beleggen-meter telt hem niet in de noemer en zegt onbekend', async ({ page }) => {
   await stand(page, { reserveringen: [] });
   await page.evaluate(() => { closeSheet(); go('maand'); gripKiesTab('kiezen'); });
-  const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const M = gripMeterBeleggen();
-    return { volledig: B.volledig, n: M.n, onb: M.onb.map((v) => v.key), tekst: document.querySelector('[data-meter="beleggen"]').innerText.replace(/\s+/g, ' ') }; });
+  /* v526: de tegel Fundament; buffer en dekking, en een dekking zonder reserveringen staat niet in de noemer */
+  const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const F = fundamentData();
+    return { volledig: B.volledig, n: F.n, onb: F.vw.filter((v) => v.ontbreekt).map((v) => v.key), ring: document.querySelector('[data-meter="fundament"] .gm-ring').innerText.trim() }; });
   expect(r.volledig).toBe(false);
   expect(r.onb).toEqual(['dekking']);
-  expect(r.n).toBe(2);
-  expect(r.tekst).toContain('1 onbekend');
+  expect(r.n).toBe(1);
+  expect(r.ring).toMatch(/^[01]\/1$/);
 });
 
 /* De band gaat alleen over het deel van de maand dat nog moet komen: per afgeronde maand de uitgaven na

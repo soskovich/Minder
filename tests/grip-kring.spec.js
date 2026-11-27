@@ -16,7 +16,7 @@ test.describe('v387 structuur', () => {
   });
   test('vaste bovenkant: drie meters, vier tabs en de knop Ik wil iets kopen; de oude blokken zijn weg', async ({ page }) => {
     await grip(page);
-    expect(await page.locator('#gripMeters [data-meter]').evaluateAll(e => e.map(x => x.dataset.meter))).toEqual(['budget', 'doelen', 'beleggen']);
+    expect(await page.locator('#gripMeters [data-meter]').evaluateAll(e => e.map(x => x.dataset.meter))).toEqual(['budget', 'lagen', 'fundament']);   // v526: Doelen is Lagen, Beleggen is Fundament
     expect(await page.locator('#gripTabs [data-griptab]').evaluateAll(e => e.map(x => x.textContent.replace('•', '').trim()))).toEqual(['Zien', 'Begrijpen', 'Kiezen', 'Terugblik']);
     expect(await page.locator('#gripKoopcheck').innerText()).toContain('Ik wil iets kopen');
     for (const sel of ['#gripTegels', '[data-tegel]', '#gripDezeMaand']) expect(await page.locator(sel).count()).toBe(0);
@@ -36,7 +36,7 @@ test.describe('v387 structuur', () => {
       eerlijk: document.querySelectorAll('#gripMeters ~ [data-nietgebruikt]').length, melding: document.querySelectorAll('[data-teruimregel]').length,
       knop: document.querySelector('#gripKoopcheck').getBoundingClientRect().bottom, nav: document.querySelector('.nav').getBoundingClientRect().top, sw: document.documentElement.scrollWidth }));
     expect(r.brug).toBe(0);
-    expect(r.eerlijk).toBe(1);
+    expect(r.eerlijk).toBe(0);   // v526: de regel onder de meters is weg (gevraagd door de gebruiker)
     expect(r.melding).toBe(0);
     expect(r.knop).toBeLessThanOrEqual(r.nav - 16);
     expect(r.sw).toBeLessThanOrEqual(390);
@@ -79,13 +79,13 @@ test.describe('v387 meters', () => {
   });
   test('Beleggen: de noemer is wat te beoordelen is, met de onbekende erbij en waarom', async ({ page }) => {
     await grip(page);
-    const r = await page.evaluate(() => { const M = gripMeterBeleggen(); return { g: M.gehaald, n: M.n, onb: M.onb.map(v => v.key), alle: M.B.voorwaarden.length }; });
-    expect(r.alle).toBe(3); expect(r.onb).toEqual(['dekking']); expect(r.n).toBe(2);
-    expect(await page.locator('[data-meter="beleggen"]').innerText()).toContain(`${r.g}/2`);
-    expect(await page.locator('[data-meter="beleggen"]').innerText()).toContain('1 onbekend');
-    await page.click('[data-meter="beleggen"]');
-    expect(await page.locator('[data-meterwv="dekking"]').innerText()).toContain('geen reserveringen');
-    await page.click('[data-meterwv="dekking"]');   // de ingang naar je reserveringen hangt hier, nu de tegel weg is
+    /* v526: de tegel Fundament (buffer en dekking); een voorwaarde die niet te beoordelen is staat niet in de noemer */
+    const r = await page.evaluate(() => { const F = fundamentData(); return { g: F.gehaald, n: F.n, onb: F.vw.filter(v => v.ontbreekt).map(v => v.key), alle: F.vw.length }; });
+    expect(r.alle).toBe(2); expect(r.onb).toEqual(['dekking']); expect(r.n).toBe(1);
+    expect(await page.locator('[data-meter="fundament"] .gm-ring').innerText()).toBe(`${r.g}/1`);
+    await page.click('[data-meter="fundament"]');
+    expect(await page.locator('[data-fundamentvw="dekking"]').innerText()).toContain('geen reserveringen');
+    await page.click('[data-fundamentvw="dekking"]');   // de ingang naar je reserveringen hangt hier
     expect(await page.locator('#sheet').innerText()).toMatch(/Reserveringen|reservering/);
   });
 });

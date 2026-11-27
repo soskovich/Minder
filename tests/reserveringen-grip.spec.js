@@ -48,7 +48,7 @@ const sheetTekst = (page) => page.evaluate(() => document.querySelector('#sheet'
 const tegel = (page) => page.evaluate(() => { go('maand'); window._gripMeter = 'beleggen'; renderGripMeter();
   const e = document.querySelector('#gripMeterSheet [data-meterwv="dekking"]');
   const r = e ? { tekst: e.innerText.replace(/\s+/g, ' ').trim(), onclick: e.getAttribute('onclick') } : null; closeSheet(); return r; });
-const naarRegel = async (page) => { await page.evaluate(() => go('maand')); await page.click('[data-meter="beleggen"]'); await page.click('[data-meterwv="dekking"]'); };
+const naarRegel = async (page) => { await page.evaluate(() => go('maand')); await page.click('[data-meter="fundament"]'); await page.click('[data-fundamentvw="dekking"]'); };   // v526: de ingang staat in de sheet van de tegel Fundament
 
 test.describe('1 · de kaart op Plan is weg', () => {
   test('Plan draagt geen reserveringen meer, met en zonder lijst', async ({ page }) => {

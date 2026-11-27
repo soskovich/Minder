@@ -108,10 +108,16 @@ test.describe('v521a', () => {
     /* v525: de golden van 9fbc05f droeg op Zien de oude kaart "Salaris binnen" met je VERDELING (Salarisrekening 150, Betaalrekening 1.600,
        Leefgeld 1.700, opzij 1.766); sinds v525 toont die kaart wat er binnenkwam en staat hij buiten deze telling (de vorm, net als #salVoorstelKaart) */
     const oudeMelding = { '€150': 1, '€1.600': 1, '€1.700': 1, '€1.766': 1 };
-    expect(verschil(VOOR['grip-zien'], NA['grip-zien'])).toEqual({ weg: Object.assign({}, splits.weg, oudeMelding), bij: splits.bij });
+    /* v526: de tegels Doelen en Beleggen (en de regel onder de tegels) zijn Lagen en Fundament geworden en staan buiten deze telling (de vorm, zoals
+       de kaarten van de salarisverdeling); in de golden van 9fbc05f droegen ze, GEMETEN op 4ce6ffa met dezelfde uitsluiting (de weggevallen getallen
+       van grip-kiezen, waar de tegels boven elke tab staan): EUR 0 drie keer, EUR 1.766 twee keer, EUR 200 twee keer en EUR 565. */
+    const tegels = { '€0': 3, '€1.766': 2, '€200': 2, '€565': 1 };
+    const wegZien = Object.assign({}, splits.weg, oudeMelding); for (const k in tegels) wegZien[k] = (wegZien[k] || 0) + tegels[k];
+    expect(verschil(VOOR['grip-zien'], NA['grip-zien'])).toEqual({ weg: wegZien, bij: splits.bij });
     expect([VOOR.insSplit, NA.insSplit]).toEqual([{ vast: '1737', pot: '1587' }, { vast: '1746', pot: '1578' }]);
     /* Begrijpen: dezelfde EUR 9 in de brug (vast-stap 309 → 300, de potjes samen +9: 127 → 128 en -960 → -952) en de indeling */
-    expect(verschil(VOOR['grip-begrijpen'], NA['grip-begrijpen'])).toEqual({ weg: { '€1.737': 1, '€1.587': 1, '€309': 1, '€127': 1, '-€960': 1 }, bij: { '€1.746': 1, '€1.578': 1, '€300': 1, '€128': 1, '-€952': 1 } });
+    { const wegB = { '€1.737': 1, '€1.587': 1, '€309': 1, '€127': 1, '-€960': 1 }; for (const k in tegels) wegB[k] = (wegB[k] || 0) + tegels[k];   // v526: plus de tegels (zie boven)
+      expect(verschil(VOOR['grip-begrijpen'], NA['grip-begrijpen'])).toEqual({ weg: wegB, bij: { '€1.746': 1, '€1.578': 1, '€300': 1, '€128': 1, '-€952': 1 } }); }
     /* de salarisverdeling: Betaalrekening 600 → 800, opzij 1460 → 1260, de twee regels beleggen (+EUR 100) en "overboeken" 199 meer → 1 erbij */
     /* v523 (punt 4): de reserveringen tellen sinds v523 per salarisperiode tot de vervaldag (de verzekering van december, zonder boeking op de 1e,
        valt nu helemaal in 24 nov – 23 dec), dus de reserveringsregel en opzij verschuiven samen; de som opzij + reserveringen houdt de EUR 200 */

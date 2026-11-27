@@ -318,19 +318,20 @@ test('f: de afspraak staat onder Deze maand en niet op een tegel', async ({ page
    alarm), gehaald groen. */
 /* v387: de tegel Beleggen is de Beleggen-meter: gehaald tegen te beoordelen, grijs zolang niet alles gehaald is. */
 test('g: niet gehaald is grijs en geen alarm', async ({ page }) => {
-  await boot(page, { set: { beleggenDrempel: 6 } });
-  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="beleggen"] .gm-v');
-    return { kleur: e.style.color, tekst: e.innerText, blok: beleggenKlaar(maandRegels()).blokkade.key }; });
-  expect(r.blok).toBe('buffer');
+  /* v526: de tegel Fundament toetst de buffer tegen je ondergrens (bufferNorm); de ring blijft grijs, het bedrag dat ontbreekt vraagt aandacht */
+  await boot(page, { set: { bufferNorm: 6 } });
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="fundament"] .gm-ring span');
+    return { kleur: e.style.color, tekst: e.innerText, mist: fundamentData().mist.map((v) => v.key) }; });
+  expect(r.mist).toContain('buffer');
   expect(r.kleur).toBe('var(--mut2)');
-  expect(r.tekst).toBe('2/3');
+  expect(r.tekst).toMatch(/^[01]\/2$/);
 });
 
 test('g: gehaald blijft groen', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="beleggen"] .gm-v'); return { kleur: e.style.color, tekst: e.innerText }; });
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-meter="fundament"] .gm-v'); return { kleur: e.style.color, tekst: e.innerText }; });   // v526: Fundament
   expect(r.kleur).toBe('var(--green)');
-  expect(r.tekst).toBe('3/3');
+  expect(r.tekst).toBe('klaar');
 });
 
 

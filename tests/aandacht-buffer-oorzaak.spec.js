@@ -114,7 +114,7 @@ test.describe('b · meer toegewezen dan er op de spaarrekening staat', () => {
     expect(r.oorzaak).toBe('€2.750 minder op je spaarrekening dan toegewezen');
     expect(r.bedrag).toEqual(['€2.750', 'meer toegewezen']);
     // in de sheet staat hetzelfde bedrag, uit dezelfde bron
-    await page.click('#s-maand [data-meter="beleggen"]'); await page.click('[data-meterwv="buffer"]');   // v387: de ingang staat in de sheet van de Beleggen-meter
+    await page.click('#s-maand [data-meter="fundament"]'); await page.click('[data-fundamentvw="buffer"]');   // v526: de ingang staat in de sheet van de tegel Fundament
     const sb = (await page.locator('#sheet [data-sheetbedrag="buffer"]').innerText()).replace(/\s+/g, ' ').trim();
     expect(sb).toBe('€2.750 meer toegewezen');
     expect(await page.locator('#sheet').innerText()).toContain('Tot je die keuze maakt telt je buffer niet als vol.');

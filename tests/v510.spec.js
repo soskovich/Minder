@@ -33,19 +33,19 @@ test('v510 a: lopend gemeten EUR 200, pensioen EUR 200 gepland; tegel en sheet d
   await beleggingen(page, { saxo: 100, kayani: 100, pensioen: 200 });
   const r = await page.evaluate(() => {
     const M = gripMeterBeleggen();
-    const div = document.createElement('div'); div.innerHTML = gripMeters();
-    const tegel = div.querySelector('[data-meterinlegtegel]');
+    /* v526: de tegel Beleggen is Fundament; de inleg staat in zijn sheet als "Je inleg · EUR X per periode" (lopend en gepland samen) */
+    openGripFundament(); const fi = document.querySelector('#gripFundamentSheet [data-fundamentinleg]'); const tegel = fi ? { getAttribute: () => fi.dataset.fundamentinleg, innerText: fi.innerText } : null; closeSheet();
     openGripMeter('beleggen');
     const rows = [...document.querySelectorAll('#gripMeterSheet [data-meterinleg]')].map(e => ({ soort: e.getAttribute('data-soort'), cent: +e.getAttribute('data-cent'), t: e.innerText.replace(/\s+/g, ' ') }));
     const som = document.querySelector('#gripMeterSheet [data-meterinlegsom]');
-    return { lijst: M.inlegLijst.map(i => [i.naam, i.soort, i.cent]), tegelCent: tegel && +tegel.getAttribute('data-meterinlegtegel'), tegelGepland: tegel && +tegel.getAttribute('data-meterinleggepland'),
-      tegelTekst: tegel && tegel.innerText.replace(/\s+/g, ' '), rows, somCent: som && +som.getAttribute('data-meterinlegsom'), somTekst: som && som.innerText };
+    return { lijst: M.inlegLijst.map(i => [i.naam, i.soort, i.cent]), tegelCent: tegel && +tegel.getAttribute() * 100, tegelGepland: M.geplandCent,
+      tegelTekst: tegel && tegel.innerText.replace(/\s+/g, ' ').split(' · ')[1], rows, somCent: som && +som.getAttribute('data-meterinlegsom'), somTekst: som && som.innerText };
   });
   expect(r.lijst).toEqual([['Saxo', 'lopend', 10000], ['Peaks Kayani', 'lopend', 10000], ['Peaks pensioen', 'gepland', 20000]]);
   expect(r.somCent).toBe(20000);                       // lopende inleg samen: alleen lopend
-  expect(r.tegelCent).toBe(r.somCent);                 // tegel = sheet, in centen
+  expect(r.tegelCent).toBe(r.somCent + r.tegelGepland);   // v526: de sheet Fundament telt lopend en gepland samen
   expect(r.tegelGepland).toBe(20000);
-  expect(r.tegelTekst).toBe('€200/mnd + €200 gepland');
+  expect(r.tegelTekst).toMatch(/^€400 per periode/);
   expect(r.rows.find(x => x.soort === 'gepland').t).toContain('€200 gepland · nog niet gestart');
   expect(r.rows.filter(x => x.soort === 'lopend').every(x => /€100 · gemeten in okt/.test(x.t))).toBe(true);
 });

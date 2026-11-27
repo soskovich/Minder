@@ -348,16 +348,18 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     /* v387: de tegel Beleggen is de Beleggen-meter: grijs (var(--mut2)), nooit rood of amber, naast een amber buffer. */
     const uit = await page.evaluate(() => {
       const R = maandRegels(); const B = beleggenKlaar(R); renderMaand();
-      const t = document.querySelector('#s-maand [data-meter="beleggen"]');
+      /* v526: de tegel Fundament; zijn ring blijft neutraal (niet gehaald is geen fout), het bedrag dat ontbreekt staat in de kleur van
+         de aandacht (mockup "Grip KPI v3"), nooit rood */
+      const t = document.querySelector('#s-maand [data-meter="fundament"]');
       return { blok: B.blokkade && B.blokkade.key, opTempo: !!R.find((r) => r.key === 'buffer').opTempo,
-        kleur: t.querySelector('.gm-v').style.color, html: t.outerHTML };
+        kleur: t.querySelector('.gm-ring span').style.color, html: t.querySelector('.gm-ring').outerHTML, heel: t.outerHTML };
     });
     const buf = (await regelTegels(page)).buffer;
     expect(uit.blok).toBe('buffer');
     expect(uit.opTempo).toBe(true);
     expect(buf.kleur).toBe('amber');
     expect(uit.kleur).toBe('var(--mut2)');
-    expect(uit.html).not.toContain('var(--red)');
+    expect(uit.heel).not.toContain('var(--red)');
     expect(uit.html).not.toContain('var(--amber)');
     await page.evaluate(() => openBeleggenVoorwaarden());
     expect(await page.evaluate(() => $('#sheet').innerText)).toContain('Hij groeit, maar de drempel is nog niet gehaald.');

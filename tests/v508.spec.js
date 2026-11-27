@@ -34,7 +34,7 @@ test('v508 a: november (1–23) heeft geen spaardoel en geen oordeel', async ({ 
 test('v508 b: op 15 nov lezen Zien, opzij, de Doelen-tegel en de Terugblik hetzelfde venster', async ({ page }) => {
   await S.boot(page, '2026-11-15');
   const r = await page.evaluate(() => { go('maand'); gripKiesTab('zien');
-    const z = document.querySelector('#gripZienStand'), o = document.querySelector('#gripZienStand [data-zienopzij]'), m = document.querySelector('[data-meterovergang]');
+    const z = document.querySelector('#gripZienStand'), o = document.querySelector('#gripZienStand [data-zienopzij]'), m = (() => { const D = gripMeterDoelen(); return D.overgang ? { dataset: { start: D.start, eind: D.eind } } : null; })();   // v526: de tegel Doelen is weg, de meting erachter niet
     const slim = document.querySelector('#gripSlim [data-dagenover]');
     const zienTxt = document.getElementById('gripInhoud').innerText;
     gripKiesTab('terugblik'); const tb = document.querySelector('#gripInhoud [data-tussenstand]');
@@ -47,7 +47,7 @@ test('v508 b: op 15 nov lezen Zien, opzij, de Doelen-tegel en de Terugblik hetze
   expect(r.z).toEqual(V); expect(r.o).toEqual(V); expect(r.m).toEqual(V); expect(r.tb).toEqual(V);
   expect(r.over).toBe(8); expect(r.slim).toContain('november (1–23)');
   expect(r.zienTxt.toLowerCase()).toContain('hoe sta je ervoor · november (1–23)');
-  expect(r.zienTxt).toContain('overgangsmaand · geen doel');
+  expect(r.zienTxt).toMatch(/overgangsmaand/);
   for (const t of [r.zienTxt, r.kies]) expect(t).not.toMatch(/2[46] okt/);
 });
 

@@ -100,34 +100,40 @@ test.describe('A · meten aan het eigen maandbudget', () => {
   });
 });
 
+/* v526: DE FEITREGEL ONDER DE METER IS WEG (de regels onder de tegels, gevraagd door de gebruiker). Wat hij droeg staat in de sheet van de
+   Budget-meter (data-meterruim, per potje "niet gebruikt" met "· zelf gekozen"), en de tik opent dezelfde te-ruim-sheet. */
 test.describe('A · de feitregel onder de meter', () => {
-  test('twee potjes: "waarvan €948 niet gebruikt in 2 potjes ›", geen "Eerlijk budget lager"', async ({ page }) => {
+  const rijen = (page) => page.evaluate(() => { openGripMeter('budget'); const r = [...document.querySelectorAll('#gripMeterSheet [data-meterruim]')].map((e) => [e.dataset.meterruim, e.innerText.replace(/\s+/g, ' ')]); return r; });
+  test('twee potjes: geen regel onder de meters, beide in de sheet van de Budget-meter, geen "Eerlijk budget lager"', async ({ page }) => {
     await grip(page);
-    const r = page.locator('#gripMeters ~ [data-nietgebruikt]');
-    expect(await r.innerText()).toBe('waarvan €948 niet gebruikt in 2 potjes ›');
+    expect(await page.locator('[data-nietgebruikt]').count()).toBe(0);
     expect(await page.locator('#gripMeters').innerText()).not.toMatch(/eerlijk/i);
     expect(await page.locator('[data-eerlijkregel]').count()).toBe(0);
-    await r.click();
-    expect(await page.locator('#teRuimSheet[data-teruimlijst]').count()).toBe(1);   // twee potjes: eerst kiezen welk
-  });
-  test('een potje: "waarvan €558 Huur niet gebruikt ›", en de tik opent dat potje', async ({ page }) => {
-    await grip(page);
-    await page.evaluate(() => { SET.budgets.vervoer = 710; save(); renderMaand(); });
-    const r = page.locator('#gripMeters ~ [data-nietgebruikt]');
-    expect(await r.innerText()).toBe('waarvan €558 Huur niet gebruikt ›');
-    await r.click();
+    const r = await rijen(page);
+    expect(r.map((x) => x[0])).toEqual(['huur', 'vervoer']);
+    await page.click('#gripMeterSheet [data-meterruim="huur"]');
     expect(await page.locator('#teRuimSheet').getAttribute('data-teruimpotje')).toBe('huur');
   });
-  test('na een eigen keuze: "· zelf gekozen", en de regel blijft', async ({ page }) => {
+  test('een potje: "waarvan Huur niet gebruikt" in de sheet, en de tik opent dat potje', async ({ page }) => {
+    await grip(page);
+    await page.evaluate(() => { SET.budgets.vervoer = 710; save(); renderMaand(); });
+    const r = await rijen(page);
+    expect(r.map((x) => x[0])).toEqual(['huur']);
+    expect(r[0][1]).toContain('waarvan Huur niet gebruikt'); expect(r[0][1]).toContain('€558');
+    await page.click('#gripMeterSheet [data-meterruim="huur"]');
+    expect(await page.locator('#teRuimSheet').getAttribute('data-teruimpotje')).toBe('huur');
+  });
+  test('na een eigen keuze: "· zelf gekozen", en de rij blijft', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => { SET.budgets.vervoer = 710; teRuimLaten('huur'); renderMaand(); });
-    expect(await page.locator('#gripMeters ~ [data-nietgebruikt]').innerText()).toBe('waarvan €558 Huur niet gebruikt › · zelf gekozen');
-    expect(await page.locator('[data-zelfgekozen]').count()).toBe(1);
+    const r = await rijen(page);
+    expect(r[0][1]).toContain('zelf gekozen');
   });
-  test('niets te ruim: geen regel', async ({ page }) => {
+  test('niets te ruim: geen rij', async ({ page }) => {
     await grip(page);
     await page.evaluate(() => { SET.budgets.vervoer = 710; SET.budgets.huur = 80; save(); renderMaand(); });
     expect(await page.locator('[data-nietgebruikt]').count()).toBe(0);
+    expect((await rijen(page)).length).toBe(0);
   });
   test('volgende maand toetst de app opnieuw: zelf gekozen gold alleen deze maand', async ({ page }) => {
     await grip(page);

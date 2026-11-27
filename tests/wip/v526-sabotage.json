@@ -1,0 +1,15 @@
+{"specs": ["tests/v526.spec.js"], "timeout": 400,
+ "sabotages": [
+  {"naam": "a: Groeien 'nog niet' telt als tekort", "zoek": "const voorbij=l.k==='groeien'?!!(GM && vd>=GM.moment):!OM.komt;", "vervang": "const voorbij=l.k==='groeien'?true:!OM.komt;"},
+  {"naam": "b: een eigen telling in de tegel (Beschermen telt het terugzetten mee)", "zoek": "const plan=Math.round(+l.plan||0), gestort=Math.round((+l.gestort||0)*100)/100,", "vervang": "const plan=Math.round(+l.plan||0), gestort=l.k==='beschermen'?G.gSav:Math.round((+l.gestort||0)*100)/100,"},
+  {"naam": "c: de inleg telt altijd mee", "zoek": "const per=RP&&RP.per!=null?Math.max(RP.per,0):0, telt=RP?RP.telt:0;", "vervang": "const per=RP&&RP.per!=null?Math.max(RP.per,0):0, telt=per;"},
+  {"naam": "d: het doel blijft een voorwaarde", "zoek": "const vw=[fundamentBuffer(), fundamentReserveringen()];", "vervang": "const vw=[fundamentBuffer(), fundamentReserveringen(), (function(){ const MD=maandDoel(); return MD?{key:'doel', naam:MD.p.naam, gehaald:!(MD.T&&MD.T.knelt), bedrag:0, label:'', sub:'doel'}:null; })()].filter(Boolean);"},
+  {"naam": "e: het kleinste bedrag als groot getal", "zoek": "mist=te.filter(v=>!v.gehaald).sort((a,b)=>(b.bedrag||0)-(a.bedrag||0));", "vervang": "mist=te.filter(v=>!v.gehaald).sort((a,b)=>(a.bedrag||0)-(b.bedrag||0));"},
+  {"naam": "f1: een keuze standaard aan", "zoek": "const knop=(k,l,s)=>`<button class=\"btn sec\" data-lagenkeuze=\"${k}\" style=\"", "vervang": "const knop=(k,l,s)=>`<button class=\"btn sec\" data-lagenkeuze=\"${k}\" style=\"${k==='zelf'?'border-color:var(--teal);':''}"},
+  {"naam": "f2: dubbele vraag met de surplus-vraag van v524", "zoek": "if(VO && VO.naar==='reserveren') return null; }catch(_){}", "vervang": "}catch(_){}"},
+  {"naam": "f3: dubbele vraag met belegVragen", "zoek": "if(al || kies.some(x=>x.id==='beleg:'+i.id || String(x.act||'').includes(`'${i.id}'`))) continue;", "vervang": ""},
+  {"naam": "f4: een keuze geldt niet per periode", "zoek": "  if(lagenKeuzeRes(T.PW)) return null;\n", "vervang": "\n"},
+  {"naam": "g: de regel onder de tegels terug", "zoek": "  return `<div class=\"gm\" id=\"gripMeters\">${b}${d}${l}</div>`;", "vervang": "  return `<div class=\"gm\" id=\"gripMeters\">${b}${d}${l}</div><div class=\"small\" data-meternuverwacht>Doelen: opzij deze periode</div>`;"},
+  {"naam": "h: een bedrag buiten Grip verschuift (Plan, Naar je lagen)", "zoek": "  return c/100; }\nfunction planLagenHero", "vervang": "  return c/100+1; }\nfunction planLagenHero"},
+  {"naam": "i: de keuze geldt voor elke latere periode", "zoek": "(String(r.volgendStart)>String(start) || rekDag(r.volgendStart, 20)<String(start))", "vervang": "(String(r.volgendStart)>String(start))"}
+ ]}

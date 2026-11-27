@@ -104,8 +104,10 @@ async function openRegelUI(page, k) {
   await page.evaluate(() => gripKiesTab('kiezen'));   // v428: een structureel signaal staat als keuze in Kiezen
   const str = page.locator(`#s-maand [data-letop="str"][onclick*="'${k}'"]`);
   if (await str.count()) { await str.first().click(); return; }
-  await page.click('#s-maand [data-meter="beleggen"]');
-  await page.click(`#gripMeterSheet [data-meterwv="${k}"]`);
+  /* v526: de ingang staat in de sheet van de tegel Fundament: buffer en dekking als voorwaarde, het doel als "telt niet mee" met de ingang naar zijn regel */
+  await page.click('#s-maand [data-meter="fundament"]');
+  if (k === 'doel') await page.click(`#gripFundamentSheet [data-fundamentgeen][onclick*="openMaandBeslis('doel')"]`);
+  else await page.click(`#gripFundamentSheet [data-fundamentvw="${k}"]`);
 }
 // Grip op een tab: de tabs zijn een stand van het scherm, en Grip opent altijd op Zien
 const gripOp = (page, tab) => page.evaluate((t) => { go('maand'); if (t && t !== 'zien') gripKiesTab(t); }, tab);

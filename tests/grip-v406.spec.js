@@ -196,9 +196,9 @@ test.describe('C · de brug op Zien', () => {
 
 test('D · de regel onder de meters begint met "Doelen:", en de feitregel van Budget blijft de eerste', async ({ page }) => {
   await S.boot(page);
-  const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); const n = document.querySelector('[data-meternuverwacht]'), f = document.querySelector('[data-nietgebruikt]');
-    return { tekst: n.innerText, volgorde: f ? !!(f.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) : null }; });
-  expect(r.tekst).toMatch(/^Doelen: /); expect(r.volgorde).toBe(true);   // v440: de regel leest opzijPeriode, met "Doelen:" ervoor (v406)
+  /* v526: de twee regels onder de meters zijn weg (gevraagd door de gebruiker): wat aandacht vraagt staat bij Kiezen */
+  const r = await page.evaluate(() => { window._gripTab = 'zien'; go('maand'); gripKiesTab('kiezen'); return { n: document.querySelectorAll('[data-meternuverwacht]').length, f: document.querySelectorAll('[data-nietgebruikt]').length }; });
+  expect(r).toEqual({ n: 0, f: 0 });
 });
 
 /* Vijf gevallen die de eerste sabotage-ronde niet droeg (meetles a): twee gelijke maanden (de piek op 2 van 3, niet op 60%),

@@ -1182,3 +1182,18 @@ De versietag bij elke regel verwijst naar de volledige onderbouwing in `CHANGELO
   salaris (v441, "Salaris → ...") blijft: dat is geen oud → nieuw. De melding na vastleggen noemt alleen de nieuwe bedragen.
 - **Valkuil:** een guard die per constructie niet vuurt (`!P.nu` in `rekUitlegRij`: zonder `P.nu` is `verwachtSaldo` er toch niet) heeft geen eigen
   sabotage; de eigenschap staat in g2.
+
+## v526 · de Grip-tegels: Budget, Lagen, Fundament
+- **Lagen leest de telling van Plan, Fundament leest de rekensom van het reserveringen-sheet.** Geen tweede telling (v104): de tegel Lagen is
+  `lagenGestort()`, de dekking van Fundament is `resSheetPeriode()` met `dekking(12, {inleg})`. Valkuil: het grote getal van Fundament bij
+  "niet gestort" komt uit `RP.per` (het bedrag van het voorstel), en dat kan afwijken van de afspraak die Lagen toetst (fixture: EUR 51 tegen EUR 36).
+- **Een laag telt pas mee als zijn moment voorbij is.** Groeien zonder afschrijving in de periode staat op "nog niet" en telt niet in de noemer;
+  een tekort voor het moment is geen tekort.
+- **Een doel is geen voorwaarde voor het fundament**, ook geen doel dat nog niet vol is. Interpretatie van de opdracht ("doel vol of besteden geen
+  voorwaarde"): de mockup noemt twee voorwaarden. Het eerstvolgende doel van `maandDoel()` staat in de sheet als regel die niet meetelt.
+- **Fundament leest je norm en niet de buffer die je voor beleggen koos.** `beleggenDrempel()` heeft op Grip geen lezer meer; meevallerPlan leest
+  `beleggenKlaar()` ongewijzigd.
+- **"Vanaf de volgende periode" schrijft geen bedrag in een andere functie.** De keuze bewaart Y en de start van de volgende periode; alleen
+  `openPeriodeStart()` leest hem (`lagenResVolgende()`, alleen de periode direct erna) als vooringevuld bedrag voor reserveringen. Bevestigen blijft jouw stap.
+- **Valkuil:** een `//`-commentaar halverwege een regel in `lagenResVolgende()` slokte de rest van de expressie op; node --check gaf
+  "Unexpected end of input". Gebruik `/* */` midden in een regel.

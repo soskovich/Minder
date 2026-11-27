@@ -126,7 +126,7 @@ test.describe('4 · laten staan stopt de vraag, niet de informatie', () => {
     await K.boot(page);
     const lees = () => page.evaluate(() => { const V = maandVooruit(), B = gripZienBrug(V); go('maand');
       return { tr: B.stappen.filter(s => s.soort === 'teruim').map(s => [s.k, s.label2, s.titel]), som: B.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, 0), verschil: B.verschil,
-        regel: (document.querySelector('[data-nietgebruikt]') || {}).innerText || '' }; });
+        regel: (() => { openGripMeter('budget'); const e = document.querySelector('#gripMeterSheet [data-meterruim="huur"]'); const t = e ? e.innerText : ''; closeSheet(); return t; })() }; });   // v526: de feitregel staat in de sheet van de Budget-meter
     const voor = await lees();
     expect(voor.tr.some(([k, l, t]) => l === 'niet gebruikt' && /Huur/.test(t))).toBe(true);
     await page.evaluate(() => openTeRuim('huur'));
@@ -138,7 +138,8 @@ test.describe('4 · laten staan stopt de vraag, niet de informatie', () => {
     expect(na.tr).toEqual(voor.tr);
     expect(na.som).toBe(na.verschil);
     expect(na.regel).toContain('niet gebruikt');
-    expect(na.regel).toBe(voor.regel);   // twee potjes, een gekozen: de regel noemt "zelf gekozen" pas als alle potjes zelf gekozen zijn
+    /* v526: de feitregel staat per potje in de sheet van de Budget-meter: de rij van Huur blijft en zegt nu "zelf gekozen" */
+    expect(voor.regel).not.toContain('zelf gekozen'); expect(na.regel).toContain('zelf gekozen');
   });
 });
 

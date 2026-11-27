@@ -122,13 +122,13 @@ test.describe('3 · de Doelen-meter op Grip', () => {
     await F.boot(page, 'nu');
     const r = await page.evaluate(() => { SET.salVerdeling = Object.assign({}, SET.salVerdeling || {}, { opzij: 1766, rek: (SET.salVerdeling || {}).rek || {} }); save();
       opzijPeriode = () => ({ ok: true, meetbaar: true, netto: 2031, doel: 1766, tx: [] }); go('maand');
-      const m = document.querySelector('#gripMeters [data-meter="doelen"]'); const t = m.innerText;
+      /* v526: de tegel Doelen is Lagen geworden; de sheet achter de Doelen-meter blijft (de ingang bij een onttrekking) */
+      const m = document.querySelector('#gripMeters [data-meter="doelen"]');
       openGripMeter('doelen'); const sh = document.querySelector('#sheet').innerText; closeSheet();
-      return { t, sub: (m.querySelector('[data-meterverwachtdoel]') || {}).innerText, sh, pct: gripMeterDoelen().pct }; });
-    expect(r.pct).toBe(115);                           // er IS een percentage uit te rekenen; de meter toont het niet
-    expect(r.t).not.toMatch(/%/);
-    expect(r.t).not.toMatch(/van je doel/);
-    expect(r.sub).toBe('€2.031 opzij · volgens je verdeling €1.766');
+      return { tegel: !!m, sh, pct: gripMeterDoelen().pct }; });
+    expect(r.pct).toBe(115);                           // er IS een percentage uit te rekenen; de sheet toont het niet
+    expect(r.tegel).toBe(false);
+    expect(r.sh).toContain('€2.031 opzij · volgens je verdeling €1.766');
     expect(r.sh).not.toMatch(/van je doel/);
     expect(r.sh).not.toMatch(/115/);
   });

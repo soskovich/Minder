@@ -77,9 +77,10 @@ test.describe('1 · contant uit een bron', () => {
 test.describe('3 · gedragstests in plaats van broncode-tests', () => {
   test('a (v464 punt 4). Zien met een opzij-periode: de ringtekst is "€2.031 opzij · volgens je verdeling €1.766"', async ({ page }) => {
     await boot(page, { set: { salVerdeling: { opzij: 1766, rek: {}, salYM: '2026-10' } } }, '2026-10-25');
+    /* v526: de tegel Doelen is weg (Lagen); dezelfde woorden staan in de sheet achter de Doelen-meter (de ingang bij een onttrekking) */
     const t = await page.evaluate(() => { opzijPeriode = () => ({ meetbaar: true, netto: 2031, doel: 1766 }); go('maand');
-      const e = document.querySelector('[data-meterverwachtdoel]'); return e ? e.innerText : null; });
-    expect(t).toBe('€2.031 opzij · volgens je verdeling €1.766');
+      openGripMeter('doelen'); const e = document.querySelector('#gripMeterSheet [data-meterschaal]'); const s = e ? e.innerText : null; closeSheet(); return s; });
+    expect(t).toContain('€2.031 opzij · volgens je verdeling €1.766');
   });
   test('b (v464 punt 5b). een ontvangst die in buiten EN in "wisselt van groep" staat, staat een keer onder LET OP', async ({ page }) => {
     await boot(page, { tx: [['2026-04-08', 7, 'Revolut Bolcom', ABN]], set: { wissel420: { ids: [], op: '2026-01-01', bevestigd: '2026-01-01' } } }, '2026-10-25');

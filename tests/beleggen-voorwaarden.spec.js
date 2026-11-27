@@ -76,12 +76,16 @@ const B = (page) => page.evaluate(() => beleggenKlaar(maandRegels()));
    v387: DE TEGEL IS DE BELEGGEN-METER GEWORDEN (Grip als regelkring): het aantal gehaalde voorwaarden tegen de
    voorwaarden die te beoordelen zijn (keuze van de gebruiker), met "N onbekend" en de lopende inleg eronder. Hij noemt
    de blokkade niet meer in een woord; de opbouw met waarde en drempel staat in zijn sheet. `tegel` leest de meter. */
+/* v526: DE BELEGGEN-METER IS DE TEGEL FUNDAMENT GEWORDEN. De vraag is niet meer "mag je beleggen" maar "draagt je fundament wat je al
+   inlegt": twee voorwaarden (buffer op norm, reserveringen gedekt met een inleg die pas telt als hij gestort is of zijn moment nog komt),
+   een spaardoel is geen voorwaarde. beleggenKlaar() zelf is ongewijzigd (de verdeelregel voor onregelmatig inkomen leest hem nog), dus de
+   asserties op B() blijven; `tegel` leest de tegel Fundament: `waarde` is de ring (gehaald/n), `groot` het bedrag of "klaar". */
 const tegel = async (page) => {
   await page.evaluate(() => go('maand'));
   return page.evaluate(() => {
-    const t = document.querySelector('#s-maand [data-meter="beleggen"]');
-    return t ? { kleur: t.querySelector('.gm-v').style.color === 'var(--green)' ? 'groen' : 'grijs', waarde: t.querySelector('.gm-v').textContent.trim(),
-      maat: t.querySelector('.gm-s').textContent.trim(), tekst: t.textContent.replace(/\s+/g, ' ').trim() } : null;
+    const t = document.querySelector('#s-maand [data-meter="fundament"]');
+    return t ? { kleur: t.querySelector('.gm-v').style.color === 'var(--green)' ? 'groen' : 'grijs', waarde: t.querySelector('.gm-ring').textContent.trim(), groot: t.querySelector('.gm-v').textContent.trim(),
+      maat: t.querySelector('.gm-s').textContent.trim(), tekst: t.textContent.replace(/\s+/g, ' ').trim(), F: (() => { const F = fundamentData(); return F.vw.map((v) => [v.key, v.ontbreekt ? 'onbekend' : v.gehaald]); })() } : null;
   });
 };
 const tekst = async (page) => { const t = await tegel(page); return t ? t.tekst : ''; };
@@ -134,8 +138,9 @@ test.describe('a · de samenstelling', () => {
     expect(b.blokkade).toBe(null);
     const t = await tegel(page);
     expect(t.kleur).toBe('groen');
-    expect(t.waarde).toBe('3/3');
-    expect(t.maat).toBe('voorwaarden');
+    expect(t.waarde).toBe('2/2');   // v526: Fundament telt buffer en dekking; het doel is geen voorwaarde meer
+    expect(t.groot).toBe('klaar');
+    expect(t.maat).toBe('fundament op orde');
   });
 
   test('buffer telt ook als hij tussen drie maanden en je richtbedrag staat', async ({ page }) => {
@@ -155,7 +160,8 @@ test.describe('b · elk van de drie als blokkade', () => {
     expect(b.blokkade.key).toBe('buffer');
     const t = await tegel(page);
     expect(t.kleur, 'niet gehaald is geen fout (v314): grijs').toBe('grijs');
-    expect(t.waarde).toBe(`${b.voorwaarden.filter((v) => v.gehaald).length}/3`);   // v387: de meter telt wat beleggenKlaar() zegt
+    expect(t.waarde).toBe('1/2');   // v526: de tegel Fundament telt buffer (niet) en dekking (wel)
+    expect(t.maat).toBe('buffer onder norm');
     /* v340: de drempel van 3 maanden staat niet meer in een zin op Grip maar in de sheet, naast de waarde. */
     expect(await sheetTekst(page)).toMatch(/tegen 3 maanden/);
   });
@@ -170,7 +176,8 @@ test.describe('b · elk van de drie als blokkade', () => {
     const b = await B(page);
     expect(b.blokkade.key).toBe('dekking');
     const t = await tegel(page);
-    expect([t.kleur, t.waarde]).toEqual(['grijs', '2/3']);
+    expect([t.kleur, t.waarde]).toEqual(['grijs', '1/2']);   // v526: Fundament, de reserveringen niet gedekt
+    expect(t.maat).toMatch(/^reserveringen /);
   });
 
   test('het aankoopdoel blokkeert: idem, de rij zegt het al', async ({ page }) => {
@@ -179,7 +186,8 @@ test.describe('b · elk van de drie als blokkade', () => {
     const b = await B(page);
     expect(b.blokkade.key).toBe('doel');
     const t = await tegel(page);
-    expect([t.kleur, t.waarde]).toEqual(['grijs', '2/3']);
+    /* v526: een spaardoel is geen voorwaarde voor je fundament, dus de tegel Fundament blokkeert hier niet (beleggenKlaar() wel, buiten Grip) */
+    expect([t.kleur, t.waarde, t.groot]).toEqual(['groen', '2/2', 'klaar']);
   });
 
   test('precies twee niet gehaald: alleen de eerste in de volgorde wordt genoemd', async ({ page }) => {
@@ -189,7 +197,7 @@ test.describe('b · elk van de drie als blokkade', () => {
     const nietGehaald = b.voorwaarden.filter((v) => !v.gehaald).map((v) => v.key);
     expect(nietGehaald).toEqual(['dekking', 'doel']);             // precies twee
     expect(b.blokkade.key).toBe('dekking');                       // maar alleen de eerste telt
-    expect((await tegel(page)).waarde).toBe('1/3');              // v387: de meter telt, de blokkade staat in zijn sheet
+    expect((await tegel(page)).waarde).toBe('1/2');              // v526: Fundament telt buffer (wel) en dekking (niet); het doel telt niet
   });
 
   test('alle drie niet gehaald: nog steeds één blokkade', async ({ page }) => {
@@ -198,8 +206,9 @@ test.describe('b · elk van de drie als blokkade', () => {
     expect(b.voorwaarden.filter((v) => !v.gehaald).map((v) => v.key)).toEqual(['buffer', 'dekking', 'doel']);
     expect(b.blokkade.key).toBe('buffer');
     const t = await tegel(page);
-    expect(t.waarde).toBe('0/3');
-    expect(t.tekst).not.toMatch(/reserveringen|Vakantie/);
+    expect(t.waarde).toBe('0/2');   // v526: buffer en dekking, het doel telt niet
+    expect(t.maat).toBe('buffer onder norm');   // het grootste bedrag dat niet gehaald is
+    expect(t.tekst).not.toMatch(/Vakantie/);
   });
 });
 
@@ -216,8 +225,8 @@ test.describe('c · zwijgen bij onvolledigheid', () => {
     expect(b.volledig).toBe(false);
     expect(b.klaar).toBe(false);
     geenUitspraak(await tekst(page));
-    expect((await tegel(page)).waarde).toBe('2/2');                 // v387: de noemer is wat te beoordelen is
-    expect((await tegel(page)).maat).toContain('1 onbekend');
+    expect((await tegel(page)).waarde).toBe('1/1');                 // v526: de noemer is wat te beoordelen is (buffer); dekking is onbekend
+    expect((await tegel(page)).F).toEqual([['buffer', true], ['dekking', 'onbekend']]);
     /* v340: "Niet te beoordelen" staat niet meer op Grip maar in de sheet achter de tegel. */
     expect(await sheetTekst(page)).toMatch(/niet te beoordelen/i);
   });
@@ -250,9 +259,10 @@ test.describe('d · zichtbaarheid en plek', () => {
   test('zonder spaardoel en zonder vermogen staat de regel er niet', async ({ page }) => {
     await boot(page, seed({ goals: [] }));
     expect(await page.evaluate(() => beleggenZichtbaar())).toBe(false);
-    /* v387: de meter staat er altijd (vaste bovenkant), en zegt dan geen uitkomst */
-    expect((await tegel(page)).waarde).toBe('nog niet');
-    expect((await tegel(page)).maat).toBe('geen doel of bezitting');
+    /* v526: de tegel Fundament staat er altijd; zonder doel en bezitting oordeelt hij over buffer en dekking (die bestaan ook zonder
+       beleggingsambitie), zonder de inleg te noemen */
+    expect((await tegel(page)).waarde).toBe('2/2');
+    expect((await tegel(page)).tekst).not.toMatch(/inleg/);
   });
 
   test('een vermogensinstelling alleen is genoeg om hem te tonen', async ({ page }) => {
@@ -267,7 +277,8 @@ test.describe('d · zichtbaarheid en plek', () => {
   test('beleggen is een meter, geen eigen kaart', async ({ page }) => {
     await boot(page);
     await tegel(page);
-    expect(await page.locator('#gripMeters [data-meter="beleggen"]').count()).toBe(1);
+    expect(await page.locator('#gripMeters [data-meter="fundament"]').count()).toBe(1);   // v526: de tegel Fundament
+    expect(await page.locator('#gripMeters [data-meter="beleggen"]').count()).toBe(0);
     expect(await page.locator('#s-maand').innerText()).not.toMatch(/voorwaarden voor beleggen/i);
   });
 
