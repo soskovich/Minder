@@ -33,6 +33,7 @@ async function boot(page, o) {
     SET.manualBal = Object.assign({}, SET.manualBal, { [SPAAR]: 5927.12, [RESV]: 1036 });
     SET.manualBalDatum = Object.assign({}, SET.manualBalDatum, { [SPAAR]: '2026-11-27', [RESV]: '2026-11-27' });
     SET.verschuiving = { [vs[0].id]: { kant: 'reserveren', keuze: 'nee' } };
+    SET.nfAfgetrokken = 1000;   // onderhoud5 (punt 3): de keuze "nee" haalde de EUR 1.000 al van het noodfonds af; 3.326 is de stand daarna
     SET.salSplit = { vast: 5216, key: recurKey(sal), naam: 'Werkgever' };
     SET.salSplitAntw = { [sal.id]: { verg: 412 } };
     SET.nfToegewezen = 3326; SET.nfDoelVast = 6000;

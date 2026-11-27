@@ -30,7 +30,7 @@ async function setup(page) {
     SET.goals.find((g) => g.id === 'iw').doel = 3000;
     SET.goals.find((g) => g.id === 'iw').gespaard = 3500;
     SET.goals.find((g) => g.id === 'kk').gespaard = 0;
-    SET.nfToegewezen = 2826; // 3500 (iw) + 0 (kk) + 2826 (nf) = 6326 = saldo -> geen tekort
+    SET.nfToegewezen = 3826; // onderhoud5 (punt 3): de stand VOOR de keuze over de verschuiving, dus de EUR 1.000 telt nog als toegewezen: 3500 + 0 + 3826 = 7326 = saldo + 1000. "nee" haalt hem eraf (2826) en dan is er geen tekort
     delete SET.opnameBron; delete SET.verschuiving;
     OWN = [...new Set(TX.map((t) => t.acc).filter(Boolean))];
     save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {}

@@ -176,7 +176,7 @@ test.describe('v526', () => {
           const re = /-?€\s?[\d.]+(?:,\d{2})?/g;
           const lees = (id) => (document.getElementById(id).innerText.match(re) || []);
           const u = {}; go('dash'); renderDash(); u.home = lees('s-dash'); go('ins'); renderIns(); u.ins = lees('s-ins');
-          go('vooruit'); renderVooruit(); u.plan = lees('s-vooruit'); go('vermogen'); renderVermogen(); u.verm = lees('s-vermogen');
+          go('vooruit'); renderVooruit(); u.doelTerug = [...document.querySelectorAll('#s-vooruit [data-doelterug]')].map((e) => e.innerText); for (const e of document.querySelectorAll('#s-vooruit [data-doelterug]')) e.remove(); u.plan = lees('s-vooruit');   /* onderhoud5 (punt 4): een doel dat niet vol is zegt sindsdien wat er staat en wat nog terug moet in plaats van "vol"; die tekst gaat buiten de vergelijking en komt apart terug (u.doelTerug) */ go('vermogen'); renderVermogen(); u.verm = lees('s-vermogen');
           const P = rekVoorstel(), G = lagenGestort(), D = dekking(12);
           u.f = { safe: safeToSpend().safe, P: P.ok ? [P.opzij, P.reserveringen, P.rek.map((r) => [r.acc, Math.round(r.laten)])] : null, G: G ? G.lagen.map((l) => [l.k, l.plan, l.gestort]) : null,
             D: [D.gedektTot, D.gat && D.gat.tekort, D.nodigPerMaand], RP: (() => { const R = resSheetPeriode(); return [R.per, R.gestort, R.komt, R.telt]; })(), nw: netWorth() };
@@ -185,7 +185,9 @@ test.describe('v526', () => {
       await page.close(); return out;
     };
     const oud = await lees(MAIN_HTML), nu = await lees(null);
-    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
+    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) if (k !== 'doelTerug') expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
+    for (const dag of Object.keys(oud)) expect(oud[dag].doelTerug, dag).toEqual([]);   // op 278655e bestaat de regel niet
+    console.log('onderhoud5 doelTerug', JSON.stringify(Object.fromEntries(Object.keys(nu).map((d) => [d, nu[d].doelTerug]))));
   });
 
   test('i: "vanaf de volgende periode" zet het bedrag in de verdeling van de volgende periode (openPeriodeStart)', async ({ page }) => {
