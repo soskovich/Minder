@@ -147,7 +147,9 @@ genoemde versietag.)*
   (`data-doelterug`). (5) De gekozen bron en verschuiving dragen ✓ en "gekozen", een regel "Vastgelegd" en "Keuze wissen"
   (`data-opnvastgelegd`, `data-opnwis`, `data-verschvastgelegd`, `data-verschwis`). (6) Het patroon "Betaalrekening op" draagt `naarTekst`
   (`opnameNaarRek()`: de eigen bijschrijving binnen `VERSCHUIF_DAGEN`, door de salarisrekening heen gevolgd), in Signalen
-  (`data-signaalnaar`) en per onttrekking; de naam zelf blijft, want oordeel en reden lezen hem. Spec `onderhoud5.spec.js` (8 tests),
+  (`data-signaalnaar`) en per onttrekking; de naam zelf blijft, want oordeel en reden lezen hem. (7) Het label bij Reserveren op Plan
+  (`lagenReserverenFlag()`) staat er alleen bij een afwijking: deels gestort, of niets gestort en het moment (`lagenOverboekMoment()`) voorbij;
+  gehaald of "nog niet" geen label, en het is altijd amber. Spec `onderhoud5.spec.js` (10 tests),
   sabotages `tests/wip/onderhoud5-sabotage.json`, export `tests/wip/onderhoud5-export.spec.js`; `onderhoud4-stand` (nfAfgetrokken 1000),
   `v524-keuzeC` (de stand voor de keuze) en `v526` h (de regel `data-doelterug` apart) gemigreerd.
 - **v526: DE TEGELS OP GRIP ZIJN BUDGET, LAGEN EN FUNDAMENT; ELKE TEGEL TOONT RING, OORDEEL EN HET GROOTSTE BEDRAG DAT NIET GEHAALD IS**

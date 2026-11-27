@@ -19248,8 +19248,12 @@ function lagenReserverenSub(){ const P=lagenReserverenPosten();
 function lagenReserverenFlag(PW){ let nodig=0; try{ nodig=Math.round(resInlegPerMaand().bedrag||0); }catch(_){}
   if(!(nodig>0)) return ''; let ra=null; try{ ra=resAccId(); }catch(_){}
   const gestort=ra?Math.round(lagenGestortOp(ra, PW)):0;
-  const tekort=gestort<nodig;
-  return `<div class="small" data-reserverenflag="${nodig}" data-reservergestort="${gestort}" style="margin-top:2px"><span style="font-weight:700;color:${tekort?'var(--amber)':'var(--teal)'};background:color-mix(in srgb,${tekort?'var(--amber)':'var(--teal)'} 14%,transparent);border-radius:8px;padding:1px 7px">deze periode ${euro0(nodig)} nodig · ${euro0(gestort)} gestort</span></div>`; }
+  /* onderhoud5 (punt 7): het label staat er alleen als er iets afwijkt. Gehaald: geen label. Niets gestort terwijl het moment van de
+     afgesproken overboeking nog komt (lagenOverboekMoment, dezelfde werkdagen-grens als de tegel Lagen): ook geen label, want "nog
+     niet" is geen tekort. Wel: deels gestort, of niets gestort en het moment is voorbij. */
+  if(gestort>=nodig) return '';
+  if(!(gestort>0)){ let komt=false; try{ komt=lagenOverboekMoment().komt; }catch(_){} if(komt) return ''; }
+  return `<div class="small" data-reserverenflag="${nodig}" data-reservergestort="${gestort}" style="margin-top:2px"><span style="font-weight:700;color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent);border-radius:8px;padding:1px 7px">deze periode ${euro0(nodig)} nodig · ${euro0(gestort)} gestort</span></div>`; }
 function lagenDoelenSub(L){ const goals=(L.P||[]).filter(p=>p.type==='goal');
   if(!goals.length) return 'Nog geen doelen';
   return goals.map(p=>{ const x=(L.SE&&L.SE.per[p.id])||{}, geld=Math.round(+x.geld||0), doel=Math.max(Math.round(+p.doel||0),0);

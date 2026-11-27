@@ -164,3 +164,29 @@ test('h: Home, Inzichten, Vermogen, safeToSpend, het voorstel en lagenGestort zi
   expect([oud.nf, nu.nf]).toEqual([3326, 2927]);   // invoer: de twee kanten verschillen werkelijk in de toewijzing
   for (const k of ['home', 'ins', 'verm', 'f']) expect(JSON.stringify(nu[k]), k).toBe(JSON.stringify(oud[k]));
 });
+
+/* punt 7: het label "deze periode EUR X nodig · EUR Y gestort" bij Reserveren staat er alleen als er iets afwijkt */
+const S4 = require('./onderhoud4-stand');
+const flag = (page, weg) => page.evaluate(({ RESV, weg }) => {
+  if (weg != null) { TX = TX.filter((t) => !(t.acc === RESV && t.amount > 0 && String(t.date).slice(0, 10) === '2026-11-27')); if (weg > 0) { const t = { id: 'o5f' + weg, date: '2026-11-27', amount: weg, acc: RESV, name: 'Salarisrekening', desc: 'Overboeking van Salarisrekening', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); }
+    save(); try { buildAccMeta(); } catch (_) {} try { runMemoVergeten(); } catch (_) {} }
+  go('vooruit'); renderVooruit(); const e = document.querySelector('#s-vooruit [data-reserverenflag]');
+  return { e: e ? [+e.dataset.reserverenflag, +e.dataset.reservergestort, e.innerText] : null, nodig: Math.round(resInlegPerMaand().bedrag || 0), komt: lagenOverboekMoment().komt }; }, { RESV: S4.RESV, weg });
+test('i (punt 7): Reserveren draagt het label alleen bij een afwijking', async ({ page }) => {
+  await S4.boot(page);
+  const gehaald = await flag(page);
+  expect(gehaald.nodig).toBe(36);                  // invoer: EUR 36 nodig, EUR 36 gestort op 27 nov
+  expect(gehaald.e).toBe(null);
+  expect(gehaald.komt).toBe(false);                // invoer: de werkdagen-grens is voorbij
+  const niets = await flag(page, 0);
+  expect(niets.e).toEqual([36, 0, 'deze periode €36 nodig · €0 gestort']);
+  const deels = await flag(page, 20);
+  expect(deels.e).toEqual([36, 20, 'deze periode €36 nodig · €20 gestort']);
+});
+test('i2 (punt 7): niets gestort terwijl het moment nog komt is geen afwijking', async ({ page }) => {
+  await S4.boot(page);
+  const r = await page.evaluate(({ RESV }) => { TX = TX.filter((t) => !(t.acc === RESV && t.amount > 0 && String(t.date).slice(0, 10) === '2026-11-27')); save(); try { runMemoVergeten(); } catch (_) {}
+    const echt = lagenOverboekMoment; window.lagenOverboekMoment = () => Object.assign({}, echt(), { komt: true });   // de dag voor de grens
+    go('vooruit'); renderVooruit(); const e = document.querySelector('#s-vooruit [data-reserverenflag]'); window.lagenOverboekMoment = echt; return !!e; }, { RESV: S4.RESV });
+  expect(r).toBe(false);
+});

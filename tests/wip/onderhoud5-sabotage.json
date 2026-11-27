@@ -1,20 +1,113 @@
-{"specs": ["tests/onderhoud5.spec.js"], "timeout": 300, "sabotages": [
- {"naam": "1: lijst slaat tussen-eigen niet over", "zoek": "  return (txOfMonth(ym)||[]).filter(t=>isSpaarOpname(t, sav, false))", "vervang": "  return (txOfMonth(ym)||[]).filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t))"},
- {"naam": "1: perioden-lijst slaat tussen-eigen niet over", "zoek": "const v=telbareTx().filter(t=>isSpaarOpname(t, sav, false) &&", "vervang": "const v=telbareTx().filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t) &&"},
- {"naam": "1: migratie laat de keuze staan", "zoek": "if(spaarTussenEigen(t, sav) || isVerschuiving(t)){ const M=", "vervang": "if(false){ const M="},
- {"naam": "2: volgorde telt terug (af geklemd op het noodfonds)", "zoek": "SET.opnameBron[id]={bron:OPN_AANVULLING, af:t?Math.max(Math.round(-t.amount*100)/100,0):0}; }\n  else SET.opnameBron[id]={bron};\n  try{ nfAanvulSync(); }catch(_){} save();", "vervang": "const af=Math.min(t?Math.max(Math.round(-t.amount*100)/100,0):0, +SET.nfToegewezen||0); SET.nfToegewezen=Math.round(((+SET.nfToegewezen||0)-af)*100)/100; SET.opnameBron[id]={bron:OPN_AANVULLING, af}; }\n  else SET.opnameBron[id]={bron};\n  save();"},
- {"naam": "2: migratie weg (boot roept niets aan)", "zoek": "try{ if(onderhoud5Migreer()) save(); }catch(_){} ", "vervang": ""},
- {"naam": "2: migratie weg (af blijft 0)", "zoek": "if(Math.round((+e.af||0)*100)!==r.c){ e.af=r.c/100; gewijzigd=true; }", "vervang": ""},
- {"naam": "2: init na het weghalen", "zoek": "  let gewijzigd=nfAfInit(); const byId=new Map(TX.map", "vervang": "  let gewijzigd=false; const byId=new Map(TX.map"},
- {"naam": "2: geen tekortregel", "zoek": "  const tekRij=tek>0.004?", "vervang": "  const tekRij=false?"},
- {"naam": "3: verschuiving telt niet", "zoek": "if(!e || !(e.keuze==='nee' || e.keuze==='3' || e.keuze==='6')) continue; const t=byId.get(id);", "vervang": "if(!e || !(e.keuze==='x')) continue; const t=byId.get(id);"},
- {"naam": "3: alleen nee telt", "zoek": "if(!e || !(e.keuze==='nee' || e.keuze==='3' || e.keuze==='6')) continue; const t=byId.get(id);", "vervang": "if(!e || !(e.keuze==='nee')) continue; const t=byId.get(id);"},
- {"naam": "3: geen herberekening bij keuze", "zoek": "  try{ nfAanvulSync(); }catch(_){} save();\n  try{ if(document.getElementById('lagenLog'))", "vervang": "  save();\n  try{ if(document.getElementById('lagenLog'))"},
- {"naam": "4: vol op status", "zoek": "(p.status==='bereikt'?(geld>=doel-0.5||!(doel>0)?' vol':", "vervang": "(p.status==='bereikt'?(true?' vol':"},
- {"naam": "5: geen vinkje", "zoek": "${cur===k?'✓ ':''}${esc(l)}${cur===k?' · gekozen':(vst?' · voorstel':'')}", "vervang": "${esc(l)}${vst?' · voorstel':''}"},
- {"naam": "5: geen keuze wissen (bron)", "zoek": "onclick=\"setOpnameBron('${esc(t.id)}','')\">Keuze wissen", "vervang": "onclick=\"\">Keuze wissen"},
- {"naam": "5: verschuiving zonder vastgelegd", "zoek": "    const vast=v.keuze?`<div", "vervang": "    const vast=false?`<div"},
- {"naam": "5: wissen verschuiving houdt keuze", "zoek": "  if(!keuze){ const e=Object.assign({}, SET.verschuiving[id]); delete e.keuze;", "vervang": "  if(false){ const e=Object.assign({}, SET.verschuiving[id]); delete e.keuze;"},
- {"naam": "6: geen bestemming", "zoek": "naarTekst:(()=>{ try{ return gripOpnameNaarTekst(T); }catch(_){ return ''; } })(), salaris:", "vervang": "naarTekst:'', salaris:"},
- {"naam": "6: signaal toont bestemming niet", "zoek": "${s.naarTekst?`<span data-signaalnaar", "vervang": "${false?`<span data-signaalnaar"}
-]}
+{
+"specs": [
+"tests/onderhoud5.spec.js"
+],
+"timeout": 300,
+"sabotages": [
+{
+"naam": "1: lijst slaat tussen-eigen niet over",
+"zoek": "  return (txOfMonth(ym)||[]).filter(t=>isSpaarOpname(t, sav, false))",
+"vervang": "  return (txOfMonth(ym)||[]).filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t))"
+},
+{
+"naam": "1: perioden-lijst slaat tussen-eigen niet over",
+"zoek": "const v=telbareTx().filter(t=>isSpaarOpname(t, sav, false) &&",
+"vervang": "const v=telbareTx().filter(t=>t && t.amount<0 && sav.has(t.acc) && !isVerschuiving(t) &&"
+},
+{
+"naam": "1: migratie laat de keuze staan",
+"zoek": "if(spaarTussenEigen(t, sav) || isVerschuiving(t)){ const M=",
+"vervang": "if(false){ const M="
+},
+{
+"naam": "2: volgorde telt terug (af geklemd op het noodfonds)",
+"zoek": "SET.opnameBron[id]={bron:OPN_AANVULLING, af:t?Math.max(Math.round(-t.amount*100)/100,0):0}; }\n  else SET.opnameBron[id]={bron};\n  try{ nfAanvulSync(); }catch(_){} save();",
+"vervang": "const af=Math.min(t?Math.max(Math.round(-t.amount*100)/100,0):0, +SET.nfToegewezen||0); SET.nfToegewezen=Math.round(((+SET.nfToegewezen||0)-af)*100)/100; SET.opnameBron[id]={bron:OPN_AANVULLING, af}; }\n  else SET.opnameBron[id]={bron};\n  save();"
+},
+{
+"naam": "2: migratie weg (boot roept niets aan)",
+"zoek": "try{ if(onderhoud5Migreer()) save(); }catch(_){} ",
+"vervang": ""
+},
+{
+"naam": "2: migratie weg (af blijft 0)",
+"zoek": "if(Math.round((+e.af||0)*100)!==r.c){ e.af=r.c/100; gewijzigd=true; }",
+"vervang": ""
+},
+{
+"naam": "2: init na het weghalen",
+"zoek": "  let gewijzigd=nfAfInit(); const byId=new Map(TX.map",
+"vervang": "  let gewijzigd=false; const byId=new Map(TX.map"
+},
+{
+"naam": "2: geen tekortregel",
+"zoek": "  const tekRij=tek>0.004?",
+"vervang": "  const tekRij=false?"
+},
+{
+"naam": "3: verschuiving telt niet",
+"zoek": "if(!e || !(e.keuze==='nee' || e.keuze==='3' || e.keuze==='6')) continue; const t=byId.get(id);",
+"vervang": "if(!e || !(e.keuze==='x')) continue; const t=byId.get(id);"
+},
+{
+"naam": "3: alleen nee telt",
+"zoek": "if(!e || !(e.keuze==='nee' || e.keuze==='3' || e.keuze==='6')) continue; const t=byId.get(id);",
+"vervang": "if(!e || !(e.keuze==='nee')) continue; const t=byId.get(id);"
+},
+{
+"naam": "3: geen herberekening bij keuze",
+"zoek": "  try{ nfAanvulSync(); }catch(_){} save();\n  try{ if(document.getElementById('lagenLog'))",
+"vervang": "  save();\n  try{ if(document.getElementById('lagenLog'))"
+},
+{
+"naam": "4: vol op status",
+"zoek": "(p.status==='bereikt'?(geld>=doel-0.5||!(doel>0)?' vol':",
+"vervang": "(p.status==='bereikt'?(true?' vol':"
+},
+{
+"naam": "5: geen vinkje",
+"zoek": "${cur===k?'✓ ':''}${esc(l)}${cur===k?' · gekozen':(vst?' · voorstel':'')}",
+"vervang": "${esc(l)}${vst?' · voorstel':''}"
+},
+{
+"naam": "5: geen keuze wissen (bron)",
+"zoek": "onclick=\"setOpnameBron('${esc(t.id)}','')\">Keuze wissen",
+"vervang": "onclick=\"\">Keuze wissen"
+},
+{
+"naam": "5: verschuiving zonder vastgelegd",
+"zoek": "    const vast=v.keuze?`<div",
+"vervang": "    const vast=false?`<div"
+},
+{
+"naam": "5: wissen verschuiving houdt keuze",
+"zoek": "  if(!keuze){ const e=Object.assign({}, SET.verschuiving[id]); delete e.keuze;",
+"vervang": "  if(false){ const e=Object.assign({}, SET.verschuiving[id]); delete e.keuze;"
+},
+{
+"naam": "6: geen bestemming",
+"zoek": "naarTekst:(()=>{ try{ return gripOpnameNaarTekst(T); }catch(_){ return ''; } })(), salaris:",
+"vervang": "naarTekst:'', salaris:"
+},
+{
+"naam": "6: signaal toont bestemming niet",
+"zoek": "${s.naarTekst?`<span data-signaalnaar",
+"vervang": "${false?`<span data-signaalnaar"
+},
+{
+"naam": "7: label altijd",
+"zoek": "  if(gestort>=nodig) return '';\n  if(!(gestort>0)){",
+"vervang": "  if(false){"
+},
+{
+"naam": "7: gehaald toont toch",
+"zoek": "  if(gestort>=nodig) return '';",
+"vervang": ""
+},
+{
+"naam": "7: moment genegeerd",
+"zoek": "if(komt) return ''; }",
+"vervang": "}"
+}
+]
+}
