@@ -162,7 +162,10 @@ genoemde versietag.)*
   sinds v523/v525 zegt "Salaris binnen" het tegen je echte afspraak; `salMoment1()` blijft voor de diagnose. (7) De export-repetitie draait
   elke dag in een eigen context; tests a en c op 2 dec. Spec `v526b.spec.js` (j-n) en `v435` 4/4b (punt 6), sabotages
   `tests/wip/v526b-sabotage.json`. Cache blijft `minder-v526`. Bij de merge met onderhoud 4: wie als tweede op main komt, krijgt de hoogste
-  cacheversie plus een letter.
+  cacheversie plus een letter. GEREBASED OP ONDERHOUD 4 (278655e): de tegel Lagen en zijn sheet lezen het netto-gestort van `lagenGestort()`
+  (de opname eraf, spec `onderhoud4.spec.js` "v526: de tegel Lagen leest het netto-gestort", sabotage bruto rood); `v526` h vergelijkt nu met 278655e;
+  de bedragen-helpers zetten de kaart van moment 1 (`[data-salmoment1]`) buiten de telling, zoals de kaarten van v525. Cache blijft `minder-v526`
+  (hoger dan `minder-v525d`).
 - **ONDERHOUD4: "NAAR JE LAGEN" EN "WAAROM EUR X MEER/MINDER OPZIJ" STAAN OP PLAN STANDAARD DICHT, EN EEN TIK ONTHOUDT DE STAND**
   (`onderhoud4`, gevraagd door de gebruiker, tak `werk/onderhoud4` vanaf 4ce6ffa; cache `minder-v525c`). GEEN BEDRAG VERANDERT (spec e: met beide
   blokken open is elk bedrag op Home, Inzichten, Grip en Plan gelijk aan 4ce6ffa, git show). Dicht is `planGestortKaart()` EEN regel

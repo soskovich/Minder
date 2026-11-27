@@ -230,3 +230,15 @@ test('m: het patroon "Betaalrekening op" telt een verschuiving niet, en een aanv
   expect(c).toBe(1398.88);
   expect(await lees()).toEqual(a);
 });
+
+// v526 (rebase op onderhoud4): de Grip-tegel Lagen en zijn sheet lezen het netto-gestort uit lagenGestort(), dus met de opname eraf.
+test('v526: de tegel Lagen leest het netto-gestort van lagenGestort() (Beschermen EUR 1.590,12 na de opname van EUR 398,88)', async ({ page }) => {
+  await S4.boot(page);
+  const r = await page.evaluate(() => { const G = lagenGestort(), T = lagenTegelData(); openGripLagen();
+    const rij = [...document.querySelectorAll('[data-lagenrij]')].map((e) => ({ k: e.dataset.lagenrij, g: +e.dataset.gestort })); closeSheet();
+    return { eruit: G.eruit, g: G.lagen.map((l) => ({ k: l.k, g: l.gestort })), t: T.lagen.map((l) => ({ k: l.k, g: l.gestort })), rij }; });
+  expect(r.eruit).toBe(398.88);                                                    // invoer: er is een opname in het opzij-venster
+  expect(r.t).toEqual(r.g);                                                        // de tegel neemt elk bedrag van lagenGestort() over
+  expect(r.rij).toEqual(r.g);                                                      // en de sheet ook
+  expect(r.t.find((l) => l.k === 'beschermen').g).toBe(1590.12);                  // netto, niet de EUR 1.989 van voor de opname
+});

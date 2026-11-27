@@ -1,11 +1,11 @@
 /* v526: Grip-tegels Budget, Lagen en Fundament (mockup "Grip KPI v3").
    Stand: tests/v526-stand.js op 27 nov 2026 (GECONSTRUEERD naar de vorm van het toestel: de back-up staat niet in de repo). Elke test heeft een
    sabotage in index.html die hem rood zet (gedraaid met tools/sabotage.py, plan in tests/wip/v526-sabotage.json).
-   Test h vergelijkt met de vorige main (4ce6ffa, git show), dus de spec draait in een checkout met die commit. */
+   Test h vergelijkt met de vorige main (278655e, git show; tot de rebase op onderhoud 4 was dat 4ce6ffa), dus de spec draait in een checkout met die commit. */
 const { execSync } = require('child_process');
 const { test, expect } = require('./klok');
 const S = require('./v526-stand');
-const MAIN_HTML = (() => { try { return execSync('git show 4ce6ffa:index.html', { cwd: __dirname + '/..', maxBuffer: 64 << 20 }).toString(); } catch (_) { return null; } })();
+const MAIN_HTML = (() => { try { return execSync('git show 278655e:index.html', { cwd: __dirname + '/..', maxBuffer: 64 << 20 }).toString(); } catch (_) { return null; } })();
 
 const tegels = (page) => page.evaluate(() => { go('maand'); gripKiesTab('zien'); closeSheet();
   const d = (k) => { const e = document.querySelector(`#gripMeters [data-meter="${k}"]`); return e ? { t: e.innerText.replace(/\s+/g, ' ').trim(), ring: e.querySelector('.gm-ring').innerText.trim(), v: e.querySelector('.gm-v').innerText.trim(), s: e.querySelector('.gm-s').innerText.trim() } : null; };
@@ -163,8 +163,8 @@ test.describe('v526', () => {
     expect(rij).toBeGreaterThan(0);
   });
 
-  test('h: elk bedrag buiten Grip is gelijk aan de vorige main (4ce6ffa) op dezelfde stand', async ({ browser }) => {
-    test.skip(!MAIN_HTML, '4ce6ffa niet beschikbaar');
+  test('h: elk bedrag buiten Grip is gelijk aan de vorige main (278655e) op dezelfde stand', async ({ browser }) => {
+    test.skip(!MAIN_HTML, '278655e niet beschikbaar');
     test.setTimeout(180000);
     const lees = async (html) => {
       const page = await browser.newPage(); await page.setViewportSize({ width: 390, height: 844 });

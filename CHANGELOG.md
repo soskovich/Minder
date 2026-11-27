@@ -1901,4 +1901,4 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   "nodig EUR X per periode · je afspraak EUR Y" (oordeel op de behoefte); Fundament buffer leest je eigen drempel voor beleggen als die er is;
   het grote getal van Fundament neutraal; een terugkerende post een keer in de sheet; de kaart moment 1 ("advies") weg van Zien; de
   export-repetitie per dag in een eigen context, tests a en c op 2 dec. Spec `v526b.spec.js` (j-n), `v435` 4/4b gemigreerd.
-
+- **v526 gerebased op onderhoud 4** (`minder-v526`, tak `werk/v526` op 278655e): conflicten in sw.js (cache blijft `minder-v526`), CLAUDE.md en CHANGELOG.md (beide regels gehouden). De tegel Lagen leest het netto-gestort uit `lagenGestort()` van onderhoud 4 (nieuwe test in `onderhoud4.spec.js`, sabotage bruto rood). `onderhoud4` e: de kaart van moment 1 (weg sinds v526b) staat buiten de telling in de bedragen-helpers; `v526` h vergelijkt met 278655e.
