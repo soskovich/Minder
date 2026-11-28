@@ -49,7 +49,9 @@ test.describe('punt 1 · Verschuivingen', () => {
     expect(V.grootste).toEqual({ k: '~vast', label: 'Vast', waarde: 100 });
     expect(V.oorzaak).toBe('Peaks Jelani €100 nieuw');
     await openVersch(page);
-    expect(await page.locator('[data-verschkopg]').innerText()).toContain('Vast +€100');
+    /* v527: zolang er geen twee volle salarisperiodes zijn rekent de kop per 30 dagen (verschuiving(a, b, true)); de stappen hierboven zijn de echte maanden */
+    const V30 = await page.evaluate(() => verschuiving('2026-09', '2026-10', true).grootste);
+    expect(await page.locator('[data-verschkopg]').innerText()).toContain(`per 30 dagen · Vast +€${V30.waarde}`);
     expect(await page.locator('[data-verschoorzaak]').innerText()).toBe('Vast: Peaks Jelani €100 nieuw');
   });
   test('verschuiving c: is de oorzaak niet te bepalen, dan staat er geen oorzaakregel', async ({ page }) => {
@@ -59,7 +61,8 @@ test.describe('punt 1 · Verschuivingen', () => {
     expect(V.grootste.k).toBe('~vast');
     expect(V.oorzaak).toBe(null);
     await openVersch(page);
-    expect(await page.locator('[data-verschkopg]').innerText()).toContain('Vast +€120');
+    const V30 = await page.evaluate(() => verschuiving('2026-09', '2026-10', true).grootste);   // v527: per 30 dagen, zie b
+    expect(await page.locator('[data-verschkopg]').innerText()).toContain(`per 30 dagen · Vast +€${V30.waarde}`);
     await expect(page.locator('[data-verschoorzaak]')).toHaveCount(0);
   });
 });

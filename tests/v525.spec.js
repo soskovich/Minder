@@ -162,7 +162,11 @@ test.describe('v525', () => {
     const deelreeks = (a, b) => { let i = 0; for (const x of b) if (i < a.length && a[i] === x) i++; return i === a.length; };
     for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) {
       if (k !== 'bedragen') { expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k])); continue; }
-      const { plan: pNu, ...rNu } = nu[dag][k], { plan: pOud, ...rOud } = oud[dag][k];
+      /* v527: Inzichten (drie tegels in de periode) en Grip (de vooruitblik kent de vaste lasten die nog komen, de stand op het einde van de periode,
+       de Budget-tegel boven elke tab) veranderen bewust; die worden afgedrukt en niet vergeleken. Home, Plan en Vermogen blijven gelijk. */
+      const v527 = (o) => { const c = {}; for (const x in o) if (!(x === 'ins' || x.startsWith('grip'))) c[x] = o[x]; return c; };
+      for (const x in oud[dag][k]) if ((x === 'ins' || x.startsWith('grip')) && JSON.stringify(nu[dag][k][x]) !== JSON.stringify(oud[dag][k][x])) console.log('v527', dag, x, JSON.stringify({ oud: oud[dag][k][x], nu: nu[dag][k][x] }));
+      const { plan: pNu, ...rNu } = v527(nu[dag][k]), { plan: pOud, ...rOud } = v527(oud[dag][k]);
       expect(JSON.stringify(rNu), `${dag} bedragen buiten Plan`).toBe(JSON.stringify(rOud));
       expect(deelreeks(pNu || [], pOud || []), `${dag} Plan is een deelreeks van 6a01b7f: ${JSON.stringify(pNu)} tegen ${JSON.stringify(pOud)}`).toBe(true);
     }

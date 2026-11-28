@@ -148,7 +148,7 @@ test('g (punt 6): het signaal "Betaalrekening op" noemt de rekening waar het gel
    met de migratie aan de huidige kant (Beschermen 3.326 naar 2.927). Grip staat erbuiten: Fundament en Lagen lezen de toewijzing. */
 const { execSync } = require('child_process');
 const MAIN_HTML = (() => { try { return execSync('git show 57e831e:index.html', { cwd: __dirname + '/..', maxBuffer: 64 << 20 }).toString(); } catch (_) { return null; } })();
-test('h: Home, Inzichten, Vermogen, safeToSpend, het voorstel en lagenGestort zijn gelijk aan 57e831e', async ({ browser }) => {
+test('h: Home, Vermogen, safeToSpend, het voorstel en lagenGestort zijn gelijk aan 57e831e (Inzichten sinds v527 niet)', async ({ browser }) => {
   test.skip(!MAIN_HTML, '57e831e niet beschikbaar');
   test.setTimeout(120000);
   const lees = async (html) => {
@@ -162,7 +162,10 @@ test('h: Home, Inzichten, Vermogen, safeToSpend, het voorstel en lagenGestort zi
     await page.close(); return u; };
   const oud = await lees(MAIN_HTML), nu = await lees(null);
   expect([oud.nf, nu.nf]).toEqual([3326, 2927]);   // invoer: de twee kanten verschillen werkelijk in de toewijzing
-  for (const k of ['home', 'ins', 'verm', 'f']) expect(JSON.stringify(nu[k]), k).toBe(JSON.stringify(oud[k]));
+  /* v527: Inzichten draagt in de periode drie tegels in plaats van de periodekaart (bewust anders dan 57e831e); dat deel wordt afgedrukt en
+     niet vergeleken. Home, Vermogen, safeToSpend, het voorstel en lagenGestort blijven gelijk. */
+  if (JSON.stringify(nu.ins) !== JSON.stringify(oud.ins)) console.log('v527 Inzichten', JSON.stringify({ oud: oud.ins, nu: nu.ins }));
+  for (const k of ['home', 'verm', 'f']) expect(JSON.stringify(nu[k]), k).toBe(JSON.stringify(oud[k]));
 });
 
 /* punt 7: het label "deze periode EUR X nodig · EUR Y gestort" bij Reserveren staat er alleen als er iets afwijkt */

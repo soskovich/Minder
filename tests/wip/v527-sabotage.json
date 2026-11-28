@@ -1,0 +1,68 @@
+{
+ "specs": [
+  "tests/v527.spec.js"
+ ],
+ "timeout": 400,
+ "sabotages": [
+  {
+   "naam": "deel0 a: de oude bron (termijnen van de volgende periode)",
+   "zoek": "ds=x.genW?x.genW(P.start, P.eind):rekTermijnen(x.s, x.last, P.start, P.eind); }catch(_){}",
+   "vervang": "ds=x.data; }catch(_){}"
+  },
+  {
+   "naam": "deel0 c: een vast potje zonder betaling telt zijn budget",
+   "zoek": "geen=Math.round(e)<=0, eind=e;",
+   "vervang": "geen=Math.round(e)<=0, eind=geen?bud:e;"
+  },
+  {
+   "naam": "B1a: het tempo telt de per-keer-potjes mee",
+   "zoek": "const tempoBud=dagRij.reduce((a,x)=>a+x.bud,0), tempoUit=Math.round(dagRij.reduce((a,x)=>a+x.uitX,0))",
+   "vervang": "const tempoBud=dagRij.concat(keerRij).reduce((a,x)=>a+x.bud,0), tempoUit=Math.round(dagRij.concat(keerRij).reduce((a,x)=>a+x.uitX,0))"
+  },
+  {
+   "naam": "B1b: Inzichten draagt weer een verwacht saldo",
+   "zoek": "+ PT.vast + PT.ink + insHistorieRegel()",
+   "vervang": "+ PT.vast + PT.ink + '<div id=\"insSaldoEind\">Verwacht saldo eind periode</div>' + insHistorieRegel()"
+  },
+  {
+   "naam": "B1b: een tweede uitgegeven-getal op de tegel",
+   "zoek": "potUit=U.r.potjes;",
+   "vervang": "potUit=U.r.potjes+1;"
+  },
+  {
+   "naam": "B1c: de tegel Vaste lasten uit een eigen telling",
+   "zoek": "vastNog=V?Math.round(V.vast):null;",
+   "vervang": "vastNog=V?Math.round(V.vast)+1:null;"
+  },
+  {
+   "naam": "B2: de sheet zonder sortering op tempo",
+   "zoek": "  dagRij.sort((a,b)=>b.d-a.d || (a.naam<b.naam?-1:1));\n",
+   "vervang": "\n"
+  },
+  {
+   "naam": "B3: ja markeert niets",
+   "zoek": "SET.dubbelPaar[sleutel]={weg:ja?K.b.id:'', op:vandaagYMD(), ovr, opname:true};",
+   "vervang": "SET.dubbelPaar[sleutel]={weg:'', op:vandaagYMD(), ovr, opname:true};"
+  },
+  {
+   "naam": "B4a: de stand rekent een eigen eind",
+   "zoek": "return {T, P, saldo, contant, schatting:!!(C&&C.schatting), rekeningen:saldo-contant, sal, start, vastR, potR, zonderR, nogR, eind:start-nogR,",
+   "vervang": "return {T, P, saldo, contant, schatting:!!(C&&C.schatting), rekeningen:saldo-contant, sal, start, vastR, potR, zonderR, nogR, eind:start-nogR+1,"
+  },
+  {
+   "naam": "B4b: de ondergrens is elk potje leeg",
+   "zoek": "const hoogst=rijen.reduce((a,x)=>a+Math.max(x.ruimte, x.verwacht),0);",
+   "vervang": "const hoogst=rijen.reduce((a,x)=>a+x.ruimte,0);"
+  },
+  {
+   "naam": "B4c: het vroege salaris telt mee",
+   "zoek": "const start=saldo-(sal && sal.binnen?sal.bedrag:0);",
+   "vervang": "const start=saldo;"
+  },
+  {
+   "naam": "B4d: de kolommen overlappen",
+   "zoek": "<span data-kol=\"ruimte\" style=\"width:64px;text-align:right;white-space:nowrap\">",
+   "vervang": "<span data-kol=\"ruimte\" style=\"width:64px;text-align:right;white-space:nowrap;margin-left:-60px\">"
+  }
+ ]
+}

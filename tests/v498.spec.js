@@ -50,7 +50,7 @@ test('v498 b: Inzichten volgt de periode zonder boekingen in november', async ({
   });
   expect(r.insmaand).toBe('periode');
   expect(r.periode).toBe('24 nov – 23 dec');
-  expect(r.saldoEindLabel).toBe('24 nov – 23 dec');   // Verwacht saldo eind <periode>
+  expect(r.saldoEindLabel).toBe(null);   // v527: "Verwacht saldo eind periode" staat niet meer op Inzichten (de stand staat op Grip)
   expect(r.heeftOkt).toBe(false);                     // niet terugvallen op de laatste maand met boekingen
 });
 

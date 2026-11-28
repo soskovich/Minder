@@ -188,7 +188,10 @@ test.describe('v523', () => {
     for (const [n, o] of [['nu', {}], ['gezien', { overboekGezien: true, dag: '2026-11-27' }], ['laat', { dag: '2026-11-29' }]]) {
       await S.boot(page, o);
       const u = await S.bedragen(page);
-      for (const k of Object.keys(VOOR[n])) { if (k === 'plan') continue; expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]); }
+      /* v527: Inzichten (drie tegels in de periode) en Grip (de vooruitblik kent de vaste lasten die nog komen, de stand op het einde van de periode,
+       de Budget-tegel boven elke tab) veranderen bewust; die worden afgedrukt en niet vergeleken. Home, Plan en Vermogen blijven gelijk. */
+      const v527 = (k) => k === 'ins' || k === 'insSplit' || k.startsWith('grip');
+      for (const k of Object.keys(VOOR[n])) { if (k === 'plan') continue; if (v527(k)) { if (JSON.stringify(u[k]) !== JSON.stringify(VOOR[n][k])) console.log('v527', n, k, JSON.stringify({ voor: VOOR[n][k], nu: u[k] })); continue; } expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]); }
       expect([n, await planLagenInvariant(page)]).toMatchObject([n, { ok: true }]);
     }
   });

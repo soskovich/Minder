@@ -125,11 +125,14 @@ test('v499 f: verwacht saldo eind periode, een bron', async ({ page }) => {
     renderIns(); const ins = document.querySelector('[data-inssaldoeind]');
     renderMaand(); gripKiesTab('begrijpen'); const br = document.querySelector('[data-brugsaldoeind]');
     const PV = periodeVerloop(periodeStandNu()); const V = maandVooruit();
-    return { ins: ins ? +ins.getAttribute('data-inssaldoeind') : null, brug: br ? +br.getAttribute('data-brugsaldoeind') : null, pv: PV.eind, bron: PV.bron, nog: V.nogVerwacht };
+    const st = document.querySelector('#gripStand');
+    return { stand: st ? +st.dataset.gripstand : null, standStart: st ? +st.dataset.gripstandsaldo : null, ins: ins ? +ins.getAttribute('data-inssaldoeind') : null, brug: br ? +br.getAttribute('data-brugsaldoeind') : null, pv: PV.eind, bron: PV.bron, nog: V.nogVerwacht };
   });
-  expect(r.ins).not.toBeNull(); expect(r.brug).not.toBeNull();
-  expect(Math.round(r.ins * 100)).toBe(Math.round(r.brug * 100));
-  expect(Math.round(r.ins * 100)).toBe(Math.round(r.pv * 100));
+  /* v527: het verwachte saldo staat niet meer op Inzichten en niet meer onder de bridge, maar EEN keer als "Stand op <eind>" bovenaan
+     Begrijpen. Die stand leest dezelfde vooruitblik (saldo nu min V.nogVerwacht); periodeVerloop() blijft die vooruitblik lezen. */
+  expect(r.ins).toBeNull(); expect(r.brug).toBeNull();
+  expect(r.stand).not.toBeNull();
+  expect(r.stand).toBe(r.standStart - Math.round(r.nog));
   expect(r.bron).toBe('vooruitblik');                                 // het saldo eind leest de vooruitblik van de motor, geen eigen tempo
 });
 

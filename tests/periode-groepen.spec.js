@@ -77,7 +77,7 @@ for (const dag of ['2026-11-26', '2026-12-01']) {
       await S.boot(page, dag);
       const r = await page.evaluate(() => { const P = periodeVan(vandaagYMD());
         TX = TX.filter((t) => String(t.date).slice(0, 10) < P.start); save(); try { runMemoVergeten(); } catch (_) {} render(); go('ins');
-        const n = document.querySelector('#insSaldoEind [data-saldoeindnoot]'); return { start: P.start, noot: n ? n.innerText : null, ins: document.getElementById('s-ins').innerText }; });
+        const n = document.querySelector('[data-insimportnoot]'); return { start: P.start, noot: n ? n.innerText : null, ins: document.getElementById('s-ins').innerText }; });
       expect(r.noot).toMatch(/uitgaven daarna ontbreken/);
       expect(r.ins).not.toMatch(/\b0%/); expect(r.ins).not.toMatch(RAAR);
     });
@@ -108,20 +108,24 @@ for (const dag of ['2026-11-26', '2026-12-01']) {
     });
 
     /* ---------- potjesregel-aansluiting (7) ---------- */
-    const stand = (page) => page.evaluate(() => { const PS = periodeStandNu(), PB = periodeBudget(); go('ins'); const k = document.querySelector('#insMaand');
-      const ins = { uit: +k.dataset.insuit, bud: +k.dataset.insbudget, vast: +k.dataset.insvast, ct: +k.dataset.inscontant, el: +k.dataset.insel, dagen: +k.dataset.insdagen, tempo: k.querySelector('[data-instempo]') ? +k.querySelector('[data-instempo]').dataset.instempo : null,
+    /* v527: de kop van Inzichten is de tegel Potjes (periodeTegelData: uitgegevenStand tegen potjes + contant, het tempo over de potjes van
+       elke dag en contant); Grip leest dezelfde bron */
+    const stand = (page) => page.evaluate(() => { const PS = periodeStandNu(), PB = periodeBudget(), T = periodeTegelData(); go('ins'); const k = document.querySelector('#insMaand');
+      const ins = { uit: +k.dataset.insuit, bud: +k.dataset.insbudget, el: +k.dataset.insel, dagen: +k.dataset.insdagen, tempo: +k.dataset.instempo, T: { uit: T.potUit, bud: T.potBud, tempo: T.tempo, tempoBud: T.tempoBud, kas: Math.round(+T.U.per[CONTANT_CAT] || 0) },
         balk: parseFloat((k.querySelector('[data-insseg="potjes"]') || { style: {} }).style.width || '0') };
       go('maand'); gripKiesTab('zien'); const z = document.querySelector('#gripZienStand');
-      const zien = { uit: +z.dataset.zienuit, bud: +z.dataset.zienbudget, vast: +z.dataset.zienvast, ct: +z.dataset.ziencontant, el: +z.dataset.zienel, dagen: +z.dataset.ziendagen };
+      const zien = { uit: +z.dataset.zienuit, bud: +z.dataset.zienbudget, el: +z.dataset.zienel, dagen: +z.dataset.ziendagen };
       const over = +document.querySelector('#gripSlim [data-dagenover]').dataset.dagenover;
       return { PS: { uit: PS.uit, pot: PS.potDeel, vast: PS.vast, ct: PS.contant, tempo: PS.potTempo, el: PS.el, dagen: PS.dagen }, PB: { tot: PB.totaal, vast: PB.vast.totaal, pot: PB.potjes.totaal, ct: PB.contant }, ins, zien, over, HV: huidigVenster() }; });
     test(`potjes 1 · ${dag}: de kop van Inzichten is de periodestand`, async ({ page }) => {
       await S.boot(page, dag); const r = await stand(page);
-      expect([r.ins.uit, r.ins.bud, r.ins.vast, r.ins.ct]).toEqual([r.PS.uit, r.PS.pot, r.PS.vast, r.PS.ct]);
+      expect([r.ins.uit, r.ins.bud]).toEqual([r.ins.T.uit, r.ins.T.bud]);
+      expect(r.ins.bud).toBe(r.PS.pot + r.PS.ct);   // potjes + contant, dezelfde periodebegroting
     });
     test(`potjes 2 · ${dag}: Grip leest dezelfde stand als Inzichten`, async ({ page }) => {
       await S.boot(page, dag); const r = await stand(page);
-      expect([r.zien.uit, r.zien.bud, r.zien.vast, r.zien.ct]).toEqual([r.ins.uit, r.ins.bud, r.ins.vast, r.ins.ct]);
+      /* v527: Grip leest hetzelfde uitgegeven (uitgegevenStand) zonder contant, want Contant is daar een eigen regel; het budget is de periodebegroting */
+      expect(r.zien.uit).toBe(r.ins.uit - r.ins.T.kas); expect(r.zien.bud).toBe(r.PS.pot);
     });
     test(`potjes 3 · ${dag}: vast + potjes + contant is het periodebudget`, async ({ page }) => {
       await S.boot(page, dag); const r = await stand(page);
@@ -130,7 +134,8 @@ for (const dag of ['2026-11-26', '2026-12-01']) {
     });
     test(`potjes 4 · ${dag}: het tempo is het potjesdeel naar rato van de periodedagen`, async ({ page }) => {
       await S.boot(page, dag); const r = await stand(page);
-      expect(r.PS.tempo).toBe(Math.round(r.PS.pot * r.PS.el / r.PS.dagen)); expect(r.ins.tempo).toBe(r.PS.tempo);
+      expect(r.PS.tempo).toBe(Math.round(r.PS.pot * r.PS.el / r.PS.dagen));
+      expect(r.ins.tempo).toBe(Math.round(r.ins.T.tempoBud * r.ins.el / r.ins.dagen));   // v527: het tempo van de tegel gaat over de potjes van elke dag en contant
     });
     test(`potjes 5 · ${dag}: de balk van de kop past in zijn breedte en volgt uit / potjes`, async ({ page }) => {
       await S.boot(page, dag); const r = await stand(page);

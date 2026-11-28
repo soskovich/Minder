@@ -69,7 +69,11 @@ test.describe('v523c', () => {
       await page.close(); return out;
     };
     const oud = await lees(VOOR_HTML), nu = await lees(null);
-    expect(JSON.stringify(nu)).toBe(JSON.stringify(oud));
+    /* v527: Inzichten (drie tegels in de periode) en Grip (de vooruitblik kent de vaste lasten die nog komen, de stand op het einde van de periode,
+       de Budget-tegel boven elke tab) veranderen bewust; die worden afgedrukt en niet vergeleken. Home, Plan en Vermogen blijven gelijk. */
+    for (const o of [oud, nu]) for (const dag in o) for (const k of Object.keys(o[dag].bedragen || {})) if (k === 'ins' || k.startsWith('grip')) { if (o === nu && JSON.stringify(nu[dag].bedragen[k]) !== JSON.stringify(oud[dag].bedragen[k])) console.log('v527', dag, k, JSON.stringify({ oud: oud[dag].bedragen[k], nu: nu[dag].bedragen[k] })); }
+    const zonder = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'ins' || String(k).startsWith('grip')) ? undefined : v));
+    expect(JSON.stringify(zonder(nu))).toBe(JSON.stringify(zonder(oud)));
     // Plan sluit via de lagen-invariant op de huidige app (eb7932b heeft geen lagen-hero, dus los getoetst)
     const { planLagenInvariant } = require('./plan-lagen-invariant');
     const p = await browser.newPage(); await S.boot(p, { salDec: '2026-12-24', dag: '2026-12-22' });

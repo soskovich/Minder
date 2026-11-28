@@ -25,7 +25,9 @@ const lees = (page) => page.evaluate(({ LEEF }) => {
   o.buitenPeriode = buitenBudget(P.soort === 'periode' ? { start: P.start, eind: P.eind } : { m: thisYM() }).bedrag;
   const U = uitgegevenStand(P.soort === 'periode' ? { start: P.start, eind: P.eind } : { m: thisYM() }); o.uitgegeven = U.totaalR;
   go('ins'); const ik = document.querySelector('[data-insuitgegeven]');
-  o.ins = ik ? { getal: +ik.dataset.insuitgegeven, tekst: ik.innerText.split('\n')[0].trim() } : null;
+  /* v527: in de periode draagt Inzichten geen uitgegeven-kop meer maar de dagteller boven de drie tegels ("Deze periode · 24 nov – 23 dec · dag X van Y") */
+  const dt = document.querySelector('[data-insdagteller]');
+  o.ins = ik ? { getal: +ik.dataset.insuitgegeven, tekst: ik.innerText.split('\n')[0].trim() } : dt ? { getal: null, tekst: dt.innerText.trim() } : null;
   o.balk = [...document.querySelectorAll('#insMbBalk [data-insseg], #insMaand [data-insseg]')].reduce((a, e) => a + parseFloat(e.style.width || '0'), 0);
   o.overloop = document.body.scrollWidth - document.body.clientWidth;
   const insTxt = document.getElementById('s-ins').innerText;
@@ -66,7 +68,7 @@ for (const dag of S.DAGEN) {
       expect(r.mb.buiten).toBe(r.buitenPeriode);
       expect(r.mb.netto).toBe(r.mb.verwacht + r.mb.buiten - r.mb.budget);
       /* Inzichten: het totaal bovenaan is uitgegevenStand van dezelfde eenheid */
-      if (r.ins) { expect(r.ins.getal).toBe(r.uitgegeven); if (ERA(dag)) expect(r.ins.tekst).toBe('Uitgegeven 24 nov – 23 dec'); }
+      if (r.ins) { if (r.ins.getal != null) expect(r.ins.getal).toBe(r.uitgegeven); if (ERA(dag)) expect(r.ins.tekst).toMatch(/^Deze periode · 24 nov – 23 dec · dag \d+ van 30/); }
       /* de balk van de maandkaart past in zijn breedte (v507: de schaal las een ander "nog in potjes" dan het segment) */
       expect(r.balk).toBeLessThanOrEqual(100.5);
       expect(r.overloop).toBeLessThanOrEqual(1);
@@ -91,7 +93,7 @@ for (const dag of S.DAGEN) {
 test('v507 b: 24 nov, Inzichten zegt de periode en Grip-kop en -tegel hetzelfde netto', async ({ page }) => {
   await S.boot(page, '2026-11-24');
   const r = await lees(page);
-  expect(r.ins.tekst).toBe('Uitgegeven 24 nov – 23 dec');
+  expect(r.ins.tekst).toMatch(/^Deze periode · 24 nov – 23 dec · dag 1 van 30/);   // v527: de dagteller boven de tegels
   expect(r.kop).toBe(r.tegel);
   const kal = await page.evaluate(() => buitenBudget({ m: thisYM() }).bedrag);
   expect(kal, 'invoer: de kalendermaand draagt de leges van 20 nov, de periode niet').toBe(60);
@@ -118,11 +120,11 @@ test('v507 c: 23 dec, de laatste dag van de periode', async ({ page }) => {
 test('v507: de voorbeeldweergave van 26 nov zegt de periode van 26 nov', async ({ page }) => {
   await S.boot(page, '2026-10-31');
   const r = await page.evaluate(() => { voorbeeldStart('2026-11-26'); const P = periodeVan(vandaagYMD()); go('ins');
-    const ik = document.querySelector('[data-insuitgegeven]'); return { ymd: vandaagYMD(), label: P.label, soort: P.soort, ins: ik ? ik.innerText.split('\n')[0].trim() : null }; });
+    const ik = document.querySelector('[data-insdagteller]'); return { ymd: vandaagYMD(), label: P.label, soort: P.soort, ins: ik ? ik.innerText.trim() : null }; });   // v527: de dagteller
   expect(r.ymd).toBe('2026-11-26');
   expect(r.soort).toBe('periode');
   expect(r.label).toBe('24 nov – 23 dec');
-  expect(r.ins).toBe('Uitgegeven 24 nov – 23 dec');
+  expect(r.ins).toMatch(/^Deze periode · 24 nov – 23 dec · dag 3 van 30/);
 });
 
 /* de lat van v445 geldt ook in de periode: een render van Grip op toestel-omvang roept telbareTx() begrensd aan (eenheidTx heeft een

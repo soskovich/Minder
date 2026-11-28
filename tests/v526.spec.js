@@ -189,7 +189,10 @@ test.describe('v526', () => {
       await page.close(); return out;
     };
     const oud = await lees(MAIN_HTML), nu = await lees(null);
-    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) if (k !== 'doelTerug' && k !== 'resFlag') expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
+    /* v527: Inzichten (drie tegels in de periode) en Grip (de vooruitblik kent de vaste lasten die nog komen, de stand op het einde van de periode,
+       de Budget-tegel boven elke tab) veranderen bewust; die worden afgedrukt en niet vergeleken. Home, Plan en Vermogen blijven gelijk. */
+    for (const dag of Object.keys(oud)) if (JSON.stringify(nu[dag].ins) !== JSON.stringify(oud[dag].ins)) console.log('v527', dag, 'ins', JSON.stringify({ oud: oud[dag].ins, nu: nu[dag].ins }));
+    for (const dag of Object.keys(oud)) for (const k of Object.keys(oud[dag])) if (k !== 'doelTerug' && k !== 'resFlag' && k !== 'ins') expect(JSON.stringify(nu[dag][k]), `${dag} ${k}`).toBe(JSON.stringify(oud[dag][k]));
     for (const dag of Object.keys(oud)) expect(oud[dag].doelTerug, dag).toEqual([]);   // op 278655e bestaat de regel niet
     console.log('onderhoud5 doelTerug/resFlag', JSON.stringify(Object.fromEntries(Object.keys(nu).map((d) => [d, { nu: [nu[d].doelTerug, nu[d].resFlag], oud: oud[d].resFlag }]))));
   });

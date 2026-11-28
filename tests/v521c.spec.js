@@ -103,7 +103,10 @@ test.describe('v521c', () => {
     for (const [n, o] of [['inleg', {}], ['zonder', { inleg: 0 }]]) {
       await B.boot(page, o);
       const u = await bedragen(page);
-      for (const k of ['home', 'ins', 'insSplit', 'grip-zien', 'grip-begrijpen', 'gripSplit', 'vermogen']) expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]);   // v524: 'plan' is nu de lagen-invariant
+      /* v527: Inzichten (drie tegels in de periode) en Grip (de vooruitblik kent de vaste lasten die nog komen, de stand op het einde van de periode,
+       de Budget-tegel boven elke tab) veranderen bewust; die worden afgedrukt en niet vergeleken. Home, Plan en Vermogen blijven gelijk. */
+      for (const k of ['ins', 'insSplit', 'grip-zien', 'grip-begrijpen', 'gripSplit']) if (JSON.stringify(u[k]) !== JSON.stringify(VOOR[n][k])) console.log('v527', n, k, JSON.stringify({ voor: VOOR[n][k], nu: u[k] }));
+      for (const k of ['home', 'vermogen']) expect([n, k, u[k]]).toEqual([n, k, VOOR[n][k]]);   // v524: 'plan' is nu de lagen-invariant
       expect(await require('./plan-lagen-invariant').planLagenInvariant(page)).toMatchObject({ ok: true });
       /* v523 (punt 4): de reserveringen tellen per salarisperiode tot de vervaldag; alleen dat bedrag (en opzij, salaris min de rest) verschuift,
          de rekeningen niet, en opzij + reserveringen blijft gelijk */
