@@ -1,0 +1,13 @@
+{
+ "specs": [
+  "tests/onderhoud1.spec.js"
+ ],
+ "timeout": 300,
+ "sabotages": [
+  {
+   "naam": "weekschema leest elke betaling van de partij (geen bedragband)",
+   "zoek": "recurKey(t)===x.key && (!(tb>0) || Math.abs(-t.amount-tb)<=Math.max(1, tb*0.2))).map(",
+   "vervang": "recurKey(t)===x.key).map("
+  }
+ ]
+}

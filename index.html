@@ -10422,9 +10422,9 @@ function periodeTermijnen(s, last, start, eind){ if(s && s.cadans==='week' && la
   return rekTermijnen(s, last, start, eind); }
 /* v527b: het schema kent geen post per week (vastCadans kiest 4-wekelijks of per maand; daaronder geen cadans en intervalM 1, dus een post
    per week liep als een maandpost). Voor de periode: is de mediane afstand tussen de betalingen van die sleutel hooguit 10 dagen, dan
-   loopt hij per week met die afstand. */
+   loopt hij per week met die afstand. Alleen de betalingen met het bedrag van deze termijn tellen. */
 function vastWeekSchema(x){ const s=x && x.s; if(!s || s.cadans==='4w' || s.cadans==='maand' || s.cadans==='week' || (+s.intervalM||1)>1) return s;
-  const D=[...new Set(telbareTx().filter(t=>t.amount<0 && !t.pending && recurKey(t)===x.key).map(t=>String(t.date).slice(0,10)))].sort().slice(-8);
+  const tb=+x.termijn||0, D=[...new Set(telbareTx().filter(t=>t.amount<0 && !t.pending && recurKey(t)===x.key && (!(tb>0) || Math.abs(-t.amount-tb)<=Math.max(1, tb*0.2))).map(t=>String(t.date).slice(0,10)))].sort().slice(-8);   // alleen de betalingen van deze termijn (een tegenpartij kan meer reeksen dragen, onderhoud1)
   if(D.length<3) return s; const g=[]; for(let i=1;i<D.length;i++) g.push(salDagenTussen(D[i-1], D[i])); g.sort((a,b)=>a-b);
   const af=g[Math.floor(g.length/2)]; return (af>0 && af<=10)?Object.assign({}, s, {cadans:'week', afstand:af}):s; }
 function vastWoorden(naam){ return String(naam||'').toUpperCase().split(/[^A-Z0-9]+/).filter(w=>w.length>=3 && !/^\d+$/.test(w)); }
