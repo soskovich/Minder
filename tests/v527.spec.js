@@ -182,3 +182,58 @@ test('B4 d: de kaart en de tabel lopen niet over op 390px en hun kolommen overla
   expect(Math.max(...r.tab)).toBe(0);
   expect(r.sov).toBeLessThanOrEqual(0);
 });
+
+/* ===== v527b: geen tweede termijn, geen dubbele telling, een filterregel ===== */
+test('v527b punt 1 a: een maandpost die in de periode al betaald is (onder een andere sleutel, dezelfde tegenpartij) krijgt geen tweede termijn', async ({ page }) => {
+  /* toetst: Spotify Family loopt op de 22e en is in deze periode op 24 nov betaald als "Spotify Family AB" (recurKey verschilt); de termijn
+     van 22 dec staat NIET in vastNog. Zonder de betaalde boeking (zonder spot) zou hij vanaf 22 okt lopen en op 22 nov en 22 dec vallen. */
+  await S.boot(page, { spot: true });
+  const r = await page.evaluate(() => { const V = maandVooruit();
+    return { lijst: V.vastNogLijst.map((x) => x.naam + ' ' + x.datum), keys: TX.filter((t) => /Spotify Family/.test(t.name)).map((t) => recurKey(t)), betaald: eenheidTx({ start: '2026-11-24', eind: vandaagYMD() }).filter((t) => /Spotify Family/.test(t.name)).map((t) => t.date.slice(0, 10)) }; });
+  expect(new Set(r.keys).size).toBe(2);   // de invoer: twee sleutels voor dezelfde tegenpartij, zoals het toestel
+  expect(r.lijst.some((x) => /spotify/i.test(x))).toBe(false);
+  expect(r.betaald).toEqual(['2026-11-24']);   // de betaalde boeking staat in de periode
+});
+
+test('v527b punt 1 b: een post per week die in de periode betaald is, krijgt wel zijn volgende termijnen', async ({ page }) => {
+  /* toetst: de glazenwasser (EUR 15 elke woensdag, laatst 25 nov) staat op 2, 9, 16 en 23 dec in vastNog; de week is korter dan wat er
+     van de periode resteert sinds die betaling. */
+  await S.boot(page, { week: true });
+  const r = await page.evaluate(() => maandVooruit().vastNogLijst.filter((x) => /Glazenwasser/.test(x.naam)).map((x) => x.datum + ' ' + x.bedrag));
+  expect(r).toEqual(['2026-12-02 15', '2026-12-09 15', '2026-12-16 15', '2026-12-23 15']);
+});
+
+test('v527b punt 2: een verwachte post in de verwachting telt niet ook in het patroon van zijn potje', async ({ page }) => {
+  /* toetst: "Boetes cjib" EUR 50 staat als nog niet gezien in vastNog, en de CJIB-betaling van oktober (EUR 145,98, Belasting & boetes)
+     telt niet in het patroon van dat potje: patroonAftrek is 145,98 x de factor / 3 eenheden, en zonder de aftrek (opts.zonderAftrek)
+     ligt nogVerwacht precies dat bedrag hoger. Een potje zonder vaste post houdt zijn patroon. */
+  await S.boot(page, { cjib: true });
+  const r = await page.evaluate(() => { const V = maandVooruit(), O = periodeVooruitKern(periodeVan(vandaagYMD()), { zonderAftrek: true });
+    const b = V.potjes.find((x) => x.k === 'belasting'), bo = O.potjes.find((x) => x.k === 'belasting'), ue = V.potjes.find((x) => x.k === 'uiteten'), ueo = O.potjes.find((x) => x.k === 'uiteten');
+    return { cjib: V.vastNogLijst.filter((x) => /cjib/i.test(x.naam)).map((x) => [x.bedrag, x.achter]), tx: V.patroonAftrekTx.map((x) => x.naam), aftrek: V.patroonAftrek.belasting,
+      nog: V.nogVerwacht, nogO: O.nogVerwacht, eind: b.eindR, eindO: bo.eindR, ue: [ue.eindR, ueo.eindR] }; });
+  expect(r.cjib).toEqual([[50, true]]);
+  expect(r.tx).toEqual(['CJIB Regeling']);
+  expect(r.aftrek).toBeGreaterThan(40);
+  expect(r.eindO - r.eind).toBeCloseTo(r.aftrek, 6);
+  expect(r.nogO - r.nog).toBeCloseTo(r.aftrek, 6);
+  expect(r.ue[0]).toBe(r.ue[1]);
+});
+
+test('v527b punt 3: boven de tegels staat een filterregel "Deze periode · <periode> ▾ · dag X van Y", en het filter blijft werken', async ({ page }) => {
+  /* toetst: precies een .ins-filt, met de periode, het ▾ en de dagteller in die ene regel; "Deze maand · alle uitgaven" staat er niet;
+     een tik opent dezelfde keuzes (openInsFilter) */
+  await S.boot(page);
+  const r = await page.evaluate(() => { go('ins'); renderIns(); const el = document.getElementById('s-ins'), F = [...el.querySelectorAll('.ins-filt')];
+    const t = F[0] ? F[0].innerText.replace(/\s+/g, ' ').trim() : ''; const boven = F[0] ? F[0].getBoundingClientRect().bottom <= el.querySelector('#insMaand').getBoundingClientRect().top : false;
+    const h = F[0] ? F[0].getBoundingClientRect().height : 0;
+    F[0] && F[0].click(); const sheet = document.getElementById('sheet').innerText; closeSheet();
+    return { n: F.length, t, boven, h, alle: /Deze maand · alle uitgaven/i.test(el.innerText), dagteller: el.querySelectorAll('[data-insdagteller]').length, sheet }; });
+  expect(r.n).toBe(1);
+  expect(r.t).toMatch(/^Deze periode · 24 nov\s?[–-]\s?23 dec ▾ · dag 4 van 30( · ● nog niet bevestigd)?$/);
+  expect(r.alle).toBe(false);
+  expect(r.dagteller).toBe(1);
+  expect(r.boven).toBe(true);
+  expect(r.h).toBeLessThan(48);
+  expect(r.sheet).toMatch(/Vorige maand|Laatste 3 maanden/);
+});

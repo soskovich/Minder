@@ -10415,7 +10415,34 @@ function reeksTekst(x, vals){ vals=vals||x.bedragen; if(!x.eenheden) return maan
 function eenheidBudgetPot(u, k){ if(u.soort==='maand' && !u.korteMaand){ const B=maandPotjes(u.ym).B||{}; return Math.round(+B[k]||0); }
   let BP=null; try{ BP=budgetVoorPeriode(u); }catch(_){ return 0; } return Math.round((+BP.perDag[k]||0)+(+BP.perKeer[k]||0)+(k===CONTANT_CAT?(+BP.contant||0):0)); }
 const PERIODE_BEGIN_DAGEN=7;   // v508 (punt 4)
-function periodeVooruitKern(P){
+/* v527b: de termijnen van een vaste post op een venster, ook wekelijks (rekTermijnen kent alleen 4-wekelijks en maanden; een post per week
+   liep daar als een maandpost). Alleen de periode-vooruitblik leest deze; de salarisverdeling houdt rekTermijnen. */
+function periodeTermijnen(s, last, start, eind){ if(s && s.cadans==='week' && last){ const stap=Math.max(Math.round(+s.afstand||7),1), out=[]; let d=last;
+    for(let i=0;i<80;i++){ d=rekDag(d, stap); if(d>eind) break; if(d>=start) out.push(d); } return out; }
+  return rekTermijnen(s, last, start, eind); }
+/* v527b: het schema kent geen post per week (vastCadans kiest 4-wekelijks of per maand; daaronder geen cadans en intervalM 1, dus een post
+   per week liep als een maandpost). Voor de periode: is de mediane afstand tussen de betalingen van die sleutel hooguit 10 dagen, dan
+   loopt hij per week met die afstand. */
+function vastWeekSchema(x){ const s=x && x.s; if(!s || s.cadans==='4w' || s.cadans==='maand' || s.cadans==='week' || (+s.intervalM||1)>1) return s;
+  const D=[...new Set(telbareTx().filter(t=>t.amount<0 && !t.pending && recurKey(t)===x.key).map(t=>String(t.date).slice(0,10)))].sort().slice(-8);
+  if(D.length<3) return s; const g=[]; for(let i=1;i<D.length;i++) g.push(salDagenTussen(D[i-1], D[i])); g.sort((a,b)=>a-b);
+  const af=g[Math.floor(g.length/2)]; return (af>0 && af<=10)?Object.assign({}, s, {cadans:'week', afstand:af}):s; }
+function vastWoorden(naam){ return String(naam||'').toUpperCase().split(/[^A-Z0-9]+/).filter(w=>w.length>=3 && !/^\d+$/.test(w)); }
+/* v527b: hoort deze afschrijving bij deze vaste last of verwachte post (een item van rekVoorstel().vastAlle)? De sleutel, of de
+   tegenpartij (minstens vijf gelijke beginletters, met een bedrag binnen 20% van de termijn); bij een verwachte post een woord uit zijn naam in
+   dezelfde categorie. */
+function vastHoortBij(t, x){ if(!t || !x || !(t.amount<0)) return false; const key=String(x.key||'');
+  if(t.vbVast && String(t.vbVast)===key) return true;
+  try{ if(recurKey(t)===key) return true; }catch(_){}
+  const tekst=String((t.name||'')+' '+(t.desc||'')).toUpperCase(), cat=catOf(t);
+  if(key.indexOf('vverw|')===0){ const w=vastWoorden(x.naam); return cat===(x.cat||'') && w.some(v=>tekst.includes(v)); }
+  if(key.indexOf('woning|')===0) return false;
+  const kort=v=>String(cleanMerch(v||'')||v||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,8);
+  const a=kort(t.name), b=kort((x.s && x.s.name) || x.naam);
+  const m=Math.min(a.length, b.length, 8);
+  if(m>=5 && a.slice(0,m)===b.slice(0,m)){ const tb=+x.termijn||0; return !(tb>0) || Math.abs(-t.amount-tb)<=Math.max(1, tb*0.2); }
+  return false; }
+function periodeVooruitKern(P, opts){
   const vandaag=vandaagYMD(), dim=Math.max(P.dagen,1), el=Math.min(Math.max(salDagenTussen(P.start, vandaag)+1,1),dim), over=Math.max(dim-el,0);
   const H=periodeHistorie(P), n=H.length;
   const basis={eenheden:H.map(eenheidKort), terugval:H.some(u=>u.soort!=='periode'), n};
@@ -10440,8 +10467,17 @@ function periodeVooruitKern(P){
      (cur.start===P.start) viel dan terug op rekVoorstel().vast, de termijnen van de VOLGENDE periode, en daarvan valt geen enkele datum
      in deze periode: elke vaste last die nog kwam (Auto Lease 11 dec, Allianz 2 dec, Shurgard 2 dec, ...) viel weg, samen EUR 816. Nu
      dezelfde generator als vastCur (genW of rekTermijnen over vastAlle), maar op het venster van P zelf. */
-  const vastNog={}, vastNogLijst=[]; try{ const Pv=rvBusy?null:rekVoorstel(); const VL=(Pv && Pv.ok && Array.isArray(Pv.vastAlle))?Pv.vastAlle.map(x=>{ let ds=null; try{ ds=x.genW?x.genW(P.start, P.eind):rekTermijnen(x.s, x.last, P.start, P.eind); }catch(_){}
-      return (ds && ds.length)?Object.assign({}, x, {data:Array.from(ds)}):null; }).filter(Boolean):null;
+  const vastNog={}, vastNogLijst=[], vastIn=[]; try{ const Pv=rvBusy?null:rekVoorstel(); const perAf=(Pv && Pv.ok)?eenheidTx({start:P.start, eind:vandaag}).filter(t=>t.amount<0):[];
+    /* v527b (punt 1): EEN POST DIE IN DEZE PERIODE AL BETAALD IS, KRIJGT GEEN TWEEDE TERMIJN, tenzij zijn interval korter is dan wat er
+       van de periode resteert sinds die betaling (wekelijks). GEMETEN op 27 nov: Spotify was op 24 nov betaald (in betaald onder
+       Abonnementen) en stond toch op 22 dec in vastNog, want de termijnen liepen vanaf een eerdere betaling. De betaalde boeking wordt
+       gezocht op de sleutel EN op de tegenpartij (vastHoortBij), en de termijnen lopen dan vanaf die betaling. Niet voor de woning en een
+       verwachte post (genW): die hebben hun eigen herkenning van een betaling. */
+    const VL=(Pv && Pv.ok && Array.isArray(Pv.vastAlle))?Pv.vastAlle.map(x=>{ let ds=null, betOp=null;
+      try{ if(x.genW) ds=x.genW(P.start, P.eind);
+        else { for(const t of perAf){ if(vastHoortBij(t, x)){ const d=String(t.date).slice(0,10); if(!betOp || d>betOp) betOp=d; } }
+          ds=periodeTermijnen(vastWeekSchema(x), betOp||x.last, P.start, P.eind); } }catch(_){}
+      return (ds && ds.length)?Object.assign({}, x, {data:Array.from(ds), betOp}):null; }).filter(Boolean):null;
     /* v506 (punt 2): een termijn van DEZE periode die al voorbij is maar niet geboekt (geen betaling van die post deze periode) telt als
        nog te gaan, niet als weg. Zo is de verwachte som van de vaste lasten met en zonder voorbeeld-schakelaar gelijk: een gesimuleerde
        termijn (vbVast) is die ene termijn betaald (fBet), zonder simulatie staat hij hier. Alleen de lopende periode (vastCur). */
@@ -10449,16 +10485,22 @@ function periodeVooruitKern(P){
     const betaaldN=key=>perTx.filter(t=>t.vbVast===key || (String(key).indexOf('woning|')===0?(WPI.has(t.id) || (t.vbVast && String(t.vbVast)===key)):recurKey(t)===key)).length;
     if(Array.isArray(VL)) for(const x of VL){ const bedr=Math.round(+x.termijn||+x.bedrag||0); if(!(bedr>0)) continue; const c=x.cat||'';
     const ds0=(x.data||[]).map(d=>String(d).slice(0,10)), voorbij=isCur?ds0.filter(ds=>ds>=P.start && ds<=vandaag):[];
-    let open=Math.max(voorbij.length-(voorbij.length?betaaldN(x.key):0),0);
+    let open=x.betOp?voorbij.length:Math.max(voorbij.length-(voorbij.length?betaaldN(x.key):0),0);   // v527b: de termijnen lopen vanaf de betaling, dus een voorbije termijn erna is nog open
     for(const ds of ds0){ const fut=ds>vandaag && ds<=P.eind, achter=!fut && open>0 && voorbij.includes(ds); if(!fut && !achter) continue; if(achter) open--;
       let telt=true; try{ telt=!x.key || verwachtInMaand(x.key, ds.slice(0,7)); }catch(_){}   // v369/v499: dezelfde lezer van SET.fixDueExcl en opzegTot als de maand-forecast
-      if(telt){ vastNog[c]=(vastNog[c]||0)+bedr; vastNogLijst.push({key:x.key||'', naam:x.naam||'', cat:c, bedrag:bedr, datum:ds, achter}); } } } }catch(_){}
+      if(telt){ vastNog[c]=(vastNog[c]||0)+bedr; vastNogLijst.push({key:x.key||'', naam:x.naam||'', cat:c, bedrag:bedr, datum:ds, achter}); if(!vastIn.includes(x)) vastIn.push(x); } } } }catch(_){}
   vastNogLijst.sort((a,b)=>a.datum<b.datum?-1:a.datum>b.datum?1:(b.bedrag-a.bedrag));
   /* de historie: per eenheid wat er in de snede van piekInScope uitging, omgerekend naar de dagen van deze periode; 'typisch' is het deel
      tot dezelfde dag (naar rato van de lengte), 'rest' het deel erna, allebei gemiddeld over de eenheden */
-  const restCat={}, tot0={}, perEenheid=[], totP=[];
+  /* v527b (punt 2): WAT ALS VASTE LAST OF VERWACHTE POST IN DE VERWACHTING STAAT (vastIn: een termijn in vastNog), TELT NIET NOG EENS IN
+     HET PATROON VAN ZIJN POTJE. GEMETEN op 27 nov: de verwachte post "Boetes cjib" EUR 50 stond in vastNog en de CJIB-betaling van oktober
+     (EUR 145,98, CJIB Regeling) zat in het patroon van Belasting & boetes, dus dezelfde post telde twee keer. Voor elk potje; de toets is
+     vastHoortBij (sleutel, of tegenpartij; bij een verwachte post een woord uit de naam in dezelfde categorie). Het weggelaten deel staat
+     per potje als patroonAftrek, zodat het verschil te zien is. Alleen de periode; de kalendermaand (maandVooruitKern) is niet aangeraakt. */
+  const restCat={}, tot0={}, perEenheid=[], totP=[], aftrekCat={}, aftrekTx=[];
   for(const u of H){ const f=eenheidFactor(u, P), cut=Math.round(el*Math.max(u.dagen,1)/dim), pm={}; let s=0;
     for(const t of eenheidTx(u)){ if(!piekInScope(t)) continue; const c=catOf(t); if(heelVast(c)) continue; const v=uitgaveNorm(t)*f, off=salDagenTussen(u.start, t.date)+1;
+      if(vastIn.length && !(opts && opts.zonderAftrek)){ const hoort=vastIn.find(x=>vastHoortBij(t, x)); if(hoort){ aftrekCat[c]=(aftrekCat[c]||0)+v/n; aftrekTx.push({id:t.id, datum:String(t.date).slice(0,10), naam:t.name||'', bedrag:Math.round(-t.amount*100)/100, cat:c, post:hoort.naam||hoort.key}); continue; } }
       pm[c]=(pm[c]||0)+v; if(off>cut){ restCat[c]=(restCat[c]||0)+v/n; s+=v; } else tot0[c]=(tot0[c]||0)+v/n; }
     perEenheid.push(pm); totP.push(s); }
   const perMaand=perEenheid.slice().reverse();   // de meest recente eerst, zoals potVarMaanden
@@ -10495,7 +10537,7 @@ function periodeVooruitKern(P){
        vast per periode. */
     const lift=k===CONTANT_CAT?0:Math.max(typ-u,0)*Math.max(1-(el-1)/PERIODE_BEGIN_DAGEN,0);
     if(!(vB>0) && Math.round(u+r+lift)===0){ potKlein+=u+r; continue; }
-    potjes.push({k, naam:CATS[k].name, bud:Math.round(vB), potje:Math.round(b), vastDeel:Math.round(vd), uit:Math.round(u), uitR:u, rest:Math.round(r+lift), eind:Math.round(u+r+lift), eindR:u+r+lift, typisch:Math.round(typ), basisLift:lift,
+    potjes.push({k, naam:CATS[k].name, bud:Math.round(vB), potje:Math.round(b), vastDeel:Math.round(vd), uit:Math.round(u), uitR:u, rest:Math.round(r+lift), eind:Math.round(u+r+lift), eindR:u+r+lift, typisch:Math.round(typ), basisLift:lift, patroonAftrek:Math.round(+aftrekCat[k]||0),
       overR:u+r+lift-vB, patroon:Math.round(patroon), maanden:perMaand.map(pm=>Math.round(+pm[k]||0))}); }
   /* een vaste last zonder potje (de woning, een losse incasso): vast, met het bedrag dat periodeBudget ervoor rekent als budget (vlCat) */
   { const zp=new Set([...Object.keys(fBet), ...Object.keys(vastNog)]);
@@ -10523,7 +10565,7 @@ function periodeVooruitKern(P){
   const band={min:uit+vast+Math.round(Math.min(...totP)), max:uit+vast+Math.round(Math.max(...totP)), maanden:H.map(u=>u.ym), labels:H.map(eenheidKort)};
   return {m:P.ym, el, dim, over, uit, vast, rest, restCat, contant:null, contantLater:null, projectie, budget, budgetNu:budget, wijz:0, maandBudget:null, band, potjes, vastePotjes, variabel, vaste, varEindR, vasteEindR, potKlein, projectieExact,
     zonder:Math.round(zonderExact), zonderExact, zonderBreed:zonderExact, zonderStand:Z, zonderLos:0, zonderLosPosten:[], zonderRest:0, inleg:0, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null,
-    periode:P, label:P.label, basis, uitTotNu, nogVerwacht:projectieExact-uitTotNu, vastNogLijst, PB:PB?Object.assign({}, PB, {P:null}):null, voorlopig:rvBusy};   /* v506 (punt 4): zonder PB.P (rekVoorstel met functies als uitDagDelen/genW), anders kan runMemo de uitkomst niet klonen en rekent elke lezer maandVooruitKern opnieuw (gemeten: 17x per Zien in de era) */
+    periode:P, label:P.label, basis, uitTotNu, nogVerwacht:projectieExact-uitTotNu, vastNogLijst, patroonAftrek:aftrekCat, patroonAftrekTx:aftrekTx, PB:PB?Object.assign({}, PB, {P:null}):null, voorlopig:rvBusy};   /* v506 (punt 4): zonder PB.P (rekVoorstel met functies als uitDagDelen/genW), anders kan runMemo de uitkomst niet klonen en rekent elke lezer maandVooruitKern opnieuw (gemeten: 17x per Zien in de era) */
 }
 function maandVooruit(){ if(window._rvBusy) return perfK('maandVooruitKern', maandVooruitKern);   // v499: binnen rekVoorstelRuw een voorlopige, niet-gememoiseerde uitkomst
   return runMemo('maandVooruit', '', ()=>perfK('maandVooruitKern', maandVooruitKern)); }
@@ -28037,7 +28079,9 @@ function insPeriodeTegels(){ const T=periodeTegelData(); if(!T) return '';
   const P=T.P, onb=periodeOnbevestigd();
   let imp=null; try{ imp=importTotYmd(); }catch(_){}
   const noot=(imp && imp<String(P.start))?`<div class="small" data-insimportnoot data-saldoeindnoot="${esc(imp)}" style="margin:-4px 2px 6px;color:var(--amber)">vanaf je saldi van ${esc(dagKort(imp))} · uitgaven daarna ontbreken</div>`:'';
-  const kop=`<div class="small muted" data-insdagteller style="margin:0 2px 6px">Deze periode · ${esc(P.label)} · dag ${T.el} van ${T.dagen}${onb?` <span data-insonbevestigd role="button" onclick="openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</div>${noot}`;
+  /* v527b (punt 3): EEN REGEL, zoals de mockup: "Deze periode · 24 nov – 23 dec ▾ · dag 4 van 30". Het is het filter zelf (dezelfde
+     keuzes, openInsFilter()); "Deze maand · alle uitgaven ▾" erboven is daarmee vervallen in deze stand. */
+  const kop=`<div class="ins-filt" id="insFilter" data-insper="nu" data-inssoort="alle" data-insdagteller role="button" onclick="openInsFilter()"><span><b>Deze periode</b> · ${esc(P.label)} <span class="muted">▾</span> <span class="small muted">· dag ${T.el} van ${T.dagen}</span>${onb?` <span data-insonbevestigd role="button" onclick="event.stopPropagation();openPeriodeStart()" style="cursor:pointer;font-weight:600;color:var(--amber)">· ● nog niet bevestigd</span>`:''}</span></div>${noot}`;
   const pct=Math.min(T.potUit/Math.max(T.potBud,1)*100,100), tp=T.potBud>0?Math.min(T.tempo/Math.max(T.potBud,1)*100,100):0;
   const pot=`<div class="card" id="insMaand" data-insmaand="periode" data-instegel="potjes" data-insperiode="${esc(P.label)}" data-insuit="${T.potUit}" data-insbudget="${T.potBud}" data-instempo="${T.tempo}" data-instempouit="${T.tempoUit}" data-instempoverschil="${T.tempoD}" data-insel="${T.el}" data-insdagen="${T.dagen}" role="button" onclick="openInsPotjesPeriode()" style="cursor:pointer">
     <div class="row" style="justify-content:space-between;gap:8px"><span class="hlabel" style="margin:0">Potjes</span><span style="font-weight:700">›</span></div>
@@ -29045,7 +29089,7 @@ function renderIns(){
   /* v527 (B1): op de lopende periode drie tegels (Potjes, Deze week, Vaste lasten), het inkomen, Verschuivingen en een link naar Grip;
      geen "Verwacht saldo eind periode" meer (dat staat op Grip) en geen tweede uitgegeven-getal */
   let PT=null; if(P.key==='nu' && soort==='alle'){ try{ PT=insPeriodeTegels(); }catch(_){ PT=null; } }
-  if(PT){ $('#s-ins').innerHTML = insFilterKnop(P,soort) + PT.kop + PT.pot + insWeekTegel() + PT.vast + PT.ink + insHistorieRegel() + insVerschuiving() + insGripLink(); return; }
+  if(PT){ $('#s-ins').innerHTML = PT.kop + PT.pot + insWeekTegel() + PT.vast + PT.ink + insHistorieRegel() + insVerschuiving() + insGripLink(); return; }
   $('#s-ins').innerHTML = insFilterKnop(P,soort) + insMaandKaart(P,soort)
     + (P.key==='nu' ? insWeekTegel() + insHistorieRegel() : '')   // v436: de patroontegels zijn weg; het label staat bij de signalen op Grip
     + insVerschuiving();

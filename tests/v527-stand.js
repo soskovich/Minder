@@ -27,6 +27,17 @@ async function boot(page, o) {
     maand(ms, '26', 10.99, 'Spotify', 'SEPA Incasso Spotify AB', 'abonnement');
     /* Uit eten: EUR 200 per maand in de drie eenheden voor de periode, niets deze periode */
     for (const d of ['2026-09-05', '2026-09-15', '2026-10-05', '2026-10-15', '2026-11-05', '2026-11-15']) add(LEEF, d, -100, 'Restaurant Lona', 'BEA, BETAALPAS Restaurant Lona', 'uiteten');
+    /* v527b: { spot: true } een tweede abonnement met de vorm van het toestel: elke maand op de 22e als "Spotify", en in deze periode op
+       24 nov als "Spotify AB" (een andere sleutel, dezelfde tegenpartij). Punt 1: geen tweede termijn op 22 dec. */
+    if (o.spot) { for (const m of ['2026-07', '2026-08', '2026-09', '2026-10']) add(BET, m + '-22', -17.99, 'Spotify Family', 'SEPA Incasso Spotify Family ' + m, 'abonnement');
+      add(BET, '2026-11-24', -17.99, 'Spotify Family AB', 'SEPA Incasso Spotify Family 2026-11', 'abonnement'); }
+    /* v527b: { week: true } een post per week (de glazenwasser, EUR 15, elke woensdag), laatst betaald op 25 nov: hij krijgt wel termijnen. */
+    if (o.week) { let d = new Date('2026-09-02T12:00'); while (ymdVan(d) <= '2026-11-25') { add(BET, ymdVan(d), -15, 'Glazenwasser Jansen', 'SEPA Incasso Glazenwasser Jansen ' + ymdVan(d), 'overig'); d.setDate(d.getDate() + 7); } }
+    /* v527b: { cjib: true } de vorm van punt 2: een verwachte post "Boetes cjib" EUR 50 vanaf 26 nov (nog niet gezien) en in oktober een
+       CJIB-betaling van EUR 145,98 in Belasting & boetes, met een potje van EUR 64. */
+    if (o.cjib) { add(LEEF, '2026-10-12', -145.98, 'CJIB Regeling', 'CJIB Regeling betalingskenmerk', 'belasting');
+      SET.budgets = Object.assign({}, SET.budgets, { belasting: 64 });
+      SET.vastVerwacht = (SET.vastVerwacht || []).concat([{ id: 'vvcjib527b', naam: 'Boetes cjib', bedrag: 50, ritme: 1, eerste: '2026-11-26', cat: 'belasting', acc: LEEF, schatting: true }]); }
     if (o.dubbel) { add(BET, '2026-11-25', -250, 'Geldmaat Zwanebloem 9', 'GEA, BETAALPAS Geldmaat Zwanebloem 9'); add(BET, '2026-11-25', -250, 'Geldmaat GM Zwanebloe', 'GEA, BETAALPAS Geldmaat GM Zwanebloe'); }
     SET.budgets = Object.assign({}, SET.budgets, { uiteten: 55, goededoel: 136 });
     SET.potAard = Object.assign({}, SET.potAard, { goededoel: 'vast' });

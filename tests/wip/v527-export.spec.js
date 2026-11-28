@@ -1,8 +1,9 @@
 /* v527 OP JOUW EXPORT (de back-up staat niet in de repo, dus dit draait alleen bij jou):
      MINDER_EXPORT=<pad naar je back-up van 27 nov> WIP=1 TZ=Europe/Amsterdam npx playwright test tests/wip/v527-export.spec.js
-   Test a (Grip, 27 nov): verwacht EUR 7.189, ondergrens EUR 6.683, vaste lasten nog EUR 816 in 7 posten, Budget-tegel EUR 406 onder
-     (budget EUR 3.651, verwacht EUR 3.245), bridge-stap vast -EUR 336.
-   Test b (Inzichten, 27 nov): Potjes EUR 173 van EUR 2.255, Deze week nog EUR 84 van EUR 202, Vaste lasten EUR 244 + EUR 816, binnen
+   Test a (Grip, 27 nov; v527b): vaste lasten nog EUR 866 in 8 posten (geen tweede Spotify; CJIB EUR 50 nog niet gezien), verwacht
+     EUR 7.139, ondergrens EUR 6.633, Budget-tegel EUR 356 onder (budget EUR 3.651, verwacht EUR 3.295), bridge-stap vast -EUR 286.
+     Verschuift punt 2 (de aftrek uit het patroon) een getal, dan drukt hij oud -> nieuw met de oorzaak af en faalt hij, tot goedkeuring.
+   Test b (Inzichten, 27 nov): Potjes EUR 173 van EUR 2.255, Deze week nog EUR 84 van EUR 202 (hele euro's), Vaste lasten EUR 244 + EUR 866, binnen
      EUR 5.727. Zonder antwoord op de opnamevraag is de tegel gelijk aan het uitgegeven-blok (uitgegevenStand); na "Ja, dezelfde":
      EUR 35 onder tempo. Drukt alles af, zodat een afwijking te plaatsen is.
    Test c (sheets): per potje Boodschappen EUR 63/488 tempo 65, Overig 42/371 tempo 49, Contant 35/400 tempo 53, Vices 13/94 tempo 13,
@@ -30,22 +31,39 @@ async function laad(page, html, data, dag, contant) {
 const data = () => { const pad = process.env.MINDER_EXPORT; if (!pad) return null; return JSON.parse(fs.readFileSync(pad, 'utf8')); };
 const DAG = process.env.REPETITIE_DAG || '2026-11-27';
 
-test('a: Grip verwacht EUR 7.189, ondergrens EUR 6.683, vast nog EUR 816 (7 posten), Budget-tegel EUR 406 onder, bridge-stap vast -EUR 336', async ({ page }) => {
+test('a: vast nog EUR 866 in 8 posten (geen tweede Spotify, CJIB nog niet gezien); verwacht 7.139, ondergrens 6.633, Budget-tegel EUR 356 onder (3.295), bridge vast -EUR 286', async ({ page }) => {
   const d = data(); if (!d) test.skip();
   await laad(page, null, d, DAG);
   const r = await page.evaluate(() => { const S = periodeStandEind(), V = maandVooruit(), MB = gripMeterBudget(), B = brugIndeling(V);
-    return { eind: S.eind, onder: S.onder, start: S.start, vast: S.vastR, pot: S.potR, zonder: S.zonderR, posten: (V.vastNogLijst || []).map((x) => `${x.naam} ${x.datum} ${x.bedrag}`),
-      MB: { budget: MB.budget, verwacht: MB.verwacht, verschil: MB.verschil, netto: MB.netto }, vastStap: B ? (B.groepen.find((x) => x.k === 'vast') || {}).d : null };
+    /* v527b (punt 2): dezelfde periode zonder de aftrek uit het patroon, om oud -> nieuw te kunnen melden */
+    const O = periodeVooruitKern(periodeVan(vandaagYMD()), { zonderAftrek: true });
+    const onder = (VV, nog) => { const vastR = Math.round(+VV.vast || 0), zonderR = Math.round(+(VV.zonderStand && VV.zonderStand.verwacht) || 0), potR = Math.round(nog) - vastR - zonderR;
+      const rr = VV.potjes.map((x) => ({ k: x.k, ruimte: Math.max(Math.round(x.bud - (+x.uit || 0)), 0), v: Math.max((+x.eindR || 0) - (+x.uitR != null ? +x.uitR : +x.uit || 0), 0) }));
+      const afg = brugAfronden(rr.map((x) => ({ k: x.k, v: x.v })), potR); return S.start - vastR - zonderR - rr.reduce((a, x) => a + Math.max(x.ruimte, afg[x.k] || 0), 0); };
+    const oud = { eind: S.start - Math.round(O.nogVerwacht), onder: onder(O, O.nogVerwacht), verwacht: Math.round(O.projectie), verschil: Math.round(O.projectie) - MB.budget };
+    return { eind: S.eind, onder: S.onder, start: S.start, vast: S.vastR, pot: S.potR, zonder: S.zonderR, posten: (V.vastNogLijst || []).map((x) => `${x.naam} ${x.datum} ${x.bedrag}${x.achter ? ' (nog niet gezien)' : ''}`),
+      MB: { budget: MB.budget, verwacht: MB.verwacht, verschil: MB.verschil, netto: MB.netto }, vastStap: B ? (B.groepen.find((x) => x.k === 'vast') || {}).d : null,
+      aftrek: V.patroonAftrek, aftrekTx: V.patroonAftrekTx, potAftrek: V.potjes.filter((x) => x.patroonAftrek).map((x) => [x.naam, x.patroon + x.patroonAftrek, x.patroon]), oud };
   });
-  const vastStap = r.vastStap;
   console.log(JSON.stringify(r, null, 1));
-  expect(r.vast).toBe(816); expect(r.posten.length).toBe(7);
-  expect(r.eind).toBe(7189); expect(r.onder).toBe(6683);
-  expect(r.MB.budget).toBe(3651); expect(r.MB.verwacht).toBe(3245); expect(r.MB.verschil).toBe(-406);
-  expect(vastStap).toBe(-336);
+  expect(r.vast).toBe(866); expect(r.posten.length).toBe(8);
+  expect(r.posten.some((x) => /spotify/i.test(x))).toBe(false);
+  expect(r.posten.filter((x) => /cjib/i.test(x) && /nog niet gezien/.test(x)).length).toBe(1);
+  expect(r.vastStap).toBe(-286);
+  /* punt 2: verschuift de aftrek uit het patroon iets, dan staat hier per getal oud -> nieuw met de oorzaak, en dan zijn de getallen
+     hieronder (berekend zonder die verschuiving) nog niet goedgekeurd. */
+  const verschuift = r.oud.eind !== r.eind || r.oud.onder !== r.onder || r.oud.verwacht !== r.MB.verwacht;
+  if (verschuift) {
+    const melding = `PUNT 2 VERSCHUIFT (wacht op goedkeuring): verwacht ${r.oud.eind} -> ${r.eind}, ondergrens ${r.oud.onder} -> ${r.onder}, Budget-tegel verwacht ${r.oud.verwacht} -> ${r.MB.verwacht} (verschil ${r.oud.verschil} -> ${r.MB.verschil}); oorzaak: ${JSON.stringify(r.potAftrek)} uit ${JSON.stringify(r.aftrekTx)}`;
+    console.log(melding);
+    expect([r.oud.eind, r.oud.onder, r.oud.verwacht, r.oud.verschil]).toEqual([7139, 6633, 3295, -356]);
+    expect(verschuift, melding).toBe(false);
+  }
+  expect(r.eind).toBe(7139); expect(r.onder).toBe(6633);
+  expect(r.MB.budget).toBe(3651); expect(r.MB.verwacht).toBe(3295); expect(r.MB.verschil).toBe(-356);
 });
 
-test('b: Inzichten EUR 173 van 2.255, week EUR 84 van 202, vast EUR 244 + 816, binnen EUR 5.727; na "ja": EUR 35 onder tempo', async ({ page }) => {
+test('b: Inzichten EUR 173 van 2.255, week EUR 84 van 202, vast EUR 244 + 866, binnen EUR 5.727; na "ja": EUR 35 onder tempo', async ({ page }) => {
   const d = data(); if (!d) test.skip();
   await laad(page, null, d, DAG);
   const r = await page.evaluate(() => { const T = periodeTegelData(), P = periodeVan(vandaagYMD()), U = uitgegevenStand({ start: P.start, eind: vandaagYMD() }), W = weekTegelBron(false), K = opnDubbelKandidaten();
@@ -53,9 +71,10 @@ test('b: Inzichten EUR 173 van 2.255, week EUR 84 van 202, vast EUR 244 + 816, b
     return { potUit: T.potUit, potBud: T.potBud, tempoD: T.tempoD, tempo: T.tempo, tempoUit: T.tempoUit, U: U.r.potjes, week: W && W.N ? [W.N.nog, W.N.bedrag] : null, vast: [T.vastBet, T.vastNog], ink: T.ink, kand: K.map((x) => [x.sleutel, x.a.name, x.b.name, x.keuze]), saldo: /Verwacht saldo/i.test(t), t }; });
   console.log(JSON.stringify(r, null, 1));
   expect([r.potUit, r.potBud]).toEqual([173, 2255]); expect(r.potUit).toBe(r.U);
-  expect(r.week).toEqual([84, 202]); expect(r.vast).toEqual([244, 816]);
+  expect(r.week.map((v) => Math.round(v))).toEqual([84, 202]); expect(r.vast).toEqual([244, 866]);   // v527b (punt 4): hele euro's, zoals het scherm
   expect(r.ink.totaal).toBe(5727); expect([r.ink.salaris, r.ink.verg, r.ink.eenmalig]).toEqual([5216, 412, 99]);
   expect(r.saldo).toBe(false);
+  expect(r.t).toMatch(/€\s?244\s+betaald · nog €\s?866 op hun datum/); expect(r.t).toMatch(/1 post nog niet gezien/);   // v527b
   expect(r.kand.length).toBeGreaterThanOrEqual(1);
   const na = await page.evaluate(() => { const K = opnDubbelKandidaten().find((x) => /Geldmaat/i.test(x.a.name) && !x.keuze); if (K) opnDubbelZet(K.sleutel, true);
     const T = periodeTegelData(), P = periodeVan(vandaagYMD()), U = uitgegevenStand({ start: P.start, eind: vandaagYMD() }); let C = null; try { C = contantRegelData(); } catch (_) {}

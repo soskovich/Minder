@@ -6,8 +6,8 @@
  "sabotages": [
   {
    "naam": "deel0 a: de oude bron (termijnen van de volgende periode)",
-   "zoek": "ds=x.genW?x.genW(P.start, P.eind):rekTermijnen(x.s, x.last, P.start, P.eind); }catch(_){}",
-   "vervang": "ds=x.data; }catch(_){}"
+   "zoek": "const VL=(Pv && Pv.ok && Array.isArray(Pv.vastAlle))?Pv.vastAlle.map(x=>{ let ds=null, betOp=null;",
+   "vervang": "const VL=(Pv && Pv.ok && Array.isArray(Pv.vastAlle))?Pv.vastAlle.map(x=>{ let ds=x.data, betOp=null; return (ds && ds.length)?Object.assign({}, x, {data:Array.from(ds)}):null;"
   },
   {
    "naam": "deel0 c: een vast potje zonder betaling telt zijn budget",

@@ -1917,3 +1917,12 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   `v527-stand.js`, export `tests/wip/v527-export.spec.js` (a, b, c, m, r). Gemigreerd: `periode-groepen`, `periode-vangnet`, `onderhoud1` b/c, `onderhoud5` h, `v498` b,
   `v499` f, `v500` c (de import-noot staat nu bij de tegels en de stand), `v512` f, `v521a` d/f, `v521c` g, `v523` h, `v523c` c, `v525` f, `v526` h: in de repetities worden
   Inzichten en Grip afgedrukt en niet vergeleken, Home, Plan en Vermogen wel.
+
+## v527b · vaste lasten die nog komen: geen tweede termijn, geen dubbele telling
+- Een vaste post die in de periode al betaald is (ook onder een andere sleutel, dezelfde tegenpartij: `vastHoortBij()`) krijgt zijn termijnen
+  vanaf die betaling (`periodeTermijnen()`), dus een maandpost geen tweede termijn; een post per week wel (`vastWeekSchema()`).
+- De historie van de periode-vooruitblik slaat boekingen over die bij een post in de verwachting horen (`patroonAftrek`, `zonderAftrek`).
+- Inzichten in de periode: een filterregel "Deze periode · <periode> ▾ · dag X van Y".
+- `tests/wip/v527-export.spec.js`: de getallen van de back-up (866 in 8 posten, 7.139, 6.633, -356, -286), oud -> nieuw bij een verschuiving
+  door punt 2, en de week op hele euro's. Cache `minder-v527b`.
+

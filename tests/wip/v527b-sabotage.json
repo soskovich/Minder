@@ -1,0 +1,53 @@
+{
+ "specs": [
+  "tests/v527.spec.js"
+ ],
+ "timeout": 400,
+ "sabotages": [
+  {
+   "naam": "punt 1a: de termijnen lopen weer vanaf de oude laatste betaling",
+   "zoek": "ds=periodeTermijnen(vastWeekSchema(x), betOp||x.last, P.start, P.eind);",
+   "vervang": "ds=periodeTermijnen(vastWeekSchema(x), x.last, P.start, P.eind);"
+  },
+  {
+   "naam": "punt 1a: de tegenpartij telt niet (alleen de sleutel)",
+   "zoek": "if(m>=5 && a.slice(0,m)===b.slice(0,m)){",
+   "vervang": "if(false){"
+  },
+  {
+   "naam": "punt 1b: geen weekschema",
+   "zoek": "return (af>0 && af<=10)?Object.assign",
+   "vervang": "return (false)?Object.assign"
+  },
+  {
+   "naam": "punt 1b: periodeTermijnen kent geen week",
+   "zoek": "if(s && s.cadans==='week' && last){",
+   "vervang": "if(false && last){"
+  },
+  {
+   "naam": "punt 2: geen aftrek uit het patroon",
+   "zoek": "if(vastIn.length && !(opts && opts.zonderAftrek)){",
+   "vervang": "if(false){"
+  },
+  {
+   "naam": "punt 2: vastIn blijft leeg",
+   "zoek": "if(!vastIn.includes(x)) vastIn.push(x);",
+   "vervang": ""
+  },
+  {
+   "naam": "punt 2: een verwachte post zonder woordtoets",
+   "zoek": "return cat===(x.cat||'') && w.some(v=>tekst.includes(v)); }",
+   "vervang": "return false; }"
+  },
+  {
+   "naam": "punt 3: de oude filterknop staat er weer boven",
+   "zoek": "if(PT){ $('#s-ins').innerHTML = PT.kop + PT.pot",
+   "vervang": "if(PT){ $('#s-ins').innerHTML = insFilterKnop(P,soort) + PT.kop + PT.pot"
+  },
+  {
+   "naam": "punt 3: de dagteller in een eigen regel",
+   "zoek": "</span> <span class=\"small muted\">· dag ${T.el} van ${T.dagen}</span>${onb?",
+   "vervang": "</span></div><div data-insdagteller class=\"small muted\">· dag ${T.el} van ${T.dagen}</div><div>${onb?"
+  }
+ ]
+}
