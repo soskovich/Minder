@@ -300,3 +300,79 @@ test('v527b punt 3: boven de tegels staat een filterregel "Deze periode · <peri
   expect(r.h).toBeLessThan(48);
   expect(r.sheet).toMatch(/Vorige maand|Laatste 3 maanden/);
 });
+
+/* ===== v527d: naamvarianten van dezelfde partij horen bij een reeks, en maandritme vanaf twee betalingen ===== */
+test('v527d punt 1: "Spotify AB" en twee keer "Spotify" zijn een reeks; betaald op de 24e in de periode, dus geen termijn op de 22e', async ({ page }) => {
+  /* toetst: de invoer eerst (de sleutel SPOTIFY heeft maar twee betaaldagen, de derde heet "Spotify AB" en heeft een eigen sleutel); de boeking
+     van 23 sep hoort via postBetaling() bij de post; het maandschema ziet drie betalingen en de volgende termijn is 24 dec, dus Spotify staat
+     niet in vastNog (periode 24 nov - 23 dec) */
+  await S.boot(page, { spotEcht: true });
+  const r = await page.evaluate(() => { const V = maandVooruit(), it = rekVoorstel().vastAlle.find((x) => x.key === 'SPOTIFY'), s = recurringSchedule().find((x) => x.key === 'SPOTIFY');
+    const ab = TX.find((t) => t.name === 'Spotify AB');
+    return { sleutels: [...new Set(TX.filter((t) => /spotify/i.test(t.name)).map(recurKey))].sort(), n: s ? s.count : null, ab: !!(it && postBetaling(ab, it)),
+      D: it ? telbareTx().filter((t) => postBetaling(t, it)).map((t) => String(t.date).slice(0, 10)).sort() : null,
+      cadans: it ? vastMaandSchema(it).cadans : null, volgende: it ? periodeTermijnen(vastMaandSchema(it), '2026-11-24', '2026-11-24', '2027-01-31') : null,
+      lijst: V.vastNogLijst.map((x) => x.naam + ' ' + x.datum) }; });
+  expect(r.sleutels).toEqual(['SPOTIFY', 'SPOTIFY AB']);
+  expect(r.n).toBe(2);
+  expect(r.ab).toBe(true);
+  expect(r.D).toEqual(['2026-09-23', '2026-10-26', '2026-11-24']);
+  expect(r.cadans).toBe('maand');
+  expect(r.volgende).toEqual(['2026-12-24', '2027-01-24']);
+  expect(r.lijst.some((x) => /spotify/i.test(x))).toBe(false);
+});
+
+test('v527d punt 1: "NIKKI" en "NIKKI via Stichting Moll" zijn een reeks; hun betalingen gaan uit het patroon van Kinderen', async ({ page }) => {
+  /* toetst: de verwachte vaste last Nikki (gekoppeld aan NIKKI) herkent ook de betalingen "via Stichting Moll(ie Payments)"; okt en nov staan in
+     de patroon-aftrek van Kinderen en het patroon ligt precies dat bedrag lager; de losse uitgaven in Kinderen blijven in het patroon; Nikki staat
+     een keer in vastNog (11 dec) */
+  await S.boot(page, { nikki: true });
+  const r = await page.evaluate(() => { const V = maandVooruit(), O = periodeVooruitKern(periodeVan(vandaagYMD()), { zonderAftrek: true }), x = vvLijst().find((v) => v.id === 'vvnikki527d');
+    const it = { key: 'vverw|' + x.id, reeks: vvReeksKey(x) }, k = V.potjes.find((p) => p.k === 'e_kinderen'), ko = O.potjes.find((p) => p.k === 'e_kinderen');
+    return { reeks: it.reeks, herkend: telbareTx().filter((t) => postBetaling(t, it)).map((t) => String(t.date).slice(0, 10) + ' ' + t.name).sort(),
+      aftrekTx: (V.patroonAftrekTx || []).filter((y) => y.cat === 'e_kinderen').map((y) => y.datum + ' ' + y.naam).sort(), aftrek: V.patroonAftrek.e_kinderen || 0,
+      eind: k ? k.eindR : null, eindO: ko ? ko.eindR : null, boer: (V.patroonAftrekTx || []).some((y) => /Kinderboerderij/.test(y.naam)),
+      nikki: V.vastNogLijst.filter((y) => /nikki/i.test(y.naam)).map((y) => y.datum + ' ' + y.bedrag) }; });
+  expect(r.reeks).toBe('NIKKI');
+  expect(r.herkend).toEqual(['2026-05-29 NIKKI via Stichting Mollie Payments', '2026-08-17 NIKKI', '2026-09-11 NIKKI', '2026-10-19 NIKKI via Stichting Moll', '2026-11-11 NIKKI via Stichting Moll']);
+  expect(r.aftrekTx).toEqual(expect.arrayContaining(['2026-10-19 NIKKI via Stichting Moll', '2026-11-11 NIKKI via Stichting Moll']));
+  expect(r.aftrek).toBeGreaterThan(0);
+  expect(r.eindO - r.eind).toBeCloseTo(r.aftrek, 6);
+  expect(r.boer).toBe(false);
+  expect(r.nikki).toEqual(['2026-12-11 47']);
+});
+
+test('v527d punt 1: "CJIB Regeling" en "CJIB Verkeersboetes" blijven gescheiden, en een gelijke eerste naam met een ander bedrag koppelt niet', async ({ page }) => {
+  /* toetst: (a) de reeks van CJIB REGELING draagt geen enkele Verkeersboete (andere naam, geen bedrag binnen 1%); (b) "Peaks Inleg" EUR 10 en
+     "Peaks Servicekosten" EUR 2,99 (hetzelfde eerste woord) zijn twee reeksen; (c) met een gelijk bedrag (EUR 10) hoort de variant er wel bij;
+     (d) een rechtsvorm achteraan met een ander bedrag (Netflix BV) hoort erbij via de genormaliseerde naam */
+  await S.boot(page, { cjib: true });
+  const r = await page.evaluate(() => { const acc = TX[0].acc, mk = (d, a, n) => { const t = { id: 'v527dpk' + d + n.replace(/\W/g, '') + Math.round(-a * 100), date: d, amount: a, acc, name: n, desc: 'SEPA Incasso ' + n + ' ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'abonnement'; return t; };
+    for (const m of ['2026-08', '2026-09', '2026-10', '2026-11']) { mk(m + '-20', -10, 'Peaks Inleg'); mk(m + '-03', -2.99, 'Peaks Servicekosten'); }
+    const gelijk = mk('2026-11-21', -10, 'Peaks Bijdrage');
+    /* (d) een rechtsvorm met een ander bedrag (prijsverhoging): "Netflix BV" EUR 13,99 naast "Netflix" EUR 15,99; alleen regel a koppelt hem */
+    const nbv = mk('2026-09-15', -13.99, 'Netflix BV'); mk('2026-10-15', -15.99, 'Netflix'); mk('2026-11-15', -15.99, 'Netflix');
+    save(); telbaarVergeten(); const NF = postFamilie('NETFLIX');
+    const R = postFamilie('CJIB REGELING'), P = postFamilie('PEAKS INLEG');
+    return { vk: TX.filter((t) => /Verkeersboetes/.test(t.name) && R.has(t.id)).length, reg: TX.filter((t) => /CJIB Regeling/.test(t.name) && R.has(t.id)).length,
+      kosten: TX.filter((t) => t.name === 'Peaks Servicekosten' && P.has(t.id)).length, inleg: TX.filter((t) => t.name === 'Peaks Inleg' && P.has(t.id)).length, gelijk: P.has(gelijk.id), nbv: NF.has(nbv.id), nbvKey: recurKey(nbv) }; });
+  expect(r.reg).toBe(4);
+  expect(r.vk).toBe(0);
+  expect(r.inleg).toBe(4);
+  expect(r.kosten).toBe(0);
+  expect(r.gelijk).toBe(true);
+  expect(r.nbvKey).toBe('NETFLIX BV');
+  expect(r.nbv).toBe(true);
+});
+
+test('v527d punt 2: twee betalingen met maandafstand zijn genoeg voor maandritme; twee in een kalendermaand blijven 4-wekelijks', async ({ page }) => {
+  /* toetst: "Opslag Twee" op 26 okt en 24 nov (afstand 29, vastCadans 4w) is een maandpost; "Box Vier" op 1 en 29 okt (de vorm van Shurgard, 1 en 30 sep: twee in een
+     maand) blijft 4-wekelijks */
+  await S.boot(page);
+  const r = await page.evaluate(() => { const acc = TX[0].acc, mk = (d, a, n) => { const t = { id: 'v527dmr' + d + n.replace(/\W/g, ''), date: d, amount: a, acc, name: n, desc: 'SEPA Incasso ' + n + ' ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'huur'; };
+    mk('2026-10-26', -20, 'Opslag Twee'); mk('2026-11-24', -20, 'Opslag Twee'); mk('2026-10-01', -66.26, 'Box Vier'); mk('2026-10-29', -71, 'Box Vier');
+    save(); telbaarVergeten(); window._rekV = null; const A = rekVoorstel().vastAlle, f = (k) => { const it = A.find((x) => x.key === k); return it ? [it.s.cadans, vastMaandSchema(it).cadans] : null; };
+    return { twee: f('OPSLAG TWEE'), vier: f('BOX VIER') }; });
+  expect(r.twee).toEqual(['4w', 'maand']);
+  expect(r.vier).toEqual(['4w', '4w']);
+});

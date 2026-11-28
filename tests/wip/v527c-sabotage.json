@@ -11,8 +11,8 @@
   },
   {
    "naam": "punt 1: twee betalingen in een kalendermaand maken hem niet 4-wekelijks",
-   "zoek": "if(C.length<3) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;",
-   "vervang": "if(C.length<3) return s; const M=C.map(d=>d.slice(0,7));"
+   "zoek": "if(C.length<2) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;",
+   "vervang": "if(C.length<2) return s; const M=C.map(d=>d.slice(0,7));"
   },
   {
    "naam": "punt 1: de periode leest het maandschema niet",

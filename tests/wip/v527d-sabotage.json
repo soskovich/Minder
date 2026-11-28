@@ -1,0 +1,33 @@
+{
+ "specs": ["tests/v527.spec.js"],
+ "timeout": 400,
+ "sabotages": [
+  {"naam": "punt 1: geen naamfamilie (postBetaling leest weer alleen de sleutel)",
+   "zoek": "  return postFamilie(key).has(t.id); }",
+   "vervang": "  return false; }"},
+  {"naam": "punt 1: een verwachte post leest de naamfamilie niet",
+   "zoek": "return !!rk && (recurKey(t)===rk || postFamilie(rk).has(t.id)); }",
+   "vervang": "return !!rk && recurKey(t)===rk; }"},
+  {"naam": "punt 1: geen toevoeging 'via ...' weg",
+   "zoek": ".replace(/\\s+VIA\\s.*$/,'')",
+   "vervang": ""},
+  {"naam": "punt 1: geen rechtsvorm weg",
+   "zoek": "const k=s.replace(/\\s+(AB|BV|B V|NL|NV|N V)$/,'');",
+   "vervang": "const k=s;"},
+  {"naam": "punt 1: regel b zonder bedragtoets",
+   "zoek": "if(!ids.has(v.t.id) && postNaamBedrag(v.a, b.a)) ids.add(v.t.id);",
+   "vervang": "if(!ids.has(v.t.id)) ids.add(v.t.id);"},
+  {"naam": "punt 1: geen regel b (alleen de genormaliseerde naam)",
+   "zoek": "    if(b.w) for(const v of (I.woord[b.w]||[]))",
+   "vervang": "    if(false) for(const v of (I.woord[b.w]||[]))"},
+  {"naam": "punt 1: de bedragtoets op 50% in plaats van 1%",
+   "zoek": "const POST_NAAM_DEEL=0.01,",
+   "vervang": "const POST_NAAM_DEEL=0.8,"},
+  {"naam": "punt 2: weer drie betalingen nodig",
+   "zoek": "  if(C.length<2) return s; const M=C.map(d=>d.slice(0,7));",
+   "vervang": "  if(C.length<3) return s; const M=C.map(d=>d.slice(0,7));"},
+  {"naam": "punt 2: twee in een kalendermaand maken hem niet 4-wekelijks",
+   "zoek": "const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;\n  /* v527d",
+   "vervang": "const M=C.map(d=>d.slice(0,7));\n  /* v527d"}
+ ]
+}

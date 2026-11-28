@@ -1935,3 +1935,13 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
   vaste last bij een gesplitste partij leest alleen zijn eigen reeks.
 - Export-test a toetst hard vast nog 866 / 8 posten / bridge -286 / ruimte 2.082 en drukt de aftrek per potje met de boekingen af.
 - Cache `minder-v527c`.
+- **v527d · naamvarianten van dezelfde partij horen bij één reeks** (gevraagd door de gebruiker na een meting op de back-up van 27 nov met
+  fbeed76: Spotify op 22 dec, Nikki dubbel).
+- `postFamilie(key)`: een boeking hoort bij de reeks van een post als (a) zijn genormaliseerde naam (`postNaamNorm()`: hoofdletters, geen
+  cijfers, geen "via ..." en geen rechtsvorm AB/BV/NL/NV achteraan) gelijk is aan die van een boeking van de post, of (b) het eerste
+  betekenisvolle woord (`postNaamWoord()`) gelijk is en het bedrag binnen 1% (`POST_NAAM_DEEL`). Bij een gesplitste partij alleen binnen de
+  bedragband van zijn reeks. `postBetaling()` leest hem, dus betaald, open termijn, gezien en de patroon-aftrek.
+- `vastMaandSchema()`: twee betalingen zijn genoeg als ze in verschillende kalendermaanden vallen en elke afstand 25 tot 35 dagen is
+  (`VAST_MAANDRITME`); met drie of meer blijft de regel van v527c.
+- Spec `v527.spec.js` 23 tests (4 nieuw), stand `{ spotEcht, nikki }`, sabotages `tests/wip/v527d-sabotage.json`; export-test a drukt de
+  familie van Spotify en Nikki af en eist Spotify maandelijks met 24 dec. Cache `minder-v527d`.

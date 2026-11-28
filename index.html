@@ -10437,8 +10437,13 @@ function vastWoorden(naam){ return String(naam||'').toUpperCase().split(/[^A-Z0-
 function vastMaandSchema(x){ const s=x && x.s; if(!s || s.cadans!=='4w') return s;
   const grens=rekMaandPlus(vandaagYMD(), -13), D=[...new Set(telbareTx().filter(t=>postBetaling(t, x)).map(t=>String(t.date).slice(0,10)))].filter(d=>d>=grens).sort();
   const C=[]; for(const d of D){ if(C.length && salDagenTussen(C[C.length-1], d)<=VAST_CLUSTER_DAGEN) continue; C.push(d); }
-  if(C.length<3) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;
+  if(C.length<2) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;
+  /* v527d (punt 2): twee betalingen zijn genoeg als elke afstand tussen VAST_MAANDRITME.min en .max dagen ligt (nooit twee in een
+     kalendermaand stond er al); met drie of meer blijft de regel van v527c (geen eis op de afstand, een maand overslaan mag) */
+  const G=[]; for(let i=1;i<C.length;i++) G.push(salDagenTussen(C[i-1], C[i]));
+  if(C.length<3 && !G.every(g=>g>=VAST_MAANDRITME.min && g<=VAST_MAANDRITME.max)) return s;
   return Object.assign({}, s, {cadans:'maand', intervalM:1, maandRitme:true}); }
+const VAST_MAANDRITME={min:25, max:35};
 /* v527c (punt 2): DE REEKS VAN EEN VERWACHTE POST. Na je bevestiging (vvKoppel) de sleutel van de gekoppelde afschrijving; zonder koppeling
    de reeks (een sleutel, recurKey) in dezelfde categorie met een woord uit de naam die minstens POST_REEKS_MIN betaaldagen heeft, de laatste
    in de laatste POST_REEKS_MAANDEN maanden (dezelfde eis als een reeks in onderhoud1b). Een woord alleen is niet genoeg: het vindt de
@@ -10463,12 +10468,41 @@ function vvReeksKey(x){ if(!x) return ''; if(x.koppel && x.koppel.key) return x.
    zijn eigen post; de woning leest woningPaymentIds(); een verwachte post zijn reeks (vvReeksKey); een vaste last zijn sleutel, en heeft de
    partij meer reeksen (onderhoud1, postReeksVan), alleen de boekingen van zijn eigen reeks: de servicekosten naast een hoofdpost koppelen
    niet. Geen woord uit de naam en geen eigen bedragtoets (tot v527c: vastHoortBij, met vijf beginletters en 20% van de termijn). */
+/* v527d (punt 1): NAAMVARIANTEN VAN DEZELFDE PARTIJ HOREN BIJ EEN REEKS. De sleutel van een post is recurKey(), de eerste twintig tekens van de
+   naam, dus "Spotify AB" en "Spotify", of "NIKKI" en "NIKKI via Stichting Moll", waren twee partijen. GEMETEN op de back-up van 27 nov: de reeks
+   SPOTIFY had twee betaaldagen (de derde heette "Spotify AB"), en de betalingen van Nikki in okt en nov ("via Stichting Moll") hoorden niet bij
+   de vaste last Nikki en telden ook in het patroon van Kinderen. Twee boekingen horen bij dezelfde reeks als (a) hun genormaliseerde naam
+   gelijk is (hoofdletters, geen cijfers, geen toevoeging van een betaaldienst "via ..." en geen rechtsvorm AB, BV, NL, NV achteraan), of (b) het
+   eerste betekenisvolle woord gelijk is EN het bedrag binnen POST_NAAM_DEEL (1%). Een boeking telt bij de reeks van een post als hij zo bij een
+   boeking van die post hoort (een stap, vanaf de boekingen met de sleutel van de post, of bij een gesplitste partij die van zijn reeks, en dan
+   alleen binnen de bedragband van die reeks). CJIB Regeling en CJIB Verkeersboetes hebben een andere naam en geen gelijk bedrag: gescheiden;
+   servicekosten van EUR 2,99 naast een inleg van EUR 10 koppelen niet. Lezer: postBetaling(), dus alle vier de lezers van v527c. */
+const POST_NAAM_DEEL=0.01, POST_NAAM_STOP=new Set(['DE','HET','THE','EEN','VAN','STICHTING']);
+function postNaamNorm(n){ let s=String(n||'').toUpperCase().replace(/[0-9]/g,' ').replace(/\s+VIA\s.*$/,'').replace(/[^A-Z&\s]/g,' ').replace(/\s+/g,' ').trim();
+  for(let i=0;i<3;i++){ const k=s.replace(/\s+(AB|BV|B V|NL|NV|N V)$/,''); if(k===s) break; s=k.trim(); } return s; }
+function postNaamWoord(n){ const W=postNaamNorm(n).split(' ').filter(w=>w.length>=3 && !POST_NAAM_STOP.has(w)); return W[0]||''; }
+const postNaamBedrag=(a,b)=>Math.abs(a-b)<=POST_NAAM_DEEL*Math.max(a,b);
+let _postFam=null, _postFamSl='';
+function postFamilie(key){ const sl=_dataGen+'|'+vandaagYMD(); if(!_postFam || _postFamSl!==sl){ _postFamSl=sl;
+    const I={sleutel:{}, norm:{}, woord:{}}; for(const t of TX){ if(t.pending || !(t.amount<0) || t.vbVast) continue; const k=recurKey(t); if(!k) continue;
+      const v={t, k, n:postNaamNorm(t.name), w:postNaamWoord(t.name), a:-t.amount}; (I.sleutel[k]=I.sleutel[k]||[]).push(v); if(v.n) (I.norm[v.n]=I.norm[v.n]||[]).push(v); if(v.w) (I.woord[v.w]=I.woord[v.w]||[]).push(v); }
+    _postFam={I, F:{}}; }
+  const C=_postFam; if(C.F[key]) return C.F[key]; const I=C.I;
+  let R=null; try{ R=postReeksVan(key); }catch(_){}
+  const basis=(R && R.ids)?(I.sleutel[R.basis||String(key).split('~')[0]]||[]).filter(v=>R.ids.has(v.t.id)):(I.sleutel[key]||[]);
+  const ids=new Set(basis.map(v=>v.t.id));
+  let lo=0, hi=Infinity; if(R && R.ids && basis.length){ const A=basis.map(v=>v.a); lo=Math.min(...A)/POST_BAND_FACTOR; hi=Math.max(...A)*POST_BAND_FACTOR; }
+  for(const b of basis){
+    for(const v of (I.norm[b.n]||[])){ if(!ids.has(v.t.id) && v.a>=lo && v.a<=hi) ids.add(v.t.id); }
+    if(b.w) for(const v of (I.woord[b.w]||[])){ if(!ids.has(v.t.id) && postNaamBedrag(v.a, b.a)) ids.add(v.t.id); } }
+  C.F[key]=ids; return ids; }
 function postBetaling(t, x){ if(!t || !x || !(t.amount<0) || t.pending) return false; const key=String(x.key||''); if(!key) return false;
   if(t.vbVast) return String(t.vbVast)===key;
   if(key.indexOf('woning|')===0){ try{ return woningPaymentIds().has(t.id); }catch(_){ return false; } }
-  if(key.indexOf('vverw|')===0){ let rk=x.reeks; if(rk===undefined){ const id=key.slice(6); rk=vvReeksKey(vvLijst().find(v=>String(v.id)===id)); } return !!rk && recurKey(t)===rk; }
-  let R=null; try{ R=postReeksVan(key); }catch(_){} if(R && R.ids) return R.ids.has(t.id);
-  return recurKey(t)===key; }
+  if(key.indexOf('vverw|')===0){ let rk=x.reeks; if(rk===undefined){ const id=key.slice(6); rk=vvReeksKey(vvLijst().find(v=>String(v.id)===id)); } return !!rk && (recurKey(t)===rk || postFamilie(rk).has(t.id)); }
+  let R=null; try{ R=postReeksVan(key); }catch(_){} if(R && R.ids && R.ids.has(t.id)) return true;
+  if(!R && recurKey(t)===key) return true;
+  return postFamilie(key).has(t.id); }
 function periodeVooruitKern(P, opts){
   const vandaag=vandaagYMD(), dim=Math.max(P.dagen,1), el=Math.min(Math.max(salDagenTussen(P.start, vandaag)+1,1),dim), over=Math.max(dim-el,0);
   const H=periodeHistorie(P), n=H.length;

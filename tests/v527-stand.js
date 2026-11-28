@@ -24,7 +24,20 @@ async function boot(page, o) {
     maand(ms, '02', 98.88, 'Allianz', 'SEPA Incasso Allianz Nederland polis', 'verzekering');
     maand(ms, '02', 71, 'Shurgard', 'SEPA Incasso Shurgard opslag', 'huur');
     maand(ms, '20', 39.99, 'SportCity', 'SEPA Incasso SportCity lidmaatschap', 'sport');
-    maand(ms, '26', 10.99, 'Spotify', 'SEPA Incasso Spotify AB', 'abonnement');
+    if (!o.spotEcht) maand(ms, '26', 10.99, 'Spotify', 'SEPA Incasso Spotify AB', 'abonnement');
+    /* v527d: { spotEcht: true } de betalingen van het toestel op 27 nov, met de naamvariant: "Spotify AB" op 23 sep, "Spotify" op 26 okt en
+       24 nov, alle drie EUR 13,99 (in plaats van de Spotify van EUR 10,99 op de 26e). De reeks SPOTIFY heeft zo maar twee betaaldagen. */
+    if (o.spotEcht) { for (const [d, n] of [['2026-09-23', 'Spotify AB'], ['2026-10-26', 'Spotify'], ['2026-11-24', 'Spotify']]) add(BET, d, -13.99, n, 'SEPA Incasso ' + n + ' ' + d, 'abonnement'); }
+    /* v527d: { nikki: true } de vorm van het toestel: een eigen potje Kinderen (e_kinderen, EUR 100) met de betalingen van Nikki: "NIKKI" op
+       17 aug en 11 sep, "NIKKI via Stichting Moll" op 19 okt en 11 nov (alle EUR 46,75) en "NIKKI via Stichting Mollie Payments" EUR 30,40 op
+       29 mei; de verwachte vaste last Nikki (EUR 47, op de 11e) is gekoppeld aan de boeking van 17 aug (sleutel NIKKI). */
+    if (o.nikki) { SET.eigenCats = Object.assign({}, SET.eigenCats, { e_kinderen: { naam: 'Kinderen', aard: 'wisselend', kleur: '#8a6', op: '2026-05-01' } }); try { eigenCatsLaad(); } catch (_) {}
+      const N = [['2026-05-29', -30.40, 'NIKKI via Stichting Mollie Payments'], ['2026-08-17', -46.75, 'NIKKI'], ['2026-09-11', -46.75, 'NIKKI'], ['2026-10-19', -46.75, 'NIKKI via Stichting Moll'], ['2026-11-11', -46.75, 'NIKKI via Stichting Moll']];
+      const T = N.map(([d, a, n]) => add(LEEF, d, a, n, n + ' betaling ' + d, 'e_kinderen'));
+      for (const d of ['2026-09-08', '2026-10-08', '2026-11-08']) add(LEEF, d, -20, 'Kinderboerderij', 'BEA, BETAALPAS Kinderboerderij', 'e_kinderen');
+      SET.budgets = Object.assign({}, SET.budgets, { e_kinderen: 100 });
+      SET.vastVerwacht = (SET.vastVerwacht || []).concat([{ id: 'vvnikki527d', naam: 'Nikki', bedrag: 47, ritme: 1, eerste: '2026-08-11', cat: 'e_kinderen', acc: LEEF,
+        koppel: { tx: T[1].id, key: recurKey(T[1]), datum: '2026-08-17', bedrag: 46.75, op: '2026-08-18' } }]); }
     /* Uit eten: EUR 200 per maand in de drie eenheden voor de periode, niets deze periode */
     for (const d of ['2026-09-05', '2026-09-15', '2026-10-05', '2026-10-15', '2026-11-05', '2026-11-15']) add(LEEF, d, -100, 'Restaurant Lona', 'BEA, BETAALPAS Restaurant Lona', 'uiteten');
     /* v527c: { spot: true } een maandpost met de vorm van het toestel: een keer per kalendermaand, maar met een gemeten mediane afstand van

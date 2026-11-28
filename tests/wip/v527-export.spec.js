@@ -1,6 +1,6 @@
 /* v527 OP JOUW EXPORT (de back-up staat niet in de repo, dus dit draait alleen bij jou):
      MINDER_EXPORT=<pad naar je back-up van 27 nov> WIP=1 TZ=Europe/Amsterdam npx playwright test tests/wip/v527-export.spec.js
-   Test a (Grip, 27 nov; v527c): HARD vaste lasten nog EUR 866 in 8 posten (geen Spotify; CJIB EUR 50 nog niet gezien) en bridge-stap
+   Test a (Grip, 27 nov; v527c, v527d: de naamvarianten van Spotify en Nikki): HARD vaste lasten nog EUR 866 in 8 posten (geen Spotify; CJIB EUR 50 nog niet gezien) en bridge-stap
      vast -EUR 286. De patroon-aftrek per potje met de boekingen: vervoer ~EUR 21 (parkeergelden), kinderen ~EUR 36 (Nikki), belasting alleen
      de CJIB Regeling (meer dan EUR 0, minder dan EUR 60,19, geen Verkeersboete). Potjes op patroon, verwacht (= saldo - 866 - potjes -
      zonder potje), ondergrens en de Budget-tegel worden exact afgedrukt en sluiten op elkaar.
@@ -39,7 +39,9 @@ test('a: vast nog EUR 866 in 8 posten (geen Spotify, CJIB nog niet gezien), brid
     const vv = vvLijst().map((x) => ({ naam: x.naam, koppel: x.koppel || null, reeks: vvReeksKey(x), betalingen: telbareTx().filter((t) => postBetaling(t, { key: 'vverw|' + x.id, reeks: vvReeksKey(x) })).map((t) => `${String(t.date).slice(0, 10)} ${t.name} ${-t.amount}`) }));
     const cjib = telbareTx().filter((t) => /cjib/i.test((t.name || '') + ' ' + (t.desc || ''))).map((t) => `${String(t.date).slice(0, 10)} ${t.name} ${-t.amount} ${catOf(t)} ${recurKey(t)}`);
     const perPot = {}; for (const x of V.patroonAftrekTx || []) (perPot[x.cat] = perPot[x.cat] || []).push(`${x.datum} ${x.naam} ${x.bedrag} (${x.post})`);
-    return { eind: S.eind, onder: S.onder, start: S.start, vast: S.vastR, pot: S.potR, zonder: S.zonderR, posten: (V.vastNogLijst || []).map((x) => `${x.naam} ${x.datum} ${x.bedrag}${x.achter ? ' (nog niet gezien)' : ''}`),
+    const fam = {}; for (const it of (rekVoorstel().vastAlle || [])) { if (!/spotify|nikki/i.test(it.naam || it.key)) continue; fam[it.key] = telbareTx().filter((t) => postBetaling(t, it)).map((t) => `${String(t.date).slice(0, 10)} ${t.name} ${-t.amount} ${recurKey(t)}`); }
+    const spot = (rekVoorstel().vastAlle || []).filter((it) => /spotify/i.test(it.naam || it.key)).map((it) => ({ key: it.key, cadans: it.s && it.s.cadans, maand: vastMaandSchema(it).cadans, volgende: periodeTermijnen(vastMaandSchema(it), '2026-11-24', '2026-11-24', '2027-01-31') }));
+    return { fam, spot, eind: S.eind, onder: S.onder, start: S.start, vast: S.vastR, pot: S.potR, zonder: S.zonderR, posten: (V.vastNogLijst || []).map((x) => `${x.naam} ${x.datum} ${x.bedrag}${x.achter ? ' (nog niet gezien)' : ''}`),
       MB: { budget: MB.budget, verwacht: MB.verwacht, verschil: MB.verschil, netto: MB.netto }, vastStap: B ? (B.groepen.find((x) => x.k === 'vast') || {}).d : null,
       aftrek: V.patroonAftrek, perPot, vv, cjib, tR: S.rijen.reduce((a, x) => a + x.ruimte, 0), tV: S.rijen.reduce((a, x) => a + x.verwacht, 0) };
   });
@@ -56,6 +58,11 @@ test('a: vast nog EUR 866 in 8 posten (geen Spotify, CJIB nog niet gezien), brid
   expect(Math.round(r.aftrek.e_kinderen || 0)).toBe(36);
   expect(r.aftrek.belasting || 0).toBeGreaterThan(0); expect(r.aftrek.belasting || 0).toBeLessThan(60.19);
   expect((r.perPot.belasting || []).some((x) => /verkeersboete/i.test(x))).toBe(false);
+  /* v527d: de naamvarianten. Spotify (Spotify AB + 2x Spotify) is een maandpost met de volgende termijn op 24 dec; Nikki okt en nov
+     (via Stichting Moll) staan in de aftrek van Kinderen. Potjes op patroon ~EUR 1.841, verwacht ~EUR 7.244: afgedrukt in STAND. */
+  expect(r.spot.every((x) => x.maand === 'maand' && x.volgende[0] === '2026-12-24')).toBe(true);
+  expect((r.perPot.e_kinderen || []).filter((x) => /nikki/i.test(x)).length).toBeGreaterThanOrEqual(2);
+  console.log(`v527d: potjes op patroon ${r.pot} (verwacht ~1841), verwacht ${r.eind} (verwacht ~7244)`);
 });
 
 test('b: Inzichten EUR 173 van 2.255, week EUR 84 van 202, vast EUR 244 + 866, binnen EUR 5.727; na "ja": EUR 35 onder tempo', async ({ page }) => {
