@@ -40,9 +40,9 @@
    "vervang": "const hoort=vastIn.find(x=>recurKey(t)===x.key);"
   },
   {
-   "naam": "punt 2: de reeks van een partij telt niet (servicekosten koppelen)",
-   "zoek": "if(R && R.ids) return R.ids.has(t.id);",
-   "vervang": "if(R && R.ids && false) return R.ids.has(t.id);"
+   "naam": "punt 2: de reeks van een partij telt niet (servicekosten koppelen; v527d: de !R-guard weg)",
+   "zoek": "  if(!R && recurKey(t)===key) return true;",
+   "vervang": "  if(recurKey(t)===key) return true;"
   },
   {
    "naam": "punt 2: de reeks van een verwachte post kiest de kleinste",
