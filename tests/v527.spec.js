@@ -184,15 +184,27 @@ test('B4 d: de kaart en de tabel lopen niet over op 390px en hun kolommen overla
 });
 
 /* ===== v527b: geen tweede termijn, geen dubbele telling, een filterregel ===== */
-test('v527b punt 1 a: een maandpost die in de periode al betaald is (onder een andere sleutel, dezelfde tegenpartij) krijgt geen tweede termijn', async ({ page }) => {
-  /* toetst: Spotify Family loopt op de 22e en is in deze periode op 24 nov betaald als "Spotify Family AB" (recurKey verschilt); de termijn
-     van 22 dec staat NIET in vastNog. Zonder de betaalde boeking (zonder spot) zou hij vanaf 22 okt lopen en op 22 nov en 22 dec vallen. */
+test('v527c punt 1: een maandpost op de 24e, betaald in de periode, met een gemeten afstand van 28 dagen, krijgt geen termijn op de 22e', async ({ page }) => {
+  /* toetst: Spotify Family (27 jul, 24 aug, 21 sep, 19 okt, 24 nov: een keer per kalendermaand, mediane afstand 28) heet in het schema
+     4-wekelijks, maar is een maandpost: zijn volgende termijn is 24 dec, buiten de periode 24 nov - 23 dec, dus hij staat niet in vastNog.
+     De invoer wordt eerst gemeten (cadans 4w, afstand 28), anders toetst de test niets. */
   await S.boot(page, { spot: true });
-  const r = await page.evaluate(() => { const V = maandVooruit();
-    return { lijst: V.vastNogLijst.map((x) => x.naam + ' ' + x.datum), keys: TX.filter((t) => /Spotify Family/.test(t.name)).map((t) => recurKey(t)), betaald: eenheidTx({ start: '2026-11-24', eind: vandaagYMD() }).filter((t) => /Spotify Family/.test(t.name)).map((t) => t.date.slice(0, 10)) }; });
-  expect(new Set(r.keys).size).toBe(2);   // de invoer: twee sleutels voor dezelfde tegenpartij, zoals het toestel
-  expect(r.lijst.some((x) => /spotify/i.test(x))).toBe(false);
-  expect(r.betaald).toEqual(['2026-11-24']);   // de betaalde boeking staat in de periode
+  const r = await page.evaluate(() => { const V = maandVooruit(); const s = recurringSchedule().find((x) => x.key === 'SPOTIFY FAMILY');
+    const it = rekVoorstel().vastAlle.find((x) => x.key === 'SPOTIFY FAMILY');
+    return { cadans: s && s.cadans, afstand: s && s.afstand, maand: vastMaandSchema(it).cadans, lijst: V.vastNogLijst.map((x) => x.naam + ' ' + x.datum),
+      volgende: periodeTermijnen(vastMaandSchema(it), '2026-11-24', '2026-11-24', '2027-01-31') }; });
+  expect(r.cadans).toBe('4w');
+  expect(r.afstand).toBe(28);
+  expect(r.maand).toBe('maand');
+  expect(r.lijst.some((x) => /spotify family/i.test(x))).toBe(false);
+  expect(r.volgende).toEqual(['2026-12-24', '2027-01-24']);
+});
+
+test('v527c punt 1: een echte 4-wekelijkse post (twee keer in een kalendermaand) blijft 4-wekelijks', async ({ page }) => {
+  await S.boot(page);
+  const r = await page.evaluate(() => { for (const d of ['2026-08-03', '2026-08-31', '2026-09-28', '2026-10-26']) { const t = { id: 'v527c4w' + d, date: d, amount: -20, acc: TX[0].acc, name: 'Opslag Vier', desc: 'SEPA Incasso Opslag Vier ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'huur'; }
+    save(); telbaarVergeten(); window._rekV = null; const it = rekVoorstel().vastAlle.find((x) => x.key === 'OPSLAG VIER'); return it ? [it.s.cadans, vastMaandSchema(it).cadans] : null; });
+  expect(r).toEqual(['4w', '4w']);
 });
 
 test('v527b punt 1 b: een post per week die in de periode betaald is, krijgt wel zijn volgende termijnen', async ({ page }) => {
@@ -203,21 +215,66 @@ test('v527b punt 1 b: een post per week die in de periode betaald is, krijgt wel
   expect(r).toEqual(['2026-12-02 15', '2026-12-09 15', '2026-12-16 15', '2026-12-23 15']);
 });
 
-test('v527b punt 2: een verwachte post in de verwachting telt niet ook in het patroon van zijn potje', async ({ page }) => {
-  /* toetst: "Boetes cjib" EUR 50 staat als nog niet gezien in vastNog, en de CJIB-betaling van oktober (EUR 145,98, Belasting & boetes)
-     telt niet in het patroon van dat potje: patroonAftrek is 145,98 x de factor / 3 eenheden, en zonder de aftrek (opts.zonderAftrek)
-     ligt nogVerwacht precies dat bedrag hoger. Een potje zonder vaste post houdt zijn patroon. */
+test('v527c punt 2: een verwachte post betaald met wisselende bedragen ("Regeling") gaat uit het patroon; losse boekingen van dezelfde partij met een andere omschrijving blijven erin', async ({ page }) => {
+  /* toetst: de reeks van "Boetes cjib" is CJIB Regeling (4 betaaldagen), niet CJIB Verkeersboetes (2 betaaldagen); de aftrek bevat alleen
+     Regeling-boekingen en minstens een; zonder de aftrek ligt het patroon precies dat bedrag hoger; een potje zonder vaste post houdt zijn
+     patroon; en de Verkeersboetes staan in het patroon van Belasting & boetes. */
   await S.boot(page, { cjib: true });
   const r = await page.evaluate(() => { const V = maandVooruit(), O = periodeVooruitKern(periodeVan(vandaagYMD()), { zonderAftrek: true });
     const b = V.potjes.find((x) => x.k === 'belasting'), bo = O.potjes.find((x) => x.k === 'belasting'), ue = V.potjes.find((x) => x.k === 'uiteten'), ueo = O.potjes.find((x) => x.k === 'uiteten');
-    return { cjib: V.vastNogLijst.filter((x) => /cjib/i.test(x.naam)).map((x) => [x.bedrag, x.achter]), tx: V.patroonAftrekTx.map((x) => x.naam), aftrek: V.patroonAftrek.belasting,
-      nog: V.nogVerwacht, nogO: O.nogVerwacht, eind: b.eindR, eindO: bo.eindR, ue: [ue.eindR, ueo.eindR] }; });
+    const P = periodeVan(vandaagYMD()), H = periodeHistorie(P), vk = H.flatMap((u) => eenheidTx(u)).filter((t) => /Verkeersboetes/.test(t.name) && piekInScope(t)).length;
+    return { reeks: vvReeksKey(vvLijst()[0]), cjib: V.vastNogLijst.filter((x) => /cjib/i.test(x.naam)).map((x) => [x.bedrag, x.achter]), tx: [...new Set(V.patroonAftrekTx.map((x) => x.naam))], n: V.patroonAftrekTx.length,
+      aftrek: V.patroonAftrek.belasting, eind: b.eindR, eindO: bo.eindR, nog: V.nogVerwacht, nogO: O.nogVerwacht, ue: [ue.eindR, ueo.eindR], vk }; });
+  expect(r.reeks).toBe('CJIB REGELING');
   expect(r.cjib).toEqual([[50, true]]);
   expect(r.tx).toEqual(['CJIB Regeling']);
-  expect(r.aftrek).toBeGreaterThan(40);
+  expect(r.n).toBeGreaterThan(0);
+  expect(r.aftrek).toBeGreaterThan(0);
+  expect(r.vk).toBeGreaterThan(0);   // de Verkeersboetes vallen in de historie en tellen in het patroon
   expect(r.eindO - r.eind).toBeCloseTo(r.aftrek, 6);
   expect(r.nogO - r.nog).toBeCloseTo(r.aftrek, 6);
   expect(r.ue[0]).toBe(r.ue[1]);
+});
+
+test('v527c punt 2: "nog niet gezien" en de patroon-aftrek lezen dezelfde lijst', async ({ page }) => {
+  /* toetst: (a) zonder betaling in november is de termijn van 26 nov nog niet gezien, en de boekingen die vvBetaald als betaling van de post
+     zou zien zijn precies de boekingen waaruit de aftrek bestaat (allebei postBetaling); (b) met een Regeling-betaling op 26 nov is de termijn
+     gezien (niet meer in vastNog) zonder dat je hem koppelde; (c) een losse Verkeersboete in november maakt hem niet gezien. */
+  await S.boot(page, { cjib: true });
+  const a = await page.evaluate(() => { const V = maandVooruit(), x = vvLijst()[0], it = { key: 'vverw|' + x.id, reeks: vvReeksKey(x) };
+    const P = periodeVan(vandaagYMD()), H = periodeHistorie(P), Hids = new Set(H.flatMap((u) => eenheidTx(u)).filter(piekInScope).map((t) => t.id));
+    return { gezien: vvBetaald(x, '2026-11-26'), achter: V.vastNogLijst.filter((y) => /cjib/i.test(y.naam)).map((y) => y.achter),
+      lijst: telbareTx().filter((t) => postBetaling(t, it) && Hids.has(t.id)).map((t) => t.id).sort(), aftrek: V.patroonAftrekTx.map((y) => y.id).sort() }; });
+  expect(a.gezien).toBe(false);
+  expect(a.achter).toEqual([true]);
+  expect(a.aftrek.length).toBeGreaterThan(0);
+  expect(a.aftrek).toEqual(a.lijst);
+  await S.boot(page, { cjib: true, cjibNov: true });
+  const b = await page.evaluate(() => { const V = maandVooruit(), x = vvLijst()[0]; return { koppel: !!x.koppel, gezien: vvBetaald(x, '2026-11-26'), cjib: V.vastNogLijst.filter((y) => /cjib/i.test(y.naam)).length }; });
+  expect(b.koppel).toBe(false);
+  expect(b.gezien).toBe(true);
+  expect(b.cjib).toBe(0);
+  await S.boot(page, { cjib: true });
+  const c = await page.evaluate(() => { const t = { id: 'v527cvk1126', date: '2026-11-25', amount: -50, acc: TX[0].acc, name: 'CJIB Verkeersboetes', desc: 'CJIB Verkeersboetes november', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'belasting';
+    save(); telbaarVergeten(); window._rekV = null; try { runMemoVergeten(); } catch (_) {} const x = vvLijst()[0]; return { gezien: vvBetaald(x, '2026-11-26'), cjib: maandVooruit().vastNogLijst.filter((y) => /cjib/i.test(y.naam)).length }; });
+  expect(c.gezien).toBe(false);
+  expect(c.cjib).toBe(1);
+});
+
+test('v527c punt 2: een vaste last met dezelfde tegenpartij maar een andere reeks (servicekosten naast de hoofdpost) koppelt niet', async ({ page }) => {
+  /* toetst: Derdengelden Peaks met een inleg van EUR 100 op de 28e en servicekosten van EUR 2,99 op de 3e (dezelfde naam, dus dezelfde
+     recurKey; postReeksen splitst ze op bedragband). postBetaling op de sleutel van de partij (de hoofdreeks) herkent de inleg en niet de
+     servicekosten; de servicekostenreeks herkent alleen zichzelf. De invoer wordt eerst gemeten: twee reeksen. */
+  await S.boot(page);
+  const r = await page.evaluate(() => { const acc = TX[0].acc, mk = (d, a) => { const t = { id: 'v527cpk' + d + a, date: d, amount: a, acc, name: 'Derdengelden Peaks', desc: 'SEPA Incasso Derdengelden Peaks ' + d, typ: '', ref: '', src: 'csv', accName: '', refNums: [] }; categorize(t); TX.push(t); OVR[t.id] = 'sparen_kosten' in CATS ? 'sparen_kosten' : 'abonnement'; return t; };
+    const I = [], K = []; for (const m of ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11']) { I.push(mk(m + '-28', -100)); K.push(mk(m + '-03', -2.99)); }
+    save(); telbaarVergeten(); const R = postReeksen('DERDENGELDEN PEAKS'); const x = { key: 'DERDENGELDEN PEAKS' }, y = { key: R[1] ? R[1].key : '' };
+    return { n: R.length, hoofdInleg: I.every((t) => postBetaling(t, x)), hoofdKosten: K.some((t) => postBetaling(t, x)), kostenKosten: K.every((t) => postBetaling(t, y)), kostenInleg: I.some((t) => postBetaling(t, y)) }; });
+  expect(r.n).toBe(2);
+  expect(r.hoofdInleg).toBe(true);
+  expect(r.hoofdKosten).toBe(false);
+  expect(r.kostenKosten).toBe(true);
+  expect(r.kostenInleg).toBe(false);
 });
 
 test('v527b punt 3: boven de tegels staat een filterregel "Deze periode · <periode> ▾ · dag X van Y", en het filter blijft werken', async ({ page }) => {

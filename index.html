@@ -3942,7 +3942,7 @@ function postReeksenAlle(){ const sl=_dataGen+'|'+vandaagYMD(); if(_postRks && _
       const af=gaps[Math.floor(gaps.length/2)]||30, laatste=r.tx[r.tx.length-1];
       return {key:i===0?k:`${k}~${Math.round(r.eerste*100)/100}`, basis:k, hoofd:i===0, name:laatste.name, cat:catOf(laatste), type:'fixed',
         amount:Math.abs(laatste.amount), lastDate:laatste.date, afstand:af, cadans:af<=10?'week':(af>=VAST_4W.min&&af<=VAST_4W.max?'4w':(af<=45?'maand':null)),
-        intervalM:af<=45?1:af<=135?3:af<=225?6:12, datums:dat, reeks:true, n:dat.length}; }); }
+        intervalM:af<=45?1:af<=135?3:af<=225?6:12, datums:dat, reeks:true, n:dat.length, ids:new Set(r.tx.map(t=>t.id))}; }); }
   _postRks=M; _postRksGen=sl; return M; }
 function postReeksen(key){ return (postReeksenAlle()[key])||[]; }
 /* de reeks achter een sleutel (een hoofdreeks op de sleutel van de partij, of "<sleutel>~<bedrag>"); null als die partij niet gesplitst is */
@@ -10428,20 +10428,47 @@ function vastWeekSchema(x){ const s=x && x.s; if(!s || s.cadans==='4w' || s.cada
   if(D.length<3) return s; const g=[]; for(let i=1;i<D.length;i++) g.push(salDagenTussen(D[i-1], D[i])); g.sort((a,b)=>a-b);
   const af=g[Math.floor(g.length/2)]; return (af>0 && af<=10)?Object.assign({}, s, {cadans:'week', afstand:af}):s; }
 function vastWoorden(naam){ return String(naam||'').toUpperCase().split(/[^A-Z0-9]+/).filter(w=>w.length>=3 && !/^\d+$/.test(w)); }
-/* v527b: hoort deze afschrijving bij deze vaste last of verwachte post (een item van rekVoorstel().vastAlle)? De sleutel, of de
-   tegenpartij (minstens vijf gelijke beginletters, met een bedrag binnen 20% van de termijn); bij een verwachte post een woord uit zijn naam in
-   dezelfde categorie. */
-function vastHoortBij(t, x){ if(!t || !x || !(t.amount<0)) return false; const key=String(x.key||'');
-  if(t.vbVast && String(t.vbVast)===key) return true;
-  try{ if(recurKey(t)===key) return true; }catch(_){}
-  const tekst=String((t.name||'')+' '+(t.desc||'')).toUpperCase(), cat=catOf(t);
-  if(key.indexOf('vverw|')===0){ const w=vastWoorden(x.naam); return cat===(x.cat||'') && w.some(v=>tekst.includes(v)); }
-  if(key.indexOf('woning|')===0) return false;
-  const kort=v=>String(cleanMerch(v||'')||v||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,8);
-  const a=kort(t.name), b=kort((x.s && x.s.name) || x.naam);
-  const m=Math.min(a.length, b.length, 8);
-  if(m>=5 && a.slice(0,m)===b.slice(0,m)){ const tb=+x.termijn||0; return !(tb>0) || Math.abs(-t.amount-tb)<=Math.max(1, tb*0.2); }
-  return false; }
+/* v527c (punt 1): EEN POST MET MAANDRITME KRIJGT ZIJN VOLGENDE TERMIJN IN DE VOLGENDE KALENDERMAAND, rond de dag van de laatste betaling
+   (rekMaandPlus: begrensd op het einde van de maand). GEMETEN op 27 nov: Spotify (23 sep, 26 okt, 24 nov) had een gemeten mediane afstand van
+   ~28 dagen, vastCadans noemde hem 4-wekelijks, en de termijn kwam op 24 nov + 28 = 22 dec, in deze periode. Een post is hier een maandpost
+   als hij in de laatste 13 maanden minstens drie keer betaald is en nooit twee keer in dezelfde kalendermaand (betalingen binnen
+   VAST_CLUSTER_DAGEN zijn er een, zoals in vastCadans); een echte 4-wekelijkse post betaalt een keer per jaar twee keer in een maand
+   (Shurgard: 1 en 30 sep). De betalingen zijn die van postBetaling(), dezelfde herkenning als "betaald". Alleen de periode-vooruitblik. */
+function vastMaandSchema(x){ const s=x && x.s; if(!s || s.cadans!=='4w') return s;
+  const grens=rekMaandPlus(vandaagYMD(), -13), D=[...new Set(telbareTx().filter(t=>postBetaling(t, x)).map(t=>String(t.date).slice(0,10)))].filter(d=>d>=grens).sort();
+  const C=[]; for(const d of D){ if(C.length && salDagenTussen(C[C.length-1], d)<=VAST_CLUSTER_DAGEN) continue; C.push(d); }
+  if(C.length<3) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;
+  return Object.assign({}, s, {cadans:'maand', intervalM:1, maandRitme:true}); }
+/* v527c (punt 2): DE REEKS VAN EEN VERWACHTE POST. Na je bevestiging (vvKoppel) de sleutel van de gekoppelde afschrijving; zonder koppeling
+   de reeks (een sleutel, recurKey) in dezelfde categorie met een woord uit de naam die minstens POST_REEKS_MIN betaaldagen heeft, de laatste
+   in de laatste POST_REEKS_MAANDEN maanden (dezelfde eis als een reeks in onderhoud1b). Een woord alleen is niet genoeg: het vindt de
+   partij, de reeks beslist. GEMETEN op 27 nov: "Boetes cjib" las met een woord elke CJIB-boeking; de Regeling (10 jun, 2 jul, 14 aug,
+   26 okt) is een reeks, de Verkeersboetes (9 en 28 sep) niet. Bij gelijke stand de reeks met de meeste betaaldagen, dan de laatste.
+   Gememoiseerd op _dataGen en de dag. */
+let _vvReeks=null, _vvReeksSl='';
+function vvReeksKey(x){ if(!x) return ''; if(x.koppel && x.koppel.key) return x.koppel.key;
+  const sl=_dataGen+'|'+vandaagYMD(); if(!_vvReeks || _vvReeksSl!==sl){ _vvReeks={}; _vvReeksSl=sl; }
+  if(_vvReeks[x.id]!==undefined) return _vvReeks[x.id];
+  let uit=''; try{ const w=vastWoorden(x.naam), grens=rekMaandPlus(vandaagYMD(), -POST_REEKS_MAANDEN), per={};
+    if(w.length) for(const t of telbareTx()){ if(t.pending || !(t.amount<0) || String(t.src)==='voorbeeld' || t.vbVast) continue; if(catOf(t)!==(x.cat||'')) continue;
+      const tekst=String((t.name||'')+' '+(t.desc||'')).toUpperCase(); if(!w.some(v=>tekst.includes(v))) continue;
+      const k=recurKey(t); if(!k) continue; (per[k]=per[k]||new Set()).add(String(t.date).slice(0,10)); }
+    const kand=Object.keys(per).map(k=>{ const D=[...per[k]].sort(); return {k, n:D.length, laatste:D[D.length-1]}; }).filter(r=>r.n>=POST_REEKS_MIN && r.laatste>=grens)
+      .sort((a,b)=>b.n-a.n || (a.laatste<b.laatste?1:a.laatste>b.laatste?-1:0) || (a.k<b.k?-1:1));
+    uit=kand.length?kand[0].k:''; }catch(_){}
+  _vvReeks[x.id]=uit; return uit; }
+/* v527c (punt 2): DE ENE HERKENNING VAN "DEZE AFSCHRIJVING IS EEN BETALING VAN DEZE POST" (een item van rekVoorstel().vastAlle, of
+   {key, reeks}). Lezers: of een vaste last in de periode al betaald is (de termijnen lopen dan vanaf die betaling), of een voorbije termijn
+   nog open staat, of een verwachte post gezien is (vvBetaald, en dus "nog niet gezien"), en de patroon-aftrek. Een gesimuleerde termijn is
+   zijn eigen post; de woning leest woningPaymentIds(); een verwachte post zijn reeks (vvReeksKey); een vaste last zijn sleutel, en heeft de
+   partij meer reeksen (onderhoud1, postReeksVan), alleen de boekingen van zijn eigen reeks: de servicekosten naast een hoofdpost koppelen
+   niet. Geen woord uit de naam en geen eigen bedragtoets (tot v527c: vastHoortBij, met vijf beginletters en 20% van de termijn). */
+function postBetaling(t, x){ if(!t || !x || !(t.amount<0) || t.pending) return false; const key=String(x.key||''); if(!key) return false;
+  if(t.vbVast) return String(t.vbVast)===key;
+  if(key.indexOf('woning|')===0){ try{ return woningPaymentIds().has(t.id); }catch(_){ return false; } }
+  if(key.indexOf('vverw|')===0){ let rk=x.reeks; if(rk===undefined){ const id=key.slice(6); rk=vvReeksKey(vvLijst().find(v=>String(v.id)===id)); } return !!rk && recurKey(t)===rk; }
+  let R=null; try{ R=postReeksVan(key); }catch(_){} if(R && R.ids) return R.ids.has(t.id);
+  return recurKey(t)===key; }
 function periodeVooruitKern(P, opts){
   const vandaag=vandaagYMD(), dim=Math.max(P.dagen,1), el=Math.min(Math.max(salDagenTussen(P.start, vandaag)+1,1),dim), over=Math.max(dim-el,0);
   const H=periodeHistorie(P), n=H.length;
@@ -10471,21 +10498,23 @@ function periodeVooruitKern(P, opts){
     /* v527b (punt 1): EEN POST DIE IN DEZE PERIODE AL BETAALD IS, KRIJGT GEEN TWEEDE TERMIJN, tenzij zijn interval korter is dan wat er
        van de periode resteert sinds die betaling (wekelijks). GEMETEN op 27 nov: Spotify was op 24 nov betaald (in betaald onder
        Abonnementen) en stond toch op 22 dec in vastNog, want de termijnen liepen vanaf een eerdere betaling. De betaalde boeking wordt
-       gezocht op de sleutel EN op de tegenpartij (vastHoortBij), en de termijnen lopen dan vanaf die betaling. Niet voor de woning en een
+       gezocht met postBetaling() (v527c: de ene herkenning, zie daar), en de termijnen lopen dan vanaf die betaling. Niet voor de woning en een
        verwachte post (genW): die hebben hun eigen herkenning van een betaling. */
     const VL=(Pv && Pv.ok && Array.isArray(Pv.vastAlle))?Pv.vastAlle.map(x=>{ let ds=null, betOp=null;
       try{ if(x.genW) ds=x.genW(P.start, P.eind);
-        else { for(const t of perAf){ if(vastHoortBij(t, x)){ const d=String(t.date).slice(0,10); if(!betOp || d>betOp) betOp=d; } }
-          ds=periodeTermijnen(vastWeekSchema(x), betOp||x.last, P.start, P.eind); } }catch(_){}
+        else { for(const t of perAf){ if(postBetaling(t, x)){ const d=String(t.date).slice(0,10); if(!betOp || d>betOp) betOp=d; } }
+          ds=periodeTermijnen(vastMaandSchema(Object.assign({}, x, {s:vastWeekSchema(x)})), betOp||x.last, P.start, P.eind); } }catch(_){}
       return (ds && ds.length)?Object.assign({}, x, {data:Array.from(ds), betOp}):null; }).filter(Boolean):null;
     /* v506 (punt 2): een termijn van DEZE periode die al voorbij is maar niet geboekt (geen betaling van die post deze periode) telt als
        nog te gaan, niet als weg. Zo is de verwachte som van de vaste lasten met en zonder voorbeeld-schakelaar gelijk: een gesimuleerde
        termijn (vbVast) is die ene termijn betaald (fBet), zonder simulatie staat hij hier. Alleen de lopende periode (vastCur). */
     const isCur=!!VL, perTx=isCur?eenheidTx({start:P.start, eind:vandaag}).filter(t=>t.amount<0):[], WPI=(()=>{ try{ return woningPaymentIds(); }catch(_){ return new Set(); } })();
-    const betaaldN=key=>perTx.filter(t=>t.vbVast===key || (String(key).indexOf('woning|')===0?(WPI.has(t.id) || (t.vbVast && String(t.vbVast)===key)):recurKey(t)===key)).length;
+    /* v527c: dezelfde herkenning als hierboven (postBetaling); een verwachte post telt hier alleen een gesimuleerde termijn, want zijn betaalde
+       termijnen staan al niet in genW (vvTermijnen leest vvBetaald, en die leest postBetaling) */
+    const betaaldN=x=>perTx.filter(t=>String(x.key||'').indexOf('vverw|')===0?(t.vbVast && String(t.vbVast)===x.key):(String(x.key||'').indexOf('woning|')===0?(WPI.has(t.id) || (t.vbVast && String(t.vbVast)===x.key)):postBetaling(t, x))).length;
     if(Array.isArray(VL)) for(const x of VL){ const bedr=Math.round(+x.termijn||+x.bedrag||0); if(!(bedr>0)) continue; const c=x.cat||'';
     const ds0=(x.data||[]).map(d=>String(d).slice(0,10)), voorbij=isCur?ds0.filter(ds=>ds>=P.start && ds<=vandaag):[];
-    let open=x.betOp?voorbij.length:Math.max(voorbij.length-(voorbij.length?betaaldN(x.key):0),0);   // v527b: de termijnen lopen vanaf de betaling, dus een voorbije termijn erna is nog open
+    let open=x.betOp?voorbij.length:Math.max(voorbij.length-(voorbij.length?betaaldN(x):0),0);   // v527b: de termijnen lopen vanaf de betaling, dus een voorbije termijn erna is nog open
     for(const ds of ds0){ const fut=ds>vandaag && ds<=P.eind, achter=!fut && open>0 && voorbij.includes(ds); if(!fut && !achter) continue; if(achter) open--;
       let telt=true; try{ telt=!x.key || verwachtInMaand(x.key, ds.slice(0,7)); }catch(_){}   // v369/v499: dezelfde lezer van SET.fixDueExcl en opzegTot als de maand-forecast
       if(telt){ vastNog[c]=(vastNog[c]||0)+bedr; vastNogLijst.push({key:x.key||'', naam:x.naam||'', cat:c, bedrag:bedr, datum:ds, achter}); if(!vastIn.includes(x)) vastIn.push(x); } } } }catch(_){}
@@ -10495,12 +10524,12 @@ function periodeVooruitKern(P, opts){
   /* v527b (punt 2): WAT ALS VASTE LAST OF VERWACHTE POST IN DE VERWACHTING STAAT (vastIn: een termijn in vastNog), TELT NIET NOG EENS IN
      HET PATROON VAN ZIJN POTJE. GEMETEN op 27 nov: de verwachte post "Boetes cjib" EUR 50 stond in vastNog en de CJIB-betaling van oktober
      (EUR 145,98, CJIB Regeling) zat in het patroon van Belasting & boetes, dus dezelfde post telde twee keer. Voor elk potje; de toets is
-     vastHoortBij (sleutel, of tegenpartij; bij een verwachte post een woord uit de naam in dezelfde categorie). Het weggelaten deel staat
+     postBetaling (v527c: dezelfde herkenning als betaald en gezien; bij een verwachte post zijn reeks, niet een woord uit de naam). Het weggelaten deel staat
      per potje als patroonAftrek, zodat het verschil te zien is. Alleen de periode; de kalendermaand (maandVooruitKern) is niet aangeraakt. */
   const restCat={}, tot0={}, perEenheid=[], totP=[], aftrekCat={}, aftrekTx=[];
   for(const u of H){ const f=eenheidFactor(u, P), cut=Math.round(el*Math.max(u.dagen,1)/dim), pm={}; let s=0;
     for(const t of eenheidTx(u)){ if(!piekInScope(t)) continue; const c=catOf(t); if(heelVast(c)) continue; const v=uitgaveNorm(t)*f, off=salDagenTussen(u.start, t.date)+1;
-      if(vastIn.length && !(opts && opts.zonderAftrek)){ const hoort=vastIn.find(x=>vastHoortBij(t, x)); if(hoort){ aftrekCat[c]=(aftrekCat[c]||0)+v/n; aftrekTx.push({id:t.id, datum:String(t.date).slice(0,10), naam:t.name||'', bedrag:Math.round(-t.amount*100)/100, cat:c, post:hoort.naam||hoort.key}); continue; } }
+      if(vastIn.length && !(opts && opts.zonderAftrek)){ const hoort=vastIn.find(x=>postBetaling(t, x)); if(hoort){ aftrekCat[c]=(aftrekCat[c]||0)+v/n; aftrekTx.push({id:t.id, datum:String(t.date).slice(0,10), naam:t.name||'', bedrag:Math.round(-t.amount*100)/100, cat:c, post:hoort.naam||hoort.key}); continue; } }
       pm[c]=(pm[c]||0)+v; if(off>cut){ restCat[c]=(restCat[c]||0)+v/n; s+=v; } else tot0[c]=(tot0[c]||0)+v/n; }
     perEenheid.push(pm); totP.push(s); }
   const perMaand=perEenheid.slice().reverse();   // de meest recente eerst, zoals potVarMaanden
@@ -40821,8 +40850,11 @@ function vvAlleTermijnen(x, tot){ const out=[]; if(!x || !/^\d{4}-\d{2}-\d{2}$/.
   return out; }
 /* is de termijn van datum d al betaald: na je bevestiging elke termijn tot en met de maand van de gekoppelde afschrijving, en elke
    termijn in een maand met een afschrijving onder dezelfde sleutel */
-function vvBetaald(x, d){ const K=x.koppel; if(!K || !K.key) return false; if(d.slice(0,7)<=String(K.datum).slice(0,7)) return true;
-  return telbareTx().some(t=>!t.pending && t.amount<0 && recurKey(t)===K.key && String(t.date).slice(0,7)===d.slice(0,7)); }
+/* v527c (punt 2): de betalingen van de post zijn die van postBetaling() (zijn reeks, vvReeksKey), dezelfde lijst als de patroon-aftrek; ook
+   zonder koppeling als zijn reeks er al is. Na een koppeling blijft elke termijn tot en met de maand van de koppeling betaald. */
+function vvBetaald(x, d){ const K=x.koppel; if(K && K.key && d.slice(0,7)<=String(K.datum).slice(0,7)) return true;
+  const it={key:'vverw|'+x.id, reeks:vvReeksKey(x)}; if(!it.reeks) return false;
+  return telbareTx().some(t=>postBetaling(t, it) && String(t.date).slice(0,7)===d.slice(0,7)); }
 /* de termijnen in [van, tot] die nog verwacht worden (niet betaald), met .orig zoals de generator van de woning */
 function vvTermijnen(x, van, tot){ const A=vvAlleTermijnen(x, tot).filter(d=>d>=van && d<=tot && !vvBetaald(x, d)); A.orig={}; return A; }
 /* neemt het schema hem al over (dezelfde sleutel als de gekoppelde afschrijving)? dan telt hij hier niet */
@@ -40833,7 +40865,7 @@ function vvVastAlle(start, eind, set, terugval, SCH){ const out=[];
     const acc=(x.acc && set.has(x.acc))?x.acc:terugval, bed=vvBedrag(x), r=Math.max(+x.ritme||1,1);
     const gen=(f,t)=>vvTermijnen(x, f, t), tm=gen(start, eind);
     out.push({key:'vverw|'+x.id, naam:x.naam||'Verwachte vaste last', acc, cat:x.cat||'overig', termijn:bed, maand:Math.round(bed/r*100)/100, data:tm, n:tm.length, bedrag:bed*tm.length,
-      last:x.eerste, s:{cadans:r===1?'maand':'', intervalM:r, key:'vverw|'+x.id, name:x.naam}, genW:gen, verwachtVanaf:x.eerste, schatting:!x.koppel && x.schatting!==false, nonSepa:false}); }
+      last:x.eerste, s:{cadans:r===1?'maand':'', intervalM:r, key:'vverw|'+x.id, name:x.naam}, genW:gen, reeks:vvReeksKey(x), verwachtVanaf:x.eerste, schatting:!x.koppel && x.schatting!==false, nonSepa:false}); }
   return out; }
 /* de termijnen van een kalendermaand die nog komen, voor de maand-prognose (fixDueItems) */
 function vvMaandItems(ym, vandaag){ const out=[]; let SCH=[]; try{ SCH=recurringSchedule().filter(s=>s.type==='fixed'); }catch(_){}

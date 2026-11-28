@@ -1,0 +1,88 @@
+{
+ "specs": [
+  "tests/v527.spec.js"
+ ],
+ "timeout": 400,
+ "sabotages": [
+  {
+   "naam": "punt 1: geen maandschema (vastMaandSchema geeft het 4w-schema terug)",
+   "zoek": "function vastMaandSchema(x){ const s=x && x.s; if(!s || s.cadans!=='4w') return s;",
+   "vervang": "function vastMaandSchema(x){ const s=x && x.s; if(!s || s.cadans!=='4w' || true) return s;"
+  },
+  {
+   "naam": "punt 1: twee betalingen in een kalendermaand maken hem niet 4-wekelijks",
+   "zoek": "if(C.length<3) return s; const M=C.map(d=>d.slice(0,7)); if(new Set(M).size!==M.length) return s;",
+   "vervang": "if(C.length<3) return s; const M=C.map(d=>d.slice(0,7));"
+  },
+  {
+   "naam": "punt 1: de periode leest het maandschema niet",
+   "zoek": "ds=periodeTermijnen(vastMaandSchema(Object.assign({}, x, {s:vastWeekSchema(x)})), betOp||x.last, P.start, P.eind);",
+   "vervang": "ds=periodeTermijnen(vastWeekSchema(x), betOp||x.last, P.start, P.eind);"
+  },
+  {
+   "naam": "punt 2: een verwachte post herkent een woord uit de naam (de vorm van v527b)",
+   "zoek": "if(key.indexOf('vverw|')===0){ let rk=x.reeks;",
+   "vervang": "if(key.indexOf('vverw|')===0){ const vv=vvLijst().find(v=>'vverw|'+v.id===key)||x; const tk=String((t.name||'')+' '+(t.desc||'')).toUpperCase(); if(catOf(t)===(vv.cat||'') && vastWoorden(vv.naam).some(w=>tk.includes(w))) return true; let rk=x.reeks;"
+  },
+  {
+   "naam": "punt 2: vvBetaald alleen na een koppeling (nog niet gezien leest een andere lijst)",
+   "zoek": "const it={key:'vverw|'+x.id, reeks:vvReeksKey(x)}; if(!it.reeks) return false;",
+   "vervang": "const it={key:'vverw|'+x.id, reeks:vvReeksKey(x)}; if(!it.reeks || !K) return false;"
+  },
+  {
+   "naam": "punt 2: vvBetaald met een woord uit de naam",
+   "zoek": "return telbareTx().some(t=>postBetaling(t, it) && String(t.date).slice(0,7)===d.slice(0,7)); }",
+   "vervang": "return telbareTx().some(t=>!t.pending && t.amount<0 && catOf(t)===(x.cat||'') && vastWoorden(x.naam).some(w=>String((t.name||'')+' '+(t.desc||'')).toUpperCase().includes(w)) && String(t.date).slice(0,7)===d.slice(0,7)); }"
+  },
+  {
+   "naam": "punt 2: de aftrek leest alleen de sleutel",
+   "zoek": "const hoort=vastIn.find(x=>postBetaling(t, x));",
+   "vervang": "const hoort=vastIn.find(x=>recurKey(t)===x.key);"
+  },
+  {
+   "naam": "punt 2: de reeks van een partij telt niet (servicekosten koppelen)",
+   "zoek": "if(R && R.ids) return R.ids.has(t.id);",
+   "vervang": "if(R && R.ids && false) return R.ids.has(t.id);"
+  },
+  {
+   "naam": "punt 2: de reeks van een verwachte post kiest de kleinste",
+   "zoek": ".sort((a,b)=>b.n-a.n || (a.laatste<b.laatste?1:a.laatste>b.laatste?-1:0) || (a.k<b.k?-1:1));",
+   "vervang": ".sort((a,b)=>a.n-b.n);"
+  },
+  {
+   "naam": "punt 2: de reeks eist geen POST_REEKS_MIN betaaldagen",
+   "zoek": ".filter(r=>r.n>=POST_REEKS_MIN && r.laatste>=grens)",
+   "vervang": ".filter(r=>r.n>=1 && r.laatste>=grens)"
+  },
+  {
+   "naam": "punt 1b: geen weekschema",
+   "zoek": "return (af>0 && af<=10)?Object.assign",
+   "vervang": "return (false)?Object.assign"
+  },
+  {
+   "naam": "punt 1b: periodeTermijnen kent geen week",
+   "zoek": "if(s && s.cadans==='week' && last){",
+   "vervang": "if(false && last){"
+  },
+  {
+   "naam": "punt 2: geen aftrek uit het patroon",
+   "zoek": "if(vastIn.length && !(opts && opts.zonderAftrek)){",
+   "vervang": "if(false){"
+  },
+  {
+   "naam": "punt 2: vastIn blijft leeg",
+   "zoek": "if(!vastIn.includes(x)) vastIn.push(x);",
+   "vervang": ""
+  },
+  {
+   "naam": "punt 3: de oude filterknop staat er weer boven",
+   "zoek": "if(PT){ $('#s-ins').innerHTML = PT.kop + PT.pot",
+   "vervang": "if(PT){ $('#s-ins').innerHTML = insFilterKnop(P,soort) + PT.kop + PT.pot"
+  },
+  {
+   "naam": "punt 3: de dagteller in een eigen regel",
+   "zoek": "</span> <span class=\"small muted\">· dag ${T.el} van ${T.dagen}</span>${onb?",
+   "vervang": "</span></div><div data-insdagteller class=\"small muted\">· dag ${T.el} van ${T.dagen}</div><div>${onb?"
+  }
+ ]
+}
