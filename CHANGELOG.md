@@ -1166,6 +1166,7 @@
   - Nieuwe spec `grip-correcties.spec.js` (11 tests). Volle suite 4131 groen, rood alleen decimaalteken. Gemigreerd: grip-kring, grip-dashboard e en n, maand-afsluiting b en d, afspraak-schema c, vrij-uitschieters c (ze lazen de afspraken op Kiezen).
   - Twintig sabotages, alle twintig rood (op 1 en 3 tot en met 7). "Terugblik bij openen" werd pas rood in de tweede vorm, want de eerste bootste het oude gedrag niet na.
 
+
 ## v391 · Boven is het verwachte eind; Grip-correcties ronde 2
 - Inzichten: herhaalt/herstelt op het verwachte eind (`potjeUitschieter()`); herhaalt draagt het verwachte bedrag. Structureel gaat voor.
 - Kiezen: 2+ maanden boven geeft eerst "<potje> herzien", ook binnen het spaargeld-patroon (de route opent dat potje).
@@ -1926,3 +1927,11 @@ Minder verplaatst geen geld: het rekent per betaalrekening uit hoeveel er nodig 
 - `tests/wip/v527-export.spec.js`: de getallen van de back-up (866 in 8 posten, 7.139, 6.633, -356, -286), oud -> nieuw bij een verschuiving
   door punt 2, en de week op hele euro's. Cache `minder-v527b`.
 
+## v527c · maandposten per kalendermaand, een herkenning voor "hoort bij een post"
+- `vastMaandSchema()`: een post die een keer per kalendermaand betaald is (minstens drie keer in 13 maanden, nooit twee in een maand) loopt in
+  de periode-vooruitblik per maand, ook als de gemeten afstand 28 dagen is. Spotify 24 nov krijgt 24 dec, niet 22 dec.
+- `postBetaling()` vervangt `vastHoortBij()`: betaald, nog open, gezien (`vvBetaald()`) en de patroon-aftrek lezen dezelfde herkenning. Een
+  verwachte post leest zijn reeks (`vvReeksKey()`); losse boekingen van dezelfde partij met een andere omschrijving horen er niet bij. Een
+  vaste last bij een gesplitste partij leest alleen zijn eigen reeks.
+- Export-test a toetst hard vast nog 866 / 8 posten / bridge -286 / ruimte 2.082 en drukt de aftrek per potje met de boekingen af.
+- Cache `minder-v527c`.

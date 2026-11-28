@@ -234,6 +234,12 @@ test('v527c punt 2: een verwachte post betaald met wisselende bedragen ("Regelin
   expect(r.eindO - r.eind).toBeCloseTo(r.aftrek, 6);
   expect(r.nogO - r.nog).toBeCloseTo(r.aftrek, 6);
   expect(r.ue[0]).toBe(r.ue[1]);
+  /* zonder de regeling zijn er alleen losse boetes (twee betaaldagen): geen reeks, dus geen aftrek, en de post blijft nog niet gezien */
+  await S.boot(page, { cjib: true, cjibZonderRegeling: true });
+  const z = await page.evaluate(() => { const V = maandVooruit(); return { reeks: vvReeksKey(vvLijst()[0]), aftrek: V.patroonAftrekTx.length, cjib: V.vastNogLijst.filter((x) => /cjib/i.test(x.naam)).map((x) => x.achter) }; });
+  expect(z.reeks).toBe('');
+  expect(z.aftrek).toBe(0);
+  expect(z.cjib).toEqual([true]);
 });
 
 test('v527c punt 2: "nog niet gezien" en de patroon-aftrek lezen dezelfde lijst', async ({ page }) => {

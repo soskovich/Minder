@@ -1,13 +1,14 @@
 /* v527 OP JOUW EXPORT (de back-up staat niet in de repo, dus dit draait alleen bij jou):
      MINDER_EXPORT=<pad naar je back-up van 27 nov> WIP=1 TZ=Europe/Amsterdam npx playwright test tests/wip/v527-export.spec.js
-   Test a (Grip, 27 nov; v527b): vaste lasten nog EUR 866 in 8 posten (geen tweede Spotify; CJIB EUR 50 nog niet gezien), verwacht
-     EUR 7.139, ondergrens EUR 6.633, Budget-tegel EUR 356 onder (budget EUR 3.651, verwacht EUR 3.295), bridge-stap vast -EUR 286.
-     Verschuift punt 2 (de aftrek uit het patroon) een getal, dan drukt hij oud -> nieuw met de oorzaak af en faalt hij, tot goedkeuring.
+   Test a (Grip, 27 nov; v527c): HARD vaste lasten nog EUR 866 in 8 posten (geen Spotify; CJIB EUR 50 nog niet gezien) en bridge-stap
+     vast -EUR 286. De patroon-aftrek per potje met de boekingen: vervoer ~EUR 21 (parkeergelden), kinderen ~EUR 36 (Nikki), belasting alleen
+     de CJIB Regeling (meer dan EUR 0, minder dan EUR 60,19, geen Verkeersboete). Potjes op patroon, verwacht (= saldo - 866 - potjes -
+     zonder potje), ondergrens en de Budget-tegel worden exact afgedrukt en sluiten op elkaar.
    Test b (Inzichten, 27 nov): Potjes EUR 173 van EUR 2.255, Deze week nog EUR 84 van EUR 202 (hele euro's), Vaste lasten EUR 244 + EUR 866, binnen
      EUR 5.727. Zonder antwoord op de opnamevraag is de tegel gelijk aan het uitgegeven-blok (uitgegevenStand); na "Ja, dezelfde":
      EUR 35 onder tempo. Drukt alles af, zodat een afwijking te plaatsen is.
    Test c (sheets): per potje Boodschappen EUR 63/488 tempo 65, Overig 42/371 tempo 49, Contant 35/400 tempo 53, Vices 13/94 tempo 13,
-     Uit eten 0/54 tempo 7; de tabel ruimte/verwacht samen EUR 2.082 / EUR 1.946.
+     Uit eten 0/54 tempo 7; de tabel ruimte/verwacht: ruimte samen EUR 2.082 (hard), verwacht gelijk aan potjes op patroon (v527c).
    Test m (deel A, alleen meten): de vaste lasten met datum, waar Nathaniel nog meetelt, de dubbele Geldmaat-opname in de twee tellers en
      in de contant-schatting op Home, en de beleggingsinleg voor 23 dec. Drukt af, toetst niets.
    Test r (de repetitie): Home, Plan, Vermogen, de Lagen, lagenGestort en het voorstel zijn op 25, 27 en 30 nov gelijk aan 8ce254a op
@@ -31,36 +32,30 @@ async function laad(page, html, data, dag, contant) {
 const data = () => { const pad = process.env.MINDER_EXPORT; if (!pad) return null; return JSON.parse(fs.readFileSync(pad, 'utf8')); };
 const DAG = process.env.REPETITIE_DAG || '2026-11-27';
 
-test('a: vast nog EUR 866 in 8 posten (geen tweede Spotify, CJIB nog niet gezien); verwacht 7.139, ondergrens 6.633, Budget-tegel EUR 356 onder (3.295), bridge vast -EUR 286', async ({ page }) => {
+test('a: vast nog EUR 866 in 8 posten (geen Spotify, CJIB nog niet gezien), bridge vast -EUR 286; de aftrek alleen uit de CJIB Regeling, en de stand exact', async ({ page }) => {
   const d = data(); if (!d) test.skip();
   await laad(page, null, d, DAG);
   const r = await page.evaluate(() => { const S = periodeStandEind(), V = maandVooruit(), MB = gripMeterBudget(), B = brugIndeling(V);
-    /* v527b (punt 2): dezelfde periode zonder de aftrek uit het patroon, om oud -> nieuw te kunnen melden */
-    const O = periodeVooruitKern(periodeVan(vandaagYMD()), { zonderAftrek: true });
-    const onder = (VV, nog) => { const vastR = Math.round(+VV.vast || 0), zonderR = Math.round(+(VV.zonderStand && VV.zonderStand.verwacht) || 0), potR = Math.round(nog) - vastR - zonderR;
-      const rr = VV.potjes.map((x) => ({ k: x.k, ruimte: Math.max(Math.round(x.bud - (+x.uit || 0)), 0), v: Math.max((+x.eindR || 0) - (+x.uitR != null ? +x.uitR : +x.uit || 0), 0) }));
-      const afg = brugAfronden(rr.map((x) => ({ k: x.k, v: x.v })), potR); return S.start - vastR - zonderR - rr.reduce((a, x) => a + Math.max(x.ruimte, afg[x.k] || 0), 0); };
-    const oud = { eind: S.start - Math.round(O.nogVerwacht), onder: onder(O, O.nogVerwacht), verwacht: Math.round(O.projectie), verschil: Math.round(O.projectie) - MB.budget };
+    const vv = vvLijst().map((x) => ({ naam: x.naam, koppel: x.koppel || null, reeks: vvReeksKey(x), betalingen: telbareTx().filter((t) => postBetaling(t, { key: 'vverw|' + x.id, reeks: vvReeksKey(x) })).map((t) => `${String(t.date).slice(0, 10)} ${t.name} ${-t.amount}`) }));
+    const cjib = telbareTx().filter((t) => /cjib/i.test((t.name || '') + ' ' + (t.desc || ''))).map((t) => `${String(t.date).slice(0, 10)} ${t.name} ${-t.amount} ${catOf(t)} ${recurKey(t)}`);
+    const perPot = {}; for (const x of V.patroonAftrekTx || []) (perPot[x.cat] = perPot[x.cat] || []).push(`${x.datum} ${x.naam} ${x.bedrag} (${x.post})`);
     return { eind: S.eind, onder: S.onder, start: S.start, vast: S.vastR, pot: S.potR, zonder: S.zonderR, posten: (V.vastNogLijst || []).map((x) => `${x.naam} ${x.datum} ${x.bedrag}${x.achter ? ' (nog niet gezien)' : ''}`),
       MB: { budget: MB.budget, verwacht: MB.verwacht, verschil: MB.verschil, netto: MB.netto }, vastStap: B ? (B.groepen.find((x) => x.k === 'vast') || {}).d : null,
-      aftrek: V.patroonAftrek, aftrekTx: V.patroonAftrekTx, potAftrek: V.potjes.filter((x) => x.patroonAftrek).map((x) => [x.naam, x.patroon + x.patroonAftrek, x.patroon]), oud };
+      aftrek: V.patroonAftrek, perPot, vv, cjib, tR: S.rijen.reduce((a, x) => a + x.ruimte, 0), tV: S.rijen.reduce((a, x) => a + x.verwacht, 0) };
   });
   console.log(JSON.stringify(r, null, 1));
+  console.log(`STAND: saldo ${r.start} - vast ${r.vast} - potjes op patroon ${r.pot} - zonder potje ${r.zonder} = verwacht ${r.eind}; ondergrens ${r.onder}; Budget-tegel budget ${r.MB.budget} verwacht ${r.MB.verwacht} verschil ${r.MB.verschil}; tabel ruimte ${r.tR} verwacht ${r.tV}`);
   expect(r.vast).toBe(866); expect(r.posten.length).toBe(8);
   expect(r.posten.some((x) => /spotify/i.test(x))).toBe(false);
   expect(r.posten.filter((x) => /cjib/i.test(x) && /nog niet gezien/.test(x)).length).toBe(1);
   expect(r.vastStap).toBe(-286);
-  /* punt 2: verschuift de aftrek uit het patroon iets, dan staat hier per getal oud -> nieuw met de oorzaak, en dan zijn de getallen
-     hieronder (berekend zonder die verschuiving) nog niet goedgekeurd. */
-  const verschuift = r.oud.eind !== r.eind || r.oud.onder !== r.onder || r.oud.verwacht !== r.MB.verwacht;
-  if (verschuift) {
-    const melding = `PUNT 2 VERSCHUIFT (wacht op goedkeuring): verwacht ${r.oud.eind} -> ${r.eind}, ondergrens ${r.oud.onder} -> ${r.onder}, Budget-tegel verwacht ${r.oud.verwacht} -> ${r.MB.verwacht} (verschil ${r.oud.verschil} -> ${r.MB.verschil}); oorzaak: ${JSON.stringify(r.potAftrek)} uit ${JSON.stringify(r.aftrekTx)}`;
-    console.log(melding);
-    expect([r.oud.eind, r.oud.onder, r.oud.verwacht, r.oud.verschil]).toEqual([7139, 6633, 3295, -356]);
-    expect(verschuift, melding).toBe(false);
-  }
-  expect(r.eind).toBe(7139); expect(r.onder).toBe(6633);
-  expect(r.MB.budget).toBe(3651); expect(r.MB.verwacht).toBe(3295); expect(r.MB.verschil).toBe(-356);
+  expect(r.tR).toBe(2082);
+  expect(r.tV).toBe(r.pot);
+  expect(r.eind).toBe(r.start - r.vast - r.pot - r.zonder);
+  expect(Math.round(r.aftrek.vervoer || 0)).toBe(21);
+  expect(Math.round(r.aftrek.e_kinderen || 0)).toBe(36);
+  expect(r.aftrek.belasting || 0).toBeGreaterThan(0); expect(r.aftrek.belasting || 0).toBeLessThan(60.19);
+  expect((r.perPot.belasting || []).some((x) => /verkeersboete/i.test(x))).toBe(false);
 });
 
 test('b: Inzichten EUR 173 van 2.255, week EUR 84 van 202, vast EUR 244 + 866, binnen EUR 5.727; na "ja": EUR 35 onder tempo', async ({ page }) => {
@@ -89,12 +84,12 @@ test('c: de sheet Potjes per potje en de tabel ruimte/verwacht EUR 2.082 / EUR 1
   await laad(page, null, d, DAG);
   const r = await page.evaluate(() => { const T = periodeTegelData(), S = periodeStandEind();
     return { dag: T.dagRij.map((x) => [x.contant ? 'Contant' : x.naam, x.uit, x.bud, x.tempo]), keer: T.keerRij.map((x) => [x.naam, x.bud, x.uit]),
-      rijen: S.rijen.map((x) => [x.naam, x.ruimte, x.verwacht]), tR: S.rijen.reduce((a, x) => a + x.ruimte, 0), tV: S.rijen.reduce((a, x) => a + x.verwacht, 0) }; });
+      rijen: S.rijen.map((x) => [x.naam, x.ruimte, x.verwacht]), pot: S.potR, tR: S.rijen.reduce((a, x) => a + x.ruimte, 0), tV: S.rijen.reduce((a, x) => a + x.verwacht, 0) }; });
   console.log(JSON.stringify(r, null, 1));
   const m = Object.fromEntries(r.dag.map((x) => [x[0], x.slice(1)]));
   expect(m['Boodschappen']).toEqual([63, 488, 65]); expect(m['Overig']).toEqual([42, 371, 49]); expect(m['Contant']).toEqual([35, 400, 53]);
   expect(m['Vices']).toEqual([13, 94, 13]); expect(m['Uit eten & café']).toEqual([0, 54, 7]);
-  expect([r.tR, r.tV]).toEqual([2082, 1946]);
+  expect(r.tR).toBe(2082); expect(r.tV).toBe(r.pot);
 });
 
 test('m: deel A, meten (drukt af, toetst niets)', async ({ page }) => {

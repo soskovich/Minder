@@ -36,9 +36,10 @@ async function boot(page, o) {
     /* v527c: { cjib: true } de vorm van punt 2: een verwachte post "Boetes cjib" EUR 50 vanaf 26 nov (nog niet gezien), een
        betalingsregeling die met wisselende bedragen loopt ("CJIB Regeling" EUR 28 op 10 jun, 2 jul en 14 aug, EUR 145,98 op 26 okt) en
        losse boetes van dezelfde partij met een andere omschrijving ("CJIB Verkeersboetes", 9 sep EUR 37, 28 sep EUR 65 x3, 93 en 175),
-       alles in Belasting & boetes met een potje van EUR 64. { cjibNov: true } zet er een betaling van de regeling op 26 nov bij (gezien). */
+       alles in Belasting & boetes met een potje van EUR 64. { cjibNov: true } zet er een betaling van de regeling op 26 nov bij (gezien);
+       { cjibZonderRegeling: true } laat de regeling weg (alleen de losse boetes: geen reeks). */
     if (o.cjib) { let i = 0; const cj = (d, a, n) => { const t = add(LEEF, d, a, n, n + ' betalingskenmerk ' + (++i), 'belasting'); return t; };
-      for (const [d, a] of [['2026-06-10', -28], ['2026-07-02', -28], ['2026-08-14', -28], ['2026-10-26', -145.98]]) cj(d, a, 'CJIB Regeling');
+      if (!o.cjibZonderRegeling) for (const [d, a] of [['2026-06-10', -28], ['2026-07-02', -28], ['2026-08-14', -28], ['2026-10-26', -145.98]]) cj(d, a, 'CJIB Regeling');
       for (const [d, a] of [['2026-09-09', -37], ['2026-09-28', -65], ['2026-09-28', -65.01], ['2026-09-28', -65.02], ['2026-09-28', -93], ['2026-09-28', -175]]) cj(d, a, 'CJIB Verkeersboetes');
       if (o.cjibNov) cj('2026-11-26', -50, 'CJIB Regeling');
       SET.budgets = Object.assign({}, SET.budgets, { belasting: 64 });
