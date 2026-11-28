@@ -6,7 +6,7 @@ const S = require('../v527-stand');
 const UIT = process.env.V527_SHOT || '/tmp';
 test('schermen en geserveerde bron', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await S.boot(page, { dubbel: true });
+  await S.boot(page, Object.assign({ dubbel: true }, process.env.V527B ? { spot: true, cjib: true } : {}));
   const body = await page.evaluate(async () => (await fetch('/index.html', { cache: 'no-store' })).text());
   const lokaal = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
   const h = (x) => crypto.createHash('sha256').update(x).digest('hex').slice(0, 16);
